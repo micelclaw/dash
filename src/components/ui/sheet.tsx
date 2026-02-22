@@ -23,7 +23,7 @@ SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { side?: 'left' | 'right' }
->(({ className, children, side = 'left', ...props }, ref) => (
+>(({ className, children, side = 'left', style: styleProp, ...props }, ref) => (
   <DialogPrimitive.Portal>
     <SheetOverlay />
     <DialogPrimitive.Content
@@ -41,6 +41,7 @@ const SheetContent = React.forwardRef<
         borderRight: side === 'left' ? '1px solid var(--border)' : undefined,
         borderLeft: side === 'right' ? '1px solid var(--border)' : undefined,
         boxShadow: 'var(--shadow-lg)',
+        ...styleProp,
       }}
       {...props}
     >

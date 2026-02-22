@@ -140,3 +140,90 @@ pre code.hljs {
   background: var(--amber-dim);
   color: var(--text);
 }
+
+/* ── Tiptap Editor ── */
+
+.ProseMirror {
+  outline: none;
+  min-height: 200px;
+}
+
+.ProseMirror h1 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text); }
+.ProseMirror h2 { font-size: 1.25rem; font-weight: 600; margin: 0.8rem 0 0.4rem; color: var(--text); }
+.ProseMirror h3 { font-size: 1rem; font-weight: 600; margin: 0.6rem 0 0.3rem; color: var(--text); }
+
+.ProseMirror p { margin: 0.4rem 0; color: var(--text); font-size: 0.875rem; line-height: 1.6; }
+
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 1.5rem;
+  margin: 0.4rem 0;
+}
+.ProseMirror li { margin: 0.2rem 0; font-size: 0.875rem; }
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--amber);
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  color: var(--text-dim);
+}
+
+.ProseMirror code {
+  background: var(--surface);
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.ProseMirror pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+}
+
+.ProseMirror a {
+  color: var(--amber);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Task list checkboxes */
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.ProseMirror ul[data-type="taskList"] li label {
+  margin-top: 0.2rem;
+}
+.ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
+  accent-color: var(--amber);
+}
+
+/* Placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* Horizontal rule */
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}

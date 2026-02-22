@@ -1,5 +1,11 @@
 import type { User } from '@/types/auth';
 import type { Agent, Conversation, Message } from '@/types/chat';
+import type { Note } from '@/types/notes';
+import type { EntityLink } from '@/types/links';
+import type { SearchResult } from '@/types/search';
+import { getPreview } from '@/lib/text';
+
+// ── Users ──
 
 const MOCK_USER: User = {
   id: 'user-1',
@@ -9,11 +15,15 @@ const MOCK_USER: User = {
   tier: 'pro',
 };
 
+// ── Agents ──
+
 const MOCK_AGENTS: Agent[] = [
   { name: 'francis', display_name: 'Francis', role: 'Main Router', model: 'claude-opus-4-6', skills_count: 12 },
   { name: 'elon', display_name: 'Elon', role: 'Code Specialist', model: 'claude-sonnet-4-5', skills_count: 5 },
   { name: 'ana', display_name: 'Ana', role: 'Data Analyst', model: 'gemini-3-pro', skills_count: 3 },
 ];
+
+// ── Conversations & Messages ──
 
 const MOCK_CONVERSATIONS: Conversation[] = [
   { id: 'conv-1', agent: 'francis', first_message: 'Budget Q3 review', message_count: 5, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -36,70 +46,297 @@ const MOCK_MESSAGES: Record<string, Message[]> = {
   ],
   'conv-3': [
     { id: 'm7', conversation_id: 'conv-3', role: 'user', content: 'Help me understand TypeScript generics with a practical example', timestamp: new Date(Date.now() - 90000_000).toISOString() },
-    { id: 'm8', conversation_id: 'conv-3', role: 'assistant', content: "Here's a practical example of TypeScript generics:\n\n```typescript\n// A generic API response wrapper\ninterface ApiResponse<T> {\n  data: T;\n  meta: {\n    total: number;\n    page: number;\n  };\n}\n\n// Usage with different types\ntype UserResponse = ApiResponse<User>;\ntype NoteResponse = ApiResponse<Note[]>;\n\n// Generic function\nasync function fetchApi<T>(path: string): Promise<ApiResponse<T>> {\n  const res = await fetch(path);\n  return res.json();\n}\n\n// Type-safe calls\nconst users = await fetchApi<User[]>('/users');\nconst note = await fetchApi<Note>('/notes/1');\n```\n\nThe key insight: generics let you write **one function** that works with **many types** while keeping full type safety.", agent: 'elon', model: 'claude-sonnet-4-5', tokens_used: 234, timestamp: new Date(Date.now() - 89990_000).toISOString() },
+    { id: 'm8', conversation_id: 'conv-3', role: 'assistant', content: "Here's a practical example of TypeScript generics:\n\n```typescript\ninterface ApiResponse<T> {\n  data: T;\n  meta: { total: number; page: number; };\n}\n\nasync function fetchApi<T>(path: string): Promise<ApiResponse<T>> {\n  const res = await fetch(path);\n  return res.json();\n}\n\nconst users = await fetchApi<User[]>('/users');\nconst note = await fetchApi<Note>('/notes/1');\n```\n\nGenerics let you write **one function** that works with **many types** while keeping full type safety.", agent: 'elon', model: 'claude-sonnet-4-5', tokens_used: 234, timestamp: new Date(Date.now() - 89990_000).toISOString() },
   ],
 };
 
-export interface SearchResult {
-  id: string;
-  domain: 'notes' | 'events' | 'contacts' | 'emails' | 'files' | 'diary' | 'conversations';
-  title: string;
-  snippet: string;
-  timestamp: string;
-  route: string;
-}
+// ── Notes ──
 
-const MOCK_SEARCH_RESULTS: SearchResult[] = [
-  { id: 'sr-1', domain: 'notes', title: 'Reunión Q3 Planning', snippet: '...qué calor en Valencia, el agua estaba per...', timestamp: new Date(Date.now() - 7200_000).toISOString(), route: '/notes?id=note-q3' },
-  { id: 'sr-2', domain: 'notes', title: 'Budget analysis', snippet: '...las cifras del tercer trimestre muestran...', timestamp: new Date(Date.now() - 86400_000).toISOString(), route: '/notes?id=note-budget' },
-  { id: 'sr-3', domain: 'notes', title: 'Ideas producto new feature', snippet: '...integrar con el API de terceros para...', timestamp: new Date(Date.now() - 172800_000).toISOString(), route: '/notes?id=note-ideas' },
-  { id: 'sr-4', domain: 'events', title: 'Viaje Valencia', snippet: 'Jun 15 — Flight and hotel reservations', timestamp: new Date(Date.now() - 86400_000 * 3).toISOString(), route: '/calendar?id=ev-valencia' },
-  { id: 'sr-5', domain: 'events', title: 'Team standup', snippet: 'Daily at 10:00 — Engineering team sync', timestamp: new Date(Date.now() - 3600_000).toISOString(), route: '/calendar?id=ev-standup' },
-  { id: 'sr-6', domain: 'emails', title: 'Re: Presupuesto Q3', snippet: 'María García — Las cifras están listas para revisión...', timestamp: new Date(Date.now() - 43200_000).toISOString(), route: '/mail?id=email-budget' },
-  { id: 'sr-7', domain: 'emails', title: 'New contract draft', snippet: 'Juan López — Attached the latest version of...', timestamp: new Date(Date.now() - 86400_000 * 2).toISOString(), route: '/mail?id=email-contract' },
-  { id: 'sr-8', domain: 'contacts', title: 'María García', snippet: 'maria@acme.com — Product Manager at Acme Corp', timestamp: new Date(Date.now() - 86400_000 * 10).toISOString(), route: '/contacts?id=contact-maria' },
-  { id: 'sr-9', domain: 'files', title: 'Q3-report-final.pdf', snippet: '2.4 MB — Updated last week', timestamp: new Date(Date.now() - 86400_000 * 7).toISOString(), route: '/drive?id=file-q3' },
-  { id: 'sr-10', domain: 'diary', title: 'Reflexión sobre el proyecto', snippet: 'Hoy fue un buen día. Avancé mucho con el...', timestamp: new Date(Date.now() - 86400_000).toISOString(), route: '/diary?id=diary-1' },
-  { id: 'sr-11', domain: 'conversations', title: 'Budget Q3 review with Francis', snippet: "I've reviewed the Budget Q3 document...", timestamp: new Date(Date.now() - 300_000).toISOString(), route: '/chat?conv=conv-1' },
+let mockNotes: Note[] = [
+  {
+    id: 'note-1',
+    title: 'Reunión Q3 Planning',
+    content: '<h2>Asistentes</h2><p>Juan, María, Carlos</p><h2>Agenda</h2><ul><li>Revisión de métricas</li><li>Roadmap Q4</li><li>Budget allocation</li></ul><p>Conclusión: necesitamos más datos antes de decidir.</p>',
+    content_format: 'html',
+    source: 'local',
+    source_id: null,
+    tags: ['work', 'meetings'],
+    pinned: true,
+    archived: false,
+    custom_fields: null,
+    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+    synced_at: null,
+    deleted_at: null,
+  },
+  {
+    id: 'note-2',
+    title: 'Lista de la compra',
+    content: '<ul><li>Leche</li><li>Huevos</li><li>Pan integral</li><li>Aguacates</li><li>Café</li></ul>',
+    content_format: 'html',
+    source: 'apple_notes',
+    source_id: 'apple-123',
+    tags: ['personal'],
+    pinned: false,
+    archived: false,
+    custom_fields: null,
+    created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    synced_at: new Date(Date.now() - 12 * 3600000).toISOString(),
+    deleted_at: null,
+  },
+  {
+    id: 'note-3',
+    title: 'Ideas proyecto X',
+    content: '<p>Concepto: una app que conecta freelancers con startups.</p><p><strong>MVP features:</strong></p><ol><li>Profile creation</li><li>Project matching</li><li>In-app messaging</li></ol><p>Investigar: <a href="https://example.com">competidores similares</a></p>',
+    content_format: 'html',
+    source: 'google_keep',
+    source_id: 'gk-456',
+    tags: ['work', 'ideas'],
+    pinned: false,
+    archived: false,
+    custom_fields: { priority: 'high' },
+    created_at: new Date(Date.now() - 3 * 24 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 2 * 24 * 3600000).toISOString(),
+    synced_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    deleted_at: null,
+  },
+  {
+    id: 'note-4',
+    title: 'Budget analysis Q3',
+    content: '<h2>Summary</h2><p>Total spend: €45,230. Over budget by 12%.</p><pre><code class="language-json">{\n  "marketing": 15200,\n  "engineering": 22030,\n  "operations": 8000\n}</code></pre><p>Action items: reduce marketing spend, negotiate cloud costs.</p>',
+    content_format: 'html',
+    source: 'local',
+    source_id: null,
+    tags: ['work', 'finance'],
+    pinned: false,
+    archived: false,
+    custom_fields: null,
+    created_at: new Date(Date.now() - 5 * 24 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 4 * 24 * 3600000).toISOString(),
+    synced_at: null,
+    deleted_at: null,
+  },
+  {
+    id: 'note-5',
+    title: 'Reflexiones sobre productividad',
+    content: '<p>He estado pensando en cómo mejorar mi flujo de trabajo. Creo que la clave está en <strong>reducir context switching</strong>.</p><blockquote><p>"The cost of interrupted work is not just the time lost, but the mental energy to reload context."</p></blockquote><p>Ideas:</p><ul data-type="taskList"><li data-checked="true"><p>Implementar time-blocking</p></li><li data-checked="true"><p>Limitar reuniones a martes y jueves</p></li><li data-checked="false"><p>Probar la técnica Pomodoro</p></li></ul>',
+    content_format: 'html',
+    source: 'synology_note',
+    source_id: 'syn-789',
+    tags: ['personal', 'productivity'],
+    pinned: false,
+    archived: false,
+    custom_fields: null,
+    created_at: new Date(Date.now() - 7 * 24 * 3600000).toISOString(),
+    updated_at: new Date(Date.now() - 6 * 24 * 3600000).toISOString(),
+    synced_at: new Date(Date.now() - 5 * 24 * 3600000).toISOString(),
+    deleted_at: null,
+  },
 ];
 
-export function getMockSearchResults(query: string, domains?: string): SearchResult[] {
-  let results = MOCK_SEARCH_RESULTS;
-  if (domains) {
-    const domainList = domains.split(',');
-    results = results.filter((r) => domainList.includes(r.domain));
-  }
-  return query ? results : [];
+// ── Entity Links ──
+
+const MOCK_LINKS: EntityLink[] = [
+  { id: 'link-1', source_type: 'note', source_id: 'note-1', target_type: 'email', target_id: 'email-1', relationship: 'mentioned_in', link_type: 'relates_to', confidence: 0.92, strength: 0.78, created_by: 'llm', created_at: new Date().toISOString() },
+  { id: 'link-2', source_type: 'note', source_id: 'note-1', target_type: 'event', target_id: 'event-1', relationship: 'attendee_of', link_type: 'attended', confidence: 1.0, strength: null, created_by: 'system', created_at: new Date().toISOString() },
+  { id: 'link-3', source_type: 'contact', source_id: 'contact-1', target_type: 'note', target_id: 'note-1', relationship: 'mentioned_in', link_type: 'mentions', confidence: 0.88, strength: 0.65, created_by: 'llm', created_at: new Date().toISOString() },
+  { id: 'link-4', source_type: 'note', source_id: 'note-4', target_type: 'email', target_id: 'email-2', relationship: 'relates_to', link_type: 'budget_discussion', confidence: 0.95, strength: 0.9, created_by: 'llm', created_at: new Date().toISOString() },
+];
+
+const MOCK_LINKED_RECORDS: Record<string, Record<string, unknown>> = {
+  'email-1': { id: 'email-1', subject: 'Re: Q3 Planning Meeting', from_name: 'María García' },
+  'email-2': { id: 'email-2', subject: 'Budget Q3 - Updated figures', from_name: 'Juan López' },
+  'event-1': { id: 'event-1', title: 'Q3 Planning Meeting', start_at: '2026-02-18T10:00:00Z' },
+  'contact-1': { id: 'contact-1', display_name: 'María García' },
+};
+
+// ── Search ──
+
+function matchesQuery(text: string, query: string): boolean {
+  return text.toLowerCase().includes(query.toLowerCase());
 }
 
-export function getMockResponse(method: string, path: string): unknown {
-  if (method === 'POST' && path === '/auth/login') {
-    return {
-      data: {
-        user: MOCK_USER,
-        accessToken: 'mock-access-token-xyz',
-        refreshToken: 'mock-refresh-token-xyz',
-      },
-    };
+function getMockSearchResults(query: string, domains?: string): SearchResult[] {
+  if (!query.trim()) return [];
+
+  const results: SearchResult[] = [];
+
+  // Notes
+  if (!domains || domains === 'notes' || domains === 'note') {
+    for (const n of mockNotes) {
+      if (matchesQuery(n.title || '', query) || matchesQuery(n.content, query)) {
+        results.push({
+          domain: 'note',
+          record_id: n.id,
+          score: 0.85,
+          snippet: getPreview(n.content, n.content_format),
+          record: n as unknown as Record<string, unknown>,
+        });
+      }
+    }
   }
 
-  if (method === 'GET' && path === '/agents') {
+  // Other domains
+  const otherResults: SearchResult[] = [
+    { domain: 'event', record_id: 'event-1', score: 0.78, snippet: 'Jun 15 — Flight and hotel', record: { title: 'Viaje Valencia', start_at: '2026-06-15T08:00:00Z' } },
+    { domain: 'event', record_id: 'event-2', score: 0.72, snippet: 'Daily at 10:00', record: { title: 'Team standup', start_at: '2026-02-22T10:00:00Z' } },
+    { domain: 'email', record_id: 'email-1', score: 0.82, snippet: 'María García — Las cifras están listas', record: { subject: 'Re: Presupuesto Q3', from_name: 'María García' } },
+    { domain: 'email', record_id: 'email-3', score: 0.75, snippet: 'Juan López — Attached the latest version', record: { subject: 'New contract draft', from_name: 'Juan López' } },
+    { domain: 'contact', record_id: 'contact-1', score: 0.90, snippet: 'maria@acme.com — Product Manager', record: { display_name: 'María García' } },
+    { domain: 'file', record_id: 'file-1', score: 0.68, snippet: '2.4 MB — Updated last week', record: { filename: 'Q3-report-final.pdf' } },
+    { domain: 'diary', record_id: 'diary-1', score: 0.65, snippet: 'Hoy fue un buen día...', record: { entry_date: '2026-02-21', mood: 'good' } },
+    { domain: 'conversation', record_id: 'conv-1', score: 0.70, snippet: "I've reviewed the Budget Q3...", record: { first_message: 'Budget Q3 review' } },
+  ];
+
+  if (!domains) {
+    results.push(...otherResults);
+  } else {
+    const domainFilter = domains.replace(/s$/, '');
+    results.push(...otherResults.filter(r => r.domain === domainFilter || `${r.domain}s` === domains));
+  }
+
+  return results.slice(0, 12);
+}
+
+// ── Mock router ──
+
+let noteIdCounter = 100;
+
+export function getMockResponse(method: string, path: string, body?: unknown): unknown {
+  const url = path.split('?');
+  const route = url[0]!;
+  const params = new URLSearchParams(url[1] ?? '');
+
+  // Auth
+  if (method === 'POST' && route === '/auth/login') {
+    return { data: { user: MOCK_USER, accessToken: 'mock-access-token-xyz', refreshToken: 'mock-refresh-token-xyz' } };
+  }
+  if (method === 'POST' && route === '/auth/refresh') {
+    return { data: { accessToken: 'mock-access-token-new', refreshToken: 'mock-refresh-token-new' } };
+  }
+
+  // Agents
+  if (method === 'GET' && route === '/agents') {
     return { data: MOCK_AGENTS };
   }
 
-  if (method === 'GET' && path.startsWith('/conversations')) {
+  // Conversations
+  if (method === 'GET' && route.startsWith('/conversations')) {
     return { data: MOCK_CONVERSATIONS };
   }
 
-  if (method === 'GET' && path.startsWith('/search')) {
-    const params = new URLSearchParams(path.split('?')[1] ?? '');
+  // Search
+  if (method === 'GET' && route === '/search') {
     const q = params.get('q') ?? '';
     const domains = params.get('domains') ?? undefined;
-    return { data: getMockSearchResults(q, domains) };
+    const results = getMockSearchResults(q, domains);
+    return { data: results, meta: { total: results.length, limit: 12, offset: 0 } };
+  }
+
+  // ── Notes CRUD ──
+
+  if (method === 'GET' && route === '/notes') {
+    let filtered = mockNotes.filter(n => !n.deleted_at);
+    const archived = params.get('archived') === 'true';
+    filtered = filtered.filter(n => n.archived === archived);
+    const search = params.get('search');
+    if (search) filtered = filtered.filter(n => matchesQuery(n.title || '', search) || matchesQuery(n.content, search));
+    const source = params.get('source');
+    if (source) filtered = filtered.filter(n => n.source === source);
+    const tag = params.get('tag');
+    if (tag) filtered = filtered.filter(n => n.tags.includes(tag));
+    const sort = params.get('sort') || 'updated_at';
+    const order = params.get('order') || 'desc';
+    filtered.sort((a, b) => {
+      const aVal = String((a as unknown as Record<string, unknown>)[sort] ?? '');
+      const bVal = String((b as unknown as Record<string, unknown>)[sort] ?? '');
+      return order === 'desc' ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
+    });
+    const limit = parseInt(params.get('limit') || '50');
+    const offset = parseInt(params.get('offset') || '0');
+    return { data: filtered.slice(offset, offset + limit), meta: { total: filtered.length, limit, offset } };
+  }
+
+  const noteGetMatch = route.match(/^\/notes\/([\w-]+)$/);
+  if (method === 'GET' && noteGetMatch) {
+    const note = mockNotes.find(n => n.id === noteGetMatch[1]);
+    return note ? { data: note } : { data: null };
+  }
+
+  if (method === 'POST' && route === '/notes') {
+    const input = body as Record<string, unknown>;
+    const newNote: Note = {
+      id: `note-${++noteIdCounter}`,
+      title: (input.title as string) || null,
+      content: (input.content as string) || '',
+      content_format: (input.content_format as 'html') || 'html',
+      source: 'local',
+      source_id: null,
+      tags: (input.tags as string[]) || [],
+      pinned: (input.pinned as boolean) || false,
+      archived: false,
+      custom_fields: (input.custom_fields as Record<string, unknown>) || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      synced_at: null,
+      deleted_at: null,
+    };
+    mockNotes.unshift(newNote);
+    return { data: newNote };
+  }
+
+  const notePatchMatch = route.match(/^\/notes\/([\w-]+)$/);
+  if (method === 'PATCH' && notePatchMatch) {
+    const input = body as Record<string, unknown>;
+    const idx = mockNotes.findIndex(n => n.id === notePatchMatch[1]);
+    if (idx !== -1) {
+      mockNotes[idx] = { ...mockNotes[idx]!, ...input, updated_at: new Date().toISOString() } as Note;
+      return { data: mockNotes[idx] };
+    }
+    return { data: null };
+  }
+
+  const noteDeleteMatch = route.match(/^\/notes\/([\w-]+)$/);
+  if (method === 'DELETE' && noteDeleteMatch) {
+    mockNotes = mockNotes.filter(n => n.id !== noteDeleteMatch[1]);
+    return { data: { success: true } };
+  }
+
+  // Archive/unarchive/restore
+  const noteActionMatch = route.match(/^\/notes\/([\w-]+)\/(archive|unarchive|restore)$/);
+  if (method === 'POST' && noteActionMatch) {
+    const [, id, action] = noteActionMatch;
+    const idx = mockNotes.findIndex(n => n.id === id);
+    if (idx !== -1) {
+      if (action === 'archive') mockNotes[idx] = { ...mockNotes[idx]!, archived: true, updated_at: new Date().toISOString() };
+      if (action === 'unarchive') mockNotes[idx] = { ...mockNotes[idx]!, archived: false, updated_at: new Date().toISOString() };
+    }
+    return { data: { success: true } };
+  }
+
+  // ── Entity Links ──
+
+  if (method === 'GET' && route === '/links') {
+    const entityId = params.get('entity_id');
+    if (entityId) {
+      const links = MOCK_LINKS.filter(l => l.source_id === entityId || l.target_id === entityId);
+      return { data: links, meta: { total: links.length, limit: 20, offset: 0 } };
+    }
+    return { data: [], meta: { total: 0, limit: 20, offset: 0 } };
+  }
+
+  // Linked record enrichment
+  const enrichMatch = route.match(/^\/(emails|events|contacts|files|diary)\/([\w-]+)$/);
+  if (method === 'GET' && enrichMatch) {
+    const record = MOCK_LINKED_RECORDS[enrichMatch[2]!];
+    return { data: record || { id: enrichMatch[2] } };
   }
 
   return { data: null };
 }
+
+// ── Exported helpers ──
 
 export function getMockConversations(): Conversation[] {
   return MOCK_CONVERSATIONS;

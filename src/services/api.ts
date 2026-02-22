@@ -3,70 +3,94 @@ import { useAuthStore } from '@/stores/auth.store';
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
 const API_PREFIX = '/api/v1';
 
-interface ApiResponse<T> {
-  data: T;
+export class ApiError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public details?: Record<string, unknown>,
+    public status?: number,
+  ) {
+    super(message);
+  }
 }
 
 class ApiClient {
-  private baseUrl: string;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+  private getToken(): string | null {
+    return useAuthStore.getState().tokens?.accessToken ?? null;
   }
 
-  private getHeaders(): HeadersInit {
-    const headers: HeadersInit = { 'Content-Type': 'application/json' };
-    const tokens = useAuthStore.getState().tokens;
-    if (tokens?.accessToken) {
-      headers['Authorization'] = `Bearer ${tokens.accessToken}`;
-    }
-    return headers;
-  }
-
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    path: string,
+    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined> },
+  ): Promise<T> {
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
       const { getMockResponse } = await import('./mock');
-      return getMockResponse(method, path) as T;
+      // Build full path with query string for mock router
+      let mockPath = path;
+      if (options?.params) {
+        const qs = new URLSearchParams();
+        for (const [key, val] of Object.entries(options.params)) {
+          if (val !== undefined) qs.set(key, String(val));
+        }
+        const str = qs.toString();
+        if (str) mockPath += `?${str}`;
+      }
+      return getMockResponse(method, mockPath, options?.body) as T;
     }
 
-    const url = `${this.baseUrl}${API_PREFIX}${path}`;
-    const res = await fetch(url, {
+    const url = new URL(`${BASE_URL}${API_PREFIX}${path}`);
+    if (options?.params) {
+      for (const [key, val] of Object.entries(options.params)) {
+        if (val !== undefined) url.searchParams.set(key, String(val));
+      }
+    }
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(url.toString(), {
       method,
-      headers: this.getHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
+      headers,
+      body: options?.body ? JSON.stringify(options.body) : undefined,
     });
 
     if (res.status === 401) {
       try {
         await useAuthStore.getState().refresh();
-        const retryRes = await fetch(url, {
-          method,
-          headers: this.getHeaders(),
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        if (!retryRes.ok) throw new Error(`HTTP ${retryRes.status}`);
-        return retryRes.json() as Promise<T>;
+        return this.request(method, path, options);
       } catch {
         useAuthStore.getState().logout();
-        throw new Error('Session expired');
+        throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);
       }
     }
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json() as Promise<T>;
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new ApiError(
+        json.error?.code || 'UNKNOWN',
+        json.error?.message || 'Request failed',
+        json.error?.details,
+        res.status,
+      );
+    }
+
+    return json;
   }
 
-  get<T>(path: string): Promise<T> {
-    return this.request<T>('GET', path);
+  get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
+    return this.request<T>('GET', path, { params });
   }
 
   post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, body);
+    return this.request<T>('POST', path, { body });
   }
 
   patch<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('PATCH', path, body);
+    return this.request<T>('PATCH', path, { body });
   }
 
   delete<T>(path: string): Promise<T> {
@@ -74,5 +98,4 @@ class ApiClient {
   }
 }
 
-export const api = new ApiClient(BASE_URL);
-export type { ApiResponse };
+export const api = new ApiClient();

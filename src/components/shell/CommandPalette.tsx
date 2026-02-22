@@ -10,7 +10,7 @@ import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { api } from '@/services/api';
-import type { SearchResult } from '@/services/mock';
+import type { SearchResult } from '@/types/search';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -57,17 +57,27 @@ interface CommandItem {
   action: () => void;
 }
 
-function timeAgo(ts: string): string {
-  const diff = Date.now() - new Date(ts).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const ROUTE_MAP: Record<string, string> = {
+  note: '/notes', event: '/calendar', contact: '/contacts',
+  email: '/mail', file: '/drive', diary: '/diary', conversation: '/chat',
+};
+
+function getResultTitle(result: SearchResult): string {
+  const r = result.record;
+  switch (result.domain) {
+    case 'note': return String(r.title || 'Untitled');
+    case 'event': return String(r.title || 'Untitled event');
+    case 'contact': return String(r.display_name || 'Unknown');
+    case 'email': return String(r.subject || '(no subject)');
+    case 'file': return String(r.filename || 'Untitled');
+    case 'diary': return String(r.entry_date || 'Diary entry');
+    case 'conversation': return String(r.first_message || 'Conversation');
+    default: return 'Unknown';
+  }
+}
+
+function getResultRoute(result: SearchResult): string {
+  return `${ROUTE_MAP[result.domain] || '/'}?id=${result.record_id}`;
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
@@ -77,8 +87,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const sidebarToggle = useSidebarStore((s) => s.toggle);
 
@@ -136,9 +146,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const params = new URLSearchParams({ q: query.trim(), limit: '8' });
-        if (domains) params.set('domains', domains);
-        const res = await api.get<{ data: SearchResult[] }>(`/search?${params}`);
+        const res = await api.get<{ data: SearchResult[] }>('/search', {
+          q: query.trim(),
+          limit: 12,
+          domains,
+        });
         setSearchResults(res.data);
       } catch {
         setSearchResults([]);
@@ -348,9 +360,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       </div>
                       {visibleItems.map((result) => (
                         <Command.Item
-                          key={result.id}
-                          value={`${result.title} ${result.snippet}`}
-                          onSelect={() => handleSelect(result.route)}
+                          key={result.record_id}
+                          value={`${getResultTitle(result)} ${result.snippet}`}
+                          onSelect={() => handleSelect(getResultRoute(result))}
                           style={{
                             display: 'flex',
                             alignItems: 'flex-start',
@@ -364,15 +376,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         >
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {result.title}
+                              {getResultTitle(result)}
                             </div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {result.snippet}
                             </div>
                           </div>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', flexShrink: 0, marginTop: 2 }}>
-                            {timeAgo(result.timestamp)}
-                          </span>
                         </Command.Item>
                       ))}
                       {remaining > 0 && mod?.path && (
@@ -509,9 +518,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 )}
                 {searchResults.map((result) => (
                   <Command.Item
-                    key={result.id}
-                    value={`${result.title} ${result.snippet}`}
-                    onSelect={() => handleSelect(result.route)}
+                    key={result.record_id}
+                    value={`${getResultTitle(result)} ${result.snippet}`}
+                    onSelect={() => handleSelect(getResultRoute(result))}
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -525,15 +534,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {result.title}
+                        {getResultTitle(result)}
                       </div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {result.snippet}
                       </div>
                     </div>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', flexShrink: 0, marginTop: 2 }}>
-                      {timeAgo(result.timestamp)}
-                    </span>
                   </Command.Item>
                 ))}
               </>

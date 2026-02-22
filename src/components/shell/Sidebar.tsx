@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { MODULES } from '@/config/modules';
 import { SidebarItem } from './SidebarItem';
@@ -7,15 +8,20 @@ import { SidebarGroup } from './SidebarGroup';
 import { ConnectionStatus } from './ConnectionStatus';
 import { UserFooter } from './UserFooter';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface SidebarProps {
   onOpenCommandPalette: () => void;
+  /** Force expanded mode (used in mobile drawer) */
+  forceExpanded?: boolean;
 }
 
-export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
-  const collapsed = useSidebarStore((s) => s.collapsed);
+export function Sidebar({ onOpenCommandPalette, forceExpanded }: SidebarProps) {
+  const storeCollapsed = useSidebarStore((s) => s.collapsed);
+  const toggle = useSidebarStore((s) => s.toggle);
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const navigate = useNavigate();
+  const collapsed = forceExpanded ? false : storeCollapsed;
 
   const { ungrouped, groups } = useMemo(() => {
     const ungrouped = MODULES.filter((m) => !m.group);
@@ -42,31 +48,89 @@ export function Sidebar({ onOpenCommandPalette }: SidebarProps) {
         overflow: 'hidden',
       }}
     >
-      {/* Logo */}
-      <button
-        onClick={() => navigate('/chat')}
+      {/* Logo + toggle */}
+      <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
           height: 48,
-          padding: collapsed ? '0' : '0 16px',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
+          padding: collapsed ? '0 4px' : '0 8px 0 16px',
+          justifyContent: collapsed ? 'center' : 'space-between',
           flexShrink: 0,
-          color: 'var(--text)',
-          fontFamily: 'var(--font-sans)',
+          gap: 4,
         }}
       >
-        <span style={{ fontSize: 20 }}>🐾</span>
-        {!collapsed && (
-          <span style={{ fontSize: '1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-            Micelclaw
-          </span>
+        <button
+          onClick={() => navigate('/chat')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text)',
+            fontFamily: 'var(--font-sans)',
+            padding: 0,
+            minWidth: 0,
+          }}
+        >
+          <span style={{ fontSize: 20, flexShrink: 0 }}>🐾</span>
+          {!collapsed && (
+            <span style={{ fontSize: '1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Micelclaw
+            </span>
+          )}
+        </button>
+
+        {/* Sidebar toggle button */}
+        {!forceExpanded && (
+          collapsed ? (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggle}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-muted)',
+                    padding: 4,
+                    display: 'flex',
+                    borderRadius: 'var(--radius-sm)',
+                    transition: 'color var(--transition-fast)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  <PanelLeftOpen size={16} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Expand sidebar (⌘B)</TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              onClick={toggle}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: 4,
+                display: 'flex',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'color var(--transition-fast)',
+                flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+              title="Collapse sidebar (⌘B)"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          )
         )}
-      </button>
+      </div>
 
       {/* Navigation */}
       <ScrollArea className="flex-1">

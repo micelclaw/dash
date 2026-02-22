@@ -29,9 +29,16 @@ export function Shell() {
   const tokens = useAuthStore((s) => s.tokens);
   const isChatPage = location.pathname === '/chat';
 
-  // Auto-collapse on compact screens
+  // Auto-collapse on compact screens, auto-expand when viewport goes wide
   useEffect(() => {
-    if (isCompact && !isMobile) setCollapsed(true);
+    if (isMobile) return;
+    if (isCompact) {
+      setCollapsed(true);
+    } else {
+      // Viewport went wide → restore user preference
+      const { userCollapsed } = useSidebarStore.getState();
+      setCollapsed(userCollapsed);
+    }
   }, [isCompact, isMobile, setCollapsed]);
 
   // Connect WebSocket on mount
@@ -141,7 +148,7 @@ export function Shell() {
         {isMobile && (
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetContent side="left" style={{ padding: 0, width: 280 }}>
-              <Sidebar onOpenCommandPalette={openPalette} />
+              <Sidebar onOpenCommandPalette={openPalette} forceExpanded />
             </SheetContent>
           </Sheet>
         )}
