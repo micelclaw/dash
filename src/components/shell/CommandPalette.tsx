@@ -1,0 +1,582 @@
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router';
+import { Command } from 'cmdk';
+import {
+  MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
+  FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
+  Search, ArrowRight,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { MODULES } from '@/config/modules';
+import { useSidebarStore } from '@/stores/sidebar.store';
+import { api } from '@/services/api';
+import type { SearchResult } from '@/services/mock';
+
+interface CommandPaletteProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+type PaletteMode = 'search' | 'commands' | 'domain';
+
+const DOMAIN_MAP: Record<string, string> = {
+  notes: 'notes',
+  mail: 'emails',
+  calendar: 'events',
+  contacts: 'contacts',
+  drive: 'files',
+  diary: 'diary',
+  chat: 'conversations',
+};
+
+const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
+  notes: { icon: StickyNote, color: 'var(--mod-notes)' },
+  events: { icon: Calendar, color: 'var(--mod-calendar)' },
+  emails: { icon: Mail, color: 'var(--mod-mail)' },
+  contacts: { icon: Users, color: 'var(--mod-contacts)' },
+  files: { icon: FolderOpen, color: 'var(--mod-drive)' },
+  diary: { icon: BookOpen, color: 'var(--mod-diary)' },
+  conversations: { icon: MessageSquare, color: 'var(--mod-chat)' },
+};
+
+const DOMAIN_LABELS: Record<string, string> = {
+  notes: 'Notes',
+  events: 'Events',
+  emails: 'Mail',
+  contacts: 'Contacts',
+  files: 'Files',
+  diary: 'Diary',
+  conversations: 'Conversations',
+};
+
+interface CommandItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  group: 'Navigation' | 'Actions' | 'UI';
+  action: () => void;
+}
+
+function timeAgo(ts: string): string {
+  const diff = Date.now() - new Date(ts).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const navigate = useNavigate();
+  const [inputValue, setInputValue] = useState('');
+  const [mode, setMode] = useState<PaletteMode>('search');
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const sidebarToggle = useSidebarStore((s) => s.toggle);
+
+  const commands: CommandItem[] = useMemo(() => [
+    { id: 'goto-chat', label: 'Go to AI Chat', icon: MessageSquare, group: 'Navigation', action: () => navigate('/chat') },
+    { id: 'goto-notes', label: 'Go to Notes', icon: StickyNote, group: 'Navigation', action: () => navigate('/notes') },
+    { id: 'goto-calendar', label: 'Go to Calendar', icon: Calendar, group: 'Navigation', action: () => navigate('/calendar') },
+    { id: 'goto-mail', label: 'Go to Mail', icon: Mail, group: 'Navigation', action: () => navigate('/mail') },
+    { id: 'goto-contacts', label: 'Go to Contacts', icon: Users, group: 'Navigation', action: () => navigate('/contacts') },
+    { id: 'goto-diary', label: 'Go to Diary', icon: BookOpen, group: 'Navigation', action: () => navigate('/diary') },
+    { id: 'goto-drive', label: 'Go to Drive', icon: FolderOpen, group: 'Navigation', action: () => navigate('/drive') },
+    { id: 'goto-photos', label: 'Go to Photos', icon: Image, group: 'Navigation', action: () => navigate('/photos') },
+    { id: 'goto-agents', label: 'Go to Agents', icon: Bot, group: 'Navigation', action: () => navigate('/agents') },
+    { id: 'goto-settings', label: 'Go to Settings', icon: Settings, group: 'Navigation', action: () => navigate('/settings') },
+    { id: 'create-note', label: 'Create new note', icon: Plus, group: 'Actions', action: () => navigate('/notes?action=new') },
+    { id: 'create-event', label: 'Create new event', icon: Plus, group: 'Actions', action: () => navigate('/calendar?action=new') },
+    { id: 'create-diary', label: 'Create diary entry', icon: Plus, group: 'Actions', action: () => navigate('/diary?action=new') },
+    { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
+    { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
+  ], [navigate, sidebarToggle]);
+
+  // Detect mode from input prefix
+  useEffect(() => {
+    if (inputValue.startsWith('>')) {
+      setMode('commands');
+      setSelectedDomain(null);
+    } else if (inputValue.startsWith('@')) {
+      setMode('domain');
+    } else {
+      setMode('search');
+      setSelectedDomain(null);
+    }
+  }, [inputValue]);
+
+  // Debounced search
+  useEffect(() => {
+    if (mode !== 'search' && !(mode === 'domain' && selectedDomain)) return;
+
+    let query = inputValue;
+    let domains: string | undefined;
+
+    if (mode === 'domain' && selectedDomain) {
+      const prefix = `@${selectedDomain} `;
+      query = inputValue.slice(prefix.length);
+      domains = DOMAIN_MAP[selectedDomain];
+    }
+
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const params = new URLSearchParams({ q: query.trim(), limit: '8' });
+        if (domains) params.set('domains', domains);
+        const res = await api.get<{ data: SearchResult[] }>(`/search?${params}`);
+        setSearchResults(res.data);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 200);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [inputValue, mode, selectedDomain]);
+
+  // Reset state on open
+  useEffect(() => {
+    if (open) {
+      setInputValue('');
+      setMode('search');
+      setSelectedDomain(null);
+      setSearchResults([]);
+    }
+  }, [open]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (inputValue) {
+        setInputValue('');
+      } else {
+        onClose();
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (e.key === 'Backspace' && !inputValue.slice(mode === 'commands' ? 1 : 0).trim()) {
+      if (mode === 'commands' || (mode === 'domain' && !selectedDomain)) {
+        setInputValue('');
+        setMode('search');
+        e.preventDefault();
+      } else if (mode === 'domain' && selectedDomain) {
+        setInputValue('@');
+        setSelectedDomain(null);
+        e.preventDefault();
+      }
+    }
+
+    if (e.key === 'Tab' && mode === 'domain' && !selectedDomain) {
+      e.preventDefault();
+      const typed = inputValue.slice(1).toLowerCase();
+      const match = Object.keys(DOMAIN_MAP).find((d) => d.startsWith(typed));
+      if (match) {
+        setSelectedDomain(match);
+        setInputValue(`@${match} `);
+      }
+    }
+  }, [inputValue, mode, selectedDomain, onClose]);
+
+  const handleSelect = useCallback((route: string) => {
+    navigate(route);
+    onClose();
+  }, [navigate, onClose]);
+
+  // Group search results by domain (max 3 per domain)
+  const groupedResults = useMemo(() => {
+    const groups = new Map<string, SearchResult[]>();
+    for (const r of searchResults) {
+      const existing = groups.get(r.domain) ?? [];
+      groups.set(r.domain, [...existing, r]);
+    }
+    return groups;
+  }, [searchResults]);
+
+  const placeholder = mode === 'commands'
+    ? 'Run a command...'
+    : mode === 'domain' && selectedDomain
+      ? `@${selectedDomain} Search in ${DOMAIN_LABELS[DOMAIN_MAP[selectedDomain] ?? ''] ?? selectedDomain}...`
+      : mode === 'domain'
+        ? '@domain query...'
+        : 'Search across all domains...';
+
+  if (!open) return null;
+
+  const commandFilter = mode === 'commands' ? inputValue.slice(1).toLowerCase() : '';
+
+  const domainSuggestions = mode === 'domain' && !selectedDomain
+    ? Object.keys(DOMAIN_MAP).filter((d) => d.startsWith(inputValue.slice(1).toLowerCase()))
+    : [];
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 'var(--z-command-palette)',
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)',
+        }}
+      />
+      {/* Palette */}
+      <div
+        style={{
+          position: 'fixed',
+          top: '20%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 'var(--z-command-palette)',
+          width: '100%',
+          maxWidth: 600,
+          maxHeight: '70vh',
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Command shouldFilter={mode === 'commands'} onKeyDown={handleKeyDown}>
+          <Command.Input
+            ref={inputRef}
+            value={inputValue}
+            onValueChange={setInputValue}
+            placeholder={placeholder}
+            autoFocus
+            style={{
+              width: '100%',
+              height: 48,
+              padding: '0 16px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: '1px solid var(--border)',
+              color: 'var(--text)',
+              fontSize: '0.9375rem',
+              fontFamily: 'var(--font-sans)',
+              outline: 'none',
+            }}
+          />
+          <Command.List
+            style={{
+              maxHeight: 'calc(70vh - 48px)',
+              overflowY: 'auto',
+              padding: 8,
+            }}
+          >
+            {/* --- SEARCH MODE --- */}
+            {mode === 'search' && (
+              <>
+                {isSearching && (
+                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                    Searching...
+                  </div>
+                )}
+                {!isSearching && inputValue.trim() && searchResults.length === 0 && (
+                  <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
+                    No results found.
+                  </Command.Empty>
+                )}
+                {!inputValue.trim() && (
+                  <>
+                    <div style={{ padding: '8px 12px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Quick navigation
+                    </div>
+                    {MODULES.filter((m) => m.path).map((mod) => {
+                      const Icon = mod.icon;
+                      return (
+                        <Command.Item
+                          key={mod.id}
+                          value={mod.label}
+                          onSelect={() => handleSelect(mod.path!)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            borderRadius: 'var(--radius-md)',
+                            fontSize: '0.875rem',
+                            color: 'var(--text)',
+                          }}
+                          data-cmdk-item=""
+                        >
+                          <Icon size={18} style={{ color: mod.color }} />
+                          <span>{mod.label}</span>
+                        </Command.Item>
+                      );
+                    })}
+                  </>
+                )}
+                {searchResults.length > 0 && Array.from(groupedResults.entries()).map(([domain, items]) => {
+                  const domainInfo = DOMAIN_ICONS[domain];
+                  const DomainIcon = domainInfo?.icon ?? Search;
+                  const domainColor = domainInfo?.color ?? 'var(--text-dim)';
+                  const label = DOMAIN_LABELS[domain] ?? domain;
+                  const visibleItems = items.slice(0, 3);
+                  const remaining = items.length - visibleItems.length;
+                  const mod = MODULES.find((m) => m.path && DOMAIN_MAP[m.id] === domain);
+
+                  return (
+                    <Command.Group key={domain} heading="">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <DomainIcon size={12} style={{ color: domainColor }} />
+                        {label}
+                      </div>
+                      {visibleItems.map((result) => (
+                        <Command.Item
+                          key={result.id}
+                          value={`${result.title} ${result.snippet}`}
+                          onSelect={() => handleSelect(result.route)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 10,
+                            padding: '6px 12px 6px 24px',
+                            cursor: 'pointer',
+                            borderRadius: 'var(--radius-md)',
+                            fontSize: '0.8125rem',
+                          }}
+                          data-cmdk-item=""
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {result.title}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {result.snippet}
+                            </div>
+                          </div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', flexShrink: 0, marginTop: 2 }}>
+                            {timeAgo(result.timestamp)}
+                          </span>
+                        </Command.Item>
+                      ))}
+                      {remaining > 0 && mod?.path && (
+                        <Command.Item
+                          value={`more ${label}`}
+                          onSelect={() => handleSelect(`${mod.path}?q=${encodeURIComponent(inputValue)}`)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 4,
+                            padding: '4px 12px 4px 24px',
+                            cursor: 'pointer',
+                            borderRadius: 'var(--radius-md)',
+                            fontSize: '0.75rem',
+                            color: 'var(--amber)',
+                          }}
+                          data-cmdk-item=""
+                        >
+                          {remaining} more results
+                          <ArrowRight size={12} />
+                        </Command.Item>
+                      )}
+                    </Command.Group>
+                  );
+                })}
+              </>
+            )}
+
+            {/* --- COMMANDS MODE --- */}
+            {mode === 'commands' && (
+              <>
+                <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
+                  No commands found.
+                </Command.Empty>
+                {(['Navigation', 'Actions', 'UI'] as const).map((group) => {
+                  const groupCommands = commands.filter((c) => {
+                    if (c.group !== group) return false;
+                    if (!commandFilter) return true;
+                    return c.label.toLowerCase().includes(commandFilter);
+                  });
+                  if (groupCommands.length === 0) return null;
+                  return (
+                    <Command.Group key={group} heading="">
+                      <div style={{ padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        {group}
+                      </div>
+                      {groupCommands.map((cmd) => {
+                        const Icon = cmd.icon;
+                        return (
+                          <Command.Item
+                            key={cmd.id}
+                            value={cmd.label}
+                            onSelect={() => {
+                              cmd.action();
+                              onClose();
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              borderRadius: 'var(--radius-md)',
+                              fontSize: '0.875rem',
+                              color: 'var(--text)',
+                            }}
+                            data-cmdk-item=""
+                          >
+                            <Icon size={16} style={{ color: 'var(--text-dim)' }} />
+                            <span>{cmd.label}</span>
+                          </Command.Item>
+                        );
+                      })}
+                    </Command.Group>
+                  );
+                })}
+              </>
+            )}
+
+            {/* --- DOMAIN FILTER MODE --- */}
+            {mode === 'domain' && !selectedDomain && (
+              <>
+                <div style={{ padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Filter by domain
+                </div>
+                {domainSuggestions.map((d) => {
+                  const apiDomain = DOMAIN_MAP[d]!;
+                  const info = DOMAIN_ICONS[apiDomain];
+                  const DIcon = info?.icon ?? Search;
+                  return (
+                    <Command.Item
+                      key={d}
+                      value={d}
+                      onSelect={() => {
+                        setSelectedDomain(d);
+                        setInputValue(`@${d} `);
+                        inputRef.current?.focus();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.875rem',
+                        color: 'var(--text)',
+                      }}
+                      data-cmdk-item=""
+                    >
+                      <DIcon size={16} style={{ color: info?.color ?? 'var(--text-dim)' }} />
+                      <span>@{d}</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>
+                        Search in {DOMAIN_LABELS[apiDomain] ?? d}
+                      </span>
+                    </Command.Item>
+                  );
+                })}
+              </>
+            )}
+
+            {mode === 'domain' && selectedDomain && (
+              <>
+                {isSearching && (
+                  <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                    Searching in {selectedDomain}...
+                  </div>
+                )}
+                {!isSearching && inputValue.slice(`@${selectedDomain} `.length).trim() && searchResults.length === 0 && (
+                  <Command.Empty style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
+                    No results in {selectedDomain}.
+                  </Command.Empty>
+                )}
+                {searchResults.map((result) => (
+                  <Command.Item
+                    key={result.id}
+                    value={`${result.title} ${result.snippet}`}
+                    onSelect={() => handleSelect(result.route)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '0.8125rem',
+                    }}
+                    data-cmdk-item=""
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {result.title}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {result.snippet}
+                      </div>
+                    </div>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', flexShrink: 0, marginTop: 2 }}>
+                      {timeAgo(result.timestamp)}
+                    </span>
+                  </Command.Item>
+                ))}
+              </>
+            )}
+          </Command.List>
+        </Command>
+
+        {/* Footer hints */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '6px 16px',
+            borderTop: '1px solid var(--border)',
+            fontSize: '0.6875rem',
+            color: 'var(--text-muted)',
+          }}
+        >
+          <span><kbd style={kbdStyle}>↑↓</kbd> Navigate</span>
+          <span><kbd style={kbdStyle}>↵</kbd> Select</span>
+          <span><kbd style={kbdStyle}>Esc</kbd> Close</span>
+          {mode === 'search' && <span style={{ marginLeft: 'auto' }}><kbd style={kbdStyle}>&gt;</kbd> Commands <kbd style={kbdStyle}>@</kbd> Domain filter</span>}
+        </div>
+      </div>
+
+      {/* cmdk item hover styles */}
+      <style>{`
+        [data-cmdk-item][data-selected="true"] {
+          background: var(--surface-hover);
+        }
+        [data-cmdk-item]:hover {
+          background: var(--surface-hover);
+        }
+      `}</style>
+    </>
+  );
+}
+
+const kbdStyle: React.CSSProperties = {
+  fontSize: '0.625rem',
+  padding: '1px 4px',
+  background: 'var(--surface)',
+  borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)',
+};

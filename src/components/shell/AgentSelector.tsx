@@ -1,0 +1,84 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { Settings } from 'lucide-react';
+import { useChatStore } from '@/stores/chat.store';
+import { getMockAgents } from '@/services/mock';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+
+export function AgentSelector() {
+  const agents = useChatStore((s) => s.agents);
+  const selectedAgent = useChatStore((s) => s.selectedAgent);
+  const selectAgent = useChatStore((s) => s.selectAgent);
+  const setAgents = useChatStore((s) => s.setAgents);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (agents.length === 0) {
+      const isMock = import.meta.env.VITE_MOCK_API === 'true';
+      if (isMock) {
+        setAgents(getMockAgents());
+      }
+    }
+  }, [agents.length, setAgents]);
+
+  const current = agents.find((a) => a.name === selectedAgent) ?? agents[0];
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 8px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            color: 'var(--text)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+            whiteSpace: 'nowrap',
+            transition: 'border-color var(--transition-fast)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+        >
+          <span>🤖</span>
+          <span>{current?.display_name ?? 'Francis'}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>▾</span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={8}>
+        {agents.map((agent) => (
+          <DropdownMenuItem
+            key={agent.name}
+            onClick={() => selectAgent(agent.name)}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <span>🤖 {agent.display_name}</span>
+            {agent.name === selectedAgent && (
+              <span style={{ color: 'var(--amber)' }}>✓</span>
+            )}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate('/agents')}>
+          <Settings size={14} />
+          Manage agents
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
