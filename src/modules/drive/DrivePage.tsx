@@ -1,11 +1,298 @@
-import { FolderOpen } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { FolderInput, Download, Trash2 } from 'lucide-react';
+import { DropZone } from '@/components/shared/DropZone';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { FolderPicker } from '@/components/shared/FolderPicker';
+import { ShareModal } from '@/components/shared/ShareModal';
+import { useNotificationStore } from '@/stores/notification.store';
+import { useDrive } from './hooks/use-drive';
+import { DriveToolbar } from './DriveToolbar';
+import { DriveGrid } from './DriveGrid';
+import { DriveList } from './DriveList';
+import { DrivePreview } from './DrivePreview';
+import type { FileRecord } from '@/types/files';
 
 export function Component() {
+  const addNotification = useNotificationStore(s => s.addNotification);
+  const {
+    currentPath, navigateTo,
+    files, loading,
+    selectedFile, handleItemClick,
+    setSelectedFile,
+    view, changeView,
+    search, setSearch,
+    uploadFile, createFolder,
+    renameFile, moveFile, deleteFile,
+    handleItemDoubleClick,
+    selectedIds, toggleSelection, toggleAll, clearSelection,
+    batchDelete, batchMove,
+  } = useDrive();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal states
+  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [folderPickerTargetIds, setFolderPickerTargetIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  const handleUploadClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList) return;
+    for (let i = 0; i < fileList.length; i++) {
+      const f = fileList[i];
+      if (f) uploadFile(f);
+    }
+    e.target.value = '';
+  }, [uploadFile]);
+
+  const handleFilesDropped = useCallback((droppedFiles: File[]) => {
+    for (const f of droppedFiles) {
+      uploadFile(f);
+    }
+  }, [uploadFile]);
+
+  const handleNewFolder = useCallback(() => {
+    const name = prompt('Folder name:');
+    if (name && name.trim()) {
+      createFolder(name.trim());
+    }
+  }, [createFolder]);
+
+  const handleRename = useCallback((id: string) => {
+    const file = files.find(f => f.id === id);
+    if (!file) return;
+    const newName = prompt('New name:', file.filename);
+    if (newName && newName.trim() && newName !== file.filename) {
+      renameFile(id, newName.trim());
+    }
+  }, [files, renameFile]);
+
+  // Single file move — opens FolderPicker
+  const handleMove = useCallback((id: string) => {
+    setFolderPickerTargetIds(new Set([id]));
+    setFolderPickerOpen(true);
+  }, []);
+
+  // Batch move — opens FolderPicker for all selected
+  const handleBatchMove = useCallback(() => {
+    setFolderPickerTargetIds(new Set(selectedIds));
+    setFolderPickerOpen(true);
+  }, [selectedIds]);
+
+  // FolderPicker confirmed
+  const handleFolderPickerSelect = useCallback(async (destPath: string) => {
+    setFolderPickerOpen(false);
+    if (folderPickerTargetIds.size === 1) {
+      const id = [...folderPickerTargetIds][0]!;
+      await moveFile(id, destPath);
+      addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
+    } else {
+      await batchMove(folderPickerTargetIds, destPath);
+      addNotification({ type: 'system', title: 'Moved', body: `${folderPickerTargetIds.size} items moved` });
+    }
+  }, [folderPickerTargetIds, moveFile, batchMove, addNotification]);
+
+  // Batch delete — opens confirm dialog
+  const handleBatchDeleteClick = useCallback(() => {
+    setConfirmDeleteOpen(true);
+  }, []);
+
+  const handleBatchDeleteConfirm = useCallback(async () => {
+    const count = selectedIds.size;
+    await batchDelete(selectedIds);
+    addNotification({ type: 'system', title: 'Deleted', body: `${count} items deleted` });
+  }, [selectedIds, batchDelete, addNotification]);
+
+  // Share — opens ShareModal
+  const handleShare = useCallback((file: FileRecord) => {
+    setShareFile(file);
+  }, []);
+
+  const hasSelection = selectedIds.size > 0;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-      <FolderOpen size={48} style={{ color: 'var(--mod-drive)' }} />
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Drive</h1>
-      <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Coming in Phase 9</p>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileInputChange}
+        style={{ display: 'none' }}
+      />
+
+      {/* Toolbar */}
+      <DriveToolbar
+        currentPath={currentPath}
+        onNavigate={navigateTo}
+        search={search}
+        onSearchChange={setSearch}
+        view={view}
+        onViewChange={changeView}
+        onNewFolder={handleNewFolder}
+        onUpload={handleUploadClick}
+      />
+
+      {/* Batch action bar */}
+      {hasSelection && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '8px 16px',
+          background: 'var(--amber-dim)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-sans)',
+        }}>
+          <span style={{ color: 'var(--text)', fontWeight: 500 }}>
+            {selectedIds.size} selected
+          </span>
+
+          <div style={{ flex: 1 }} />
+
+          <BatchButton icon={FolderInput} label="Move" onClick={handleBatchMove} />
+          <BatchButton icon={Download} label="Download" onClick={() => {}} disabled />
+          <BatchButton icon={Trash2} label="Delete" onClick={handleBatchDeleteClick} variant="danger" />
+
+          <button
+            onClick={clearSelection}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              fontSize: '0.75rem', color: 'var(--text-dim)',
+              fontFamily: 'var(--font-sans)',
+              padding: '4px 8px',
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Content area */}
+      <DropZone onFilesDropped={handleFilesDropped}>
+        <div style={{ height: '100%', overflow: 'auto' }}>
+          {view === 'grid' ? (
+            <DriveGrid
+              files={files}
+              loading={loading}
+              selectedFileId={selectedFile?.id ?? null}
+              selectedIds={selectedIds}
+              hasSelection={hasSelection}
+              onItemClick={handleItemClick}
+              onItemDoubleClick={handleItemDoubleClick}
+              onToggleSelect={toggleSelection}
+              onRename={handleRename}
+              onMove={handleMove}
+              onShare={handleShare}
+              onDelete={deleteFile}
+            />
+          ) : (
+            <DriveList
+              files={files}
+              loading={loading}
+              selectedFileId={selectedFile?.id ?? null}
+              selectedIds={selectedIds}
+              onItemClick={handleItemClick}
+              onItemDoubleClick={handleItemDoubleClick}
+              onToggleSelect={toggleSelection}
+              onToggleAll={toggleAll}
+              onRename={handleRename}
+              onMove={handleMove}
+              onShare={handleShare}
+              onDelete={deleteFile}
+            />
+          )}
+        </div>
+      </DropZone>
+
+      {/* Preview panel */}
+      {selectedFile && (
+        <DrivePreview
+          file={selectedFile}
+          onClose={() => setSelectedFile(null)}
+          onDelete={deleteFile}
+        />
+      )}
+
+      {/* Share modal */}
+      {shareFile && (
+        <ShareModal
+          open={!!shareFile}
+          file={shareFile}
+          onClose={() => setShareFile(null)}
+        />
+      )}
+
+      {/* Folder picker for Move */}
+      <FolderPicker
+        open={folderPickerOpen}
+        currentPath={currentPath}
+        onSelect={handleFolderPickerSelect}
+        onCancel={() => setFolderPickerOpen(false)}
+      />
+
+      {/* Confirm delete dialog */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onClose={() => setConfirmDeleteOpen(false)}
+        onConfirm={handleBatchDeleteConfirm}
+        title={`Delete ${selectedIds.size} items?`}
+        description="This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
+  );
+}
+
+function BatchButton({ icon: Icon, label, onClick, disabled, variant }: {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  variant?: 'danger';
+}) {
+  const [hovered, setHovered] = useState(false);
+  const color = variant === 'danger'
+    ? 'var(--error)'
+    : 'var(--text)';
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 10px',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        background: hovered && !disabled ? 'var(--surface-hover)' : 'var(--surface)',
+        color: disabled ? 'var(--text-muted)' : color,
+        fontSize: '0.75rem',
+        fontFamily: 'var(--font-sans)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Icon size={13} />
+      {label}
+    </button>
   );
 }

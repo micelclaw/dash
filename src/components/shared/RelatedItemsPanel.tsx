@@ -9,6 +9,8 @@ import type { LinkedRecord } from '@/types/links';
 interface RelatedItemsPanelProps {
   links: LinkedRecord[];
   loading?: boolean;
+  /** Called before navigating — use to close modals/panels */
+  onNavigate?: () => void;
 }
 
 const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
@@ -22,7 +24,7 @@ const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
 
 const MAX_VISIBLE = 8;
 
-export function RelatedItemsPanel({ links, loading }: RelatedItemsPanelProps) {
+export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPanelProps) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
 
@@ -53,7 +55,7 @@ export function RelatedItemsPanel({ links, loading }: RelatedItemsPanelProps) {
         return (
           <div
             key={rec.link.id}
-            onClick={() => navigate(rec.record.route)}
+            onClick={() => { onNavigate?.(); navigate(rec.record.route); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '4px 0', cursor: 'pointer',

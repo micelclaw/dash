@@ -63,7 +63,9 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
             background: 'var(--card)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-md)',
+            boxShadow: 'var(--shadow-lg)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             padding: '4px 0',
             animation: 'fadeIn 100ms ease',
           }}

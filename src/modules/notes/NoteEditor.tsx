@@ -218,7 +218,7 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
       {/* Related items */}
       {(links.length > 0 || linksLoading) && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          <RelatedItemsPanel links={links} loading={linksLoading} />
+          <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
         </div>
       )}
     </div>

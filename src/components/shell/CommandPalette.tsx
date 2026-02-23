@@ -248,8 +248,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           position: 'fixed',
           inset: 0,
           zIndex: 'var(--z-command-palette)',
-          background: 'rgba(0, 0, 0, 0.5)',
-          backdropFilter: 'blur(4px)',
+          background: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       />
       {/* Palette */}

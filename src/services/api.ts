@@ -96,6 +96,25 @@ class ApiClient {
   delete<T>(path: string): Promise<T> {
     return this.request<T>('DELETE', path);
   }
+
+  async upload<T>(path: string, formData: FormData): Promise<T> {
+    const useMock = import.meta.env.VITE_MOCK_API === 'true';
+    if (useMock) {
+      const { getMockResponse } = await import('./mock');
+      return getMockResponse('POST', path, Object.fromEntries(formData.entries())) as T;
+    }
+    const url = `${BASE_URL}${API_PREFIX}${path}`;
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    // No Content-Type — browser sets multipart boundary
+    const res = await fetch(url, { method: 'POST', headers, body: formData });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new ApiError('UPLOAD_FAILED', text, undefined, res.status);
+    }
+    return res.json();
+  }
 }
 
 export const api = new ApiClient();

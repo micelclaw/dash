@@ -1,11 +1,89 @@
+import { useState, useCallback } from 'react';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { SplitPane } from '@/components/shared/SplitPane';
+import { DiaryTimeline } from './DiaryTimeline';
+import { DiaryEditor } from './DiaryEditor';
+import { useDiary } from './hooks/use-diary';
 import { BookOpen } from 'lucide-react';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 export function Component() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const isMobile = useIsMobile();
+
+  const { entries, loading, error, fetchEntries, updateEntry, openToday } = useDiary({ search: search || undefined });
+
+  const selectedEntry = entries.find(e => e.id === selectedId) ?? null;
+
+  const handleCreateToday = useCallback(async () => {
+    const entry = await openToday();
+    setSelectedId(entry.id);
+  }, [openToday]);
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+  };
+
+  // Mobile: push navigation
+  if (isMobile) {
+    if (selectedEntry) {
+      return (
+        <div style={{ height: '100%' }}>
+          <DiaryEditor
+            entry={selectedEntry}
+            onUpdate={updateEntry}
+            onBack={() => setSelectedId(null)}
+          />
+        </div>
+      );
+    }
+    return (
+      <div style={{ height: '100%' }}>
+        <DiaryTimeline
+          entries={entries}
+          loading={loading}
+          error={error}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onCreateToday={handleCreateToday}
+          search={search}
+          onSearchChange={setSearch}
+          onRetry={fetchEntries}
+        />
+      </div>
+    );
+  }
+
+  // Desktop: SplitPane
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16 }}>
-      <BookOpen size={48} style={{ color: 'var(--mod-diary)' }} />
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Diary</h1>
-      <p style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>Coming in Phase 9</p>
-    </div>
+    <SplitPane defaultSizes={[25, 75]} minSizes={[200, 400]} id="diary-split">
+      <DiaryTimeline
+        entries={entries}
+        loading={loading}
+        error={error}
+        selectedId={selectedId}
+        onSelect={handleSelect}
+        onCreateToday={handleCreateToday}
+        search={search}
+        onSearchChange={setSearch}
+        onRetry={fetchEntries}
+      />
+      {selectedEntry ? (
+        <DiaryEditor
+          entry={selectedEntry}
+          onUpdate={updateEntry}
+        />
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
+          <EmptyState
+            icon={BookOpen}
+            title="Select an entry"
+            description="Choose a diary entry from the timeline or start writing today's entry."
+            actions={[{ label: "+ Write today's entry", onClick: handleCreateToday, variant: 'primary' }]}
+          />
+        </div>
+      )}
+    </SplitPane>
   );
 }

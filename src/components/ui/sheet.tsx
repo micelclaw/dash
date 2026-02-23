@@ -13,7 +13,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     className={cn('fixed inset-0 animate-in fade-in-0', className)}
-    style={{ zIndex: 'var(--z-modal-backdrop)', background: 'rgba(0, 0, 0, 0.6)' }}
+    style={{ zIndex: 'var(--z-modal-backdrop)', background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     {...props}
     ref={ref}
   />
