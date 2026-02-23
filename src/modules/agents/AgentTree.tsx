@@ -16,6 +16,7 @@ interface TreeNode {
   children: TreeNode[];
   x: number;
   y: number;
+  height: number;
 }
 
 interface BracketEdge {
@@ -27,11 +28,28 @@ interface BracketEdge {
 }
 
 const NODE_WIDTH = 260;
-const NODE_HEIGHT = 150;
-const LEVEL_HEIGHT = 180;
+const LEVEL_HEIGHT = 220;
 const H_GAP = 30;
 const BRACKET_OFFSET = 30;
 const CORNER_RADIUS = 8;
+
+function computeCardHeight(agent: ManagedAgent, childCount: number, isOwner: boolean): number {
+  if (isOwner) return 70;
+  let h = 20;  // padding (10 + 10)
+  h += 24;     // header row
+  h += 6;      // gap
+  h += 16;     // role description
+  h += 6;      // gap
+  const skillRows = Math.max(1, Math.ceil(Math.min(agent.skills.length, 6) / 3));
+  h += skillRows * 22; // skill tag rows
+  h += 6;      // gap
+  h += 22;     // footer (status + model badges)
+  if (childCount > 0) {
+    h += 8;    // gap + marginTop
+    h += 26;   // toggle (paddingTop + borderTop + content)
+  }
+  return h;
+}
 
 const OWNER_AGENT: ManagedAgent = {
   id: 'owner',
@@ -56,35 +74,47 @@ const OWNER_AGENT: ManagedAgent = {
 
 function buildTree(agents: ManagedAgent[]): TreeNode {
   const rootChildren = agents.filter(a => a.parent_agent_id === null);
+  const childCounts = new Map<string, number>();
+  for (const a of agents) {
+    if (a.parent_agent_id) {
+      childCounts.set(a.parent_agent_id, (childCounts.get(a.parent_agent_id) || 0) + 1);
+    }
+  }
 
   function buildChildren(parentId: string, depth: number): TreeNode[] {
     const kids = agents.filter(a => a.parent_agent_id === parentId);
     return kids.map(agent => {
+      const cc = childCounts.get(agent.id) || 0;
       const node: TreeNode = {
         agent,
         children: [],
         x: 0,
         y: depth * LEVEL_HEIGHT,
+        height: computeCardHeight(agent, cc, false),
       };
       node.children = buildChildren(agent.id, depth + 1);
       return node;
     });
   }
 
+  const ownerChildCount = rootChildren.length;
   const ownerNode: TreeNode = {
     agent: OWNER_AGENT,
     children: rootChildren.map(agent => {
+      const cc = childCounts.get(agent.id) || 0;
       const node: TreeNode = {
         agent,
         children: [],
         x: 0,
         y: LEVEL_HEIGHT,
+        height: computeCardHeight(agent, cc, false),
       };
       node.children = buildChildren(agent.id, 2);
       return node;
     }),
     x: 0,
     y: 0,
+    height: computeCardHeight(OWNER_AGENT, ownerChildCount, true),
   };
 
   return ownerNode;
@@ -141,7 +171,7 @@ function collectBracketEdges(node: TreeNode, collapsed: Set<string>): BracketEdg
   if (node.children.length > 0 && !collapsed.has(node.agent.id)) {
     edges.push({
       parentX: node.x + NODE_WIDTH / 2,
-      parentY: node.y + NODE_HEIGHT,
+      parentY: node.y + node.height,
       children: node.children.map(c => ({
         x: c.x + NODE_WIDTH / 2,
         y: c.y,
@@ -222,7 +252,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeP
     const allEdges = collectBracketEdges(root, collapsed);
 
     const maxX = allNodes.reduce((max, n) => Math.max(max, n.x + NODE_WIDTH), 0);
-    const maxY = allNodes.reduce((max, n) => Math.max(max, n.y + NODE_HEIGHT), 0);
+    const maxY = allNodes.reduce((max, n) => Math.max(max, n.y + n.height), 0);
 
     return {
       nodes: allNodes,
@@ -322,12 +352,11 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeP
               x={node.x}
               y={node.y}
               width={NODE_WIDTH}
-              height={NODE_HEIGHT}
+              height={node.height + 8}
             >
               <div
                 style={{
                   width: '100%',
-                  height: '100%',
                   display: 'flex',
                   alignItems: 'flex-start',
                   justifyContent: 'center',
