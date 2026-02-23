@@ -76,6 +76,8 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
         padding: '12px 16px',
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
+        flexWrap: 'wrap' as const,
+        gap: 8,
       }}>
         <h3 style={{
           margin: 0,

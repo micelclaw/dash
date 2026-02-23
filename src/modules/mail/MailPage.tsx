@@ -43,8 +43,8 @@ export function Component() {
 
   const {
     emails, loading, error, fetchEmails,
-    markUnread, toggleStar,
-    archiveEmail, deleteEmail, snoozeEmail,
+    markRead, markUnread, toggleStar,
+    archiveEmail, moveToFolder, deleteEmail, snoozeEmail,
     sendEmail, batchAction,
   } = useEmails({
     folder: activeFolder,
@@ -173,6 +173,9 @@ export function Component() {
           onDelete={deleteEmail}
           onSnooze={handleSnooze}
           onToggleStar={toggleStar}
+          onMarkRead={markRead}
+          onMarkUnread={markUnread}
+          onMoveToFolder={moveToFolder}
           onBatchRead={() => batchAction([...selectedIds], 'read')}
           onBatchUnread={() => batchAction([...selectedIds], 'unread')}
           onBatchArchive={() => batchAction([...selectedIds], 'archive')}
@@ -235,6 +238,9 @@ export function Component() {
           onDelete={deleteEmail}
           onSnooze={handleSnooze}
           onToggleStar={toggleStar}
+          onMarkRead={markRead}
+          onMarkUnread={markUnread}
+          onMoveToFolder={moveToFolder}
           onBatchRead={() => batchAction([...selectedIds], 'read')}
           onBatchUnread={() => batchAction([...selectedIds], 'unread')}
           onBatchArchive={() => batchAction([...selectedIds], 'archive')}

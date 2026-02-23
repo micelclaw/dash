@@ -21,7 +21,7 @@ export const useSidebarStore = create<SidebarStore>()(
       userCollapsed: false,
       mobileOpen: false,
       toggle: () => set((s) => {
-        const next = !s.userCollapsed;
+        const next = !s.collapsed;
         return { collapsed: next, userCollapsed: next };
       }),
       setCollapsed: (collapsed: boolean) => set({ collapsed }),

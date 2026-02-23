@@ -131,6 +131,7 @@ export function Component() {
           hiddenCalendars={hiddenCalendars}
           onEventClick={handleEventClick}
           onSlotClick={handleSlotClick}
+          onEventUpdate={updateEvent}
         />
       )}
     </div>

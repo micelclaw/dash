@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Image, Mail } from 'lucide-react';
 import { DropZone } from '@/components/shared/DropZone';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { simpleHash } from '@/lib/file-utils';
 import { formatMonthYear } from '@/lib/date-helpers';
 import type { Photo } from '@/types/files';
@@ -123,6 +124,7 @@ export function PhotosTimeline({
   onFilesDropped,
 }: PhotosTimelineProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   // Compute the global index for a photo within a group
   const getGlobalIndex = useCallback((groupKey: string, localIndex: number) => {
@@ -202,7 +204,9 @@ export function PhotosTimeline({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gridTemplateColumns: isMobile
+                  ? 'repeat(auto-fill, minmax(100px, 1fr))'
+                  : 'repeat(auto-fill, minmax(150px, 1fr))',
                 gap: 4,
                 marginTop: 8,
                 marginBottom: 16,

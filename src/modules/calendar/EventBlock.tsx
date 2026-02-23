@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, useCallback, type CSSProperties } from 'react';
 import { formatTime } from '@/lib/date-helpers';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
@@ -9,9 +9,15 @@ interface EventBlockProps {
   style?: CSSProperties;
   /** Pixel height of the block — used to decide how much info to show */
   heightPx?: number;
+  /** Enable drag-and-drop move */
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent, event: CalendarEvent) => void;
+  /** Enable bottom-edge resize */
+  resizable?: boolean;
+  onResizeStart?: (event: CalendarEvent, clientY: number) => void;
 }
 
-export function EventBlock({ event, onClick, style, heightPx }: EventBlockProps) {
+export function EventBlock({ event, onClick, style, heightPx, draggable, onDragStart, resizable, onResizeStart }: EventBlockProps) {
   const [hovered, setHovered] = useState(false);
   const color = getCalendarColor(event.calendar_name);
   const lines = heightPx ? Math.floor(heightPx / 18) : 1;
@@ -22,8 +28,24 @@ export function EventBlock({ event, onClick, style, heightPx }: EventBlockProps)
     ? `${formatTime(startDate)} – ${formatTime(endDate)}`
     : formatTime(startDate);
 
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    if (onDragStart) {
+      onDragStart(e, event);
+    }
+  }, [onDragStart, event]);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (onResizeStart) {
+      onResizeStart(event, e.clientY);
+    }
+  }, [onResizeStart, event]);
+
   return (
     <div
+      draggable={draggable}
+      onDragStart={draggable ? handleDragStart : undefined}
       onClick={(e) => {
         e.stopPropagation();
         onClick(event);
@@ -35,13 +57,14 @@ export function EventBlock({ event, onClick, style, heightPx }: EventBlockProps)
         borderLeft: `3px solid ${color}`,
         borderRadius: 'var(--radius-sm)',
         padding: '2px 6px',
-        cursor: 'pointer',
+        cursor: draggable ? 'grab' : 'pointer',
         overflow: 'hidden',
         minHeight: 20,
         fontSize: '0.8125rem',
         fontFamily: 'var(--font-sans)',
         lineHeight: 1.3,
         transition: `background var(--transition-fast)`,
+        position: 'relative',
         ...style,
       }}
     >
@@ -116,6 +139,24 @@ export function EventBlock({ event, onClick, style, heightPx }: EventBlockProps)
             </div>
           )}
         </>
+      )}
+
+      {/* Resize handle at bottom */}
+      {resizable && (
+        <div
+          onMouseDown={handleResizeMouseDown}
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 6,
+            cursor: 'ns-resize',
+            background: hovered ? `${color}40` : 'transparent',
+            borderRadius: '0 0 var(--radius-sm) var(--radius-sm)',
+            transition: 'background var(--transition-fast)',
+          }}
+        />
       )}
     </div>
   );

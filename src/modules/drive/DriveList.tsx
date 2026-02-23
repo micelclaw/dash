@@ -25,6 +25,7 @@ interface DriveListProps {
   onMove: (id: string) => void;
   onShare: (file: FileRecord) => void;
   onDelete: (id: string) => void;
+  onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }
 
 const COLUMNS: { key: SortField; label: string; width?: string }[] = [
@@ -39,7 +40,7 @@ const GRID_COLS = '32px 1fr 90px 120px 100px';
 export function DriveList({
   files, loading, selectedFileId, selectedIds,
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll,
-  onRename, onMove, onShare, onDelete,
+  onRename, onMove, onShare, onDelete, onDragToFolder,
 }: DriveListProps) {
   const [sortField, setSortField] = useState<SortField>('filename');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
@@ -131,6 +132,7 @@ export function DriveList({
           file={file}
           selected={file.id === selectedFileId}
           checked={selectedIds.has(file.id)}
+          selectedIds={selectedIds}
           onClick={() => onItemClick(file)}
           onDoubleClick={() => onItemDoubleClick(file)}
           onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
@@ -138,6 +140,7 @@ export function DriveList({
           onMove={() => onMove(file.id)}
           onShare={() => onShare(file)}
           onDelete={() => onDelete(file.id)}
+          onDragToFolder={onDragToFolder}
         />
       ))}
 
@@ -198,12 +201,13 @@ function ColumnHeader({
 }
 
 function ListRow({
-  file, selected, checked, onClick, onDoubleClick, onToggleSelect,
-  onRename, onMove, onShare, onDelete,
+  file, selected, checked, selectedIds, onClick, onDoubleClick, onToggleSelect,
+  onRename, onMove, onShare, onDelete, onDragToFolder,
 }: {
   file: FileRecord;
   selected: boolean;
   checked: boolean;
+  selectedIds: Set<string>;
   onClick: () => void;
   onDoubleClick: () => void;
   onToggleSelect: (shiftKey: boolean) => void;
@@ -211,8 +215,10 @@ function ListRow({
   onMove: () => void;
   onShare: () => void;
   onDelete: () => void;
+  onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const isDir = file.is_directory;
 
   const contextItems: ContextMenuItem[] = [
@@ -229,10 +235,55 @@ function ListRow({
     { label: 'Properties', icon: Info, onClick },
   ];
 
+  // Drag-and-drop handlers
+  const handleDragStart = (e: React.DragEvent) => {
+    const ids = checked && selectedIds.size > 0
+      ? [...selectedIds]
+      : [file.id];
+    e.dataTransfer.setData('application/claw-file-ids', JSON.stringify(ids));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!isDir) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!isDir) return;
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!isDir || !onDragToFolder) return;
+    const raw = e.dataTransfer.getData('application/claw-file-ids');
+    if (!raw) return;
+    try {
+      const ids = JSON.parse(raw) as string[];
+      if (ids.includes(file.id)) return;
+      const destPath = file.filepath.endsWith('/') ? file.filepath : file.filepath + '/';
+      onDragToFolder(ids, destPath);
+    } catch { /* ignore bad data */ }
+  };
+
   return (
     <ContextMenu
       trigger={
         <div
+          draggable
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
           onMouseEnter={() => setHovered(true)}
@@ -243,14 +294,17 @@ function ListRow({
             gap: 8,
             padding: '6px 16px',
             cursor: 'pointer',
-            background: checked
+            background: isDragOver
               ? 'var(--amber-dim)'
-              : selected
+              : checked
                 ? 'var(--amber-dim)'
-                : hovered
-                  ? 'var(--surface-hover)'
-                  : 'transparent',
+                : selected
+                  ? 'var(--amber-dim)'
+                  : hovered
+                    ? 'var(--surface-hover)'
+                    : 'transparent',
             borderBottom: '1px solid var(--border)',
+            border: isDragOver ? '1px dashed var(--amber)' : undefined,
             transition: 'background var(--transition-fast)',
             fontSize: '0.8125rem',
             color: 'var(--text)',

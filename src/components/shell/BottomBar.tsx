@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { ChatInput } from './ChatInput';
 import { ChatPanel } from './ChatPanel';
 
 export function BottomBar() {
+  const isMobile = useIsMobile();
   const chatState = useChatStore((s) => s.chatState);
   const setChatState = useChatStore((s) => s.setChatState);
   const bubbleMessage = useChatStore((s) => s.bubbleMessage);
@@ -125,6 +127,7 @@ export function BottomBar() {
         onCollapse={handleCollapse}
         showExpand
         showCollapse={chatState === 2}
+        compactAgent={isMobile}
       />
 
       {/* CSS animations */}

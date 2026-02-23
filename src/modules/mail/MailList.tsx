@@ -24,6 +24,9 @@ interface MailListProps {
   onDelete: (id: string) => void;
   onSnooze: (id: string, el: HTMLElement) => void;
   onToggleStar: (id: string) => void;
+  onMarkRead?: (id: string) => void;
+  onMarkUnread?: (id: string) => void;
+  onMoveToFolder?: (id: string, folder: string) => void;
   onBatchRead: () => void;
   onBatchUnread: () => void;
   onBatchArchive: () => void;
@@ -106,6 +109,9 @@ export function MailList({
   onDelete,
   onSnooze,
   onToggleStar,
+  onMarkRead,
+  onMarkUnread,
+  onMoveToFolder,
   onBatchRead,
   onBatchUnread,
   onBatchArchive,
@@ -226,6 +232,9 @@ export function MailList({
               onDelete={() => onDelete(email.id)}
               onSnooze={(el) => onSnooze(email.id, el)}
               onToggleStar={() => onToggleStar(email.id)}
+              onMarkRead={onMarkRead ? () => onMarkRead(email.id) : undefined}
+              onMarkUnread={onMarkUnread ? () => onMarkUnread(email.id) : undefined}
+              onMoveToFolder={onMoveToFolder ? (folder) => onMoveToFolder(email.id, folder) : undefined}
             />
           ))
         )}

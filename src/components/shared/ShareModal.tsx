@@ -122,6 +122,8 @@ export function ShareModal({ open, file, onClose }: ShareModalProps) {
         zIndex: 'var(--z-modal)' as unknown as number,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
       }}
     >
       <div

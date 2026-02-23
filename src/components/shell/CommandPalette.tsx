@@ -31,22 +31,34 @@ const DOMAIN_MAP: Record<string, string> = {
 
 const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   notes: { icon: StickyNote, color: 'var(--mod-notes)' },
+  note: { icon: StickyNote, color: 'var(--mod-notes)' },
   events: { icon: Calendar, color: 'var(--mod-calendar)' },
+  event: { icon: Calendar, color: 'var(--mod-calendar)' },
   emails: { icon: Mail, color: 'var(--mod-mail)' },
+  email: { icon: Mail, color: 'var(--mod-mail)' },
   contacts: { icon: Users, color: 'var(--mod-contacts)' },
+  contact: { icon: Users, color: 'var(--mod-contacts)' },
   files: { icon: FolderOpen, color: 'var(--mod-drive)' },
+  file: { icon: FolderOpen, color: 'var(--mod-drive)' },
   diary: { icon: BookOpen, color: 'var(--mod-diary)' },
   conversations: { icon: MessageSquare, color: 'var(--mod-chat)' },
+  conversation: { icon: MessageSquare, color: 'var(--mod-chat)' },
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
   notes: 'Notes',
+  note: 'Notes',
   events: 'Events',
+  event: 'Events',
   emails: 'Mail',
+  email: 'Mail',
   contacts: 'Contacts',
+  contact: 'Contacts',
   files: 'Files',
+  file: 'Files',
   diary: 'Diary',
   conversations: 'Conversations',
+  conversation: 'Conversations',
 };
 
 interface CommandItem {
@@ -359,32 +371,38 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         <DomainIcon size={12} style={{ color: domainColor }} />
                         {label}
                       </div>
-                      {visibleItems.map((result) => (
-                        <Command.Item
-                          key={result.record_id}
-                          value={`${getResultTitle(result)} ${result.snippet}`}
-                          onSelect={() => handleSelect(getResultRoute(result))}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: 10,
-                            padding: '6px 12px 6px 24px',
-                            cursor: 'pointer',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: '0.8125rem',
-                          }}
-                          data-cmdk-item=""
-                        >
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {getResultTitle(result)}
+                      {visibleItems.map((result) => {
+                        const rInfo = DOMAIN_ICONS[domain];
+                        const RIcon = rInfo?.icon ?? Search;
+                        const rColor = rInfo?.color ?? 'var(--text-dim)';
+                        return (
+                          <Command.Item
+                            key={result.record_id}
+                            value={`${getResultTitle(result)} ${result.snippet}`}
+                            onSelect={() => handleSelect(getResultRoute(result))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '6px 12px 6px 24px',
+                              cursor: 'pointer',
+                              borderRadius: 'var(--radius-md)',
+                              fontSize: '0.8125rem',
+                            }}
+                            data-cmdk-item=""
+                          >
+                            <RIcon size={14} style={{ color: rColor, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {getResultTitle(result)}
+                              </div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {result.snippet}
+                              </div>
                             </div>
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {result.snippet}
-                            </div>
-                          </div>
-                        </Command.Item>
-                      ))}
+                          </Command.Item>
+                        );
+                      })}
                       {remaining > 0 && mod?.path && (
                         <Command.Item
                           value={`more ${label}`}
@@ -517,32 +535,38 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     No results in {selectedDomain}.
                   </Command.Empty>
                 )}
-                {searchResults.map((result) => (
-                  <Command.Item
-                    key={result.record_id}
-                    value={`${getResultTitle(result)} ${result.snippet}`}
-                    onSelect={() => handleSelect(getResultRoute(result))}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 10,
-                      padding: '8px 12px',
-                      cursor: 'pointer',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: '0.8125rem',
-                    }}
-                    data-cmdk-item=""
-                  >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {getResultTitle(result)}
+                {searchResults.map((result) => {
+                  const dInfo = selectedDomain ? DOMAIN_ICONS[DOMAIN_MAP[selectedDomain] ?? ''] : undefined;
+                  const DResultIcon = dInfo?.icon ?? Search;
+                  const dResultColor = dInfo?.color ?? 'var(--text-dim)';
+                  return (
+                    <Command.Item
+                      key={result.record_id}
+                      value={`${getResultTitle(result)} ${result.snippet}`}
+                      onSelect={() => handleSelect(getResultRoute(result))}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.8125rem',
+                      }}
+                      data-cmdk-item=""
+                    >
+                      <DResultIcon size={14} style={{ color: dResultColor, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {getResultTitle(result)}
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {result.snippet}
+                        </div>
                       </div>
-                      <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {result.snippet}
-                      </div>
-                    </div>
-                  </Command.Item>
-                ))}
+                    </Command.Item>
+                  );
+                })}
               </>
             )}
           </Command.List>

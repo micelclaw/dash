@@ -22,6 +22,8 @@ export function PhotoLightbox({
 
   // Touch/swipe support
   const pointerStartX = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const SWIPE_THRESHOLD = 50;
 
   const goPrev = useCallback(() => {
     if (currentIndex > 0) onNavigate(currentIndex - 1);
@@ -49,11 +51,28 @@ export function PhotoLightbox({
   const handlePointerUp = (e: React.PointerEvent) => {
     if (pointerStartX.current === null) return;
     const dx = e.clientX - pointerStartX.current;
-    if (Math.abs(dx) > 60) {
+    if (Math.abs(dx) > SWIPE_THRESHOLD) {
       if (dx > 0) goPrev();
       else goNext();
     }
     pointerStartX.current = null;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartX.current = e.touches[0]!.clientX;
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const endX = e.changedTouches[0]!.clientX;
+    const dx = endX - touchStartX.current;
+    if (Math.abs(dx) > SWIPE_THRESHOLD) {
+      if (dx > 0) goPrev();
+      else goNext();
+    }
+    touchStartX.current = null;
   };
 
   if (!photo) return null;
@@ -90,6 +109,8 @@ export function PhotoLightbox({
       }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Close button */}
       <button

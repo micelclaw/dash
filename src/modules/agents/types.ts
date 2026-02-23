@@ -5,6 +5,8 @@ export interface ManagedAgent {
   role: string;
   avatar: string | null;
   model: string;
+  color: string;
+  is_chief: boolean;
   parent_agent_id: string | null;
   skills: AgentSkill[];
   workspace_path: string;
@@ -46,4 +48,39 @@ export interface ConversationStats {
   active_sessions: number;
 }
 
-export type AgentTab = 'tree' | 'conversations' | 'workspaces';
+export interface MeetingMessage {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  agent_avatar: string;
+  agent_role: string;
+  agent_color: string;
+  content: string;
+  created_at: string;
+}
+
+export interface ActionItem {
+  id: string;
+  title: string;
+  assigned_to: string;
+  status: 'pending' | 'in_progress' | 'complete';
+  description?: string;
+  deliverable_url?: string;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description: string | null;
+  participants: string[];
+  user_participates: boolean;
+  status: 'scheduled' | 'in_progress' | 'completed';
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  messages: MeetingMessage[];
+  action_items: ActionItem[];
+  created_at: string;
+}
+
+export type AgentTab = 'tree' | 'council' | 'conversations' | 'workspaces';

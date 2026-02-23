@@ -12,10 +12,8 @@ import {
   startOfDay,
 } from '@/lib/date-helpers';
 import { getCalendarColor } from './types';
-import type { CalendarView, CalendarEvent } from './types';
+import type { CalendarView, CalendarEvent, EventUpdateInput } from './types';
 import { EventBlock } from './EventBlock';
-
-// TODO P9-3: Drag & drop move/resize
 
 interface CalendarGridProps {
   view: CalendarView;
@@ -24,6 +22,7 @@ interface CalendarGridProps {
   hiddenCalendars: Set<string>;
   onEventClick: (event: CalendarEvent) => void;
   onSlotClick: (date: Date) => void;
+  onEventUpdate?: (id: string, input: EventUpdateInput) => void;
 }
 
 /** Total pixel height for the 24-hour time grid (48 half-hour rows x 30px each) */
@@ -34,6 +33,11 @@ const TIME_GUTTER_WIDTH = 56;
 const DAY_NAMES = getWeekDayNames(1);
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 
+/** Snap minutes to nearest 15-minute interval */
+function snapMinutes(minutes: number): number {
+  return Math.round(minutes / 15) * 15;
+}
+
 export function CalendarGrid({
   view,
   currentDate,
@@ -41,6 +45,7 @@ export function CalendarGrid({
   hiddenCalendars,
   onEventClick,
   onSlotClick,
+  onEventUpdate,
 }: CalendarGridProps) {
   const visibleEvents = useMemo(
     () => events.filter((ev) => !hiddenCalendars.has(ev.calendar_name)),
@@ -55,6 +60,7 @@ export function CalendarGrid({
           events={visibleEvents}
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
+          onEventUpdate={onEventUpdate}
         />
       );
     case 'week':
@@ -64,6 +70,7 @@ export function CalendarGrid({
           events={visibleEvents}
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
+          onEventUpdate={onEventUpdate}
         />
       );
     case 'month':
@@ -95,9 +102,10 @@ interface TimeGridProps {
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
   onSlotClick: (date: Date) => void;
+  onEventUpdate?: (id: string, input: EventUpdateInput) => void;
 }
 
-function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
+function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnCount = days.length;
 
@@ -181,8 +189,163 @@ function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
     [days, onSlotClick],
   );
 
+  // ─── Drag-and-drop state ──────────────────────────────────────────
+  const [dragEventId, setDragEventId] = useState<string | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ col: number; top: number; height: number } | null>(null);
+
+  const handleEventDragStart = useCallback((e: React.DragEvent, event: CalendarEvent) => {
+    setDragEventId(event.id);
+    e.dataTransfer.setData('application/claw-event-id', event.id);
+    e.dataTransfer.effectAllowed = 'move';
+    // Use a transparent drag image so we show our own preview
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(img, 0, 0);
+  }, []);
+
+  const handleColumnDragOver = useCallback((colIndex: number, e: React.DragEvent) => {
+    if (!dragEventId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const totalMinutes = snapMinutes(Math.floor((y / TOTAL_HEIGHT) * 1440));
+
+    // Calculate the dragged event's original duration
+    const ev = events.find(ev => ev.id === dragEventId);
+    if (!ev) return;
+    const evStart = new Date(ev.start_at);
+    const evEnd = ev.end_at ? new Date(ev.end_at) : new Date(evStart.getTime() + 60 * 60 * 1000);
+    const durationMin = Math.max((evEnd.getTime() - evStart.getTime()) / 60000, 15);
+
+    const previewTop = (totalMinutes / 1440) * TOTAL_HEIGHT;
+    const previewHeight = (durationMin / 1440) * TOTAL_HEIGHT;
+
+    setDragPreview({ col: colIndex, top: previewTop, height: previewHeight });
+  }, [dragEventId, events]);
+
+  const handleColumnDrop = useCallback((colIndex: number, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragPreview(null);
+    setDragEventId(null);
+
+    const eventId = e.dataTransfer.getData('application/claw-event-id');
+    if (!eventId || !onEventUpdate) return;
+
+    const ev = events.find(ev => ev.id === eventId);
+    if (!ev) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const totalMinutes = snapMinutes(Math.floor((y / TOTAL_HEIGHT) * 1440));
+    const newHours = Math.floor(totalMinutes / 60);
+    const newMinutes = totalMinutes % 60;
+
+    // Calculate duration to preserve it
+    const evStart = new Date(ev.start_at);
+    const evEnd = ev.end_at ? new Date(ev.end_at) : new Date(evStart.getTime() + 60 * 60 * 1000);
+    const durationMs = evEnd.getTime() - evStart.getTime();
+
+    // Build new start/end on the target day
+    const targetDay = new Date(days[colIndex]!);
+    const newStart = new Date(targetDay);
+    newStart.setHours(newHours, newMinutes, 0, 0);
+    const newEnd = new Date(newStart.getTime() + durationMs);
+
+    onEventUpdate(eventId, {
+      start_at: newStart.toISOString(),
+      end_at: newEnd.toISOString(),
+    });
+  }, [days, events, onEventUpdate]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragPreview(null);
+    setDragEventId(null);
+  }, []);
+
+  // ─── Resize state ─────────────────────────────────────────────────
+  const [resizeState, setResizeState] = useState<{
+    eventId: string;
+    startClientY: number;
+    originalEndMin: number;
+    originalStartMin: number;
+  } | null>(null);
+  const [resizePreviewHeight, setResizePreviewHeight] = useState<number | null>(null);
+  const resizeRef = useRef(resizeState);
+  resizeRef.current = resizeState;
+
+  const handleResizeStart = useCallback((event: CalendarEvent, clientY: number) => {
+    const evStart = new Date(event.start_at);
+    const evEnd = event.end_at ? new Date(event.end_at) : new Date(evStart.getTime() + 60 * 60 * 1000);
+    const startMin = evStart.getHours() * 60 + evStart.getMinutes();
+    const endMin = evEnd.getHours() * 60 + evEnd.getMinutes();
+
+    setResizeState({
+      eventId: event.id,
+      startClientY: clientY,
+      originalEndMin: endMin,
+      originalStartMin: startMin,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!resizeState) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const rs = resizeRef.current;
+      if (!rs) return;
+      const deltaY = e.clientY - rs.startClientY;
+      const deltaMinutes = snapMinutes(Math.floor((deltaY / TOTAL_HEIGHT) * 1440));
+      const newEndMin = Math.max(rs.originalStartMin + 15, rs.originalEndMin + deltaMinutes);
+      const newHeight = ((newEndMin - rs.originalStartMin) / 1440) * TOTAL_HEIGHT;
+      setResizePreviewHeight(Math.max(newHeight, 20));
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      const rs = resizeRef.current;
+      if (!rs || !onEventUpdate) {
+        setResizeState(null);
+        setResizePreviewHeight(null);
+        return;
+      }
+
+      const ev = events.find(ev => ev.id === rs.eventId);
+      if (!ev) {
+        setResizeState(null);
+        setResizePreviewHeight(null);
+        return;
+      }
+
+      const deltaY = e.clientY - rs.startClientY;
+      const deltaMinutes = snapMinutes(Math.floor((deltaY / TOTAL_HEIGHT) * 1440));
+      const newEndMin = Math.max(rs.originalStartMin + 15, rs.originalEndMin + deltaMinutes);
+      const newEndHours = Math.floor(newEndMin / 60);
+      const newEndMinutes = newEndMin % 60;
+
+      const evStart = new Date(ev.start_at);
+      const newEnd = new Date(evStart);
+      newEnd.setHours(newEndHours, newEndMinutes, 0, 0);
+
+      onEventUpdate(rs.eventId, {
+        end_at: newEnd.toISOString(),
+      });
+
+      setResizeState(null);
+      setResizePreviewHeight(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizeState, events, onEventUpdate]);
+
   return (
     <div
+      onDragEnd={handleDragEnd}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -336,6 +499,8 @@ function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
               <div
                 key={colIndex}
                 onClick={(e) => handleSlotClick(colIndex, e)}
+                onDragOver={(e) => handleColumnDragOver(colIndex, e)}
+                onDrop={(e) => handleColumnDrop(colIndex, e)}
                 style={{
                   position: 'relative',
                   borderRight: colIndex < columnCount - 1 ? '1px solid var(--border)' : 'none',
@@ -401,6 +566,25 @@ function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
                   </div>
                 )}
 
+                {/* Drag preview ghost */}
+                {dragPreview && dragPreview.col === colIndex && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: dragPreview.top,
+                      left: 2,
+                      right: 4,
+                      height: dragPreview.height,
+                      background: 'var(--amber-dim)',
+                      border: '2px dashed var(--amber)',
+                      borderRadius: 'var(--radius-sm)',
+                      zIndex: 4,
+                      pointerEvents: 'none',
+                      opacity: 0.7,
+                    }}
+                  />
+                )}
+
                 {/* Events */}
                 {dayEvents.map((ev) => {
                   const evStart = new Date(ev.start_at);
@@ -411,13 +595,24 @@ function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
                   const top = (startMin / 1440) * TOTAL_HEIGHT;
                   const height = (durationMin / 1440) * TOTAL_HEIGHT;
 
-                  const blockHeight = Math.max(height, 20);
+                  // Apply resize preview height if this is the event being resized
+                  const isResizing = resizeState?.eventId === ev.id;
+                  const blockHeight = isResizing && resizePreviewHeight != null
+                    ? resizePreviewHeight
+                    : Math.max(height, 20);
+
+                  const isDragging = dragEventId === ev.id;
+
                   return (
                     <EventBlock
                       key={ev.id}
                       event={ev}
                       onClick={onEventClick}
                       heightPx={blockHeight}
+                      draggable={!!onEventUpdate}
+                      onDragStart={handleEventDragStart}
+                      resizable={!!onEventUpdate}
+                      onResizeStart={handleResizeStart}
                       style={{
                         position: 'absolute',
                         top,
@@ -425,6 +620,8 @@ function TimeGrid({ days, events, onEventClick, onSlotClick }: TimeGridProps) {
                         right: 4,
                         height: blockHeight,
                         zIndex: 2,
+                        opacity: isDragging ? 0.4 : 1,
+                        transition: isDragging ? 'none' : undefined,
                       }}
                     />
                   );

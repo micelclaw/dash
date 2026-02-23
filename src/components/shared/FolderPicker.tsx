@@ -132,6 +132,8 @@ export function FolderPicker({ open, currentPath, onSelect, onCancel }: FolderPi
         alignItems: 'center',
         justifyContent: 'center',
         background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
       }}
     >
       <div

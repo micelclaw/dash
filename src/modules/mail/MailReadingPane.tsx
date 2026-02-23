@@ -26,7 +26,7 @@ function formatFileSize(bytes: number): string {
 }
 
 const DARK_MODE_STYLES = `<style>
-body { background: transparent; color: #e0e0e0; font-family: -apple-system, sans-serif; font-size: 14px; line-height: 1.6; margin: 0; padding: 8px; }
+body { background: #111118; color: #e2e2e6; font-family: -apple-system, sans-serif; font-size: 14px; line-height: 1.6; margin: 0; padding: 8px; }
 a { color: #d4a017; }
 img { max-width: 100%; }
 blockquote { border-left: 3px solid #333; margin: 8px 0; padding-left: 12px; color: #999; }
@@ -355,7 +355,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
           <iframe
             srcDoc={DARK_MODE_STYLES + email.body_html}
             sandbox=""
-            style={{ width: '100%', border: 'none', minHeight: 100 }}
+            style={{ width: '100%', border: 'none', minHeight: 100, background: 'var(--bg)' }}
             onLoad={(e) => {
               const iframe = e.target as HTMLIFrameElement;
               if (iframe.contentDocument) {

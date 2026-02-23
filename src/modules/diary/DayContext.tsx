@@ -85,9 +85,14 @@ export function DayContext({ entryDate }: DayContextProps) {
       )}
 
       {context.emailCount > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div
+          onClick={() => navigate(`/mail?date=${entryDate}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', transition: 'color var(--transition-fast)' }}
+          onMouseEnter={ev => { ev.currentTarget.style.color = 'var(--mod-mail)'; }}
+          onMouseLeave={ev => { ev.currentTarget.style.color = 'inherit'; }}
+        >
           <Mail size={14} style={{ color: 'var(--mod-mail)', flexShrink: 0 }} />
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+          <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
             {context.emailCount} email{context.emailCount !== 1 ? 's' : ''} received
           </span>
         </div>

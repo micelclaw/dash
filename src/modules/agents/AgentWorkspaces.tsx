@@ -9,6 +9,7 @@ import type { ManagedAgent } from './types';
 
 interface AgentWorkspacesProps {
   agents: ManagedAgent[];
+  isMobile?: boolean;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -23,7 +24,7 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export function AgentWorkspaces({ agents }: AgentWorkspacesProps) {
+export function AgentWorkspaces({ agents, isMobile }: AgentWorkspacesProps) {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<string>(agents[0]?.id ?? '');
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
@@ -89,59 +90,91 @@ export function AgentWorkspaces({ agents }: AgentWorkspacesProps) {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       height: '100%',
       overflow: 'hidden',
     }}>
-      {/* Left panel: agent list */}
-      <div style={{
-        width: 200,
-        borderRight: '1px solid var(--border)',
-        overflowY: 'auto',
-        flexShrink: 0,
-      }}>
-        {agents.map(agent => {
-          const isSelected = agent.id === selectedId;
-          const isHovered = agent.id === hoveredAgentId;
-          return (
-            <div
-              key={agent.id}
-              onClick={() => setSelectedId(agent.id)}
-              onMouseEnter={() => setHoveredAgentId(agent.id)}
-              onMouseLeave={() => setHoveredAgentId(null)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 12px',
-                cursor: 'pointer',
-                background: isSelected
-                  ? 'var(--surface-hover)'
-                  : isHovered
-                    ? 'var(--surface)'
-                    : 'transparent',
-                borderLeft: isSelected
-                  ? '3px solid var(--amber)'
-                  : '3px solid transparent',
-                transition: 'var(--transition-fast)',
-              }}
-            >
-              <span style={{ fontSize: '1.125rem', flexShrink: 0 }}>
-                {agent.avatar ?? '🤖'}
-              </span>
-              <span style={{
-                fontSize: '0.8125rem',
-                color: isSelected ? 'var(--text)' : 'var(--text-dim)',
-                fontWeight: isSelected ? 600 : 400,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}>
-                {agent.display_name}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {/* Agent selector: dropdown on mobile, sidebar on desktop */}
+      {isMobile ? (
+        <div style={{
+          padding: '10px 12px',
+          borderBottom: '1px solid var(--border)',
+          flexShrink: 0,
+        }}>
+          <select
+            value={selectedId}
+            onChange={e => setSelectedId(e.target.value)}
+            style={{
+              width: '100%',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px 10px',
+              fontSize: '0.8125rem',
+              fontFamily: 'var(--font-sans)',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {agents.map(agent => (
+              <option key={agent.id} value={agent.id}>
+                {agent.avatar ?? '\u{1F916}'} {agent.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div style={{
+          width: 200,
+          borderRight: '1px solid var(--border)',
+          overflowY: 'auto',
+          flexShrink: 0,
+        }}>
+          {agents.map(agent => {
+            const isSelected = agent.id === selectedId;
+            const isHovered = agent.id === hoveredAgentId;
+            return (
+              <div
+                key={agent.id}
+                onClick={() => setSelectedId(agent.id)}
+                onMouseEnter={() => setHoveredAgentId(agent.id)}
+                onMouseLeave={() => setHoveredAgentId(null)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 12px',
+                  cursor: 'pointer',
+                  background: isSelected
+                    ? 'var(--surface-hover)'
+                    : isHovered
+                      ? 'var(--surface)'
+                      : 'transparent',
+                  borderLeft: isSelected
+                    ? '3px solid var(--amber)'
+                    : '3px solid transparent',
+                  transition: 'var(--transition-fast)',
+                }}
+              >
+                <span style={{ fontSize: '1.125rem', flexShrink: 0 }}>
+                  {agent.avatar ?? '🤖'}
+                </span>
+                <span style={{
+                  fontSize: '0.8125rem',
+                  color: isSelected ? 'var(--text)' : 'var(--text-dim)',
+                  fontWeight: isSelected ? 600 : 400,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {agent.display_name}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Right panel: file browser */}
       <div style={{

@@ -13,6 +13,7 @@ interface DriveToolbarProps {
   onViewChange: (v: DriveView) => void;
   onNewFolder: () => void;
   onUpload: () => void;
+  isMobile?: boolean;
 }
 
 export function DriveToolbar({
@@ -20,6 +21,7 @@ export function DriveToolbar({
   search, onSearchChange,
   view, onViewChange,
   onNewFolder, onUpload,
+  isMobile,
 }: DriveToolbarProps) {
   const [localSearch, setLocalSearch] = useState(search);
   const [newFolderHovered, setNewFolderHovered] = useState(false);
@@ -48,15 +50,22 @@ export function DriveToolbar({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        padding: '8px 16px',
+        gap: isMobile ? 4 : 8,
+        padding: isMobile ? '6px 8px' : '8px 16px',
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
         fontFamily: 'var(--font-sans)',
       }}
     >
-      {/* Left: Breadcrumb */}
-      <div style={{ flex: '0 1 auto', minWidth: 0 }}>
+      {/* Left: Breadcrumb — truncated on mobile */}
+      <div style={{
+        flex: '0 1 auto',
+        minWidth: 0,
+        maxWidth: isMobile ? 120 : undefined,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
         <FileBreadcrumb
           path={currentPath}
           rootLabel="Drive"
@@ -77,8 +86,8 @@ export function DriveToolbar({
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
           padding: '0 10px',
-          maxWidth: 240,
-          flex: '0 1 240px',
+          maxWidth: isMobile ? 140 : 240,
+          flex: isMobile ? '0 1 140px' : '0 1 240px',
         }}
       >
         <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
@@ -149,7 +158,7 @@ export function DriveToolbar({
         <FolderPlus size={16} />
       </button>
 
-      {/* Upload button */}
+      {/* Upload button — icon-only on mobile */}
       <button
         onClick={onUpload}
         title="Upload file"
@@ -158,8 +167,9 @@ export function DriveToolbar({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '6px 12px',
+          justifyContent: 'center',
+          gap: isMobile ? 0 : 6,
+          padding: isMobile ? '6px 8px' : '6px 12px',
           border: 'none',
           borderRadius: 'var(--radius-sm)',
           background: uploadHovered ? 'var(--amber)' : 'var(--amber-dim)',
@@ -173,7 +183,7 @@ export function DriveToolbar({
         }}
       >
         <Upload size={14} />
-        Upload
+        {!isMobile && 'Upload'}
       </button>
     </div>
   );

@@ -1,7 +1,12 @@
 import { useState, useRef } from 'react';
-import { Star, Paperclip, Archive, Clock, Trash2 } from 'lucide-react';
+import {
+  Star, Paperclip, Archive, Clock, Trash2,
+  MailOpen, Mail as MailIcon, Inbox, ShieldAlert,
+} from 'lucide-react';
+import { ContextMenu } from '@/components/shared/ContextMenu';
 import { formatEmailTime } from '@/lib/date-helpers';
 import type { Email } from './types';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 
 interface MailListItemProps {
   email: Email;
@@ -14,6 +19,9 @@ interface MailListItemProps {
   onDelete: () => void;
   onSnooze: (el: HTMLElement) => void;
   onToggleStar: () => void;
+  onMarkRead?: () => void;
+  onMarkUnread?: () => void;
+  onMoveToFolder?: (folder: string) => void;
 }
 
 export function MailListItem({
@@ -27,6 +35,9 @@ export function MailListItem({
   onDelete,
   onSnooze,
   onToggleStar,
+  onMarkRead,
+  onMarkUnread,
+  onMoveToFolder,
 }: MailListItemProps) {
   const [hovered, setHovered] = useState(false);
   const snoozeRef = useRef<HTMLButtonElement>(null);
@@ -34,7 +45,27 @@ export function MailListItem({
   const unread = !email.is_read;
   const leftBorderColor = accountColor ?? 'var(--mod-mail)';
 
+  const contextItems: ContextMenuItem[] = [
+    {
+      label: unread ? 'Mark as read' : 'Mark as unread',
+      icon: unread ? MailOpen : MailIcon,
+      onClick: () => unread ? onMarkRead?.() : onMarkUnread?.(),
+    },
+    {
+      label: email.is_starred ? 'Unstar' : 'Star',
+      icon: Star,
+      onClick: onToggleStar,
+    },
+    { label: '', separator: true, onClick: () => {} },
+    { label: 'Archive', icon: Archive, onClick: onArchive },
+    { label: 'Move to Inbox', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') },
+    { label: 'Move to Spam', icon: ShieldAlert, onClick: () => onMoveToFolder?.('SPAM') },
+    { label: '', separator: true, onClick: () => {} },
+    { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const },
+  ];
+
   return (
+    <ContextMenu trigger={
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -101,7 +132,7 @@ export function MailListItem({
             minWidth: 0,
             fontSize: '0.8125rem',
             fontFamily: 'var(--font-sans)',
-            fontWeight: unread ? 600 : 400,
+            fontWeight: unread ? 600 : 500,
             color: 'var(--text)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -260,7 +291,7 @@ export function MailListItem({
           style={{
             fontSize: '0.8125rem',
             fontFamily: 'var(--font-sans)',
-            fontWeight: unread ? 600 : 400,
+            fontWeight: unread ? 600 : 500,
             color: 'var(--text)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -276,7 +307,7 @@ export function MailListItem({
             style={{
               fontSize: '0.8125rem',
               fontFamily: 'var(--font-sans)',
-              color: 'var(--text-muted)',
+              color: 'var(--text-dim)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -322,5 +353,6 @@ export function MailListItem({
         </div>
       )}
     </div>
+    } items={contextItems} />
   );
 }

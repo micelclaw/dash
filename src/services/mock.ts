@@ -8,7 +8,7 @@ import type { Contact } from '@/modules/contacts/types';
 import type { DiaryEntry } from '@/modules/diary/types';
 import type { Email, EmailAccount } from '@/modules/mail/types';
 import type { FileRecord, Photo, Album } from '@/types/files';
-import type { ManagedAgent, AgentConversation, ConversationStats } from '@/modules/agents/types';
+import type { ManagedAgent, AgentConversation, ConversationStats, Meeting } from '@/modules/agents/types';
 import { getPreview } from '@/lib/text';
 
 // ── Users ──
@@ -668,69 +668,122 @@ let albumIdCounter = 100;
 // ── Managed Agents (Agent Manager) ──
 
 const MOCK_MANAGED_AGENTS: ManagedAgent[] = [
+  // Francis — Main Router (only top-level agent, direct report to Paco)
   {
     id: 'agent-1', name: 'francis', display_name: 'Francis', role: 'Main Router',
-    avatar: '\u{1F916}', model: 'claude-opus-4-6', parent_agent_id: null,
+    avatar: '🤖', model: 'claude-opus-4-6', color: '#d4a017', is_chief: true,
+    parent_agent_id: null,
     skills: [
-      { id: 'sk-1', name: 'Notes', icon: '\u{1F4DD}', enabled: true, domain: 'notes' },
-      { id: 'sk-2', name: 'Calendar', icon: '\u{1F4C5}', enabled: true, domain: 'calendar' },
-      { id: 'sk-3', name: 'Mail', icon: '\u2709\uFE0F', enabled: true, domain: 'mail' },
-      { id: 'sk-4', name: 'Drive', icon: '\u{1F4C1}', enabled: true, domain: 'drive' },
-      { id: 'sk-5', name: 'Search', icon: '\u{1F50D}', enabled: true, domain: 'search' },
-      { id: 'sk-6', name: 'Photos', icon: '\u{1F4F7}', enabled: true, domain: 'photos' },
-      { id: 'sk-7', name: 'Diary', icon: '\u{1F4D3}', enabled: true, domain: 'diary' },
-      { id: 'sk-8', name: 'Contacts', icon: '\u{1F464}', enabled: true, domain: 'contacts' },
-      { id: 'sk-9', name: 'Graph', icon: '\u{1F578}\uFE0F', enabled: true, domain: 'graph' },
-      { id: 'sk-10', name: 'Insights', icon: '\u{1F4A1}', enabled: true, domain: 'insights' },
-      { id: 'sk-11', name: 'Digest', icon: '\u{1F4F0}', enabled: true, domain: 'digest' },
-      { id: 'sk-12', name: 'System', icon: '\u2699\uFE0F', enabled: true, domain: 'system' },
+      { id: 'sk-1', name: 'Notes', icon: '📝', enabled: true, domain: 'notes' },
+      { id: 'sk-2', name: 'Calendar', icon: '📅', enabled: true, domain: 'calendar' },
+      { id: 'sk-3', name: 'Mail', icon: '✉️', enabled: true, domain: 'mail' },
+      { id: 'sk-4', name: 'Drive', icon: '📁', enabled: true, domain: 'drive' },
+      { id: 'sk-5', name: 'Search', icon: '🔍', enabled: true, domain: 'search' },
+      { id: 'sk-6', name: 'Photos', icon: '📷', enabled: true, domain: 'photos' },
+      { id: 'sk-7', name: 'Diary', icon: '📓', enabled: true, domain: 'diary' },
+      { id: 'sk-8', name: 'Contacts', icon: '👤', enabled: true, domain: 'contacts' },
+      { id: 'sk-9', name: 'Graph', icon: '🕸️', enabled: true, domain: 'graph' },
+      { id: 'sk-10', name: 'Insights', icon: '💡', enabled: true, domain: 'insights' },
+      { id: 'sk-11', name: 'Digest', icon: '📰', enabled: true, domain: 'digest' },
+      { id: 'sk-12', name: 'System', icon: '⚙️', enabled: true, domain: 'system' },
     ],
     workspace_path: '/gateway/workspace/agents/francis/',
     status: 'active', last_active_at: new Date(Date.now() - 300000).toISOString(),
     sessions_today: 12, tokens_today: 45230, created_at: daysAgo(60),
   },
+  // Elon — CTO (chief, child of Francis)
   {
-    id: 'agent-2', name: 'elon', display_name: 'Elon', role: 'Code Agent',
-    avatar: '\u{1F9EA}', model: 'claude-sonnet-4-5', parent_agent_id: null,
+    id: 'agent-2', name: 'elon', display_name: 'Elon', role: 'CTO',
+    avatar: '🧪', model: 'claude-sonnet-4-5', color: '#10b981', is_chief: true,
+    parent_agent_id: 'agent-1',
     skills: [
-      { id: 'sk-13', name: 'Code', icon: '\u{1F4BB}', enabled: true, domain: 'code' },
-      { id: 'sk-14', name: 'Drive', icon: '\u{1F4C1}', enabled: true, domain: 'drive' },
-      { id: 'sk-15', name: 'Search', icon: '\u{1F50D}', enabled: true, domain: 'search' },
-      { id: 'sk-16', name: 'Git', icon: '\u{1F500}', enabled: true, domain: 'git' },
-      { id: 'sk-17', name: 'Shell', icon: '\u{1F5A5}\uFE0F', enabled: true, domain: 'shell' },
+      { id: 'sk-13', name: 'Code', icon: '💻', enabled: true, domain: 'code' },
+      { id: 'sk-14', name: 'Drive', icon: '📁', enabled: true, domain: 'drive' },
+      { id: 'sk-15', name: 'Search', icon: '🔍', enabled: true, domain: 'search' },
+      { id: 'sk-16', name: 'Git', icon: '🔀', enabled: true, domain: 'git' },
+      { id: 'sk-17', name: 'Shell', icon: '🖥️', enabled: true, domain: 'shell' },
     ],
     workspace_path: '/gateway/workspace/agents/elon/',
     status: 'active', last_active_at: new Date(Date.now() - 1800000).toISOString(),
     sessions_today: 5, tokens_today: 22100, created_at: daysAgo(45),
   },
+  // Ana — Data Analyst (chief, child of Francis)
   {
     id: 'agent-3', name: 'ana', display_name: 'Ana', role: 'Data Analyst',
-    avatar: '\u{1F4CA}', model: 'deepseek-chat', parent_agent_id: null,
+    avatar: '📊', model: 'deepseek-chat', color: '#a855f7', is_chief: true,
+    parent_agent_id: 'agent-1',
     skills: [
-      { id: 'sk-18', name: 'Search', icon: '\u{1F50D}', enabled: true, domain: 'search' },
-      { id: 'sk-19', name: 'Drive', icon: '\u{1F4C1}', enabled: true, domain: 'drive' },
-      { id: 'sk-20', name: 'Insights', icon: '\u{1F4A1}', enabled: true, domain: 'insights' },
+      { id: 'sk-18', name: 'Search', icon: '🔍', enabled: true, domain: 'search' },
+      { id: 'sk-19', name: 'Drive', icon: '📁', enabled: true, domain: 'drive' },
+      { id: 'sk-20', name: 'Insights', icon: '💡', enabled: true, domain: 'insights' },
     ],
     workspace_path: '/gateway/workspace/agents/ana/',
     status: 'idle', last_active_at: new Date(Date.now() - 7200000).toISOString(),
     sessions_today: 2, tokens_today: 8500, created_at: daysAgo(30),
   },
+  // Creative — Content & Design (chief, child of Francis)
   {
-    id: 'agent-4', name: 'mailer', display_name: 'Mailer', role: 'Email Handler',
-    avatar: '\u{1F4E7}', model: 'claude-sonnet-4-5', parent_agent_id: 'agent-1',
+    id: 'agent-4', name: 'creative', display_name: 'Creative', role: 'Content & Design',
+    avatar: '🎨', model: 'claude-sonnet-4-5', color: '#ec4899', is_chief: true,
+    parent_agent_id: 'agent-1',
     skills: [
-      { id: 'sk-21', name: 'Mail', icon: '\u2709\uFE0F', enabled: true, domain: 'mail' },
-      { id: 'sk-22', name: 'Contacts', icon: '\u{1F464}', enabled: true, domain: 'contacts' },
+      { id: 'sk-21', name: 'Notes', icon: '📝', enabled: true, domain: 'notes' },
+      { id: 'sk-22', name: 'Drive', icon: '📁', enabled: true, domain: 'drive' },
+      { id: 'sk-23', name: 'Photos', icon: '📷', enabled: true, domain: 'photos' },
+      { id: 'sk-24', name: 'Diary', icon: '📓', enabled: true, domain: 'diary' },
+    ],
+    workspace_path: '/gateway/workspace/agents/creative/',
+    status: 'active', last_active_at: new Date(Date.now() - 900000).toISOString(),
+    sessions_today: 7, tokens_today: 18400, created_at: daysAgo(40),
+  },
+  // Strategy — Business Intelligence (chief, child of Francis)
+  {
+    id: 'agent-5', name: 'strategy', display_name: 'Strategy', role: 'Business Intelligence',
+    avatar: '💡', model: 'claude-opus-4-6', color: '#f97316', is_chief: true,
+    parent_agent_id: 'agent-1',
+    skills: [
+      { id: 'sk-25', name: 'Search', icon: '🔍', enabled: true, domain: 'search' },
+      { id: 'sk-26', name: 'Insights', icon: '💡', enabled: true, domain: 'insights' },
+      { id: 'sk-27', name: 'Drive', icon: '📁', enabled: true, domain: 'drive' },
+      { id: 'sk-28', name: 'Notes', icon: '📝', enabled: true, domain: 'notes' },
+    ],
+    workspace_path: '/gateway/workspace/agents/strategy/',
+    status: 'idle', last_active_at: new Date(Date.now() - 5400000).toISOString(),
+    sessions_today: 3, tokens_today: 12300, created_at: daysAgo(35),
+  },
+  // Mailer — Email Handler (sub-agent of Elon)
+  {
+    id: 'agent-6', name: 'mailer', display_name: 'Mailer', role: 'Email Handler',
+    avatar: '📧', model: 'claude-sonnet-4-5', color: '#10b981', is_chief: false,
+    parent_agent_id: 'agent-2',
+    skills: [
+      { id: 'sk-29', name: 'Mail', icon: '✉️', enabled: true, domain: 'mail' },
+      { id: 'sk-30', name: 'Contacts', icon: '👤', enabled: true, domain: 'contacts' },
     ],
     workspace_path: '/gateway/workspace/agents/mailer/',
     status: 'active', last_active_at: new Date(Date.now() - 600000).toISOString(),
     sessions_today: 8, tokens_today: 15000, created_at: daysAgo(20),
   },
+  // DevOps — CI/CD (sub-agent of Elon)
   {
-    id: 'agent-5', name: 'scheduler', display_name: 'Scheduler', role: 'Calendar Manager',
-    avatar: '\u{1F4C5}', model: 'claude-haiku-4-5', parent_agent_id: 'agent-1',
+    id: 'agent-7', name: 'devops', display_name: 'DevOps', role: 'CI/CD',
+    avatar: '🔧', model: 'claude-haiku-4-5', color: '#10b981', is_chief: false,
+    parent_agent_id: 'agent-2',
     skills: [
-      { id: 'sk-23', name: 'Calendar', icon: '\u{1F4C5}', enabled: true, domain: 'calendar' },
+      { id: 'sk-31', name: 'Shell', icon: '🖥️', enabled: true, domain: 'shell' },
+      { id: 'sk-32', name: 'Git', icon: '🔀', enabled: true, domain: 'git' },
+    ],
+    workspace_path: '/gateway/workspace/agents/devops/',
+    status: 'idle', last_active_at: new Date(Date.now() - 7200000).toISOString(),
+    sessions_today: 1, tokens_today: 3200, created_at: daysAgo(18),
+  },
+  // Scheduler — Calendar Manager (sub-agent of Creative)
+  {
+    id: 'agent-8', name: 'scheduler', display_name: 'Scheduler', role: 'Calendar Manager',
+    avatar: '📅', model: 'claude-haiku-4-5', color: '#ec4899', is_chief: false,
+    parent_agent_id: 'agent-4',
+    skills: [
+      { id: 'sk-33', name: 'Calendar', icon: '📅', enabled: true, domain: 'calendar' },
     ],
     workspace_path: '/gateway/workspace/agents/scheduler/',
     status: 'idle', last_active_at: new Date(Date.now() - 3600000).toISOString(),
@@ -783,6 +836,103 @@ const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   },
 ];
 
+const MOCK_MEETINGS: Meeting[] = [
+  {
+    id: 'meeting-1',
+    title: 'Executive Standup: Partnership & Sponsorship Strategy',
+    description: 'Discuss incoming partnership requests and create a pipeline',
+    participants: ['agent-1', 'agent-2', 'agent-3', 'agent-4', 'agent-5'],
+    user_participates: false,
+    status: 'completed',
+    scheduled_at: null,
+    started_at: '2026-02-10T11:22:00Z',
+    completed_at: '2026-02-10T11:45:00Z',
+    messages: [
+      {
+        id: 'mm-1', agent_id: 'agent-1', agent_name: 'Francis', agent_avatar: '🤖',
+        agent_role: 'Main Router', agent_color: '#d4a017',
+        content: "Alright team, let's get into it. We're getting inbound partnership requests — companies wanting to pay for links in videos, product mentions, that kind of thing. We've never monetized, so we need a proper pipeline. Not some janky thing we throw together — a real process. How do we handle this without selling our soul?",
+        created_at: '2026-02-10T11:22:00Z',
+      },
+      {
+        id: 'mm-2', agent_id: 'agent-5', agent_name: 'Strategy', agent_avatar: '💡',
+        agent_role: 'Business Intelligence', agent_color: '#f97316',
+        content: "Good. First thing I want to say — and I cannot stress this enough — the fact that we're getting inbound at 520 subscribers is a signal. It means our audience quality is high. These companies aren't reaching out because of volume; they're reaching out because our viewers are decision-makers, developers, people who actually buy tools. That's leverage. Don't forget that.",
+        created_at: '2026-02-10T11:23:00Z',
+      },
+      {
+        id: 'mm-3', agent_id: 'agent-4', agent_name: 'Creative', agent_avatar: '🎨',
+        agent_role: 'Content & Design', agent_color: '#ec4899',
+        content: "Facts. The engagement rate on our videos is way above average for the niche. Comments are from real practitioners, not drive-bys. That's the moat. And honestly? Most of these inbound requests are probably garbage — SEO farms wanting a dofollow link for $50. We need a filter that kills 90% of them before they waste our time.",
+        created_at: '2026-02-10T11:24:00Z',
+      },
+      {
+        id: 'mm-4', agent_id: 'agent-2', agent_name: 'Elon', agent_avatar: '🧪',
+        agent_role: 'CTO', agent_color: '#10b981',
+        content: "I'll set up the partnerships@ alias today. Google Workspace, forwarding to Francis's inbox. I'll also set up a basic tracker — probably a JSON file in our ops directory to start, we can upgrade later if volume justifies it. No over-engineering.",
+        created_at: '2026-02-10T11:25:00Z',
+      },
+      {
+        id: 'mm-5', agent_id: 'agent-1', agent_name: 'Francis', agent_avatar: '🤖',
+        agent_role: 'Main Router', agent_color: '#d4a017',
+        content: "Perfect. Let's wrap this up with clear action items.",
+        created_at: '2026-02-10T11:26:00Z',
+      },
+    ],
+    action_items: [
+      { id: 'ai-1', title: 'partnerships@clearmud.ai', assigned_to: 'Elon', status: 'complete',
+        description: "Google Workspace alias created, forwarding to Francis's inbox with BCC. Set up and tested." },
+      { id: 'ai-2', title: 'Partnership tracker', assigned_to: 'Elon', status: 'complete',
+        description: 'JSON-based tracker in ops/ directory. Fields: company, contact, request type, status, date.' },
+      { id: 'ai-3', title: 'Warm decline template', assigned_to: 'Creative', status: 'complete',
+        description: "Template for politely declining partnerships that don't fit." },
+      { id: 'ai-4', title: 'Business inquiries blurb', assigned_to: 'Creative', status: 'complete',
+        description: 'Short text for YouTube about section and website contact page.' },
+      { id: 'ai-5', title: 'Qualification checklist', assigned_to: 'Strategy', status: 'complete',
+        description: '5-point checklist for evaluating partnership requests.' },
+    ],
+    created_at: '2026-02-10T11:20:00Z',
+  },
+  {
+    id: 'meeting-2',
+    title: 'Weekly Review: Q3 Progress and Blockers',
+    description: 'Review sprint progress, identify blockers, plan next week',
+    participants: ['agent-1', 'agent-2', 'agent-3'],
+    user_participates: true,
+    status: 'completed',
+    scheduled_at: '2026-02-03T09:00:00Z',
+    started_at: '2026-02-03T09:02:00Z',
+    completed_at: '2026-02-03T09:30:00Z',
+    messages: [
+      {
+        id: 'mm-10', agent_id: 'agent-1', agent_name: 'Francis', agent_avatar: '🤖',
+        agent_role: 'Main Router', agent_color: '#d4a017',
+        content: "Good morning everyone. Let's review this week's progress. Elon, start with the backend status.",
+        created_at: '2026-02-03T09:02:00Z',
+      },
+      {
+        id: 'mm-11', agent_id: 'agent-2', agent_name: 'Elon', agent_avatar: '🧪',
+        agent_role: 'CTO', agent_color: '#10b981',
+        content: "Backend is solid. All CRUD endpoints passing tests. The sync engine had a hiccup with IMAP rate limiting but I've added exponential backoff. Ready for frontend integration.",
+        created_at: '2026-02-03T09:04:00Z',
+      },
+      {
+        id: 'mm-12', agent_id: 'agent-3', agent_name: 'Ana', agent_avatar: '📊',
+        agent_role: 'Data Analyst', agent_color: '#a855f7',
+        content: "Data pipeline is 80% there. I've mapped all the connector outputs to our unified schema. Still need to finalize the dedup logic for contacts coming from multiple sources.",
+        created_at: '2026-02-03T09:06:00Z',
+      },
+    ],
+    action_items: [
+      { id: 'ai-10', title: 'Frontend integration sprint', assigned_to: 'Elon', status: 'complete',
+        description: 'Connect all dashboard modules to real API endpoints.' },
+      { id: 'ai-11', title: 'Data pipeline review', assigned_to: 'Ana', status: 'in_progress',
+        description: 'Review data flow from sync connectors to dashboard.' },
+    ],
+    created_at: '2026-02-03T08:50:00Z',
+  },
+];
+
 const MOCK_CONVERSATION_STATS: ConversationStats = {
   period: 'today',
   total_messages: 342,
@@ -796,9 +946,12 @@ const MOCK_CONVERSATION_STATS: ConversationStats = {
   by_agent: [
     { agent: 'francis', messages: 150, tokens: 2000000, cost_usd: 30.00 },
     { agent: 'elon', messages: 80, tokens: 1000000, cost_usd: 15.00 },
-    { agent: 'mailer', messages: 60, tokens: 500000, cost_usd: 7.00 },
-    { agent: 'ana', messages: 30, tokens: 200000, cost_usd: 2.00 },
-    { agent: 'scheduler', messages: 22, tokens: 200000, cost_usd: 2.01 },
+    { agent: 'creative', messages: 40, tokens: 400000, cost_usd: 4.00 },
+    { agent: 'strategy', messages: 25, tokens: 250000, cost_usd: 3.50 },
+    { agent: 'mailer', messages: 20, tokens: 150000, cost_usd: 1.50 },
+    { agent: 'ana', messages: 15, tokens: 100000, cost_usd: 1.00 },
+    { agent: 'devops', messages: 8, tokens: 50000, cost_usd: 0.50 },
+    { agent: 'scheduler', messages: 4, tokens: 50000, cost_usd: 0.51 },
   ],
   active_sessions: 3,
 };
@@ -920,6 +1073,8 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
       role: (input.role as string) || 'Assistant',
       avatar: (input.avatar as string) || null,
       model: (input.model as string) || 'claude-sonnet-4-5',
+      color: (input.color as string) || 'var(--amber)',
+      is_chief: (input.is_chief as boolean) ?? false,
       parent_agent_id: (input.parent_agent_id as string) || null,
       skills: (input.skills as ManagedAgent['skills']) || [],
       workspace_path: `/gateway/workspace/agents/${(input.name as string) || 'new-agent'}/`,
@@ -953,6 +1108,39 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
     const key = agent ? `${agent.name}/${filename}` : '';
     const content = MOCK_AGENT_FILES[key] || `# ${filename}\n\nNo content available.`;
     return { data: { content } };
+  }
+
+  // ── Council Meetings ──
+
+  if (method === 'GET' && route === '/meetings') {
+    return { data: MOCK_MEETINGS, meta: { total: MOCK_MEETINGS.length, limit: 50, offset: 0 } };
+  }
+
+  const meetingGetMatch = route.match(/^\/meetings\/([\w-]+)$/);
+  if (method === 'GET' && meetingGetMatch) {
+    const meeting = MOCK_MEETINGS.find(m => m.id === meetingGetMatch[1]);
+    if (meeting) return { data: meeting };
+    return { data: null };
+  }
+
+  if (method === 'POST' && route === '/meetings') {
+    const input = body as Record<string, unknown>;
+    const newMeeting: Meeting = {
+      id: `meeting-${Date.now()}`,
+      title: (input.title as string) || 'Untitled Meeting',
+      description: (input.description as string) || null,
+      participants: (input.participants as string[]) || ['agent-1'],
+      user_participates: (input.user_participates as boolean) || false,
+      status: 'scheduled',
+      scheduled_at: (input.scheduled_at as string) || null,
+      started_at: null,
+      completed_at: null,
+      messages: [],
+      action_items: [],
+      created_at: new Date().toISOString(),
+    };
+    MOCK_MEETINGS.push(newMeeting);
+    return { data: newMeeting };
   }
 
   // Search

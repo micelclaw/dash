@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
@@ -30,12 +30,17 @@ export function Shell() {
   const isChatPage = location.pathname === '/chat';
 
   // Auto-collapse on compact screens, auto-expand when viewport goes wide
+  const prevCompactRef = useRef(isCompact);
   useEffect(() => {
     if (isMobile) return;
-    if (isCompact) {
+    const wasCompact = prevCompactRef.current;
+    prevCompactRef.current = isCompact;
+
+    if (isCompact && !wasCompact) {
+      // Just entered compact → auto-collapse once
       setCollapsed(true);
-    } else {
-      // Viewport went wide → restore user preference
+    } else if (!isCompact && wasCompact) {
+      // Left compact → restore user preference
       const { userCollapsed } = useSidebarStore.getState();
       setCollapsed(userCollapsed);
     }

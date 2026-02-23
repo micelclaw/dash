@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { AgentTreeNode } from './AgentTreeNode';
 import { AgentDetail } from './AgentDetail';
 import type { ManagedAgent } from './types';
@@ -7,6 +8,7 @@ interface AgentTreeProps {
   agents: ManagedAgent[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  isMobile?: boolean;
 }
 
 interface TreeNode {
@@ -16,10 +18,20 @@ interface TreeNode {
   y: number;
 }
 
-const LEVEL_HEIGHT = 140;
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 90;
-const H_GAP = 20;
+interface BracketEdge {
+  parentX: number;
+  parentY: number;
+  children: { x: number; y: number; id: string }[];
+  color: string;
+  parentId: string;
+}
+
+const NODE_WIDTH = 260;
+const NODE_HEIGHT = 150;
+const LEVEL_HEIGHT = 180;
+const H_GAP = 30;
+const BRACKET_OFFSET = 30;
+const CORNER_RADIUS = 8;
 
 const OWNER_AGENT: ManagedAgent = {
   id: 'owner',
@@ -28,6 +40,8 @@ const OWNER_AGENT: ManagedAgent = {
   role: 'Owner',
   avatar: '👤',
   model: '',
+  color: '#d4a017',
+  is_chief: true,
   parent_agent_id: null,
   skills: [],
   workspace_path: '',
@@ -38,14 +52,10 @@ const OWNER_AGENT: ManagedAgent = {
   created_at: '',
 };
 
+// ─── Tree building ────────────────────────────────────────────────
+
 function buildTree(agents: ManagedAgent[]): TreeNode {
   const rootChildren = agents.filter(a => a.parent_agent_id === null);
-  const ownerNode: TreeNode = {
-    agent: OWNER_AGENT,
-    children: [],
-    x: 0,
-    y: 0,
-  };
 
   function buildChildren(parentId: string, depth: number): TreeNode[] {
     const kids = agents.filter(a => a.parent_agent_id === parentId);
@@ -61,88 +71,211 @@ function buildTree(agents: ManagedAgent[]): TreeNode {
     });
   }
 
-  // Root agents (no parent) are children of the owner
-  ownerNode.children = rootChildren.map(agent => {
-    const node: TreeNode = {
-      agent,
-      children: [],
-      x: 0,
-      y: LEVEL_HEIGHT,
-    };
-    node.children = buildChildren(agent.id, 2);
-    return node;
-  });
+  const ownerNode: TreeNode = {
+    agent: OWNER_AGENT,
+    children: rootChildren.map(agent => {
+      const node: TreeNode = {
+        agent,
+        children: [],
+        x: 0,
+        y: LEVEL_HEIGHT,
+      };
+      node.children = buildChildren(agent.id, 2);
+      return node;
+    }),
+    x: 0,
+    y: 0,
+  };
 
   return ownerNode;
 }
 
-function computeSubtreeWidth(node: TreeNode): number {
-  if (node.children.length === 0) return NODE_WIDTH;
+// ─── Layout helpers ───────────────────────────────────────────────
+
+function computeSubtreeWidth(node: TreeNode, collapsed: Set<string>): number {
+  if (node.children.length === 0 || collapsed.has(node.agent.id)) return NODE_WIDTH;
+
   const childrenWidth = node.children.reduce(
-    (sum, child) => sum + computeSubtreeWidth(child),
+    (sum, child) => sum + computeSubtreeWidth(child, collapsed),
     0,
   );
-  return Math.max(NODE_WIDTH, childrenWidth + H_GAP * (node.children.length - 1));
+  const gapsWidth = H_GAP * (node.children.length - 1);
+  return Math.max(NODE_WIDTH, childrenWidth + gapsWidth);
 }
 
-function layoutTree(node: TreeNode, left: number, depth: number): void {
-  const subtreeWidth = computeSubtreeWidth(node);
+function layoutTree(node: TreeNode, left: number, depth: number, collapsed: Set<string>): void {
+  const subtreeWidth = computeSubtreeWidth(node, collapsed);
   node.x = left + subtreeWidth / 2 - NODE_WIDTH / 2;
   node.y = depth * LEVEL_HEIGHT;
 
-  let childLeft = left;
+  if (node.children.length === 0 || collapsed.has(node.agent.id)) return;
+
+  const childrenTotalWidth = node.children.reduce(
+    (sum, child) => sum + computeSubtreeWidth(child, collapsed),
+    0,
+  ) + H_GAP * (node.children.length - 1);
+
+  let childLeft = left + (subtreeWidth - childrenTotalWidth) / 2;
+
   for (const child of node.children) {
-    const childWidth = computeSubtreeWidth(child);
-    layoutTree(child, childLeft, depth + 1);
+    const childWidth = computeSubtreeWidth(child, collapsed);
+    layoutTree(child, childLeft, depth + 1, collapsed);
     childLeft += childWidth + H_GAP;
   }
 }
 
-function flattenNodes(node: TreeNode): TreeNode[] {
-  return [node, ...node.children.flatMap(flattenNodes)];
+function flattenNodes(node: TreeNode, collapsed: Set<string>): TreeNode[] {
+  const result: TreeNode[] = [node];
+  if (!collapsed.has(node.agent.id)) {
+    for (const child of node.children) {
+      result.push(...flattenNodes(child, collapsed));
+    }
+  }
+  return result;
 }
 
-interface Edge {
-  parentX: number;
-  parentY: number;
-  childX: number;
-  childY: number;
-}
+// ─── Edge collection (bracket-style) ─────────────────────────────
 
-function collectEdges(node: TreeNode): Edge[] {
-  const edges: Edge[] = [];
-  for (const child of node.children) {
+function collectBracketEdges(node: TreeNode, collapsed: Set<string>): BracketEdge[] {
+  const edges: BracketEdge[] = [];
+  if (node.children.length > 0 && !collapsed.has(node.agent.id)) {
     edges.push({
       parentX: node.x + NODE_WIDTH / 2,
       parentY: node.y + NODE_HEIGHT,
-      childX: child.x + NODE_WIDTH / 2,
-      childY: child.y,
+      children: node.children.map(c => ({
+        x: c.x + NODE_WIDTH / 2,
+        y: c.y,
+        id: c.agent.id,
+      })),
+      color: node.agent.color || 'var(--border)',
+      parentId: node.agent.id,
     });
-    edges.push(...collectEdges(child));
+    for (const child of node.children) {
+      edges.push(...collectBracketEdges(child, collapsed));
+    }
   }
   return edges;
 }
 
-export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
+function renderBracketPaths(edge: BracketEdge): string[] {
+  const { parentX, parentY, children } = edge;
+  const bracketY = parentY + BRACKET_OFFSET;
+  const r = CORNER_RADIUS;
+
+  return children.map(child => {
+    const dx = child.x - parentX;
+    if (Math.abs(dx) < 1) {
+      return `M ${parentX} ${parentY} L ${parentX} ${child.y}`;
+    }
+    const dir = dx > 0 ? 1 : -1;
+    const absDx = Math.abs(dx);
+    const clampedR = Math.min(r, absDx, Math.abs(child.y - bracketY));
+    return [
+      `M ${parentX} ${parentY}`,
+      `L ${parentX} ${bracketY - clampedR}`,
+      `Q ${parentX} ${bracketY}, ${parentX + dir * clampedR} ${bracketY}`,
+      `L ${child.x - dir * clampedR} ${bracketY}`,
+      `Q ${child.x} ${bracketY}, ${child.x} ${bracketY + clampedR}`,
+      `L ${child.x} ${child.y}`,
+    ].join(' ');
+  });
+}
+
+// ─── Child count helper ──────────────────────────────────────────
+
+function buildChildCountMap(agents: ManagedAgent[]): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const agent of agents) {
+    if (agent.parent_agent_id) {
+      map.set(agent.parent_agent_id, (map.get(agent.parent_agent_id) || 0) + 1);
+    }
+  }
+  return map;
+}
+
+// ─── Main component ───────────────────────────────────────────────
+
+export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeProps) {
+  // Default: all expanded (empty collapsed set)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggleExpand = useCallback((agentId: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(agentId)) {
+        next.delete(agentId);
+      } else {
+        next.add(agentId);
+      }
+      return next;
+    });
+  }, []);
+
+  const childCountMap = useMemo(() => buildChildCountMap(agents), [agents]);
+
   const { nodes, edges, svgWidth, svgHeight } = useMemo(() => {
     const root = buildTree(agents);
-    const totalWidth = computeSubtreeWidth(root);
-    layoutTree(root, 0, 0);
+    const totalWidth = computeSubtreeWidth(root, collapsed);
+    layoutTree(root, 0, 0, collapsed);
 
-    const allNodes = flattenNodes(root);
-    const allEdges = collectEdges(root);
+    const allNodes = flattenNodes(root, collapsed);
+    const allEdges = collectBracketEdges(root, collapsed);
 
-    const maxDepth = allNodes.reduce((max, n) => Math.max(max, n.y), 0);
+    const maxX = allNodes.reduce((max, n) => Math.max(max, n.x + NODE_WIDTH), 0);
+    const maxY = allNodes.reduce((max, n) => Math.max(max, n.y + NODE_HEIGHT), 0);
 
     return {
       nodes: allNodes,
       edges: allEdges,
-      svgWidth: totalWidth + 40,
-      svgHeight: maxDepth + NODE_HEIGHT + 40,
+      svgWidth: Math.max(totalWidth, maxX) + 60,
+      svgHeight: maxY + 40,
     };
-  }, [agents]);
+  }, [agents, collapsed]);
 
   const showDetail = selectedId && selectedId !== 'owner';
+
+  // Mobile: fullscreen detail view with back button
+  if (isMobile && showDetail) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden',
+      }}>
+        {/* Back button bar */}
+        <button
+          onClick={() => onSelect('')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '10px 12px',
+            background: 'none',
+            border: 'none',
+            borderBottom: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+            fontSize: '0.8125rem',
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: 'var(--font-sans)',
+            flexShrink: 0,
+          }}
+        >
+          <ChevronLeft size={16} />
+          Back to tree
+        </button>
+        {/* Fullscreen detail */}
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <AgentDetail
+            agentId={selectedId}
+            agents={agents}
+            onSelect={onSelect}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -154,7 +287,8 @@ export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
       <div style={{
         flex: 1,
         overflow: 'auto',
-        padding: 20,
+        padding: isMobile ? 12 : 20,
+        WebkitOverflowScrolling: 'touch' as any,
       }}>
         <svg
           width={svgWidth}
@@ -162,25 +296,26 @@ export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
           style={{ display: 'block', margin: '0 auto' }}
         >
-          {/* Connection lines */}
-          {edges.map((edge, i) => {
-            const startX = edge.parentX;
-            const startY = edge.parentY;
-            const endX = edge.childX;
-            const endY = edge.childY;
-            const midY = (startY + endY) / 2;
+          {/* Connection edges (bracket-style with rounded corners) */}
+          {edges.map(edge => {
+            const paths = renderBracketPaths(edge);
             return (
-              <path
-                key={i}
-                d={`M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`}
-                fill="none"
-                stroke="var(--border)"
-                strokeWidth={2}
-              />
+              <g key={`bracket-${edge.parentId}`}>
+                {paths.map((d, i) => (
+                  <path
+                    key={`${edge.parentId}-${edge.children[i]?.id ?? i}`}
+                    d={d}
+                    fill="none"
+                    stroke={edge.color || 'var(--border)'}
+                    strokeWidth={1.5}
+                    strokeOpacity={0.4}
+                  />
+                ))}
+              </g>
             );
           })}
 
-          {/* Nodes */}
+          {/* Agent nodes */}
           {nodes.map(node => (
             <foreignObject
               key={node.agent.id}
@@ -194,8 +329,9 @@ export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
                   width: '100%',
                   height: '100%',
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   justifyContent: 'center',
+                  paddingTop: 4,
                 }}
               >
                 <AgentTreeNode
@@ -203,6 +339,9 @@ export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
                   selected={selectedId === node.agent.id}
                   onClick={() => onSelect(node.agent.id)}
                   isOwner={node.agent.id === 'owner'}
+                  childCount={childCountMap.get(node.agent.id) || 0}
+                  expanded={!collapsed.has(node.agent.id)}
+                  onToggleExpand={() => toggleExpand(node.agent.id)}
                 />
               </div>
             </foreignObject>
@@ -210,8 +349,8 @@ export function AgentTree({ agents, selectedId, onSelect }: AgentTreeProps) {
         </svg>
       </div>
 
-      {/* Detail panel */}
-      {showDetail && (
+      {/* Detail panel (desktop only) */}
+      {!isMobile && showDetail && (
         <div style={{
           width: 400,
           minWidth: 400,

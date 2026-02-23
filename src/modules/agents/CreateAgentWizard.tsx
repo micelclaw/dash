@@ -31,17 +31,25 @@ const SKILL_OPTIONS = [
   { id: 'insights', name: 'Insights', icon: '💡' },
 ];
 
+const STEPS = [
+  { number: 1, label: 'Identity' },
+  { number: 2, label: 'Model' },
+  { number: 3, label: 'Skills' },
+  { number: 4, label: 'Parent' },
+];
+
 const inputStyle: React.CSSProperties = {
   background: 'var(--surface)',
   border: '1px solid var(--border)',
   color: 'var(--text)',
-  padding: '8px 12px',
+  padding: '10px 12px',
   borderRadius: 'var(--radius-sm)',
   fontSize: '0.875rem',
   fontFamily: 'var(--font-sans)',
   width: '100%',
   boxSizing: 'border-box',
   outline: 'none',
+  transition: 'var(--transition-fast)',
 };
 
 const labelStyle: React.CSSProperties = {
@@ -51,6 +59,105 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 6,
   display: 'block',
 };
+
+const buttonBase: React.CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '8px 18px',
+  fontSize: '0.875rem',
+  fontFamily: 'var(--font-sans)',
+  cursor: 'pointer',
+  transition: 'var(--transition-fast)',
+};
+
+/* ------------------------------------------------------------------ */
+/*  Stepper                                                           */
+/* ------------------------------------------------------------------ */
+
+function Stepper({ current }: { current: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 0, padding: '0 8px' }}>
+      {STEPS.map((s, i) => {
+        const isCompleted = s.number < current;
+        const isActive = s.number === current;
+        const isUpcoming = s.number > current;
+
+        return (
+          <div key={s.number} style={{ display: 'flex', alignItems: 'flex-start', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+            {/* Circle + label column */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 48 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 'var(--radius-full)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-sans)',
+                  transition: 'var(--transition-fast)',
+                  ...(isCompleted
+                    ? {
+                        background: 'var(--amber)',
+                        color: 'var(--bg)',
+                        border: '2px solid var(--amber)',
+                      }
+                    : isActive
+                    ? {
+                        background: 'var(--amber)',
+                        color: 'var(--bg)',
+                        border: '2px solid var(--amber)',
+                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)',
+                      }
+                    : {
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        border: '2px solid var(--border)',
+                      }),
+                }}
+              >
+                {isCompleted ? '✓' : s.number}
+              </div>
+              <span
+                style={{
+                  fontSize: '0.6875rem',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isUpcoming ? 'var(--text-muted)' : isActive ? 'var(--amber)' : 'var(--text-dim)',
+                  marginTop: 6,
+                  whiteSpace: 'nowrap',
+                  transition: 'var(--transition-fast)',
+                }}
+              >
+                {s.label}
+              </span>
+            </div>
+
+            {/* Connecting line */}
+            {i < STEPS.length - 1 && (
+              <div
+                style={{
+                  flex: 1,
+                  height: 2,
+                  marginTop: 13,
+                  borderRadius: 1,
+                  background: isCompleted ? 'var(--amber)' : 'var(--border)',
+                  transition: 'var(--transition-fast)',
+                  minWidth: 24,
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Wizard                                                            */
+/* ------------------------------------------------------------------ */
 
 export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWizardProps) {
   const [step, setStep] = useState(1);
@@ -71,9 +178,13 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
   const [parentMode, setParentMode] = useState<'top' | 'sub'>('top');
   const [parentAgentId, setParentAgentId] = useState<string>(agents[0]?.id ?? '');
 
+  // Hover states
   const [hoveredCancel, setHoveredCancel] = useState(false);
   const [hoveredBack, setHoveredBack] = useState(false);
   const [hoveredNext, setHoveredNext] = useState(false);
+  const [hoveredClose, setHoveredClose] = useState(false);
+  const [hoveredModel, setHoveredModel] = useState<string | null>(null);
+  const [hoveredSkill, setHoveredSkill] = useState<string | null>(null);
 
   const toggleSkill = (skillId: string) => {
     setSelectedSkills(prev =>
@@ -98,7 +209,6 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
       onCreated(res.data);
       onClose();
     } catch {
-      // Error handling could be expanded
       setCreating(false);
     }
   };
@@ -113,194 +223,265 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
     }
   };
 
+  /* ------ Step renderers ------ */
+
+  const renderIdentity = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div>
+        <label style={labelStyle}>Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. francis"
+          style={inputStyle}
+          autoFocus
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>Avatar</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {AVATAR_OPTIONS.map(a => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setAvatar(a)}
+              style={{
+                width: 40,
+                height: 40,
+                fontSize: '1.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 'var(--radius-md)',
+                border: avatar === a ? '2px solid var(--amber)' : '1px solid var(--border)',
+                background: avatar === a ? 'var(--surface-hover)' : 'var(--surface)',
+                cursor: 'pointer',
+                transition: 'var(--transition-fast)',
+              }}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Role</label>
+        <input
+          type="text"
+          value={role}
+          onChange={e => setRole(e.target.value)}
+          placeholder="e.g. Chief of Staff"
+          style={inputStyle}
+        />
+      </div>
+    </div>
+  );
+
+  const renderModel = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={labelStyle}>Select Model</label>
+      {MODEL_OPTIONS.map(opt => {
+        const isSelected = model === opt.value;
+        const isHovered = hoveredModel === opt.value;
+        return (
+          <label
+            key={opt.value}
+            onMouseEnter={() => setHoveredModel(opt.value)}
+            onMouseLeave={() => setHoveredModel(null)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: '0.875rem',
+              cursor: 'pointer',
+              color: 'var(--text)',
+              padding: '10px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: isSelected ? '1px solid var(--amber)' : '1px solid var(--border)',
+              background: isSelected
+                ? 'var(--surface-hover)'
+                : isHovered
+                ? 'var(--surface)'
+                : 'transparent',
+              transition: 'var(--transition-fast)',
+            }}
+          >
+            <input
+              type="radio"
+              name="model"
+              value={opt.value}
+              checked={isSelected}
+              onChange={() => setModel(opt.value)}
+              style={{ accentColor: 'var(--amber)' }}
+            />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+              {opt.label}
+            </span>
+            <span style={{
+              fontSize: '0.6875rem',
+              color: 'var(--text-muted)',
+              marginLeft: 'auto',
+              padding: '2px 8px',
+              background: 'var(--surface)',
+              borderRadius: 'var(--radius-full)',
+            }}>
+              {opt.provider}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+
+  const renderSkills = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <label style={{ ...labelStyle, marginBottom: 0 }}>Select Skills</label>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          {selectedSkills.length} selected
+        </span>
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 8,
+      }}>
+        {SKILL_OPTIONS.map(skill => {
+          const isSelected = selectedSkills.includes(skill.id);
+          const isHovered = hoveredSkill === skill.id;
+          return (
+            <label
+              key={skill.id}
+              onMouseEnter={() => setHoveredSkill(skill.id)}
+              onMouseLeave={() => setHoveredSkill(null)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                color: 'var(--text)',
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-sm)',
+                border: isSelected ? '1px solid var(--amber)' : '1px solid var(--border)',
+                background: isSelected
+                  ? 'var(--surface-hover)'
+                  : isHovered
+                  ? 'var(--surface)'
+                  : 'transparent',
+                transition: 'var(--transition-fast)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggleSkill(skill.id)}
+                style={{ accentColor: 'var(--amber)' }}
+              />
+              <span style={{ fontSize: '1rem' }}>{skill.icon}</span>
+              <span>{skill.name}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderParent = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <label style={labelStyle}>Hierarchy</label>
+
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: '0.875rem',
+          cursor: 'pointer',
+          color: 'var(--text)',
+          padding: '10px 12px',
+          borderRadius: 'var(--radius-sm)',
+          border: parentMode === 'top' ? '1px solid var(--amber)' : '1px solid var(--border)',
+          background: parentMode === 'top' ? 'var(--surface-hover)' : 'transparent',
+          transition: 'var(--transition-fast)',
+        }}
+      >
+        <input
+          type="radio"
+          name="parent"
+          checked={parentMode === 'top'}
+          onChange={() => setParentMode('top')}
+          style={{ accentColor: 'var(--amber)' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontWeight: 500 }}>Top-level agent</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Reports directly to you
+          </span>
+        </div>
+      </label>
+
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: '0.875rem',
+          cursor: 'pointer',
+          color: 'var(--text)',
+          padding: '10px 12px',
+          borderRadius: 'var(--radius-sm)',
+          border: parentMode === 'sub' ? '1px solid var(--amber)' : '1px solid var(--border)',
+          background: parentMode === 'sub' ? 'var(--surface-hover)' : 'transparent',
+          transition: 'var(--transition-fast)',
+        }}
+      >
+        <input
+          type="radio"
+          name="parent"
+          checked={parentMode === 'sub'}
+          onChange={() => setParentMode('sub')}
+          style={{ accentColor: 'var(--amber)' }}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontWeight: 500 }}>Sub-agent</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Reports to another agent
+          </span>
+        </div>
+      </label>
+
+      {parentMode === 'sub' && (
+        <div style={{ paddingLeft: 4, marginTop: 4 }}>
+          <label style={{ ...labelStyle, fontSize: '0.75rem' }}>Parent agent</label>
+          <select
+            value={parentAgentId}
+            onChange={e => setParentAgentId(e.target.value)}
+            style={{ ...inputStyle, cursor: 'pointer' }}
+          >
+            {agents.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.avatar ?? '🤖'} {a.display_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+
   const renderStep = () => {
     switch (step) {
-      case 1:
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={labelStyle}>Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="e.g. francis"
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Avatar</label>
-              <select
-                value={avatar}
-                onChange={e => setAvatar(e.target.value)}
-                style={{ ...inputStyle, cursor: 'pointer' }}
-              >
-                {AVATAR_OPTIONS.map(a => (
-                  <option key={a} value={a}>{a}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Role</label>
-              <input
-                type="text"
-                value={role}
-                onChange={e => setRole(e.target.value)}
-                placeholder="e.g. Chief of Staff"
-                style={inputStyle}
-              />
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label style={labelStyle}>Select Model</label>
-            {MODEL_OPTIONS.map(opt => (
-              <label
-                key={opt.value}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                  color: 'var(--text)',
-                  padding: '6px 0',
-                }}
-              >
-                <input
-                  type="radio"
-                  name="model"
-                  value={opt.value}
-                  checked={model === opt.value}
-                  onChange={() => setModel(opt.value)}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <span>{opt.label}</span>
-                <span style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-dim)',
-                }}>
-                  {opt.provider}
-                </span>
-              </label>
-            ))}
-          </div>
-        );
-
-      case 3:
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label style={labelStyle}>Select Skills</label>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 8,
-            }}>
-              {SKILL_OPTIONS.map(skill => (
-                <label
-                  key={skill.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: '0.875rem',
-                    cursor: 'pointer',
-                    color: 'var(--text)',
-                    padding: '6px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: selectedSkills.includes(skill.id)
-                      ? 'var(--surface-hover)'
-                      : 'transparent',
-                    transition: 'var(--transition-fast)',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedSkills.includes(skill.id)}
-                    onChange={() => toggleSkill(skill.id)}
-                    style={{ accentColor: 'var(--amber)' }}
-                  />
-                  <span>{skill.icon}</span>
-                  <span>{skill.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 4:
-        return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label style={labelStyle}>Parent Agent</label>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              color: 'var(--text)',
-              padding: '6px 0',
-            }}>
-              <input
-                type="radio"
-                name="parent"
-                checked={parentMode === 'top'}
-                onChange={() => setParentMode('top')}
-                style={{ accentColor: 'var(--amber)' }}
-              />
-              <span>Top-level (reports to you)</span>
-            </label>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: '0.875rem',
-              cursor: 'pointer',
-              color: 'var(--text)',
-              padding: '6px 0',
-            }}>
-              <input
-                type="radio"
-                name="parent"
-                checked={parentMode === 'sub'}
-                onChange={() => setParentMode('sub')}
-                style={{ accentColor: 'var(--amber)' }}
-              />
-              <span>Sub-agent of:</span>
-            </label>
-            {parentMode === 'sub' && (
-              <select
-                value={parentAgentId}
-                onChange={e => setParentAgentId(e.target.value)}
-                style={{ ...inputStyle, cursor: 'pointer', marginLeft: 24 }}
-              >
-                {agents.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.avatar ?? '🤖'} {a.display_name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        );
-
-      default:
-        return null;
+      case 1: return renderIdentity();
+      case 2: return renderModel();
+      case 3: return renderSkills();
+      case 4: return renderParent();
+      default: return null;
     }
   };
 
-  const buttonBase: React.CSSProperties = {
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '8px 16px',
-    fontSize: '0.875rem',
-    fontFamily: 'var(--font-sans)',
-    cursor: 'pointer',
-    transition: 'var(--transition-fast)',
-  };
+  /* ------ Layout ------ */
 
   return (
     <div
@@ -312,6 +493,8 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
         right: 0,
         bottom: 0,
         background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         zIndex: 'var(--z-modal)',
         display: 'flex',
         alignItems: 'center',
@@ -322,14 +505,14 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--card)',
-          maxWidth: 480,
-          width: '90vw',
+          border: '1px solid var(--border)',
+          maxWidth: 540,
+          width: '92vw',
+          minHeight: 480,
           borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-lg)',
-          padding: 24,
           display: 'flex',
           flexDirection: 'column',
-          gap: 20,
         }}
       >
         {/* Header */}
@@ -337,55 +520,61 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          padding: '20px 24px 0 24px',
         }}>
           <h2 style={{
             margin: 0,
             fontSize: '1.125rem',
-            fontWeight: 600,
+            fontWeight: 700,
             color: 'var(--text)',
+            letterSpacing: '-0.01em',
           }}>
             Create New Agent
           </h2>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}>
-            <span style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-dim)',
-            }}>
-              Step {step}/4
-            </span>
-            <button
-              onClick={onClose}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-dim)',
-                cursor: 'pointer',
-                padding: 4,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <X size={18} />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            onMouseEnter={() => setHoveredClose(true)}
+            onMouseLeave={() => setHoveredClose(false)}
+            style={{
+              background: hoveredClose ? 'var(--surface-hover)' : 'transparent',
+              border: 'none',
+              color: hoveredClose ? 'var(--text)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              padding: 6,
+              borderRadius: 'var(--radius-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'var(--transition-fast)',
+            }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Stepper */}
+        <div style={{ padding: '20px 24px 0 24px' }}>
+          <Stepper current={step} />
         </div>
 
         {/* Step content */}
-        <div style={{ minHeight: 200 }}>
+        <div style={{
+          flex: 1,
+          padding: '24px 24px 0 24px',
+          overflowY: 'auto',
+          minHeight: 0,
+        }}>
           {renderStep()}
         </div>
 
-        {/* Footer buttons */}
+        {/* Footer */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           borderTop: '1px solid var(--border)',
-          paddingTop: 16,
+          padding: '16px 24px',
+          marginTop: 'auto',
         }}>
           <button
             onClick={onClose}
@@ -404,6 +593,7 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
           >
             Cancel
           </button>
+
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 1 && (
               <button
@@ -428,9 +618,13 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
                 style={{
                   ...buttonBase,
                   background: hoveredNext && canGoNext()
-                    ? 'var(--surface-hover)'
+                    ? 'var(--amber-dim)'
+                    : canGoNext()
+                    ? 'var(--amber)'
                     : 'var(--surface)',
-                  color: canGoNext() ? 'var(--text)' : 'var(--text-muted)',
+                  color: canGoNext() ? 'var(--bg)' : 'var(--text-muted)',
+                  border: canGoNext() ? 'none' : '1px solid var(--border)',
+                  fontWeight: canGoNext() ? 600 : 400,
                   cursor: canGoNext() ? 'pointer' : 'not-allowed',
                   opacity: canGoNext() ? 1 : 0.5,
                 }}
@@ -455,7 +649,7 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
                   opacity: creating ? 0.7 : 1,
                 }}
               >
-                {creating ? 'Creating...' : 'Create \u2713'}
+                {creating ? 'Creating...' : 'Create ✓'}
               </button>
             )}
           </div>

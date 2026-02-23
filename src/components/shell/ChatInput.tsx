@@ -9,9 +9,10 @@ interface ChatInputProps {
   onCollapse?: () => void;
   showExpand?: boolean;
   showCollapse?: boolean;
+  compactAgent?: boolean;
 }
 
-export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse }: ChatInputProps) {
+export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, compactAgent }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
@@ -62,7 +63,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse }: Ch
         flexShrink: 0,
       }}
     >
-      <AgentSelector />
+      <AgentSelector compact={compactAgent} />
 
       <div
         style={{

@@ -5,6 +5,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
 import { ShareModal } from '@/components/shared/ShareModal';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useDrive } from './hooks/use-drive';
 import { DriveToolbar } from './DriveToolbar';
 import { DriveGrid } from './DriveGrid';
@@ -13,6 +14,7 @@ import { DrivePreview } from './DrivePreview';
 import type { FileRecord } from '@/types/files';
 
 export function Component() {
+  const isMobile = useIsMobile();
   const addNotification = useNotificationStore(s => s.addNotification);
   const {
     currentPath, navigateTo,
@@ -113,6 +115,17 @@ export function Component() {
     setShareFile(file);
   }, []);
 
+  // Drag-and-drop to folder
+  const handleDragToFolder = useCallback(async (fileIds: string[], destPath: string) => {
+    if (fileIds.length === 1) {
+      await moveFile(fileIds[0]!, destPath);
+      addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
+    } else {
+      await batchMove(new Set(fileIds), destPath);
+      addNotification({ type: 'system', title: 'Moved', body: `${fileIds.length} items moved` });
+    }
+  }, [moveFile, batchMove, addNotification]);
+
   const hasSelection = selectedIds.size > 0;
 
   return (
@@ -143,6 +156,7 @@ export function Component() {
         onViewChange={changeView}
         onNewFolder={handleNewFolder}
         onUpload={handleUploadClick}
+        isMobile={isMobile}
       />
 
       {/* Batch action bar */}
@@ -150,8 +164,8 @@ export function Component() {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
-          padding: '8px 16px',
+          gap: isMobile ? 6 : 12,
+          padding: isMobile ? '6px 10px' : '8px 16px',
           background: 'var(--amber-dim)',
           borderBottom: '1px solid var(--border)',
           fontSize: '0.8125rem',
@@ -163,9 +177,9 @@ export function Component() {
 
           <div style={{ flex: 1 }} />
 
-          <BatchButton icon={FolderInput} label="Move" onClick={handleBatchMove} />
-          <BatchButton icon={Download} label="Download" onClick={() => {}} disabled />
-          <BatchButton icon={Trash2} label="Delete" onClick={handleBatchDeleteClick} variant="danger" />
+          <BatchButton icon={FolderInput} label={isMobile ? '' : 'Move'} onClick={handleBatchMove} />
+          <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={() => {}} disabled />
+          <BatchButton icon={Trash2} label={isMobile ? '' : 'Delete'} onClick={handleBatchDeleteClick} variant="danger" />
 
           <button
             onClick={clearSelection}
@@ -198,6 +212,8 @@ export function Component() {
               onMove={handleMove}
               onShare={handleShare}
               onDelete={deleteFile}
+              onDragToFolder={handleDragToFolder}
+              isMobile={isMobile}
             />
           ) : (
             <DriveList
@@ -213,17 +229,19 @@ export function Component() {
               onMove={handleMove}
               onShare={handleShare}
               onDelete={deleteFile}
+              onDragToFolder={handleDragToFolder}
             />
           )}
         </div>
       </DropZone>
 
-      {/* Preview panel */}
+      {/* Preview panel — fullscreen overlay on mobile, bottom panel on desktop */}
       {selectedFile && (
         <DrivePreview
           file={selectedFile}
           onClose={() => setSelectedFile(null)}
           onDelete={deleteFile}
+          isMobile={isMobile}
         />
       )}
 

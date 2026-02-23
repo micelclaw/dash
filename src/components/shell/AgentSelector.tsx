@@ -11,7 +11,11 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 
-export function AgentSelector() {
+interface AgentSelectorProps {
+  compact?: boolean;
+}
+
+export function AgentSelector({ compact }: AgentSelectorProps) {
   const agents = useChatStore((s) => s.agents);
   const selectedAgent = useChatStore((s) => s.selectedAgent);
   const selectAgent = useChatStore((s) => s.selectAgent);
@@ -36,8 +40,8 @@ export function AgentSelector() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
-            padding: '4px 8px',
+            gap: compact ? 0 : 6,
+            padding: compact ? '4px 6px' : '4px 8px',
             background: 'transparent',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
@@ -52,8 +56,8 @@ export function AgentSelector() {
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
         >
           <span>🤖</span>
-          <span>{current?.display_name ?? 'Francis'}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>▾</span>
+          {!compact && <span>{current?.display_name ?? 'Francis'}</span>}
+          {!compact && <span style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>▾</span>}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={8}>

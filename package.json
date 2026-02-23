@@ -1,9 +1,9 @@
 {
   "name": "@claw-os/dash",
-  "version": "0.6.0",
+  "version": "0.7.1",
   "private": true,
   "type": "module",
-  "description": "Claw Dash — Micelclaw frontend (Phase 8)",
+  "description": "Claw Dash — Micelclaw frontend (Phase 9)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
