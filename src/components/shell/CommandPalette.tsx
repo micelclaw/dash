@@ -4,7 +4,7 @@ import { Command } from 'cmdk';
 import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
-  Search, ArrowRight,
+  Search, ArrowRight, Type, Brain, Lock,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
@@ -99,6 +99,10 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchMode, setSearchMode] = useState<'auto' | 'fulltext' | 'semantic'>(() => {
+    try { return (localStorage.getItem('claw-search-mode') as any) || 'auto'; } catch { return 'auto'; }
+  });
+  const [lastSearchType, setLastSearchType] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -158,12 +162,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await api.get<{ data: SearchResult[] }>('/search', {
+        const params: Record<string, string | number> = {
           q: query.trim(),
           limit: 12,
-          domains,
-        });
+        };
+        if (domains) params.domains = domains;
+        if (searchMode !== 'auto') params.mode = searchMode;
+        const res = await api.get<{ data: SearchResult[]; meta?: { search_type?: string } }>('/search', params);
         setSearchResults(res.data);
+        setLastSearchType((res as any).meta?.search_type || null);
       } catch {
         setSearchResults([]);
       } finally {
@@ -174,7 +181,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [inputValue, mode, selectedDomain]);
+  }, [inputValue, mode, selectedDomain, searchMode]);
 
   // Reset state on open
   useEffect(() => {
@@ -400,6 +407,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                                 {result.snippet}
                               </div>
                             </div>
+                            {result.score > 0 && (searchMode === 'semantic' || lastSearchType === 'hybrid_rrf') && (
+                              <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
+                                {result.score.toFixed(2)}
+                              </span>
+                            )}
                           </Command.Item>
                         );
                       })}
@@ -571,6 +583,61 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             )}
           </Command.List>
         </Command>
+
+        {/* Search mode toggle */}
+        {(mode === 'search' || (mode === 'domain' && selectedDomain)) && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '6px 16px',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
+            {(['fulltext', 'semantic'] as const).map((sm) => {
+              const isActive = searchMode === sm || (searchMode === 'auto' && sm === 'fulltext');
+              const isPro = sm === 'semantic';
+              return (
+                <button
+                  key={sm}
+                  onClick={() => {
+                    const next = sm === searchMode ? 'auto' : sm;
+                    setSearchMode(next);
+                    try { localStorage.setItem('claw-search-mode', next); } catch { /* */ }
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    height: 24,
+                    padding: '0 10px',
+                    background: searchMode === sm ? 'var(--amber)' : 'var(--surface)',
+                    color: searchMode === sm ? '#06060a' : 'var(--text-muted)',
+                    border: searchMode === sm ? 'none' : '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '0.6875rem',
+                    fontFamily: 'var(--font-sans)',
+                    cursor: 'pointer',
+                    fontWeight: searchMode === sm ? 600 : 400,
+                  }}
+                >
+                  {sm === 'fulltext' ? <Type size={10} /> : <Brain size={10} />}
+                  {sm === 'fulltext' ? 'Keywords' : 'Semantic'}
+                  {isPro && searchMode !== 'semantic' && <Lock size={8} style={{ opacity: 0.6 }} />}
+                </button>
+              );
+            })}
+            {lastSearchType === 'hybrid_rrf' && searchMode === 'auto' && searchResults.length > 0 && (
+              <span style={{ marginLeft: 4, fontSize: '0.625rem', color: 'var(--amber)', fontFamily: 'var(--font-sans)' }}>
+                semantic
+              </span>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+              {searchMode === 'auto' ? 'Auto' : searchMode === 'fulltext' ? 'Keywords' : 'Semantic'}
+            </span>
+          </div>
+        )}
 
         {/* Footer hints */}
         <div

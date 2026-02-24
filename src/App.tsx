@@ -36,6 +36,7 @@ const router = createBrowserRouter([
           { path: '/explorer', lazy: () => import('@/modules/explorer/ExplorerPage') },
           { path: '/storage', lazy: () => import('@/modules/storage/StoragePage') },
           { path: '/settings', lazy: () => import('@/modules/settings/SettingsPage') },
+          { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/clawhub', lazy: () => import('@/modules/clawhub/ClawHubPage') },
           // Dev-only routes
           ...(import.meta.env.DEV
