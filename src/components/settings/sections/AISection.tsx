@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Eye, EyeOff, Trash2, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+
+const LazyTokenDashboard = lazy(() => import('./TokenUsageDashboard').then(m => ({ default: m.TokenUsageDashboard })));
 import { useSettingsStore } from '@/stores/settings.store';
 import { useApiKeyStore } from '@/stores/apikey.store';
 import { SettingSection } from '../SettingSection';
@@ -314,17 +316,15 @@ export function AISection() {
         </div>
       </SettingSection>
 
-      {/* Token Usage Placeholder */}
+      {/* Token Usage Dashboard */}
       <SettingSection title="Token Usage">
-        <div style={{
-          padding: '24px 16px', textAlign: 'center',
-          border: '1px dashed var(--border)', borderRadius: 'var(--radius-md)',
-          color: 'var(--text-muted)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)',
-        }}>
-          <div style={{ fontSize: '1.25rem', marginBottom: 8 }}>📊</div>
-          Token usage dashboard coming soon<br />
-          <span style={{ fontSize: '0.75rem' }}>Track your AI consumption by model and source.</span>
-        </div>
+        <Suspense fallback={
+          <div style={{ padding: '24px 0' }}>
+            <div style={{ height: 60, background: 'var(--surface)', borderRadius: 'var(--radius-md)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          </div>
+        }>
+          <LazyTokenDashboard />
+        </Suspense>
       </SettingSection>
 
       <SaveBar visible={!!dirty.ai} saving={saving} onSave={handleSave} onDiscard={() => resetSection('ai')} />

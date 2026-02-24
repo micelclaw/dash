@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router';
+import { toast } from 'sonner';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile, useIsCompact } from '@/hooks/use-media-query';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { useCommandPalette } from '@/hooks/use-command-palette';
@@ -14,6 +16,7 @@ import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { BottomBar } from './BottomBar';
 import { CommandPalette } from './CommandPalette';
+import { UrgentAlertModal } from '@/components/UrgentAlertModal';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -107,22 +110,39 @@ export function Shell() {
     });
   }, [agentEvent, addNotification]);
 
+  const handleDigestReady = useDigestStore((s) => s.handleDigestReady);
+  const handleDigestUrgent = useDigestStore((s) => s.handleDigestUrgent);
+
   useEffect(() => {
     if (!digestEvent) return;
     if (digestEvent.event === 'digest.ready') {
+      handleDigestReady(digestEvent.data);
       addNotification({
         type: 'digest',
         title: digestEvent.data.summary as string,
         action: { label: 'Open', route: '/chat' },
       });
+
+      const alertLevel = digestEvent.data.alert_level as string;
+      if (alertLevel === 'NORMAL' || alertLevel === 'URGENT') {
+        toast(alertLevel === 'URGENT' ? 'Urgent Alert' : 'Digest', {
+          description: digestEvent.data.summary as string,
+          duration: alertLevel === 'URGENT' ? 10000 : 5000,
+        });
+      }
     } else if (digestEvent.event === 'digest.urgent') {
+      handleDigestUrgent(digestEvent.data);
       addNotification({
         type: 'digest',
         title: digestEvent.data.summary as string,
         action: digestEvent.data.route ? { label: 'View', route: digestEvent.data.route as string } : undefined,
       });
+      toast.warning('Urgent Alert', {
+        description: digestEvent.data.summary as string,
+        duration: 10000,
+      });
     }
-  }, [digestEvent, addNotification]);
+  }, [digestEvent, addNotification, handleDigestReady, handleDigestUrgent]);
 
   useEffect(() => {
     if (!systemEvent) return;
@@ -173,6 +193,9 @@ export function Shell() {
 
         {/* Command Palette */}
         <CommandPalette open={commandPaletteOpen} onClose={closePalette} />
+
+        {/* Urgent Digest Alert Modal */}
+        <UrgentAlertModal />
       </div>
     </TooltipProvider>
   );

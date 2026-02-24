@@ -1,11 +1,49 @@
 import { useLocation } from 'react-router';
-import { Menu, Search } from 'lucide-react';
+import { Menu, Search, Newspaper } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
+import { BriefingPanel } from '@/components/BriefingPanel';
 import { useSidebarStore } from '@/stores/sidebar.store';
+import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { MODULES } from '@/config/modules';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/auth.store';
+
+function BriefingButton() {
+  const unreadCount = useDigestStore((s) => s.unreadCount);
+  const panelOpen = useDigestStore((s) => s.panelOpen);
+  const setPanelOpen = useDigestStore((s) => s.setPanelOpen);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setPanelOpen(!panelOpen)}
+        style={{
+          position: 'relative',
+          background: 'none', border: 'none',
+          cursor: 'pointer', color: panelOpen ? 'var(--amber)' : 'var(--text-dim)',
+          padding: 4, display: 'flex',
+        }}
+      >
+        <Newspaper size={18} />
+        {unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: -2, right: -4,
+            minWidth: 14, height: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--amber)', color: '#06060a',
+            borderRadius: 7, fontSize: '0.5625rem',
+            fontWeight: 700, fontFamily: 'var(--font-sans)',
+            padding: '0 3px',
+          }}>
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </button>
+      <BriefingPanel />
+    </div>
+  );
+}
 
 interface TopBarProps {
   onOpenCommandPalette: () => void;
@@ -120,6 +158,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
 
       {/* Right zone */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <BriefingButton />
         <NotificationBell />
         {!isMobile && (
           <Avatar className="h-7 w-7">
