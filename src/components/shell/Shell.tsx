@@ -10,6 +10,7 @@ import { useKeyboard } from '@/hooks/use-keyboard';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useTheme } from '@/hooks/use-theme';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
@@ -31,6 +32,9 @@ export function Shell() {
   const disconnect = useWebSocketStore((s) => s.disconnect);
   const tokens = useAuthStore((s) => s.tokens);
   const isChatPage = location.pathname === '/chat';
+
+  // Apply user theme + accent from settings
+  useTheme();
 
   // Auto-collapse on compact screens, auto-expand when viewport goes wide
   const prevCompactRef = useRef(isCompact);

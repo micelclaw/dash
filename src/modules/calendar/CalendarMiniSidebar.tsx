@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Settings, Trash2, Type } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { toast } from 'sonner';
+import { api } from '@/services/api';
 import {
   getMonthGridDays,
   getWeekDayNames,
@@ -21,6 +22,7 @@ interface CalendarMiniSidebarProps {
   onToggleCalendar: (name: string) => void;
   events: CalendarEvent[];
   onAddCalendar?: () => void;
+  onRefresh?: () => void;
 }
 
 const DAY_NAMES = getWeekDayNames(1);
@@ -35,8 +37,49 @@ export function CalendarMiniSidebar({
   onToggleCalendar,
   events,
   onAddCalendar,
+  onRefresh,
 }: CalendarMiniSidebarProps) {
   const [miniMonth, setMiniMonth] = useState(() => new Date(currentDate));
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameTo, setRenameTo] = useState('');
+  const renameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (renaming && renameRef.current) renameRef.current.focus();
+  }, [renaming]);
+
+  const handleRename = async (oldName: string) => {
+    const newName = renameTo.trim();
+    if (!newName || newName === oldName) { setRenaming(null); return; }
+    try {
+      // Batch update all events with this calendar_name
+      const matching = events.filter(e => e.calendar_name === oldName);
+      await Promise.all(matching.map(e =>
+        api.patch(`/events/${e.id}`, { calendar_name: newName }),
+      ));
+      toast.success(`Renamed "${oldName}" to "${newName}"`);
+      setRenaming(null);
+      onRefresh?.();
+    } catch {
+      toast.error('Failed to rename calendar');
+    }
+  };
+
+  const handleDeleteCalendar = async (name: string) => {
+    const matching = events.filter(e => e.calendar_name === name);
+    if (matching.length === 0) {
+      toast.info(`No events in "${name}"`);
+      return;
+    }
+    if (!confirm(`Delete all ${matching.length} events in "${name}"? This cannot be undone.`)) return;
+    try {
+      await Promise.all(matching.map(e => api.delete(`/events/${e.id}`)));
+      toast.success(`Deleted ${matching.length} events from "${name}"`);
+      onRefresh?.();
+    } catch {
+      toast.error('Failed to delete calendar events');
+    }
+  };
 
   const gridDays = useMemo(() => getMonthGridDays(miniMonth), [miniMonth]);
 
@@ -210,6 +253,35 @@ export function CalendarMiniSidebar({
         {calendarNames.map((name) => {
           const color = getCalendarColor(name);
           const hidden = hiddenCalendars.has(name);
+          const isRenaming = renaming === name;
+
+          if (isRenaming) {
+            return (
+              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0' }}>
+                <input
+                  ref={renameRef}
+                  value={renameTo}
+                  onChange={(e) => setRenameTo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRename(name);
+                    if (e.key === 'Escape') setRenaming(null);
+                  }}
+                  onBlur={() => handleRename(name)}
+                  style={{
+                    flex: 1,
+                    padding: '2px 6px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--amber)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text)',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-sans)',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+            );
+          }
 
           return (
             <ContextMenu
@@ -254,11 +326,11 @@ export function CalendarMiniSidebar({
                 </label>
               }
               items={[
-                { label: 'Rename', icon: Type, onClick: () => toast.info(`Rename "${name}" — coming soon`) },
-                { label: 'Edit', icon: Pencil, onClick: () => toast.info(`Edit "${name}" — coming soon`) },
-                { label: 'Settings', icon: Settings, onClick: () => toast.info(`Settings for "${name}" — coming soon`) },
+                { label: 'Rename', icon: Type, onClick: () => { setRenameTo(name); setRenaming(name); } },
+                { label: 'Edit', icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
+                { label: 'Settings', icon: Settings, onClick: () => toast.info(`Calendar settings — coming soon`) },
                 { label: '', icon: undefined, onClick: () => {}, separator: true },
-                { label: 'Delete', icon: Trash2, onClick: () => toast.info(`Delete "${name}" — coming soon`), variant: 'danger' as const },
+                { label: 'Delete', icon: Trash2, onClick: () => handleDeleteCalendar(name), variant: 'danger' as const },
               ]}
             />
           );

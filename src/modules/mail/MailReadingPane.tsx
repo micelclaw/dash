@@ -154,6 +154,108 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     setMoreOpen(false);
   };
 
+  const handlePrint = () => {
+    if (!email) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Could not open print window. Check your popup blocker.');
+      return;
+    }
+    const content = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>${email.subject || 'Email'}</title>
+<style>
+body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #000; }
+.header { border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
+.subject { font-size: 24px; font-weight: 600; margin-bottom: 15px; }
+.meta { font-size: 14px; color: #666; margin-bottom: 6px; }
+.meta strong { color: #000; }
+.body { font-size: 14px; }
+.body img { max-width: 100%; height: auto; }
+@media print { body { margin: 0; } }
+</style></head><body>
+<div class="header">
+<div class="subject">${email.subject || '(no subject)'}</div>
+<div class="meta"><strong>From:</strong> ${email.from_name || ''} &lt;${email.from_address}&gt;</div>
+<div class="meta"><strong>To:</strong> ${email.to_addresses.map(t => `${t.name || ''} <${t.address}>`).join(', ')}</div>
+${email.cc_addresses.length > 0 ? `<div class="meta"><strong>CC:</strong> ${email.cc_addresses.map(c => c.address).join(', ')}</div>` : ''}
+<div class="meta"><strong>Date:</strong> ${new Date(email.received_at).toLocaleString()}</div>
+</div>
+<div class="body">${email.body_html || `<pre>${email.body_plain || ''}</pre>`}</div>
+</body></html>`;
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+    };
+  };
+
+  const handleOpenInNewWindow = () => {
+    if (!email) return;
+    handlePrint(); // Reuse the popup with email content
+  };
+
+  const handleDelete = async () => {
+    if (!email) return;
+    if (!confirm('Delete this email? It can be restored from Trash.')) return;
+    try {
+      await api.delete(`/emails/${email.id}`);
+      toast.success('Email deleted');
+      onBack?.();
+    } catch {
+      toast.error('Failed to delete email');
+    }
+    setMoreOpen(false);
+  };
+
+  const handleBlockSender = async () => {
+    if (!email) return;
+    if (!confirm(`Block all emails from ${email.from_address}? Existing emails from this sender will be moved to Spam.`)) return;
+    try {
+      await api.post('/emails/block-sender', { email_address: email.from_address });
+      toast.success(`${email.from_address} blocked`);
+    } catch {
+      toast.error('Failed to block sender');
+    }
+    setMoreOpen(false);
+  };
+
+  const handleReportSpam = async () => {
+    if (!email) return;
+    try {
+      await api.post(`/emails/${email.id}/report-spam`);
+      toast.success('Reported as spam');
+      onBack?.();
+    } catch {
+      toast.error('Failed to report spam');
+    }
+    setMoreOpen(false);
+  };
+
+  const handleDownloadEml = async () => {
+    if (!email) return;
+    try {
+      const res = await fetch(`/api/v1/emails/${email.id}/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('claw_token')}` },
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `email-${email.id}.eml`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Email downloaded');
+    } catch {
+      toast.error('Failed to download email');
+    }
+    setMoreOpen(false);
+  };
+
   // Loading skeleton
   if (loading) {
     return (
@@ -486,7 +588,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
 
         {/* Print button */}
         <button
-          onClick={() => window.print()}
+          onClick={handlePrint}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -509,7 +611,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
 
         {/* New window */}
         <button
-          onClick={() => toast.info('Open in new window — coming soon')}
+          onClick={handleOpenInNewWindow}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -586,7 +688,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <BookOpen size={14} /> Mark unread
               </button>
-              <button onClick={() => { toast.info('Delete — coming soon'); setMoreOpen(false); }}
+              <button onClick={handleDelete}
                 style={{ ...menuItemStyle, color: 'var(--danger, #ef4444)' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -595,17 +697,17 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
 
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
-              <button onClick={() => { toast.info('Block sender — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={handleBlockSender} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <Ban size={14} /> Block sender
               </button>
-              <button onClick={() => { toast.info('Report spam — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={handleReportSpam} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <ShieldAlert size={14} /> Report spam
               </button>
-              <button onClick={() => { toast.info('Report phishing — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={() => { handleReportSpam(); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <AlertTriangle size={14} /> Report phishing
@@ -623,7 +725,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <Code size={14} /> Show original
               </button>
-              <button onClick={() => { toast.info('Download .eml — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+              <button onClick={handleDownloadEml} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <Download size={14} /> Download .eml

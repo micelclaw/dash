@@ -31,7 +31,7 @@ export function Component() {
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
 
   // Fetch events for the current view
-  const { events, loading, createEvent, updateEvent, deleteEvent } = useEvents({
+  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useEvents({
     view,
     currentDate,
   });
@@ -149,6 +149,7 @@ export function Component() {
       onToggleCalendar={handleToggleCalendar}
       events={events}
       onAddCalendar={() => setAddCalendarOpen(true)}
+      onRefresh={fetchEvents}
     />
   );
 

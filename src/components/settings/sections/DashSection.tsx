@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
+import { applyTheme, applyAccentColor } from '@/hooks/use-theme';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
@@ -17,6 +18,7 @@ const MODULES_LIST = [
   { value: 'diary', label: 'Diary' },
   { value: 'explorer', label: 'Explorer' },
   { value: 'agents', label: 'Agents' },
+  { value: 'bookmarks', label: 'Bookmarks' },
 ];
 
 const ACCENT_PRESETS = [
@@ -25,6 +27,10 @@ const ACCENT_PRESETS = [
   { color: '#3b82f6', label: 'Blue' },
   { color: '#a855f7', label: 'Purple' },
   { color: '#ef4444', label: 'Red' },
+  { color: '#f97316', label: 'Orange' },
+  { color: '#14b8a6', label: 'Teal' },
+  { color: '#ec4899', label: 'Pink' },
+  { color: '#06b6d4', label: 'Cyan' },
 ];
 
 export function DashSection() {
@@ -143,7 +149,14 @@ export function DashSection() {
         />
       </SettingSection>
 
-      <SaveBar visible={!!dirty.dash} saving={saving} onSave={handleSave} onDiscard={() => resetSection('dash')} />
+      <SaveBar visible={!!dirty.dash} saving={saving} onSave={handleSave} onDiscard={() => {
+        const original = useSettingsStore.getState().original;
+        resetSection('dash');
+        if (original?.dash) {
+          applyTheme(original.dash.theme);
+          applyAccentColor(original.dash.accent_color);
+        }
+      }} />
     </>
   );
 }
