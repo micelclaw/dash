@@ -30,6 +30,7 @@ const router = createBrowserRouter([
           { path: '/mail', lazy: () => import('@/modules/mail/MailPage') },
           { path: '/contacts', lazy: () => import('@/modules/contacts/ContactsPage') },
           { path: '/diary', lazy: () => import('@/modules/diary/DiaryPage') },
+          { path: '/bookmarks', lazy: () => import('@/modules/bookmarks/BookmarksPage') },
           { path: '/drive', lazy: () => import('@/modules/drive/DrivePage') },
           { path: '/photos', lazy: () => import('@/modules/photos/PhotosPage') },
           { path: '/agents', lazy: () => import('@/modules/agents/AgentsPage') },

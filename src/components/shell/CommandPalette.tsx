@@ -4,7 +4,7 @@ import { Command } from 'cmdk';
 import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
-  Search, ArrowRight, Type, Brain, Lock,
+  Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
@@ -27,6 +27,7 @@ const DOMAIN_MAP: Record<string, string> = {
   drive: 'files',
   diary: 'diary',
   chat: 'conversations',
+  bookmarks: 'bookmarks',
 };
 
 const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
@@ -43,6 +44,8 @@ const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   diary: { icon: BookOpen, color: 'var(--mod-diary)' },
   conversations: { icon: MessageSquare, color: 'var(--mod-chat)' },
   conversation: { icon: MessageSquare, color: 'var(--mod-chat)' },
+  bookmarks: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
+  bookmark: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -59,6 +62,8 @@ const DOMAIN_LABELS: Record<string, string> = {
   diary: 'Diary',
   conversations: 'Conversations',
   conversation: 'Conversations',
+  bookmarks: 'Bookmarks',
+  bookmark: 'Bookmarks',
 };
 
 interface CommandItem {
@@ -72,6 +77,7 @@ interface CommandItem {
 const ROUTE_MAP: Record<string, string> = {
   note: '/notes', event: '/calendar', contact: '/contacts',
   email: '/mail', file: '/drive', diary: '/diary', conversation: '/chat',
+  bookmark: '/bookmarks',
 };
 
 function getResultTitle(result: SearchResult): string {
@@ -84,6 +90,7 @@ function getResultTitle(result: SearchResult): string {
     case 'file': return String(r.filename || 'Untitled');
     case 'diary': return String(r.entry_date || 'Diary entry');
     case 'conversation': return String(r.first_message || 'Conversation');
+    case 'bookmark': return String(r.title || r.url || 'Bookmark');
     default: return 'Unknown';
   }
 }
@@ -117,11 +124,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'goto-diary', label: 'Go to Diary', icon: BookOpen, group: 'Navigation', action: () => navigate('/diary') },
     { id: 'goto-drive', label: 'Go to Drive', icon: FolderOpen, group: 'Navigation', action: () => navigate('/drive') },
     { id: 'goto-photos', label: 'Go to Photos', icon: Image, group: 'Navigation', action: () => navigate('/photos') },
+    { id: 'goto-bookmarks', label: 'Go to Bookmarks', icon: Bookmark, group: 'Navigation', action: () => navigate('/bookmarks') },
     { id: 'goto-agents', label: 'Go to Agents', icon: Bot, group: 'Navigation', action: () => navigate('/agents') },
     { id: 'goto-settings', label: 'Go to Settings', icon: Settings, group: 'Navigation', action: () => navigate('/settings') },
     { id: 'create-note', label: 'Create new note', icon: Plus, group: 'Actions', action: () => navigate('/notes?action=new') },
     { id: 'create-event', label: 'Create new event', icon: Plus, group: 'Actions', action: () => navigate('/calendar?action=new') },
     { id: 'create-diary', label: 'Create diary entry', icon: Plus, group: 'Actions', action: () => navigate('/diary?action=new') },
+    { id: 'save-bookmark', label: 'Save a bookmark', icon: Bookmark, group: 'Actions', action: () => navigate('/bookmarks?action=new') },
     { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
     { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
   ], [navigate, sidebarToggle]);
@@ -362,6 +371,57 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       );
                     })}
                   </>
+                )}
+                {/* Web actions when user has typed a query */}
+                {inputValue.trim() && !isSearching && (
+                  <Command.Group heading="">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 4px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      <Globe size={12} style={{ color: 'var(--amber)' }} />
+                      Web
+                    </div>
+                    <Command.Item
+                      value={`search web ${inputValue}`}
+                      onSelect={() => {
+                        navigate(`/chat?prompt=${encodeURIComponent(`Search the web for: ${inputValue.trim()}`)}`);
+                        onClose();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '6px 12px 6px 24px',
+                        cursor: 'pointer',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.8125rem',
+                        color: 'var(--text)',
+                      }}
+                      data-cmdk-item=""
+                    >
+                      <Search size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+                      <span>Search the web for <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
+                    </Command.Item>
+                    <Command.Item
+                      value={`browse web ${inputValue}`}
+                      onSelect={() => {
+                        navigate(`/chat?prompt=${encodeURIComponent(`Browse the web: ${inputValue.trim()}`)}`);
+                        onClose();
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '6px 12px 6px 24px',
+                        cursor: 'pointer',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '0.8125rem',
+                        color: 'var(--text)',
+                      }}
+                      data-cmdk-item=""
+                    >
+                      <Globe size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+                      <span>Browse the web for <strong style={{ color: 'var(--amber)' }}>{inputValue.trim()}</strong></span>
+                    </Command.Item>
+                  </Command.Group>
                 )}
                 {searchResults.length > 0 && Array.from(groupedResults.entries()).map(([domain, items]) => {
                   const domainInfo = DOMAIN_ICONS[domain];

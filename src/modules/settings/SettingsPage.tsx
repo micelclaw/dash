@@ -19,6 +19,7 @@ import { SecuritySection } from '@/components/settings/sections/SecuritySection'
 import { LicenseSection } from '@/components/settings/sections/LicenseSection';
 import { PlaceholderSection } from '@/components/settings/sections/PlaceholderSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
+import { SearchSection } from '@/components/settings/sections/SearchSection';
 
 interface SidebarItem {
   id: string;
@@ -36,7 +37,7 @@ const SECTIONS: SidebarItem[] = [
   { id: 'photos', label: 'Photos', icon: Image },
   { id: 'storage', label: 'Storage', icon: HardDrive },
   { id: 'dash', label: 'Dash', icon: Palette },
-  { id: 'search', label: 'Search', icon: SearchIcon, soon: true, dividerBefore: true },
+  { id: 'search', label: 'Search', icon: SearchIcon, dividerBefore: true },
   { id: 'digest', label: 'Digest', icon: Newspaper },
   { id: 'security', label: 'Security', icon: Shield, dividerBefore: true },
   { id: 'license', label: 'License', icon: CreditCard },
@@ -53,7 +54,7 @@ function renderSection(section: string) {
     case 'dash': return <DashSection />;
     case 'security': return <SecuritySection />;
     case 'license': return <LicenseSection />;
-    case 'search': return <PlaceholderSection icon={SearchIcon} title="Web search configuration coming soon" description="Configure search engines, API keys, and browser security settings." />;
+    case 'search': return <SearchSection />;
     case 'digest': return <DigestSection />;
     default: return <GeneralSection />;
   }
