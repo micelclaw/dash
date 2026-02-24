@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail } from 'lucide-react';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon } from 'lucide-react';
 import { DropZone } from '@/components/shared/DropZone';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { simpleHash } from '@/lib/file-utils';
 import { formatMonthYear } from '@/lib/date-helpers';
+import { toast } from 'sonner';
 import type { Photo } from '@/types/files';
 import type { PhotoGroup } from './types';
 
@@ -54,64 +56,78 @@ function PhotoThumbnail({
   const hue = simpleHash(photo.id) % 360;
 
   return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        position: 'relative',
-        aspectRatio: '1 / 1',
-        borderRadius: 'var(--radius-sm)',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transform: hovered ? 'scale(1.02)' : 'scale(1)',
-        transition: 'transform var(--transition-fast)',
-      }}
-    >
-      {/* Gradient placeholder */}
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
-      </div>
-
-      {/* Hover overlay */}
-      {hovered && (
+    <EntityContextMenu
+      entityType="photo"
+      entityId={photo.id}
+      entityTitle={photo.filename || 'Photo'}
+      onEdit={onClick}
+      extraItems={[
+        { label: 'Add to album', icon: FolderPlus, onClick: () => toast.info('Add to album — coming soon') },
+        { label: 'View EXIF', icon: Info, onClick: () => toast.info('View EXIF — coming soon') },
+        { label: 'Download', icon: Download, onClick: () => toast.info('Download — coming soon') },
+        { label: 'Set as cover', icon: ImageIcon, onClick: () => toast.info('Set as cover — coming soon') },
+      ]}
+      trigger={
         <div
+          onClick={onClick}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
           style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)',
-            pointerEvents: 'none',
-          }}
-        />
-      )}
-
-      {/* Source badge for non-local photos */}
-      {photo.source !== 'local' && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 4,
-            left: 4,
-            background: 'rgba(0,0,0,0.6)',
+            position: 'relative',
+            aspectRatio: '1 / 1',
             borderRadius: 'var(--radius-sm)',
-            padding: '2px 4px',
-            display: 'flex',
-            alignItems: 'center',
+            overflow: 'hidden',
+            cursor: 'pointer',
+            transform: hovered ? 'scale(1.02)' : 'scale(1)',
+            transition: 'transform var(--transition-fast)',
           }}
         >
-          <Mail size={10} style={{ color: 'var(--text-dim)' }} />
+          {/* Gradient placeholder */}
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+          </div>
+
+          {/* Hover overlay */}
+          {hovered && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+
+          {/* Source badge for non-local photos */}
+          {photo.source !== 'local' && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 4,
+                left: 4,
+                background: 'rgba(0,0,0,0.6)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '2px 4px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <Mail size={10} style={{ color: 'var(--text-dim)' }} />
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      }
+    />
   );
 }
 

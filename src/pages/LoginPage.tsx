@@ -2,12 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { getMockUser } from '@/services/mock';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
   const login = useAuthStore((s) => s.login);
   const setAuth = useAuthStore((s) => s.setAuth);
   const navigate = useNavigate();
@@ -109,7 +111,7 @@ export function LoginPage() {
           />
         </div>
 
-        <div style={{ marginBottom: 24 }}>
+        <div style={{ marginBottom: 16 }}>
           <label
             htmlFor="password"
             style={{ display: 'block', fontSize: '0.8125rem', color: 'var(--text-dim)', marginBottom: 6 }}
@@ -139,6 +141,24 @@ export function LoginPage() {
             onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
             onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
           />
+          <button
+            type="button"
+            onClick={() => setShowForgot(true)}
+            style={{
+              display: 'block',
+              marginTop: 6,
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: 'var(--amber)',
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              padding: 0,
+            }}
+          >
+            Forgot password?
+          </button>
         </div>
 
         <button
@@ -166,6 +186,8 @@ export function LoginPage() {
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
+
+      <ForgotPasswordModal open={showForgot} onClose={() => setShowForgot(false)} />
     </div>
   );
 }

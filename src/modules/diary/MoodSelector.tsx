@@ -64,6 +64,8 @@ export function MoodSelector({ value, onChange }: MoodSelectorProps) {
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
             boxShadow: 'var(--shadow-md)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             zIndex: 'var(--z-dropdown)' as unknown as number,
             overflow: 'hidden',
             minWidth: 140,

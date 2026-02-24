@@ -1,4 +1,4 @@
-import { Globe, Mail } from 'lucide-react';
+import { Globe, Mail, FileText, StickyNote, Diamond } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SourceBadgeProps {
@@ -6,12 +6,15 @@ interface SourceBadgeProps {
   size?: 'sm' | 'md';
 }
 
-const SOURCE_CONFIG: Record<string, { label: string; color: string; icon: 'paw' | 'google' | 'apple' | 'synology' | 'mail' | 'globe' }> = {
+const SOURCE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   local: { label: 'Local', color: 'var(--amber)', icon: 'paw' },
   google: { label: 'Google', color: '#4285f4', icon: 'google' },
   apple: { label: 'Apple', color: '#a2aaad', icon: 'apple' },
   synology: { label: 'Synology', color: '#e87e04', icon: 'synology' },
   imap: { label: 'IMAP', color: 'var(--mod-mail)', icon: 'mail' },
+  notion: { label: 'Notion', color: '#999999', icon: 'notion' },
+  evernote: { label: 'Evernote', color: '#00a82d', icon: 'evernote' },
+  obsidian: { label: 'Obsidian', color: '#7c3aed', icon: 'obsidian' },
 };
 
 function SourceIcon({ type, size }: { type: string; size: number }) {
@@ -42,6 +45,12 @@ function SourceIcon({ type, size }: { type: string; size: number }) {
       );
     case 'mail':
       return <Mail size={size} />;
+    case 'notion':
+      return <FileText size={size} />;
+    case 'evernote':
+      return <StickyNote size={size} />;
+    case 'obsidian':
+      return <Diamond size={size} />;
     default:
       return <Globe size={size} />;
   }

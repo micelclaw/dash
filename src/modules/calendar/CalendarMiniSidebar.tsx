@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Settings, Trash2, Type } from 'lucide-react';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import { toast } from 'sonner';
 import {
   getMonthGridDays,
   getWeekDayNames,
@@ -18,6 +20,7 @@ interface CalendarMiniSidebarProps {
   hiddenCalendars: Set<string>;
   onToggleCalendar: (name: string) => void;
   events: CalendarEvent[];
+  onAddCalendar?: () => void;
 }
 
 const DAY_NAMES = getWeekDayNames(1);
@@ -31,6 +34,7 @@ export function CalendarMiniSidebar({
   hiddenCalendars,
   onToggleCalendar,
   events,
+  onAddCalendar,
 }: CalendarMiniSidebarProps) {
   const [miniMonth, setMiniMonth] = useState(() => new Date(currentDate));
 
@@ -208,46 +212,81 @@ export function CalendarMiniSidebar({
           const hidden = hiddenCalendars.has(name);
 
           return (
-            <label
+            <ContextMenu
               key={name}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '4px 0',
-                cursor: 'pointer',
-                fontSize: '0.8125rem',
-                fontFamily: 'var(--font-sans)',
-                color: hidden ? 'var(--text-muted)' : 'var(--text)',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={!hidden}
-                onChange={() => onToggleCalendar(name)}
-                style={{
-                  accentColor: color,
-                  width: 14,
-                  height: 14,
-                  cursor: 'pointer',
-                }}
-              />
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: color,
-                  flexShrink: 0,
-                  opacity: hidden ? 0.3 : 1,
-                }}
-              />
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {name}
-              </span>
-            </label>
+              trigger={
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '4px 0',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-sans)',
+                    color: hidden ? 'var(--text-muted)' : 'var(--text)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!hidden}
+                    onChange={() => onToggleCalendar(name)}
+                    style={{
+                      accentColor: color,
+                      width: 14,
+                      height: 14,
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: color,
+                      flexShrink: 0,
+                      opacity: hidden ? 0.3 : 1,
+                    }}
+                  />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {name}
+                  </span>
+                </label>
+              }
+              items={[
+                { label: 'Rename', icon: Type, onClick: () => toast.info(`Rename "${name}" — coming soon`) },
+                { label: 'Edit', icon: Pencil, onClick: () => toast.info(`Edit "${name}" — coming soon`) },
+                { label: 'Settings', icon: Settings, onClick: () => toast.info(`Settings for "${name}" — coming soon`) },
+                { label: '', icon: undefined, onClick: () => {}, separator: true },
+                { label: 'Delete', icon: Trash2, onClick: () => toast.info(`Delete "${name}" — coming soon`), variant: 'danger' as const },
+              ]}
+            />
           );
         })}
+
+        {/* Add calendar button */}
+        <button
+          onClick={onAddCalendar}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginTop: 8,
+            padding: '6px 0',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+            color: 'var(--amber)',
+            transition: 'opacity var(--transition-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '0.8'; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+        >
+          <Plus size={14} />
+          Add calendar
+        </button>
       </div>
     </div>
   );

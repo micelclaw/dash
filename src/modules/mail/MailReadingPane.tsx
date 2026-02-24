@@ -2,7 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import {
   ChevronLeft, Reply, ReplyAll, Forward,
   MoreHorizontal, Star, BookOpen, FileText,
+  Printer, ExternalLink, Trash2, Ban, ShieldAlert,
+  AlertTriangle, Languages, Code, Download, Sparkles,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
 import { useEmailLinks } from './hooks/use-email-links';
@@ -448,11 +451,84 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
           padding: '12px 16px',
           borderTop: '1px solid var(--border)',
           position: 'relative',
+          flexWrap: 'wrap',
         }}
       >
         <ActionButton icon={Reply} label="Reply" onClick={handleReply} />
         <ActionButton icon={ReplyAll} label="Reply All" onClick={handleReplyAll} />
         <ActionButton icon={Forward} label="Forward" onClick={handleForward} />
+
+        {/* Star button */}
+        <button
+          onClick={handleToggleStar}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            cursor: 'pointer',
+            transition: 'background var(--transition-fast)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          title={email.is_starred ? 'Unstar' : 'Star'}
+        >
+          <Star
+            size={14}
+            fill={email.is_starred ? 'var(--amber)' : 'none'}
+            style={{ color: email.is_starred ? 'var(--amber)' : 'var(--text-dim)' }}
+          />
+        </button>
+
+        {/* Print button */}
+        <button
+          onClick={() => window.print()}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            color: 'var(--text-dim)',
+            cursor: 'pointer',
+            transition: 'background var(--transition-fast)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          title="Print"
+        >
+          <Printer size={14} />
+        </button>
+
+        {/* New window */}
+        <button
+          onClick={() => toast.info('Open in new window — coming soon')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            color: 'var(--text-dim)',
+            cursor: 'pointer',
+            transition: 'background var(--transition-fast)',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          title="Open in new window"
+        >
+          <ExternalLink size={14} />
+        </button>
 
         {/* More menu */}
         <div ref={moreRef} style={{ position: 'relative', marginLeft: 'auto' }}>
@@ -486,35 +562,114 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
                 borderRadius: 'var(--radius-md)',
                 boxShadow: 'var(--shadow-md)',
                 zIndex: 'var(--z-dropdown)' as unknown as number,
-                minWidth: 160,
+                minWidth: 180,
                 padding: '4px 0',
+                maxHeight: 360,
+                overflowY: 'auto',
               }}
             >
-              <button
-                onClick={handleMarkUnread}
-                style={menuItemStyle}
+              <button onClick={() => { handleReplyAll(); setMoreOpen(false); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                <BookOpen size={14} />
-                Mark unread
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <ReplyAll size={14} /> Reply all
               </button>
-              <button
-                onClick={handleToggleStar}
-                style={menuItemStyle}
+              <button onClick={() => { handleForward(); setMoreOpen(false); }} style={menuItemStyle}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              >
-                <Star
-                  size={14}
-                  fill={email.is_starred ? 'var(--amber)' : 'none'}
-                  style={{ color: email.is_starred ? 'var(--amber)' : 'var(--text-dim)' }}
-                />
-                {email.is_starred ? 'Unstar' : 'Star'}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Forward size={14} /> Forward
+              </button>
+
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
+              <button onClick={handleMarkUnread} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <BookOpen size={14} /> Mark unread
+              </button>
+              <button onClick={() => { toast.info('Delete — coming soon'); setMoreOpen(false); }}
+                style={{ ...menuItemStyle, color: 'var(--danger, #ef4444)' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Trash2 size={14} /> Delete
+              </button>
+
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
+              <button onClick={() => { toast.info('Block sender — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Ban size={14} /> Block sender
+              </button>
+              <button onClick={() => { toast.info('Report spam — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <ShieldAlert size={14} /> Report spam
+              </button>
+              <button onClick={() => { toast.info('Report phishing — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <AlertTriangle size={14} /> Report phishing
+              </button>
+
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
+              <button onClick={() => { toast.info('Translate — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Languages size={14} /> Translate
+              </button>
+              <button onClick={() => { toast.info('Show original — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Code size={14} /> Show original
+              </button>
+              <button onClick={() => { toast.info('Download .eml — coming soon'); setMoreOpen(false); }} style={menuItemStyle}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Download size={14} /> Download .eml
               </button>
             </div>
           )}
         </div>
+      </div>
+
+      {/* AI Auto-reply stub */}
+      <div style={{
+        padding: '8px 16px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+      }}>
+        <button
+          disabled
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+            cursor: 'not-allowed',
+            opacity: 0.6,
+          }}
+        >
+          <Sparkles size={14} />
+          AI Auto-reply
+          <span style={{
+            fontSize: '0.625rem',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '1px 4px',
+            fontWeight: 600,
+          }}>
+            Soon
+          </span>
+        </button>
       </div>
     </div>
   );

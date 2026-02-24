@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Pin, Archive, Trash } from 'lucide-react';
+import { Pin, Archive, Trash, Share2, Link2 } from 'lucide-react';
 import { SourceBadge } from '@/components/shared/SourceBadge';
 import { Tag } from '@/components/shared/Tag';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
+import { RelateModal } from '@/components/shared/RelateModal';
 import { timeAgo } from '@/lib/time';
 import { getPreview } from '@/lib/text';
 import type { Note } from '@/types/notes';
@@ -18,6 +20,8 @@ interface NotesListItemProps {
 
 export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDelete }: NotesListItemProps) {
   const [highlight, setHighlight] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [relateOpen, setRelateOpen] = useState(false);
   const prevUpdatedAt = useRef(note.updated_at);
 
   // Amber flash on external WS update
@@ -35,6 +39,7 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
   const extraTags = note.tags.length - 2;
 
   return (
+    <>
     <ContextMenu
       trigger={
         <div
@@ -88,8 +93,29 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
         { label: note.pinned ? 'Unpin' : 'Pin', icon: Pin, onClick: onPin },
         { label: 'Archive', icon: Archive, onClick: onArchive },
         { label: '', icon: undefined, onClick: () => {}, separator: true },
+        { label: 'Share', icon: Share2, onClick: () => setShareOpen(true) },
+        { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
+        { label: '', icon: undefined, onClick: () => {}, separator: true },
         { label: 'Delete', icon: Trash, onClick: onDelete, variant: 'danger' as const },
       ]}
     />
+    {shareOpen && (
+      <EntityShareModal
+        open={shareOpen}
+        entityType="note"
+        entityId={note.id}
+        entityTitle={note.title || 'Untitled'}
+        onClose={() => setShareOpen(false)}
+      />
+    )}
+    {relateOpen && (
+      <RelateModal
+        open={relateOpen}
+        sourceType="note"
+        sourceId={note.id}
+        onClose={() => setRelateOpen(false)}
+      />
+    )}
+    </>
   );
 }

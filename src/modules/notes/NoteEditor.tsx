@@ -8,7 +8,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -18,6 +18,7 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SourceBadge } from '@/components/shared/SourceBadge';
 import { Tag } from '@/components/shared/Tag';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { SourcePickerModal } from './SourcePickerModal';
 import type { Note } from '@/types/notes';
 import type { ApiResponse } from '@/types/api';
 
@@ -46,6 +47,9 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [showTagInput, setShowTagInput] = useState(false);
   const { links, loading: linksLoading } = useNoteLinks(noteId);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -152,6 +156,40 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
     };
   }, []);
 
+  const handleSourceChange = useCallback(async (source: string) => {
+    if (!note) return;
+    setNote(prev => prev ? { ...prev, source } : null);
+    try {
+      await api.patch(`/notes/${noteId}`, { source });
+    } catch {
+      toast.error('Failed to update source');
+    }
+  }, [note, noteId]);
+
+  const handleAddTag = useCallback(async () => {
+    const tag = tagInput.trim();
+    if (!tag || !note || note.tags.includes(tag)) { setTagInput(''); return; }
+    const newTags = [...note.tags, tag];
+    setNote(prev => prev ? { ...prev, tags: newTags } : null);
+    setTagInput('');
+    try {
+      await api.patch(`/notes/${noteId}`, { tags: newTags });
+    } catch {
+      toast.error('Failed to add tag');
+    }
+  }, [tagInput, note, noteId]);
+
+  const handleRemoveTag = useCallback(async (tagToRemove: string) => {
+    if (!note) return;
+    const newTags = note.tags.filter(t => t !== tagToRemove);
+    setNote(prev => prev ? { ...prev, tags: newTags } : null);
+    try {
+      await api.patch(`/notes/${noteId}`, { tags: newTags });
+    } catch {
+      toast.error('Failed to remove tag');
+    }
+  }, [note, noteId]);
+
   if (loading) return <EditorSkeleton />;
   if (!note) {
     return (
@@ -195,12 +233,86 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
         {/* Metadata row */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
-          fontSize: '0.75rem', color: 'var(--text-dim)',
+          fontSize: '0.75rem', color: 'var(--text-dim)', flexWrap: 'wrap',
         }}>
-          <SourceBadge source={note.source} size="sm" />
+          {/* Clickable source badge */}
+          <button
+            onClick={() => setSourcePickerOpen(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center',
+              background: 'transparent', border: '1px solid transparent',
+              borderRadius: 'var(--radius-sm)', padding: '1px 4px',
+              cursor: 'pointer', transition: 'border-color var(--transition-fast)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}
+            title="Change source"
+          >
+            <SourceBadge source={note.source} size="sm" />
+          </button>
+
+          {/* Removable tags */}
           {note.tags.map(tag => (
-            <Tag key={tag} label={tag} color="var(--text-dim)" size="sm" variant="outline" />
+            <span
+              key={tag}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '1px 6px', background: 'var(--surface)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-full)',
+                fontSize: '0.6875rem', color: 'var(--text-dim)',
+              }}
+            >
+              {tag}
+              <button
+                onClick={() => handleRemoveTag(tag)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: 0, color: 'var(--text-muted)', display: 'flex',
+                }}
+              >
+                <X size={10} />
+              </button>
+            </span>
           ))}
+
+          {/* Add tag input */}
+          {showTagInput ? (
+            <input
+              value={tagInput}
+              onChange={e => setTagInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); }
+                if (e.key === 'Escape') { setShowTagInput(false); setTagInput(''); }
+              }}
+              onBlur={() => { if (!tagInput.trim()) setShowTagInput(false); }}
+              placeholder="tag name"
+              autoFocus
+              style={{
+                width: 80, background: 'var(--surface)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                padding: '1px 6px', fontSize: '0.6875rem', color: 'var(--text)',
+                fontFamily: 'var(--font-sans)', outline: 'none',
+              }}
+            />
+          ) : (
+            <button
+              onClick={() => setShowTagInput(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 2,
+                background: 'transparent', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', padding: '1px 6px',
+                cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.6875rem',
+                fontFamily: 'var(--font-sans)',
+                transition: 'border-color var(--transition-fast)',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--amber)'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+            >
+              <Plus size={10} />
+              tag
+            </button>
+          )}
+
           {saving && (
             <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.6875rem' }}>
               Saving...
@@ -208,6 +320,14 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
           )}
         </div>
       </div>
+
+      {/* Source picker modal */}
+      <SourcePickerModal
+        open={sourcePickerOpen}
+        currentSource={note.source}
+        onSelect={handleSourceChange}
+        onClose={() => setSourcePickerOpen(false)}
+      />
 
       {/* Editor area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>

@@ -172,6 +172,7 @@ export function DiaryTimeline({
             {group.entries.map(entry => (
               <DiaryTimelineItem
                 key={entry.id}
+                id={entry.id}
                 entryDate={entry.entry_date}
                 content={entry.content}
                 mood={entry.mood}

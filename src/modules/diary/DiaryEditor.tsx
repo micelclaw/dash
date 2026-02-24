@@ -165,11 +165,13 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
             value={tagInput}
             onChange={e => setTagInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-            placeholder="+ tag"
+            placeholder="Add tag"
             style={{
-              width: 60,
-              background: 'transparent',
-              border: 'none',
+              width: 72,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '2px 8px',
               outline: 'none',
               color: 'var(--text-muted)',
               fontSize: '0.75rem',

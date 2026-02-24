@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { getAgentColor } from './agent-colors';
 import type { AgentConversation, ManagedAgent } from './types';
 
 interface ConversationMessageProps {
@@ -18,6 +19,8 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
   const toAvatar = toAgent?.avatar ?? '🤖';
   const toName = toAgent?.display_name ?? message.to_agent;
 
+  const fromColor = getAgentColor(message.from_agent, (fromAgent as ManagedAgent & { color?: string })?.color);
+
   const time = new Date(message.created_at).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -32,8 +35,9 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        padding: '12px 0',
+        padding: '12px 12px',
         borderBottom: '1px solid var(--border)',
+        borderLeft: `3px solid ${fromColor}`,
         background: hovered ? 'var(--surface-hover)' : 'transparent',
         transition: 'var(--transition-fast)',
       }}
@@ -53,8 +57,17 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
           fontWeight: 600,
           color: 'var(--text)',
         }}>
-          <span>{fromAvatar}</span>
-          <span>{fromName}</span>
+          <span style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            border: `2px solid ${fromColor}`,
+            fontSize: '0.75rem',
+          }}>{fromAvatar}</span>
+          <span style={{ color: fromColor }}>{fromName}</span>
           <ArrowRight size={12} style={{ color: 'var(--text-dim)' }} />
           <span>{toAvatar}</span>
           <span>{toName}</span>

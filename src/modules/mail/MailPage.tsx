@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
-import { Mail } from 'lucide-react';
+import { Mail, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
@@ -54,6 +54,9 @@ export function Component() {
   });
 
   const { accounts } = useEmailAccounts();
+
+  // Collapsible list
+  const [listCollapsed, setListCollapsed] = useState(false);
 
   // Snooze menu
   const [snoozeTarget, setSnoozeTarget] = useState<{ id: string; el: HTMLElement } | null>(null);
@@ -198,12 +201,13 @@ export function Component() {
   }
 
   // Desktop / Tablet: 3-column grid
+  const listWidth = listCollapsed ? '0px' : isTablet ? '1fr' : '340px';
   return (
     <div
       style={{
         display: 'grid',
         height: '100%',
-        gridTemplateColumns: isTablet ? '56px 1fr 1fr' : '200px 340px 1fr',
+        gridTemplateColumns: isTablet ? `56px ${listWidth} 1fr` : `200px ${listWidth} 1fr`,
         overflow: 'hidden',
       }}
     >
@@ -218,8 +222,14 @@ export function Component() {
         emails={emails}
       />
 
-      <div style={{ borderRight: '1px solid var(--border)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <MailList
+      <div style={{
+        borderRight: listCollapsed ? 'none' : '1px solid var(--border)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        transition: 'width var(--transition-fast)',
+      }}>
+        {!listCollapsed && <MailList
           emails={emails}
           loading={loading}
           error={error}
@@ -246,24 +256,52 @@ export function Component() {
           onBatchArchive={() => batchAction([...selectedIds], 'archive')}
           onBatchDelete={() => batchAction([...selectedIds], 'delete')}
           accounts={accountColorMap}
-        />
+        />}
       </div>
 
-      {selectedEmailId ? (
-        <MailReadingPane
-          emailId={selectedEmailId}
-          onReply={handleReply}
-          onForward={handleForward}
-        />
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
-          <EmptyState
-            icon={Mail}
-            title="Select an email"
-            description="Choose an email from the list to read"
-          />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Collapse/expand toggle */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          padding: '4px 8px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg)',
+          flexShrink: 0,
+        }}>
+          <button
+            onClick={() => setListCollapsed(prev => !prev)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 28, height: 28,
+              border: 'none', borderRadius: 'var(--radius-sm)',
+              background: 'transparent', color: 'var(--text-dim)',
+              cursor: 'pointer', transition: 'background var(--transition-fast)',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            title={listCollapsed ? 'Show email list' : 'Hide email list'}
+          >
+            {listCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+          </button>
         </div>
-      )}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          {selectedEmailId ? (
+            <MailReadingPane
+              emailId={selectedEmailId}
+              onReply={handleReply}
+              onForward={handleForward}
+            />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
+              <EmptyState
+                icon={Mail}
+                title="Select an email"
+                description="Choose an email from the list to read"
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Composer floats above everything */}
       {composerData && (

@@ -9,6 +9,7 @@ import { CalendarMiniSidebar } from './CalendarMiniSidebar';
 import { CalendarGrid } from './CalendarGrid';
 import { EventModal } from './EventModal';
 import { EventQuickCreate } from './EventQuickCreate';
+import { AddCalendarModal } from './AddCalendarModal';
 import type { CalendarView, CalendarEvent } from './types';
 
 export function Component() {
@@ -25,6 +26,9 @@ export function Component() {
 
   // Quick create state
   const [quickCreateDate, setQuickCreateDate] = useState<Date | null>(null);
+
+  // Add calendar modal
+  const [addCalendarOpen, setAddCalendarOpen] = useState(false);
 
   // Fetch events for the current view
   const { events, loading, createEvent, updateEvent, deleteEvent } = useEvents({
@@ -144,6 +148,7 @@ export function Component() {
       hiddenCalendars={hiddenCalendars}
       onToggleCalendar={handleToggleCalendar}
       events={events}
+      onAddCalendar={() => setAddCalendarOpen(true)}
     />
   );
 
@@ -182,6 +187,12 @@ export function Component() {
           onCreate={createEvent}
         />
       )}
+
+      {/* Add calendar modal */}
+      <AddCalendarModal
+        open={addCalendarOpen}
+        onClose={() => setAddCalendarOpen(false)}
+      />
     </>
   );
 }

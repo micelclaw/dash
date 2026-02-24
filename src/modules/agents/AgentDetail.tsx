@@ -5,6 +5,7 @@ import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { AgentActivity } from './AgentActivity';
+import { getAgentColor } from './agent-colors';
 import type { ManagedAgent } from './types';
 
 interface AgentDetailProps {
@@ -75,10 +76,20 @@ export function AgentDetail({ agentId, agents, onSelect }: AgentDetailProps) {
           <span style={{ fontSize: '1.25rem' }}>{agent.avatar || '🤖'}</span>
           <div>
             <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
               fontSize: '1rem',
               fontWeight: 600,
               color: 'var(--text)',
             }}>
+              <span style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: getAgentColor(agent.name),
+                flexShrink: 0,
+              }} />
               {agent.display_name} — {agent.role}
             </div>
             <div style={{

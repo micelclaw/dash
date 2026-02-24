@@ -35,7 +35,7 @@ function SkeletonItem() {
 
 export function ContactsList({
   contacts, loading, error, filters, onFiltersChange,
-  selectedId, onSelect, onCreateContact, onDeleteContact: _onDeleteContact, onRetry,
+  selectedId, onSelect, onCreateContact, onDeleteContact, onRetry,
 }: ContactsListProps) {
   const availableTags = useMemo(
     () => [...new Set(contacts.flatMap(c => c.tags))].sort(),
@@ -127,6 +127,7 @@ export function ContactsList({
             contact={contact}
             selected={contact.id === selectedId}
             onClick={() => onSelect(contact.id)}
+            onDelete={() => onDeleteContact(contact.id)}
           />
         ))}
       </div>
