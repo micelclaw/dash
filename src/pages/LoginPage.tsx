@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { getMockUser } from '@/services/mock';
@@ -10,9 +10,43 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
   const login = useAuthStore((s) => s.login);
   const setAuth = useAuthStore((s) => s.setAuth);
   const navigate = useNavigate();
+
+  // Auto-login for single_user mode (skip if user explicitly logged out)
+  useEffect(() => {
+    const useMock = import.meta.env.VITE_MOCK_API === 'true';
+    if (useMock) {
+      setCheckingAutoLogin(false);
+      return;
+    }
+
+    if (sessionStorage.getItem('claw-explicit-logout')) {
+      setCheckingAutoLogin(false);
+      return;
+    }
+
+    const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+    fetch(`${baseUrl}/api/v1/auth/status`)
+      .then((r) => r.json())
+      .then((res) => {
+        const { mode, auto_login, access_token, user } = res.data ?? {};
+        if (mode === 'single_user' && auto_login && access_token && user) {
+          setAuth(
+            { id: user.id, email: user.email ?? '', display_name: user.display_name, role: user.role, tier: res.tier ?? 'free' },
+            { accessToken: access_token, refreshToken: '' },
+          );
+          navigate('/', { replace: true });
+          return;
+        }
+        setCheckingAutoLogin(false);
+      })
+      .catch(() => {
+        setCheckingAutoLogin(false);
+      });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -27,12 +61,36 @@ export function LoginPage() {
       } else {
         await login(email, password);
       }
+      sessionStorage.removeItem('claw-explicit-logout');
       navigate('/', { replace: true });
     } catch {
       setError('Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checkingAutoLogin) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundImage: 'url(/login_page.png)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: 'var(--bg)',
+          color: 'var(--text-dim)',
+          fontFamily: 'var(--font-sans)',
+          fontSize: '0.875rem',
+        }}
+      >
+        Connecting...
+      </div>
+    );
   }
 
   return (
@@ -42,7 +100,11 @@ export function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--bg)',
+        backgroundImage: 'url(/login_page.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: 'var(--bg)',
       }}
     >
       <form
@@ -51,9 +113,11 @@ export function LoginPage() {
           width: '100%',
           maxWidth: 380,
           padding: 32,
-          background: 'var(--surface)',
+          background: 'rgba(12, 12, 16, 0.75)',
+          backdropFilter: 'blur(5px)',
+          WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)',
+          border: '1px solid rgba(255,255,255,0.08)',
         }}
       >
         <div style={{ textAlign: 'center', marginBottom: 32 }}>

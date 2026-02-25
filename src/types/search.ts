@@ -3,7 +3,7 @@ export interface SearchResult {
   record_id: string;
   score: number;
   snippet: string;
-  record: Record<string, unknown>;
+  record: Record<string, unknown> | null;
   provenance?: {
     vector_rank: number;
     fulltext_rank: number;

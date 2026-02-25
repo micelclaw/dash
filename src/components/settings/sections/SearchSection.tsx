@@ -6,6 +6,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useApiKeyStore } from '@/stores/apikey.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
 
 // ─── Types ───────────────────────────────────────────────
@@ -167,7 +168,7 @@ function WebSearchConfig() {
   const deleteKey = useApiKeyStore((s) => s.deleteKey);
   const testConnection = useApiKeyStore((s) => s.testConnection);
   const settings = useSettingsStore((s) => s.settings);
-  const tier = (settings as any)?.tier ?? 'free';
+  const tier = useAuthStore((s) => s.user?.tier ?? 'free');
 
   const [tavilyKey, setTavilyKey] = useState('');
   const [showKey, setShowKey] = useState(false);

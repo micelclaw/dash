@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowRight, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { api } from '@/services/api';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
@@ -12,6 +13,7 @@ interface AgentDetailProps {
   agentId: string;
   agents: ManagedAgent[];
   onSelect: (id: string) => void;
+  onAgentChanged?: () => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -33,11 +35,64 @@ function formatRelativeTime(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
-export function AgentDetail({ agentId, agents, onSelect }: AgentDetailProps) {
-  const { agent, loading } = useAgentDetail(agentId);
+function modelId(model: string): string {
+  // Normalize: ensure "anthropic/" prefix
+  return model.includes('/') ? model : `anthropic/${model}`;
+}
+
+function ModelLabel({ model }: { model: string }) {
+  // "anthropic/claude-haiku-4-5" → "Claude Haiku 4.5"
+  const raw = model.includes('/') ? model.split('/')[1]! : model;
+  return <>{raw.replace(/^claude-/, 'Claude ').replace(/-(\d+)-(\d+)/, ' $1.$2').replace(/-/g, ' ')}</>;
+}
+
+export function AgentDetail({ agentId, agents, onSelect, onAgentChanged }: AgentDetailProps) {
+  const { agent, loading, refetch } = useAgentDetail(agentId);
   const navigate = useNavigate();
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
+
+  // Model dropdown
+  const [modelOpen, setModelOpen] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [hoveredModel, setHoveredModel] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch available models when dropdown opens
+  useEffect(() => {
+    if (!modelOpen || models.length > 0) return;
+    setModelLoading(true);
+    api.get<{ data: { id: string; provider: string; name: string }[] }>('/managed-agents/models')
+      .then(res => setModels(res.data.map(m => m.id)))
+      .catch(() => setModels(['anthropic/claude-haiku-4-5', 'anthropic/claude-sonnet-4-6', 'anthropic/claude-opus-4-6']))
+      .finally(() => setModelLoading(false));
+  }, [modelOpen, models.length]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!modelOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setModelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [modelOpen]);
+
+  const handleModelSelect = useCallback(async (model: string) => {
+    if (!agent || modelId(model) === modelId(agent.model)) { setModelOpen(false); return; }
+    setModelSaving(true);
+    try {
+      await api.post(`/managed-agents/${agent.id}/set-model`, { model });
+      refetch();
+      onAgentChanged?.();
+      setModelOpen(false);
+    } catch { /* ignore */ }
+    finally { setModelSaving(false); }
+  }, [agent, refetch, onAgentChanged]);
 
   if (loading || !agent) {
     return (
@@ -92,12 +147,84 @@ export function AgentDetail({ agentId, agents, onSelect }: AgentDetailProps) {
               }} />
               {agent.display_name} — {agent.role}
             </div>
-            <div style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-dim)',
-              marginTop: 2,
-            }}>
-              {agent.model}
+            <div ref={dropdownRef} style={{ position: 'relative', marginTop: 4 }}>
+              <button
+                onClick={() => setModelOpen(!modelOpen)}
+                disabled={modelSaving}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: 'var(--amber-dim)',
+                  border: '1px solid var(--amber)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--amber)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  padding: '3px 10px',
+                  cursor: modelSaving ? 'wait' : 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  transition: 'var(--transition-fast)',
+                  borderColor: modelOpen ? 'var(--amber)' : 'rgba(var(--amber-rgb, 217,119,6), 0.4)',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--amber)'; }}
+                onMouseLeave={e => { if (!modelOpen) e.currentTarget.style.borderColor = 'rgba(217,119,6,0.4)'; }}
+              >
+                {modelSaving ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                <ModelLabel model={agent.model} />
+                <ChevronDown size={13} style={{ opacity: 0.7, transform: modelOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+              </button>
+              {modelOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: 4,
+                  background: 'rgba(24, 24, 27, 0.85)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  boxShadow: 'var(--shadow-lg)',
+                  zIndex: 50,
+                  minWidth: 220,
+                  overflow: 'hidden',
+                }}>
+                  {modelLoading ? (
+                    <div style={{ padding: '10px 14px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                      Loading models...
+                    </div>
+                  ) : (
+                    models.map(m => (
+                      <button
+                        key={m}
+                        onClick={() => handleModelSelect(m)}
+                        onMouseEnter={() => setHoveredModel(m)}
+                        onMouseLeave={() => setHoveredModel(null)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          padding: '8px 14px',
+                          background: hoveredModel === m ? 'var(--surface-hover)' : 'transparent',
+                          border: 'none',
+                          color: modelId(m) === modelId(agent.model) ? 'var(--amber)' : 'var(--text)',
+                          fontSize: '0.75rem',
+                          fontWeight: modelId(m) === modelId(agent.model) ? 600 : 400,
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-sans)',
+                          transition: 'var(--transition-fast)',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <ModelLabel model={m} />
+                        {modelId(m) === modelId(agent.model) && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8 }}>current</span>}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -82,6 +82,10 @@ const ROUTE_MAP: Record<string, string> = {
 
 function getResultTitle(result: SearchResult): string {
   const r = result.record;
+  if (!r) {
+    // record not hydrated — fall back to snippet
+    return result.snippet?.split('\n')[0]?.slice(0, 60) || result.domain || 'Unknown';
+  }
   switch (result.domain) {
     case 'note': return String(r.title || 'Untitled');
     case 'event': return String(r.title || 'Untitled event');

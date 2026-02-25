@@ -1,8 +1,8 @@
+import { useAuthStore } from '@/stores/auth.store';
 import { SettingSection } from '../SettingSection';
 
 export function LicenseSection() {
-  // TODO: Connect to license endpoint when available
-  const tier = 'free';
+  const tier = useAuthStore((s) => s.user?.tier ?? 'free');
 
   return (
     <SettingSection title="License">

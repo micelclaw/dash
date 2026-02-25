@@ -143,6 +143,11 @@ export function BottomBar() {
         @keyframes blink {
           50% { opacity: 0; }
         }
+        @keyframes dotFade {
+          0%, 20% { opacity: 0; }
+          40% { opacity: 1; }
+          60%, 100% { opacity: 0; }
+        }
       `}</style>
     </div>
   );

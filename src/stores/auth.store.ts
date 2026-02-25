@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, AuthTokens } from '@/types/auth';
+import type { User, AuthTokens, Tier } from '@/types/auth';
 import { api } from '@/services/api';
 
 interface AuthStore {
@@ -21,30 +21,39 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
 
       login: async (email: string, password: string) => {
-        const res = await api.post<{ data: { user: User; accessToken: string; refreshToken: string } }>(
+        const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
           '/auth/login',
           { email, password },
         );
-        const { user, accessToken, refreshToken } = res.data;
+        const d = res.data;
+        // API keys are snake_case after transformer (access_token, refresh_token)
+        const accessToken = (d.access_token ?? d.accessToken) as string;
+        const refreshToken = (d.refresh_token ?? d.refreshToken) as string;
+        const user = d.user as User;
+        user.tier = (res.tier as Tier) ?? 'free';
         set({ user, tokens: { accessToken, refreshToken }, isAuthenticated: true });
       },
 
       logout: () => {
+        sessionStorage.setItem('claw-explicit-logout', '1');
         set({ user: null, tokens: null, isAuthenticated: false });
       },
 
       refresh: async () => {
-        const { tokens } = get();
+        const { tokens, user } = get();
         if (!tokens?.refreshToken) return;
         try {
-          const res = await api.post<{ data: { accessToken: string; refreshToken: string } }>(
+          const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
             '/auth/refresh',
             { refresh_token: tokens.refreshToken },
           );
+          const d = res.data;
+          const updatedUser = user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user;
           set({
+            user: updatedUser,
             tokens: {
-              accessToken: res.data.accessToken,
-              refreshToken: res.data.refreshToken,
+              accessToken: (d.access_token ?? d.accessToken) as string,
+              refreshToken: (d.refresh_token ?? d.refreshToken) as string,
             },
           });
         } catch {

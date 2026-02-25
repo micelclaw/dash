@@ -22,7 +22,7 @@ export function UserFooter({ collapsed }: UserFooterProps) {
 
   if (!user) return null;
 
-  const initials = user.display_name
+  const initials = (user.display_name ?? user.email ?? '?')
     .split(' ')
     .map((n) => n[0])
     .join('')
@@ -56,7 +56,7 @@ export function UserFooter({ collapsed }: UserFooterProps) {
           {!collapsed && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <span style={{ fontSize: '0.8125rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {user.display_name}
+                {user.display_name ?? user.email}
               </span>
               <Badge variant={user.tier === 'pro' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
                 {user.tier === 'pro' ? 'Pro' : 'Free'}

@@ -176,8 +176,8 @@ body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; marg
 <div class="header">
 <div class="subject">${email.subject || '(no subject)'}</div>
 <div class="meta"><strong>From:</strong> ${email.from_name || ''} &lt;${email.from_address}&gt;</div>
-<div class="meta"><strong>To:</strong> ${email.to_addresses.map(t => `${t.name || ''} <${t.address}>`).join(', ')}</div>
-${email.cc_addresses.length > 0 ? `<div class="meta"><strong>CC:</strong> ${email.cc_addresses.map(c => c.address).join(', ')}</div>` : ''}
+<div class="meta"><strong>To:</strong> ${(email.to_addresses ?? []).map(t => `${t.name || ''} <${t.address}>`).join(', ')}</div>
+${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong> ${(email.cc_addresses ?? []).map(c => c.address).join(', ')}</div>` : ''}
 <div class="meta"><strong>Date:</strong> ${new Date(email.received_at).toLocaleString()}</div>
 </div>
 <div class="body">${email.body_html || `<pre>${email.body_plain || ''}</pre>`}</div>
@@ -415,13 +415,13 @@ ${email.cc_addresses.length > 0 ? `<div class="meta"><strong>CC:</strong> ${emai
 
         {/* To */}
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-          To: {email.to_addresses.map(a => a.name ?? a.address).join(', ')}
+          To: {(email.to_addresses ?? []).map(a => a.name ?? a.address).join(', ')}
         </div>
 
         {/* CC */}
-        {email.cc_addresses.length > 0 && (
+        {(email.cc_addresses ?? []).length > 0 && (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            CC: {email.cc_addresses.map(a => a.name ?? a.address).join(', ')}
+            CC: {(email.cc_addresses ?? []).map(a => a.name ?? a.address).join(', ')}
           </div>
         )}
 
@@ -482,7 +482,7 @@ ${email.cc_addresses.length > 0 ? `<div class="meta"><strong>CC:</strong> ${emai
         )}
 
         {/* Attachments */}
-        {email.attachments.length > 0 && (
+        {(email.attachments ?? []).length > 0 && (
           <div style={{ marginTop: 16 }}>
             <div
               style={{
@@ -494,9 +494,9 @@ ${email.cc_addresses.length > 0 ? `<div class="meta"><strong>CC:</strong> ${emai
                 paddingTop: 8,
               }}
             >
-              Attachments ({email.attachments.length})
+              Attachments ({(email.attachments ?? []).length})
             </div>
-            {email.attachments.map((att, idx) => (
+            {(email.attachments ?? []).map((att, idx) => (
               <div
                 key={idx}
                 style={{

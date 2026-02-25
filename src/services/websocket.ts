@@ -16,6 +16,7 @@ export class ClawWebSocket {
   private listeners = new Map<string, Set<EventCallback>>();
   private options: ClawWebSocketOptions;
   private token: string | null = null;
+  private everConnected = false;
 
   constructor(options: ClawWebSocketOptions) {
     this.options = options;
@@ -36,6 +37,7 @@ export class ClawWebSocket {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
+      this.everConnected = true;
       this.options.onStatusChange('connected');
     };
 
@@ -46,6 +48,10 @@ export class ClawWebSocket {
     this.ws.onclose = () => {
       this.clearHeartbeat();
       if (this.token) {
+        if (!this.everConnected) {
+          this.options.onStatusChange('offline');
+          return;
+        }
         this.options.onStatusChange('reconnecting');
         this.reconnect();
       }

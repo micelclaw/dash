@@ -17,7 +17,7 @@ const TABS: { key: AgentTab; label: string }[] = [
 ];
 
 export function Component() {
-  const { agents, loading, error, addAgent } = useAgents();
+  const { agents, loading, error, addAgent, refetch } = useAgents();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<AgentTab>('tree');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -190,6 +190,7 @@ export function Component() {
             selectedId={selectedAgentId}
             onSelect={setSelectedAgentId}
             isMobile={isMobile}
+            onAgentChanged={refetch}
           />
         )}
         {activeTab === 'council' && <CouncilTab agents={agents} />}

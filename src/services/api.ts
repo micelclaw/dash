@@ -3,6 +3,28 @@ import { useAuthStore } from '@/stores/auth.store';
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
 const API_PREFIX = '/api/v1';
 
+/**
+ * Convert camelCase keys to snake_case recursively.
+ * The real API (Drizzle ORM) returns camelCase but all frontend
+ * types and mock data use snake_case.
+ */
+function camelToSnake(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+function transformKeys(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(transformKeys);
+  if (typeof obj === 'object' && obj !== null) {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      result[camelToSnake(key)] = transformKeys(value);
+    }
+    return result;
+  }
+  return obj;
+}
+
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -78,7 +100,9 @@ class ApiClient {
       );
     }
 
-    return json;
+    // Transform camelCase keys from API to snake_case for frontend
+    const useMockMode = import.meta.env.VITE_MOCK_API === 'true';
+    return (useMockMode ? json : transformKeys(json)) as T;
   }
 
   get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
@@ -117,7 +141,8 @@ class ApiClient {
       const text = await res.text();
       throw new ApiError('UPLOAD_FAILED', text, undefined, res.status);
     }
-    return res.json();
+    const json = await res.json();
+    return transformKeys(json) as T;
   }
 }
 

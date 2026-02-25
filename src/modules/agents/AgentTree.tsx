@@ -9,6 +9,7 @@ interface AgentTreeProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   isMobile?: boolean;
+  onAgentChanged?: () => void;
 }
 
 interface TreeNode {
@@ -225,7 +226,7 @@ function buildChildCountMap(agents: ManagedAgent[]): Map<string, number> {
 
 // ─── Main component ───────────────────────────────────────────────
 
-export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeProps) {
+export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChanged }: AgentTreeProps) {
   // Default: all expanded (empty collapsed set)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -301,6 +302,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeP
             agentId={selectedId}
             agents={agents}
             onSelect={onSelect}
+            onAgentChanged={onAgentChanged}
           />
         </div>
       </div>
@@ -390,6 +392,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile }: AgentTreeP
             agentId={selectedId}
             agents={agents}
             onSelect={onSelect}
+            onAgentChanged={onAgentChanged}
           />
         </div>
       )}

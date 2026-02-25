@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
-  Search as SearchIcon, Newspaper, HardDrive,
+  Search as SearchIcon, Newspaper, HardDrive, Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useSecurityStore } from '@/stores/security.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { GeneralSection } from '@/components/settings/sections/GeneralSection';
 import { AISection } from '@/components/settings/sections/AISection';
@@ -17,9 +18,9 @@ import { DashSection } from '@/components/settings/sections/DashSection';
 import { StorageSection } from '@/components/settings/sections/StorageSection';
 import { SecuritySection } from '@/components/settings/sections/SecuritySection';
 import { LicenseSection } from '@/components/settings/sections/LicenseSection';
-import { PlaceholderSection } from '@/components/settings/sections/PlaceholderSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
 import { SearchSection } from '@/components/settings/sections/SearchSection';
+import { UsersSection } from '@/components/settings/sections/UsersSection';
 
 interface SidebarItem {
   id: string;
@@ -29,19 +30,25 @@ interface SidebarItem {
   dividerBefore?: boolean;
 }
 
-const SECTIONS: SidebarItem[] = [
-  { id: 'general', label: 'General', icon: Globe },
-  { id: 'ai', label: 'AI', icon: Cpu },
-  { id: 'sync', label: 'Sync', icon: RefreshCw },
-  { id: 'mail', label: 'Mail', icon: Mail },
-  { id: 'photos', label: 'Photos', icon: Image },
-  { id: 'storage', label: 'Storage', icon: HardDrive },
-  { id: 'dash', label: 'Dash', icon: Palette },
-  { id: 'search', label: 'Search', icon: SearchIcon, dividerBefore: true },
-  { id: 'digest', label: 'Digest', icon: Newspaper },
-  { id: 'security', label: 'Security', icon: Shield, dividerBefore: true },
-  { id: 'license', label: 'License', icon: CreditCard },
-];
+function buildSections(isAdmin: boolean): SidebarItem[] {
+  const sections: SidebarItem[] = [
+    { id: 'general', label: 'General', icon: Globe },
+    { id: 'ai', label: 'AI', icon: Cpu },
+    { id: 'sync', label: 'Sync', icon: RefreshCw },
+    { id: 'mail', label: 'Mail', icon: Mail },
+    { id: 'photos', label: 'Photos', icon: Image },
+    { id: 'storage', label: 'Storage', icon: HardDrive },
+    { id: 'dash', label: 'Dash', icon: Palette },
+    { id: 'search', label: 'Search', icon: SearchIcon, dividerBefore: true },
+    { id: 'digest', label: 'Digest', icon: Newspaper },
+  ];
+  if (isAdmin) {
+    sections.push({ id: 'users', label: 'Users', icon: Users, dividerBefore: true });
+  }
+  sections.push({ id: 'security', label: 'Security', icon: Shield, dividerBefore: !isAdmin });
+  sections.push({ id: 'license', label: 'License', icon: CreditCard });
+  return sections;
+}
 
 function renderSection(section: string) {
   switch (section) {
@@ -52,6 +59,7 @@ function renderSection(section: string) {
     case 'photos': return <PhotosSection />;
     case 'storage': return <StorageSection />;
     case 'dash': return <DashSection />;
+    case 'users': return <UsersSection />;
     case 'security': return <SecuritySection />;
     case 'license': return <LicenseSection />;
     case 'search': return <SearchSection />;
@@ -70,6 +78,9 @@ export function Component() {
   const fetchConfig = useSecurityStore((s) => s.fetchConfig);
   const loading = useSettingsStore((s) => s.loading);
   const settings = useSettingsStore((s) => s.settings);
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === 'owner' || userRole === 'admin';
+  const SECTIONS = useMemo(() => buildSections(isAdmin), [isAdmin]);
 
   useEffect(() => {
     fetchSettings();

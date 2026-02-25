@@ -193,7 +193,15 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
                 </ReactMarkdown>
               </div>
             )}
-            {isStreaming && (
+            {isStreaming && !message.content && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 0' }}>
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Thinking</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0s' }}>.</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.2s' }}>.</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.4s' }}>.</span>
+              </div>
+            )}
+            {isStreaming && message.content && (
               <span
                 style={{
                   display: 'inline-block',
