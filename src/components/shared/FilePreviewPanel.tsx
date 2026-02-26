@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, Download, Trash2 } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { RelatedItemsPanel } from './RelatedItemsPanel';
-import { formatFileSize, isImageMime, getMimeLabel } from '@/lib/file-utils';
+import { formatFileSize, isImageMime, getMimeLabel, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
 import { formatRelative } from '@/lib/date-helpers';
 import type { FileRecord } from '@/types/files';
@@ -50,7 +50,7 @@ export function FilePreviewPanel({
         >
           {isImage && !imgError ? (
             <img
-              src={`/api/v1/files/${file.id}/preview`}
+              src={getPreviewUrl(file.id)}
               alt={file.filename}
               onError={() => setImgError(true)}
               style={{

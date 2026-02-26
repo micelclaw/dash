@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/auth.store';
+
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -37,6 +39,15 @@ export function getMimeLabel(mime: string | null | undefined): string {
   if (mime === 'text/markdown') return 'Markdown';
   if (mime.startsWith('text/')) return 'Text';
   return 'File';
+}
+
+/** Build an authenticated preview URL for use in <img src>. */
+export function getPreviewUrl(fileId: string, width?: number): string {
+  const token = useAuthStore.getState().tokens?.accessToken;
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  if (width) params.set('width', String(width));
+  return `/api/v1/files/${fileId}/preview?${params.toString()}`;
 }
 
 /** Simple numeric hash from a string (for gradient placeholders) */

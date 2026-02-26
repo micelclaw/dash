@@ -90,7 +90,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
             top: position.y,
             zIndex: 'var(--z-dropdown)',
             minWidth: 180,
-            background: 'var(--card)',
+            background: 'rgba(17, 17, 24, 0.4)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
             boxShadow: 'var(--shadow-lg)',

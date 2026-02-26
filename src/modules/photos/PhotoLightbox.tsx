@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, Image } from 'lucide-react';
-import { simpleHash, formatFileSize } from '@/lib/file-utils';
+import { simpleHash, formatFileSize, getPreviewUrl } from '@/lib/file-utils';
 import { formatDateShort, formatTime } from '@/lib/date-helpers';
 import type { Photo } from '@/types/files';
 
@@ -86,7 +86,7 @@ export function PhotoLightbox({
   if (!photo) return null;
 
   const hue = simpleHash(photo.id) % 360;
-  const previewUrl = `/api/v1/files/${photo.id}/preview`;
+  const previewUrl = getPreviewUrl(photo.id, 1200);
   const dateObj = photo.taken_at ? new Date(photo.taken_at) : new Date(photo.created_at);
   const camera = photo.metadata?.camera;
   const gps = photo.metadata?.gps;

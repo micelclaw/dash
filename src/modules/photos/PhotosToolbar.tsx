@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, Search, Upload } from 'lucide-react';
+import { Camera, Search, Upload, FolderPlus, Trash2, X } from 'lucide-react';
 import type { PhotosView } from './types';
 
 interface PhotosToolbarProps {
@@ -8,6 +8,47 @@ interface PhotosToolbarProps {
   search: string;
   onSearchChange: (search: string) => void;
   onUpload: (files: File[]) => void;
+  selectedCount?: number;
+  onBatchAddToAlbum?: () => void;
+  onBatchDelete?: () => void;
+  onClearSelection?: () => void;
+}
+
+function BatchButton({ icon: Icon, label, onClick, disabled, variant }: {
+  icon: React.ComponentType<{ size?: number }>;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  variant?: 'danger';
+}) {
+  const [hovered, setHovered] = useState(false);
+  const color = variant === 'danger' ? 'var(--error)' : 'var(--text)';
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 10px',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        background: hovered && !disabled ? 'var(--surface-hover)' : 'var(--surface)',
+        color: disabled ? 'var(--text-muted)' : color,
+        fontSize: '0.75rem',
+        fontFamily: 'var(--font-sans)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Icon size={13} />
+      {label}
+    </button>
+  );
 }
 
 export function PhotosToolbar({
@@ -16,6 +57,10 @@ export function PhotosToolbar({
   search,
   onSearchChange,
   onUpload,
+  selectedCount = 0,
+  onBatchAddToAlbum,
+  onBatchDelete,
+  onClearSelection,
 }: PhotosToolbarProps) {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState(search);
@@ -110,6 +155,44 @@ export function PhotosToolbar({
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
+
+      {/* Batch actions */}
+      {selectedCount > 0 && (
+        <>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
+            {selectedCount} selected
+          </span>
+          {onBatchAddToAlbum && (
+            <BatchButton icon={FolderPlus} label="Add to album" onClick={onBatchAddToAlbum} />
+          )}
+          {onBatchDelete && (
+            <BatchButton icon={Trash2} label="Delete" onClick={onBatchDelete} variant="danger" />
+          )}
+          {onClearSelection && (
+            <button
+              onClick={onClearSelection}
+              onMouseEnter={() => setHoveredBtn('clear')}
+              onMouseLeave={() => setHoveredBtn(null)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '4px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                background: hoveredBtn === 'clear' ? 'var(--surface-hover)' : 'transparent',
+                color: 'var(--text-dim)',
+                fontSize: '0.75rem',
+                fontFamily: 'var(--font-sans)',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={13} />
+              Clear
+            </button>
+          )}
+        </>
+      )}
 
       {/* Search */}
       <div

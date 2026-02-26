@@ -26,8 +26,8 @@ export function useAlbums() {
 
   useEffect(() => { fetchAlbums(); }, [fetchAlbums]);
 
-  const createAlbum = async (name: string): Promise<Album> => {
-    const res = await api.post<ApiResponse<Album>>('/albums', { name });
+  const createAlbum = async (name: string, description?: string): Promise<Album> => {
+    const res = await api.post<ApiResponse<Album>>('/albums', { name, description });
     setAlbums(prev => [res.data, ...prev]);
     toast('Album created');
     return res.data;
@@ -45,5 +45,42 @@ export function useAlbums() {
     }
   };
 
-  return { albums, loading, createAlbum, deleteAlbum };
+  const addPhotosToAlbum = async (albumId: string, fileIds: string[]) => {
+    await api.post(`/albums/${albumId}/photos`, { file_ids: fileIds });
+    setAlbums(prev => prev.map(a => a.id === albumId
+      ? { ...a, photo_count: a.photo_count + fileIds.length } : a));
+    toast(`${fileIds.length} photo${fileIds.length !== 1 ? 's' : ''} added`);
+  };
+
+  const removePhotoFromAlbum = async (albumId: string, fileId: string) => {
+    await api.delete(`/albums/${albumId}/photos/${fileId}`);
+    setAlbums(prev => prev.map(a => a.id === albumId
+      ? { ...a, photo_count: Math.max(0, a.photo_count - 1) } : a));
+    toast('Photo removed from album');
+  };
+
+  const setAlbumCover = async (albumId: string, photoId: string) => {
+    await api.patch(`/albums/${albumId}`, { cover_photo_id: photoId, cover_mode: 'custom' });
+    setAlbums(prev => prev.map(a => a.id === albumId
+      ? { ...a, cover_photo_id: photoId, cover_mode: 'custom' as const } : a));
+    toast('Cover updated');
+  };
+
+  const updateAlbum = async (albumId: string, data: { name?: string; description?: string }) => {
+    const res = await api.patch<ApiResponse<Album>>(`/albums/${albumId}`, data);
+    setAlbums(prev => prev.map(a => a.id === albumId ? res.data : a));
+    toast('Album updated');
+  };
+
+  return {
+    albums,
+    loading,
+    fetchAlbums,
+    createAlbum,
+    deleteAlbum,
+    addPhotosToAlbum,
+    removePhotoFromAlbum,
+    setAlbumCover,
+    updateAlbum,
+  };
 }

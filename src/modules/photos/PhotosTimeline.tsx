@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon } from 'lucide-react';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2 } from 'lucide-react';
 import { DropZone } from '@/components/shared/DropZone';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { useIsMobile } from '@/hooks/use-media-query';
-import { simpleHash } from '@/lib/file-utils';
+import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
+import { downloadFile } from '@/lib/file-download';
 import { formatMonthYear } from '@/lib/date-helpers';
-import { toast } from 'sonner';
-import type { Photo } from '@/types/files';
+import type { Photo, Album } from '@/types/files';
 import type { PhotoGroup } from './types';
+import { AlbumPickerDropdown } from './AlbumPickerDropdown';
 
 interface PhotosTimelineProps {
   photos: Photo[];
@@ -17,6 +18,14 @@ interface PhotosTimelineProps {
   onLoadMore: () => void;
   onPhotoClick: (index: number) => void;
   onFilesDropped: (files: File[]) => void;
+  albums: Album[];
+  onAddToAlbum: (photoId: string, albumId: string) => void;
+  onSetAsCover: (photoId: string, albumId: string) => void;
+  onCreateAlbum: (name: string) => Promise<Album>;
+  onViewExif: (photo: Photo) => void;
+  onDeletePhoto: (photoId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string, shiftKey: boolean) => void;
 }
 
 function groupPhotosByMonth(photos: Photo[]): PhotoGroup[] {
@@ -48,113 +57,196 @@ function groupPhotosByMonth(photos: Photo[]): PhotoGroup[] {
 function PhotoThumbnail({
   photo,
   onClick,
+  albums,
+  onAddToAlbum,
+  onSetAsCover,
+  onCreateAlbum,
+  onViewExif,
+  onDelete,
+  selected,
+  showCheckbox,
+  onToggleSelect,
 }: {
   photo: Photo;
   onClick: () => void;
+  albums: Album[];
+  onAddToAlbum: (photoId: string, albumId: string) => void;
+  onSetAsCover: (photoId: string, albumId: string) => void;
+  onCreateAlbum: (name: string) => Promise<Album>;
+  onViewExif: (photo: Photo) => void;
+  onDelete: (photoId: string) => void;
+  selected?: boolean;
+  showCheckbox?: boolean;
+  onToggleSelect?: (shiftKey: boolean) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [albumPicker, setAlbumPicker] = useState<{ mode: 'add' | 'cover'; pos: { x: number; y: number } } | null>(null);
   const hue = simpleHash(photo.id) % 360;
-  const previewUrl = `/api/v1/files/${photo.id}/preview`;
+  const previewUrl = getPreviewUrl(photo.id, 300);
+
+  const showCb = showCheckbox || hovered || selected;
 
   return (
-    <EntityContextMenu
-      entityType="photo"
-      entityId={photo.id}
-      entityTitle={photo.filename || 'Photo'}
-      onEdit={onClick}
-      extraItems={[
-        { label: 'Add to album', icon: FolderPlus, onClick: () => toast.info('Add to album — coming soon') },
-        { label: 'View EXIF', icon: Info, onClick: () => toast.info('View EXIF — coming soon') },
-        { label: 'Download', icon: Download, onClick: () => toast.info('Download — coming soon') },
-        { label: 'Set as cover', icon: ImageIcon, onClick: () => toast.info('Set as cover — coming soon') },
-      ]}
-      trigger={
-        <div
-          onClick={onClick}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          style={{
-            position: 'relative',
-            aspectRatio: '1 / 1',
-            borderRadius: 'var(--radius-sm)',
-            overflow: 'hidden',
-            cursor: 'pointer',
-            transform: hovered ? 'scale(1.02)' : 'scale(1)',
-            transition: 'transform var(--transition-fast)',
-          }}
-        >
-          {/* Thumbnail image with gradient fallback */}
+    <>
+      <EntityContextMenu
+        entityType="photo"
+        entityId={photo.id}
+        entityTitle={photo.filename || 'Photo'}
+        onDelete={() => onDelete(photo.id)}
+        extraItems={[
+          {
+            label: 'Add to album',
+            icon: FolderPlus,
+            onClick: () => {
+              setAlbumPicker({ mode: 'add', pos: { x: window.innerWidth / 2, y: window.innerHeight / 3 } });
+            },
+          },
+          { label: 'View EXIF', icon: Info, onClick: () => onViewExif(photo) },
+          { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+          {
+            label: 'Set as cover',
+            icon: ImageIcon,
+            onClick: () => {
+              setAlbumPicker({ mode: 'cover', pos: { x: window.innerWidth / 2, y: window.innerHeight / 3 } });
+            },
+          },
+        ]}
+        trigger={
           <div
+            onClick={(e) => {
+              if ((e.target as HTMLElement).tagName === 'INPUT') return;
+              onClick();
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             style={{
-              width: '100%',
-              height: '100%',
-              background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              position: 'relative',
+              aspectRatio: '1 / 1',
+              borderRadius: 'var(--radius-sm)',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              transform: hovered ? 'scale(1.02)' : 'scale(1)',
+              transition: 'transform var(--transition-fast)',
+              outline: selected ? '2px solid var(--amber)' : 'none',
+              outlineOffset: -2,
             }}
           >
-            {!imgError ? (
-              <>
-                <img
-                  src={previewUrl}
-                  alt={photo.filename}
-                  loading="lazy"
-                  onError={() => setImgError(true)}
-                  onLoad={() => setImgLoaded(true)}
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    opacity: imgLoaded ? 1 : 0,
-                    transition: 'opacity 0.2s',
-                  }}
-                />
-                {!imgLoaded && (
-                  <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
-                )}
-              </>
-            ) : (
-              <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+            {/* Checkbox */}
+            {showCb && (
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSelect?.(e.shiftKey);
+                }}
+                onChange={() => {}}
+                style={{
+                  position: 'absolute',
+                  top: 6,
+                  left: 6,
+                  width: 16,
+                  height: 16,
+                  accentColor: 'var(--amber)',
+                  cursor: 'pointer',
+                  zIndex: 2,
+                }}
+              />
             )}
-          </div>
 
-          {/* Hover overlay */}
-          {hovered && (
+            {/* Thumbnail image with gradient fallback */}
             <div
               style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)',
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-
-          {/* Source badge for non-local photos */}
-          {photo.source !== 'local' && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 4,
-                left: 4,
-                background: 'rgba(0,0,0,0.6)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '2px 4px',
+                width: '100%',
+                height: '100%',
+                background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              <Mail size={10} style={{ color: 'var(--text-dim)' }} />
+              {!imgError ? (
+                <>
+                  <img
+                    src={previewUrl}
+                    alt={photo.filename}
+                    loading="lazy"
+                    onError={() => setImgError(true)}
+                    onLoad={() => setImgLoaded(true)}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      opacity: imgLoaded ? 1 : 0,
+                      transition: 'opacity 0.2s',
+                    }}
+                  />
+                  {!imgLoaded && (
+                    <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+                  )}
+                </>
+              ) : (
+                <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+              )}
             </div>
-          )}
-        </div>
-      }
-    />
+
+            {/* Hover overlay */}
+            {hovered && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)',
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+
+            {/* Source badge for non-local photos */}
+            {photo.source !== 'local' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: 4,
+                  background: 'rgba(0,0,0,0.6)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '2px 4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Mail size={10} style={{ color: 'var(--text-dim)' }} />
+              </div>
+            )}
+          </div>
+        }
+      />
+
+      {/* Album picker dropdown */}
+      {albumPicker && (
+        <AlbumPickerDropdown
+          open
+          anchorPos={albumPicker.pos}
+          albums={albums}
+          title={albumPicker.mode === 'add' ? 'Add to album' : 'Set as cover'}
+          onSelect={(albumId) => {
+            if (albumPicker.mode === 'add') {
+              onAddToAlbum(photo.id, albumId);
+            } else {
+              onSetAsCover(photo.id, albumId);
+            }
+            setAlbumPicker(null);
+          }}
+          onCreate={onCreateAlbum}
+          onClose={() => setAlbumPicker(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -165,9 +257,19 @@ export function PhotosTimeline({
   onLoadMore,
   onPhotoClick,
   onFilesDropped,
+  albums,
+  onAddToAlbum,
+  onSetAsCover,
+  onCreateAlbum,
+  onViewExif,
+  onDeletePhoto,
+  selectedIds,
+  onToggleSelect,
 }: PhotosTimelineProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  const hasSelection = selectedIds.size > 0;
 
   // Compute the global index for a photo within a group
   const getGlobalIndex = useCallback((groupKey: string, localIndex: number) => {
@@ -260,6 +362,15 @@ export function PhotosTimeline({
                   key={photo.id}
                   photo={photo}
                   onClick={() => onPhotoClick(getGlobalIndex(group.key, i))}
+                  albums={albums}
+                  onAddToAlbum={onAddToAlbum}
+                  onSetAsCover={onSetAsCover}
+                  onCreateAlbum={onCreateAlbum}
+                  onViewExif={onViewExif}
+                  onDelete={onDeletePhoto}
+                  selected={selectedIds.has(photo.id)}
+                  showCheckbox={hasSelection}
+                  onToggleSelect={(shiftKey) => onToggleSelect(photo.id, shiftKey)}
                 />
               ))}
             </div>

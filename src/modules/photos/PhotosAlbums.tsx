@@ -1,96 +1,140 @@
 import { useState } from 'react';
-import { Camera, Plus } from 'lucide-react';
+import { Camera, Plus, Pencil, Upload, Share2, Trash2 } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { simpleHash } from '@/lib/file-utils';
+import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
+import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
 import type { Album } from '@/types/files';
 
 interface PhotosAlbumsProps {
   albums: Album[];
   loading: boolean;
   onAlbumClick: (albumId: string) => void;
-  onCreateAlbum: (name: string) => void;
+  onCreateAlbumClick: () => void;
+  onEditAlbum: (album: Album) => void;
+  onRequestFiles: (album: Album) => void;
+  onShareAlbum: (album: Album) => void;
+  onDeleteAlbum: (album: Album) => void;
 }
 
 function AlbumCard({
   album,
   onClick,
+  onEdit,
+  onRequestFiles,
+  onShare,
+  onDelete,
 }: {
   album: Album;
   onClick: () => void;
+  onEdit: () => void;
+  onRequestFiles: () => void;
+  onShare: () => void;
+  onDelete: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const hue = simpleHash(album.id) % 360;
+
+  const contextItems: ContextMenuItem[] = [
+    { label: 'Edit', icon: Pencil, onClick: onEdit },
+    { label: 'Request files', icon: Upload, onClick: onRequestFiles },
+    { label: '', separator: true, onClick: () => {} },
+    { label: 'Share', icon: Share2, onClick: onShare },
+    { label: '', separator: true, onClick: () => {} },
+    { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' },
+  ];
+
+  return (
+    <ContextMenu
+      trigger={
+        <div
+          onClick={onClick}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{
+            borderRadius: 'var(--radius-md)',
+            overflow: 'hidden',
+            cursor: 'pointer',
+            background: hovered ? 'var(--surface-hover)' : 'var(--surface)',
+            boxShadow: hovered ? 'var(--shadow-md)' : 'none',
+            transition: 'background var(--transition-fast), box-shadow var(--transition-fast)',
+          }}
+        >
+          {/* Cover area */}
+          <div
+            style={{
+              height: 160,
+              background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            {album.cover_photo_id && !imgError ? (
+              <img
+                src={getPreviewUrl(album.cover_photo_id, 400)}
+                alt=""
+                loading="lazy"
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgError(true)}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  opacity: imgLoaded ? 1 : 0,
+                  transition: 'opacity 0.2s',
+                }}
+              />
+            ) : null}
+            {(!album.cover_photo_id || imgError || !imgLoaded) && (
+              <Camera size={36} style={{ opacity: 0.3, color: 'var(--text)' }} />
+            )}
+          </div>
+
+          {/* Info */}
+          <div style={{ padding: '10px 12px' }}>
+            <div
+              style={{
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                color: 'var(--text)',
+                fontFamily: 'var(--font-sans)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {album.name}
+            </div>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: 'var(--text-dim)',
+                fontFamily: 'var(--font-sans)',
+                marginTop: 2,
+              }}
+            >
+              {album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </div>
+      }
+      items={contextItems}
+    />
+  );
+}
+
+function NewAlbumCard({ onClick }: { onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        borderRadius: 'var(--radius-md)',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        background: hovered ? 'var(--surface-hover)' : 'var(--surface)',
-        boxShadow: hovered ? 'var(--shadow-md)' : 'none',
-        transition: 'background var(--transition-fast), box-shadow var(--transition-fast)',
-      }}
-    >
-      {/* Cover area */}
-      <div
-        style={{
-          height: 160,
-          background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Camera size={36} style={{ opacity: 0.3, color: 'var(--text)' }} />
-      </div>
-
-      {/* Info */}
-      <div style={{ padding: '10px 12px' }}>
-        <div
-          style={{
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: 'var(--text)',
-            fontFamily: 'var(--font-sans)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {album.name}
-        </div>
-        <div
-          style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-dim)',
-            fontFamily: 'var(--font-sans)',
-            marginTop: 2,
-          }}
-        >
-          {album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NewAlbumCard({ onCreateAlbum }: { onCreateAlbum: (name: string) => void }) {
-  const [hovered, setHovered] = useState(false);
-
-  const handleClick = () => {
-    const name = window.prompt('Album name:');
-    if (name?.trim()) {
-      onCreateAlbum(name.trim());
-    }
-  };
-
-  return (
-    <div
-      onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -126,7 +170,11 @@ export function PhotosAlbums({
   albums,
   loading,
   onAlbumClick,
-  onCreateAlbum,
+  onCreateAlbumClick,
+  onEditAlbum,
+  onRequestFiles,
+  onShareAlbum,
+  onDeleteAlbum,
 }: PhotosAlbumsProps) {
   if (!loading && albums.length === 0) {
     return (
@@ -139,10 +187,7 @@ export function PhotosAlbums({
             {
               label: 'Create Album',
               variant: 'primary',
-              onClick: () => {
-                const name = window.prompt('Album name:');
-                if (name?.trim()) onCreateAlbum(name.trim());
-              },
+              onClick: onCreateAlbumClick,
             },
           ]}
         />
@@ -182,9 +227,13 @@ export function PhotosAlbums({
               key={album.id}
               album={album}
               onClick={() => onAlbumClick(album.id)}
+              onEdit={() => onEditAlbum(album)}
+              onRequestFiles={() => onRequestFiles(album)}
+              onShare={() => onShareAlbum(album)}
+              onDelete={() => onDeleteAlbum(album)}
             />
           ))}
-          <NewAlbumCard onCreateAlbum={onCreateAlbum} />
+          <NewAlbumCard onClick={onCreateAlbumClick} />
         </div>
       )}
     </div>
