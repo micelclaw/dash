@@ -21,8 +21,9 @@ interface CalendarGridProps {
   events: CalendarEvent[];
   hiddenCalendars: Set<string>;
   onEventClick: (event: CalendarEvent) => void;
-  onSlotClick: (date: Date) => void;
+  onSlotClick?: (date: Date) => void;
   onEventUpdate?: (id: string, input: EventUpdateInput) => void;
+  onEventDelete?: (id: string) => void;
 }
 
 /** Total pixel height for the 24-hour time grid (48 half-hour rows x 30px each) */
@@ -46,6 +47,7 @@ export function CalendarGrid({
   onEventClick,
   onSlotClick,
   onEventUpdate,
+  onEventDelete,
 }: CalendarGridProps) {
   const visibleEvents = useMemo(
     () => events.filter((ev) => !hiddenCalendars.has(ev.calendar_name)),
@@ -61,6 +63,7 @@ export function CalendarGrid({
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
           onEventUpdate={onEventUpdate}
+          onEventDelete={onEventDelete}
         />
       );
     case 'week':
@@ -71,6 +74,7 @@ export function CalendarGrid({
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
           onEventUpdate={onEventUpdate}
+          onEventDelete={onEventDelete}
         />
       );
     case 'month':
@@ -80,6 +84,7 @@ export function CalendarGrid({
           events={visibleEvents}
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
+          onEventDelete={onEventDelete}
         />
       );
     case 'agenda':
@@ -88,6 +93,7 @@ export function CalendarGrid({
           currentDate={currentDate}
           events={visibleEvents}
           onEventClick={onEventClick}
+          onEventDelete={onEventDelete}
         />
       );
   }
@@ -101,11 +107,12 @@ interface TimeGridProps {
   days: Date[];
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
-  onSlotClick: (date: Date) => void;
+  onSlotClick?: (date: Date) => void;
   onEventUpdate?: (id: string, input: EventUpdateInput) => void;
+  onEventDelete?: (id: string) => void;
 }
 
-function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate }: TimeGridProps) {
+function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEventDelete }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnCount = days.length;
 
@@ -184,7 +191,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate }: Ti
       const snappedMinutes = (hours % 1) * 60;
       const date = new Date(days[dayIndex]!);
       date.setHours(snappedHours, snappedMinutes, 0, 0);
-      onSlotClick(date);
+      onSlotClick?.(date);
     },
     [days, onSlotClick],
   );
@@ -444,7 +451,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate }: Ti
                 }}
               >
                 {dayAllDay.map((ev) => (
-                  <EventBlock key={ev.id} event={ev} onClick={onEventClick} />
+                  <EventBlock key={ev.id} event={ev} onClick={onEventClick} onDelete={() => onEventDelete?.(ev.id)} />
                 ))}
               </div>
             );
@@ -608,6 +615,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate }: Ti
                       key={ev.id}
                       event={ev}
                       onClick={onEventClick}
+                      onDelete={() => onEventDelete?.(ev.id)}
                       heightPx={blockHeight}
                       draggable={!!onEventUpdate}
                       onDragStart={handleEventDragStart}
@@ -643,10 +651,11 @@ interface MonthGridProps {
   currentDate: Date;
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
-  onSlotClick: (date: Date) => void;
+  onSlotClick?: (date: Date) => void;
+  onEventDelete?: (id: string) => void;
 }
 
-function MonthGrid({ currentDate, events, onEventClick, onSlotClick }: MonthGridProps) {
+function MonthGrid({ currentDate, events, onEventClick, onSlotClick, onEventDelete }: MonthGridProps) {
   const gridDays = useMemo(() => getMonthGridDays(currentDate), [currentDate]);
 
   // Group events by day string
@@ -720,7 +729,7 @@ function MonthGrid({ currentDate, events, onEventClick, onSlotClick }: MonthGrid
           return (
             <div
               key={i}
-              onClick={() => onSlotClick(startOfDay(day))}
+              onClick={() => onSlotClick?.(startOfDay(day))}
               style={{
                 borderRight: (i + 1) % 7 !== 0 ? '1px solid var(--border)' : 'none',
                 borderBottom: i < 35 ? '1px solid var(--border)' : 'none',
@@ -834,9 +843,10 @@ interface AgendaViewProps {
   currentDate: Date;
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
+  onEventDelete?: (id: string) => void;
 }
 
-function AgendaView({ events, onEventClick }: AgendaViewProps) {
+function AgendaView({ events, onEventClick, onEventDelete }: AgendaViewProps) {
   // Group events by date
   const grouped = useMemo(() => {
     const map = new Map<string, { date: Date; events: CalendarEvent[] }>();

@@ -68,8 +68,22 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
         {trigger}
       </div>
       {open && (
+        <>
+        {/* Invisible backdrop: captures dismiss-clicks so they don't reach elements underneath */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(false);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 'var(--z-dropdown)',
+          }}
+        />
         <div
           ref={menuRef}
+          onClick={(e) => e.stopPropagation()}
           style={{
             position: 'fixed',
             left: position.x,
@@ -133,6 +147,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
             );
           })}
         </div>
+        </>
       )}
     </>
   );

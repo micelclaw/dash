@@ -8,7 +8,6 @@ import { CalendarToolbar } from './CalendarToolbar';
 import { CalendarMiniSidebar } from './CalendarMiniSidebar';
 import { CalendarGrid } from './CalendarGrid';
 import { EventModal } from './EventModal';
-import { EventQuickCreate } from './EventQuickCreate';
 import { AddCalendarModal } from './AddCalendarModal';
 import type { CalendarView, CalendarEvent } from './types';
 
@@ -23,9 +22,7 @@ export function Component() {
   // Modal state
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-
-  // Quick create state
-  const [quickCreateDate, setQuickCreateDate] = useState<Date | null>(null);
+  const [createDate, setCreateDate] = useState<Date | null>(null);
 
   // Add calendar modal
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
@@ -47,7 +44,8 @@ export function Component() {
     const targetId = searchParams.get('id');
 
     if (action === 'new') {
-      setQuickCreateDate(new Date());
+      setSelectedEvent(null);
+      setModalOpen(true);
       setSearchParams({}, { replace: true });
     } else if (targetId) {
       const target = events.find(e => e.id === targetId);
@@ -72,17 +70,15 @@ export function Component() {
   }, []);
 
   const handleSlotClick = useCallback((date: Date) => {
-    setQuickCreateDate(date);
+    setSelectedEvent(null);
+    setCreateDate(date);
+    setModalOpen(true);
   }, []);
 
   const handleCreateEvent = useCallback(() => {
-    // Default to now, snapped to the next half hour
-    const now = new Date();
-    const minutes = now.getMinutes();
-    now.setMinutes(minutes < 30 ? 30 : 0);
-    if (minutes >= 30) now.setHours(now.getHours() + 1);
-    now.setSeconds(0, 0);
-    setQuickCreateDate(now);
+    setSelectedEvent(null);
+    setCreateDate(null);
+    setModalOpen(true);
   }, []);
 
   const handleToggleCalendar = useCallback((name: string) => {
@@ -100,10 +96,7 @@ export function Component() {
   const handleCloseModal = useCallback(() => {
     setModalOpen(false);
     setSelectedEvent(null);
-  }, []);
-
-  const handleCloseQuickCreate = useCallback(() => {
-    setQuickCreateDate(null);
+    setCreateDate(null);
   }, []);
 
   // Toolbar + Grid combined as the main content area
@@ -146,6 +139,7 @@ export function Component() {
           onEventClick={handleEventClick}
           onSlotClick={handleSlotClick}
           onEventUpdate={updateEvent}
+          onEventDelete={deleteEvent}
         />
       )}
     </div>
@@ -186,18 +180,11 @@ export function Component() {
         onClose={handleCloseModal}
         onUpdate={updateEvent}
         onDelete={deleteEvent}
+        onCreate={createEvent}
+        defaultDate={createDate}
         linkedRecords={linkedRecords}
         linkedRecordsLoading={linkedRecordsLoading}
       />
-
-      {/* Quick create popover */}
-      {quickCreateDate && (
-        <EventQuickCreate
-          date={quickCreateDate}
-          onClose={handleCloseQuickCreate}
-          onCreate={createEvent}
-        />
-      )}
 
       {/* Add calendar modal */}
       <AddCalendarModal

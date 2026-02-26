@@ -4,29 +4,34 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { RelateModal } from '@/components/shared/RelateModal';
 import { formatTime, formatDateLong } from '@/lib/date-helpers';
 import { getCalendarColor, DEFAULT_CALENDAR_COLORS } from './types';
-import type { CalendarEvent, EventUpdateInput } from './types';
+import type { CalendarEvent, EventCreateInput, EventUpdateInput } from './types';
 import type { LinkedRecord } from '@/types/links';
 
 interface EventModalProps {
   event: CalendarEvent | null;
   open: boolean;
   onClose: () => void;
+  onCreate?: (input: EventCreateInput) => Promise<CalendarEvent>;
   onUpdate: (id: string, input: EventUpdateInput) => Promise<CalendarEvent>;
   onDelete: (id: string) => Promise<void>;
   linkedRecords: LinkedRecord[];
   linkedRecordsLoading: boolean;
+  /** Pre-fill start time when creating from a slot click */
+  defaultDate?: Date | null;
 }
 
-type Mode = 'view' | 'edit';
+type Mode = 'view' | 'edit' | 'create';
 
 export function EventModal({
   event,
   open,
   onClose,
+  onCreate,
   onUpdate,
   onDelete,
   linkedRecords,
   linkedRecordsLoading,
+  defaultDate,
 }: EventModalProps) {
   const [mode, setMode] = useState<Mode>('view');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -42,7 +47,7 @@ export function EventModal({
   const [description, setDescription] = useState('');
   const [attendeesStr, setAttendeesStr] = useState('');
 
-  // Sync form from event
+  // Sync form from event (or reset for create mode)
   useEffect(() => {
     if (event) {
       setTitle(event.title);
@@ -53,12 +58,30 @@ export function EventModal({
       setCalendarName(event.calendar_name);
       setDescription(event.description || '');
       setAttendeesStr(
-        event.attendees.map((a) => a.email).join(', '),
+        event.attendees?.map((a) => a.email).join(', ') ?? '',
       );
       setMode('view');
       setConfirmingDelete(false);
+    } else if (open) {
+      // Create mode — empty form with sensible defaults
+      const now = defaultDate ? new Date(defaultDate) : new Date();
+      if (!defaultDate) {
+        const minutes = Math.ceil(now.getMinutes() / 30) * 30;
+        now.setMinutes(minutes, 0, 0);
+      }
+      const endDefault = new Date(now.getTime() + 60 * 60 * 1000);
+      setTitle('');
+      setStartAt(toLocalDatetime(now.toISOString()));
+      setEndAt(toLocalDatetime(endDefault.toISOString()));
+      setAllDay(false);
+      setLocation('');
+      setCalendarName('Personal');
+      setDescription('');
+      setAttendeesStr('');
+      setMode('create');
+      setConfirmingDelete(false);
     }
-  }, [event]);
+  }, [event, open, defaultDate]);
 
   // Close on Escape
   useEffect(() => {
@@ -71,9 +94,8 @@ export function EventModal({
   }, [open, onClose]);
 
   const handleSave = useCallback(async () => {
-    if (!event) return;
-    const input: EventUpdateInput = {
-      title,
+    const input = {
+      title: title || 'Untitled event',
       start_at: new Date(startAt).toISOString(),
       end_at: endAt ? new Date(endAt).toISOString() : undefined,
       all_day: allDay,
@@ -84,9 +106,14 @@ export function EventModal({
         ? attendeesStr.split(',').map((e) => ({ email: e.trim() }))
         : [],
     };
-    await onUpdate(event.id, input);
-    setMode('view');
-  }, [event, title, startAt, endAt, allDay, location, calendarName, description, attendeesStr, onUpdate]);
+    if (mode === 'create') {
+      await onCreate?.(input as EventCreateInput);
+      onClose();
+    } else if (event) {
+      await onUpdate(event.id, input);
+      setMode('view');
+    }
+  }, [mode, event, title, startAt, endAt, allDay, location, calendarName, description, attendeesStr, onCreate, onUpdate, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -98,11 +125,12 @@ export function EventModal({
     onClose();
   }, [event, confirmingDelete, onDelete, onClose]);
 
-  if (!open || !event) return null;
+  if (!open) return null;
 
-  const start = new Date(event.start_at);
-  const end = event.end_at ? new Date(event.end_at) : null;
-  const color = getCalendarColor(event.calendar_name);
+  const isCreate = mode === 'create';
+  const start = event ? new Date(event.start_at) : new Date();
+  const end = event?.end_at ? new Date(event.end_at) : null;
+  const color = getCalendarColor(event?.calendar_name);
 
   return (
     <>
@@ -157,7 +185,7 @@ export function EventModal({
               fontWeight: 600,
             }}
           >
-            {mode === 'edit' ? 'Edit Event' : 'Event Details'}
+            {isCreate ? 'New Event' : mode === 'edit' ? 'Edit Event' : 'Event Details'}
           </span>
           <button onClick={onClose} style={closeBtn}>
             <X size={16} />
@@ -166,7 +194,7 @@ export function EventModal({
 
         {/* Body */}
         <div style={{ padding: '16px', flex: 1, overflow: 'auto' }}>
-          {mode === 'view' ? (
+          {mode === 'view' && event ? (
             <ViewMode
               event={event}
               start={start}
@@ -203,7 +231,7 @@ export function EventModal({
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: mode === 'edit' ? 'flex-end' : 'space-between',
+            justifyContent: mode === 'view' ? 'space-between' : 'flex-end',
             padding: '12px 16px',
             borderTop: '1px solid var(--border)',
             gap: 8,
@@ -244,7 +272,8 @@ export function EventModal({
             <>
               <button
                 onClick={() => {
-                  setMode('view');
+                  if (isCreate) onClose();
+                  else setMode('view');
                 }}
                 style={actionBtn}
               >
@@ -260,7 +289,7 @@ export function EventModal({
                   fontWeight: 600,
                 }}
               >
-                Save
+                {isCreate ? 'Create' : 'Save'}
               </button>
             </>
           )}
@@ -339,11 +368,11 @@ function ViewMode({
       </div>
 
       {/* Attendees */}
-      {event.attendees.length > 0 && (
+      {(event.attendees?.length ?? 0) > 0 && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.8125rem' }}>
           <Users size={14} style={{ color: 'var(--text-dim)', flexShrink: 0, marginTop: 2 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {event.attendees.map((a, i) => (
+            {event.attendees!.map((a, i) => (
               <span
                 key={i}
                 style={{
