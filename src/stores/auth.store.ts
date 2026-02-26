@@ -13,6 +13,9 @@ interface AuthStore {
   setAuth: (user: User, tokens: AuthTokens) => void;
 }
 
+// Lock to deduplicate concurrent refresh calls — only one in-flight at a time
+let refreshPromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
@@ -40,24 +43,35 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       refresh: async () => {
-        const { tokens, user } = get();
-        if (!tokens?.refreshToken) return;
+        // Deduplicate: if a refresh is already in flight, wait for it
+        if (refreshPromise) return refreshPromise;
+
+        refreshPromise = (async () => {
+          const { tokens, user } = get();
+          if (!tokens?.refreshToken) return;
+          try {
+            const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
+              '/auth/refresh',
+              { refresh_token: tokens.refreshToken },
+            );
+            const d = res.data;
+            const updatedUser = user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user;
+            set({
+              user: updatedUser,
+              tokens: {
+                accessToken: (d.access_token ?? d.accessToken) as string,
+                refreshToken: (d.refresh_token ?? d.refreshToken) as string,
+              },
+            });
+          } catch {
+            get().logout();
+          }
+        })();
+
         try {
-          const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
-            '/auth/refresh',
-            { refresh_token: tokens.refreshToken },
-          );
-          const d = res.data;
-          const updatedUser = user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user;
-          set({
-            user: updatedUser,
-            tokens: {
-              accessToken: (d.access_token ?? d.accessToken) as string,
-              refreshToken: (d.refresh_token ?? d.refreshToken) as string,
-            },
-          });
-        } catch {
-          get().logout();
+          await refreshPromise;
+        } finally {
+          refreshPromise = null;
         }
       },
 

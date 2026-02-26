@@ -12,9 +12,25 @@ const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
   diary: { endpoint: '/diary', titleField: 'entry_date' },
 };
 
+const ROUTE_MAP: Record<string, string> = {
+  note: '/notes',
+  event: '/calendar',
+  contact: '/contacts',
+  email: '/mail',
+  file: '/drive',
+  diary: '/diary',
+};
+
 export function useContactLinks(contactId: string | null) {
   const [linkedRecords, setLinkedRecords] = useState<LinkedRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setVersion(v => v + 1);
+    window.addEventListener('links-changed', handler);
+    return () => window.removeEventListener('links-changed', handler);
+  }, []);
 
   useEffect(() => {
     if (!contactId) { setLinkedRecords([]); return; }
@@ -37,18 +53,18 @@ export function useContactLinks(contactId: string | null) {
               record: {
                 id: recordId,
                 title: String(rec.data?.[config.titleField] || recordId),
-                route: `/${domain}s?id=${recordId}`,
+                route: `${ROUTE_MAP[domain] || '/'}?id=${recordId}`,
               },
             });
           } catch {
-            records.push({ link, domain, record: { id: recordId, title: recordId, route: `/${domain}s?id=${recordId}` } });
+            records.push({ link, domain, record: { id: recordId, title: recordId, route: `${ROUTE_MAP[domain] || '/'}?id=${recordId}` } });
           }
         }
         setLinkedRecords(records);
       })
       .catch(() => setLinkedRecords([]))
       .finally(() => setLoading(false));
-  }, [contactId]);
+  }, [contactId, version]);
 
   return { linkedRecords, loading };
 }

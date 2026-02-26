@@ -17,8 +17,6 @@ const DialogOverlay = React.forwardRef<
     style={{
       zIndex: 'var(--z-modal-backdrop)',
       background: 'rgba(0, 0, 0, 0.6)',
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
     }}
     {...props}
   />

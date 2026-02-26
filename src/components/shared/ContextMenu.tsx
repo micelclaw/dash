@@ -19,14 +19,30 @@ interface ContextMenuProps {
 export function ContextMenu({ trigger, items }: ContextMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const rawPos = useRef({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    rawPos.current = { x: e.clientX, y: e.clientY };
     setPosition({ x: e.clientX, y: e.clientY });
     setOpen(true);
   };
+
+  // Adjust position if menu overflows viewport edges
+  useEffect(() => {
+    if (!open || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    let { x, y } = rawPos.current;
+    if (y + rect.height > vh) y = vh - rect.height - 8;
+    if (x + rect.width > vw) x = vw - rect.width - 8;
+    if (y < 8) y = 8;
+    if (x < 8) x = 8;
+    setPosition({ x, y });
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return;

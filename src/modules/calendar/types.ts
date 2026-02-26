@@ -60,7 +60,8 @@ export const DEFAULT_CALENDAR_COLORS: Record<string, string> = {
   Shared: '#a855f7',
 };
 
-export function getCalendarColor(name: string): string {
+export function getCalendarColor(name: string | null | undefined): string {
+  if (!name) return DEFAULT_CALENDAR_COLORS['default'];
   return DEFAULT_CALENDAR_COLORS[name] || hashToColor(name);
 }
 

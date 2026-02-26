@@ -32,6 +32,14 @@ function resolveLink(link: EntityLink, currentId: string): LinkedRecord {
 export function useNoteLinks(noteId: string | null) {
   const [links, setLinks] = useState<LinkedRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [version, setVersion] = useState(0);
+
+  // Re-fetch when a link is created/deleted anywhere
+  useEffect(() => {
+    const handler = () => setVersion(v => v + 1);
+    window.addEventListener('links-changed', handler);
+    return () => window.removeEventListener('links-changed', handler);
+  }, []);
 
   useEffect(() => {
     if (!noteId) { setLinks([]); return; }
@@ -55,7 +63,7 @@ export function useNoteLinks(noteId: string | null) {
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [noteId]);
+  }, [noteId, version]);
 
   return { links, loading };
 }

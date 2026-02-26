@@ -10,6 +10,7 @@ export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
   const config = {
     connected: { color: 'var(--success)', label: 'Connected' },
     reconnecting: { color: 'var(--warning)', label: 'Reconnecting...' },
+    auth_failed: { color: 'var(--warning)', label: 'Reconnecting...' },
     offline: { color: 'var(--error)', label: 'Offline' },
   }[status];
 

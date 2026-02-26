@@ -10,4 +10,4 @@ export interface WsAction {
   events?: string[];
 }
 
-export type WsStatus = 'connected' | 'reconnecting' | 'offline';
+export type WsStatus = 'connected' | 'reconnecting' | 'offline' | 'auth_failed';

@@ -45,11 +45,11 @@ export class ClawWebSocket {
       this.handleMessage(raw);
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (ev: CloseEvent) => {
       this.clearHeartbeat();
       if (this.token) {
         if (!this.everConnected) {
-          this.options.onStatusChange('offline');
+          this.options.onStatusChange(ev.code === 4401 ? 'auth_failed' : 'offline');
           return;
         }
         this.options.onStatusChange('reconnecting');

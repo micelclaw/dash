@@ -1,10 +1,3 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-
 interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
@@ -32,15 +25,56 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   variant = 'default',
 }: ConfirmDialogProps) {
+  if (!open) return null;
+
   const confirmColor = VARIANT_COLORS[variant] ?? 'var(--amber)';
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent style={{ maxWidth: 400 }}>
-        <div>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription style={{ marginTop: 8 }}>{description}</DialogDescription>}
-        </div>
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 'var(--z-modal)' as unknown as number,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
+          padding: 24,
+          maxWidth: 400,
+          width: '90vw',
+          fontFamily: 'var(--font-sans)',
+        }}
+      >
+        <h3 style={{
+          margin: 0,
+          fontSize: '1.125rem',
+          fontWeight: 600,
+          color: 'var(--text)',
+        }}>
+          {title}
+        </h3>
+        {description && (
+          <p style={{
+            margin: '8px 0 0',
+            fontSize: '0.875rem',
+            color: 'var(--text-dim)',
+            lineHeight: 1.5,
+          }}>
+            {description}
+          </p>
+        )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button
             onClick={onClose}
@@ -74,7 +108,7 @@ export function ConfirmDialog({
             {confirmLabel}
           </button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }

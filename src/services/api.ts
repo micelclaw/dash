@@ -44,7 +44,7 @@ class ApiClient {
   private async request<T>(
     method: string,
     path: string,
-    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined> },
+    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined>; _isRetry?: boolean },
   ): Promise<T> {
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
@@ -69,9 +69,10 @@ class ApiClient {
       }
     }
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = {};
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (options?.body) headers['Content-Type'] = 'application/json';
 
     const res = await fetch(url.toString(), {
       method,
@@ -79,10 +80,10 @@ class ApiClient {
       body: options?.body ? JSON.stringify(options.body) : undefined,
     });
 
-    if (res.status === 401) {
+    if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {
       try {
         await useAuthStore.getState().refresh();
-        return this.request(method, path, options);
+        return this.request(method, path, { ...options, _isRetry: true });
       } catch {
         useAuthStore.getState().logout();
         throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);

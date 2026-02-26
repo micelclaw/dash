@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { DiaryTimeline } from './DiaryTimeline';
@@ -8,11 +9,21 @@ import { BookOpen } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 
 export function Component() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const isMobile = useIsMobile();
 
   const { entries, loading, error, fetchEntries, updateEntry, openToday } = useDiary({ search: search || undefined });
+
+  // Handle ?id=diaryId from URL (e.g. navigating from Related Items panel)
+  useEffect(() => {
+    const targetId = searchParams.get('id');
+    if (targetId) {
+      setSelectedId(targetId);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const selectedEntry = entries.find(e => e.id === selectedId) ?? null;
 

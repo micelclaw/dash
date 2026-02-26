@@ -111,7 +111,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchMode, setSearchMode] = useState<'auto' | 'fulltext' | 'semantic'>(() => {
-    try { return (localStorage.getItem('claw-search-mode') as any) || 'auto'; } catch { return 'auto'; }
+    try { return (localStorage.getItem('claw-search-mode') as any) || 'fulltext'; } catch { return 'fulltext'; }
   });
   const [lastSearchType, setLastSearchType] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

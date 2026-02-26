@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, MapPin, Calendar, Users, Pencil, Trash2 } from 'lucide-react';
+import { X, MapPin, Calendar, Users, Pencil, Trash2, Link2 } from 'lucide-react';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { RelateModal } from '@/components/shared/RelateModal';
 import { formatTime, formatDateLong } from '@/lib/date-helpers';
 import { getCalendarColor, DEFAULT_CALENDAR_COLORS } from './types';
 import type { CalendarEvent, EventUpdateInput } from './types';
@@ -29,6 +30,7 @@ export function EventModal({
 }: EventModalProps) {
   const [mode, setMode] = useState<Mode>('view');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [relateOpen, setRelateOpen] = useState(false);
 
   // Edit form state
   const [title, setTitle] = useState('');
@@ -221,6 +223,13 @@ export function EventModal({
                 {confirmingDelete ? 'Are you sure?' : 'Delete'}
               </button>
               <button
+                onClick={() => setRelateOpen(true)}
+                style={actionBtn}
+              >
+                <Link2 size={14} />
+                Relate
+              </button>
+              <button
                 onClick={() => {
                   setMode('edit');
                   setConfirmingDelete(false);
@@ -257,6 +266,14 @@ export function EventModal({
           )}
         </div>
       </div>
+      {relateOpen && event && (
+        <RelateModal
+          open={relateOpen}
+          sourceType="event"
+          sourceId={event.id}
+          onClose={() => setRelateOpen(false)}
+        />
+      )}
     </>
   );
 }

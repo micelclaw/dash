@@ -41,13 +41,23 @@ export function Component() {
     selectedEvent?.id ?? null,
   );
 
-  // Handle ?action=new from URL
+  // Handle ?action=new and ?id=eventId from URL
   useEffect(() => {
-    if (searchParams.get('action') === 'new') {
+    const action = searchParams.get('action');
+    const targetId = searchParams.get('id');
+
+    if (action === 'new') {
       setQuickCreateDate(new Date());
       setSearchParams({}, { replace: true });
+    } else if (targetId) {
+      const target = events.find(e => e.id === targetId);
+      if (target) {
+        setSelectedEvent(target);
+        setModalOpen(true);
+        setSearchParams({}, { replace: true });
+      }
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, events]);
 
   // Switch to agenda on mobile
   useEffect(() => {

@@ -70,7 +70,9 @@ export function useNotes(filters: NoteFilters) {
       return res.data;
     } catch (err) {
       setNotes(prev => prev.filter(n => n.id !== tempId));
-      toast.error('Failed to create note');
+      const msg = err instanceof ApiError ? err.message : 'Failed to create note';
+      console.error('createNote failed:', err);
+      toast.error(msg);
       throw err;
     }
   };
@@ -100,7 +102,8 @@ export function useNotes(filters: NoteFilters) {
           },
         } : undefined,
       });
-    } catch {
+    } catch (err) {
+      console.error('deleteNote failed:', err);
       if (removed) setNotes(prev => [removed, ...prev]);
       toast.error('Failed to delete note');
     }
@@ -144,8 +147,14 @@ export function useNotes(filters: NoteFilters) {
     }
   };
 
+  // Local-only state update (no API call) — used by NoteEditor to propagate
+  // title/tag/content changes back to the sidebar list in real time.
+  const patchLocalNote = useCallback((id: string, changes: Partial<Note>) => {
+    setNotes(prev => prev.map(n => n.id === id ? { ...n, ...changes } : n));
+  }, []);
+
   return {
     notes, meta, loading, error,
-    fetchNotes, createNote, updateNote, deleteNote, archiveNote, togglePin,
+    fetchNotes, createNote, updateNote, deleteNote, archiveNote, togglePin, patchLocalNote,
   };
 }

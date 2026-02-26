@@ -27,6 +27,7 @@ const lowlight = createLowlight(common);
 interface NoteEditorProps {
   noteId: string;
   onBack?: () => void;
+  onSaved?: (id: string, changes: Partial<Note>) => void;
 }
 
 function EditorSkeleton() {
@@ -42,7 +43,7 @@ function EditorSkeleton() {
   );
 }
 
-export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
+export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -109,18 +110,20 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
       try {
         await api.patch(`/notes/${noteId}`, { content: html });
         setIsDirty(false);
+        onSaved?.(noteId, { content: html, updated_at: new Date().toISOString() });
       } catch {
         toast.error('Failed to save');
       } finally {
         setSaving(false);
       }
     }, 1500);
-  }, [note, noteId]);
+  }, [note, noteId, onSaved]);
 
   const handleTitleChange = useCallback((title: string) => {
     if (!note) return;
     setNote(prev => prev ? { ...prev, title } : null);
     setIsDirty(true);
+    onSaved?.(noteId, { title });
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -134,7 +137,7 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
         setSaving(false);
       }
     }, 1500);
-  }, [note, noteId]);
+  }, [note, noteId, onSaved]);
 
   // Listen for WS updates to the current note
   const wsEvent = useWebSocket('note.updated');
@@ -172,23 +175,25 @@ export function NoteEditor({ noteId, onBack }: NoteEditorProps) {
     const newTags = [...note.tags, tag];
     setNote(prev => prev ? { ...prev, tags: newTags } : null);
     setTagInput('');
+    onSaved?.(noteId, { tags: newTags });
     try {
       await api.patch(`/notes/${noteId}`, { tags: newTags });
     } catch {
       toast.error('Failed to add tag');
     }
-  }, [tagInput, note, noteId]);
+  }, [tagInput, note, noteId, onSaved]);
 
   const handleRemoveTag = useCallback(async (tagToRemove: string) => {
     if (!note) return;
     const newTags = note.tags.filter(t => t !== tagToRemove);
     setNote(prev => prev ? { ...prev, tags: newTags } : null);
+    onSaved?.(noteId, { tags: newTags });
     try {
       await api.patch(`/notes/${noteId}`, { tags: newTags });
     } catch {
       toast.error('Failed to remove tag');
     }
-  }, [note, noteId]);
+  }, [note, noteId, onSaved]);
 
   if (loading) return <EditorSkeleton />;
   if (!note) {

@@ -1,7 +1,11 @@
 import { useState, useCallback, type CSSProperties } from 'react';
+import { Link2 } from 'lucide-react';
 import { formatTime } from '@/lib/date-helpers';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import { RelateModal } from '@/components/shared/RelateModal';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 
 interface EventBlockProps {
   event: CalendarEvent;
@@ -19,6 +23,7 @@ interface EventBlockProps {
 
 export function EventBlock({ event, onClick, style, heightPx, draggable, onDragStart, resizable, onResizeStart }: EventBlockProps) {
   const [hovered, setHovered] = useState(false);
+  const [relateOpen, setRelateOpen] = useState(false);
   const color = getCalendarColor(event.calendar_name);
   const lines = heightPx ? Math.floor(heightPx / 18) : 1;
 
@@ -42,7 +47,13 @@ export function EventBlock({ event, onClick, style, heightPx, draggable, onDragS
     }
   }, [onResizeStart, event]);
 
+  const contextItems: ContextMenuItem[] = [
+    { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
+  ];
+
   return (
+    <>
+    <ContextMenu trigger={
     <div
       draggable={draggable}
       onDragStart={draggable ? handleDragStart : undefined}
@@ -123,7 +134,7 @@ export function EventBlock({ event, onClick, style, heightPx, draggable, onDragS
           )}
 
           {/* Attendees (5+ lines) */}
-          {lines >= 5 && event.attendees.length > 0 && (
+          {lines >= 5 && (event.attendees?.length ?? 0) > 0 && (
             <div
               style={{
                 fontSize: '0.6875rem',
@@ -159,5 +170,15 @@ export function EventBlock({ event, onClick, style, heightPx, draggable, onDragS
         />
       )}
     </div>
+    } items={contextItems} />
+      {relateOpen && (
+        <RelateModal
+          open={relateOpen}
+          sourceType="event"
+          sourceId={event.id}
+          onClose={() => setRelateOpen(false)}
+        />
+      )}
+    </>
   );
 }

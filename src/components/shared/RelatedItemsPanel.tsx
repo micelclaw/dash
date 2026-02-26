@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen, ArrowRight,
+  StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen, ArrowRight, Trash2,
 } from 'lucide-react';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import { api } from '@/services/api';
+import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { LinkedRecord } from '@/types/links';
 
 interface RelatedItemsPanelProps {
@@ -52,29 +56,47 @@ export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPa
         const Icon = domainInfo?.icon ?? StickyNote;
         const color = domainInfo?.color ?? 'var(--text-dim)';
 
+        const contextItems: ContextMenuItem[] = [
+          {
+            label: 'Remove relation',
+            icon: Trash2,
+            variant: 'danger',
+            onClick: async () => {
+              try {
+                await api.delete(`/links/${rec.link.id}`);
+                toast.success('Relation removed');
+                window.dispatchEvent(new CustomEvent('links-changed'));
+              } catch {
+                toast.error('Failed to remove relation');
+              }
+            },
+          },
+        ];
+
         return (
-          <div
-            key={rec.link.id}
-            onClick={() => { onNavigate?.(); navigate(rec.record.route); }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '4px 0', cursor: 'pointer',
-              fontSize: '0.8125rem',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon size={14} style={{ color, flexShrink: 0 }} />
-            <span style={{ flex: 1, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {rec.record.title}
-            </span>
-            {rec.record.subtitle && (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}>
-                {rec.record.subtitle}
+          <ContextMenu key={rec.link.id} trigger={
+            <div
+              onClick={() => { onNavigate?.(); navigate(rec.record.route); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '4px 0', cursor: 'pointer',
+                fontSize: '0.8125rem',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <Icon size={14} style={{ color, flexShrink: 0 }} />
+              <span style={{ flex: 1, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {rec.record.title}
               </span>
-            )}
-            <ArrowRight size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-          </div>
+              {rec.record.subtitle && (
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}>
+                  {rec.record.subtitle}
+                </span>
+              )}
+              <ArrowRight size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            </div>
+          } items={contextItems} />
         );
       })}
       {remaining > 0 && !expanded && (

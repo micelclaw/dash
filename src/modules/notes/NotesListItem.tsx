@@ -35,8 +35,9 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
   }, [note.updated_at]);
 
   const preview = getPreview(note.content, note.content_format);
-  const visibleTags = note.tags.slice(0, 2);
-  const extraTags = note.tags.length - 2;
+  const tags = note.tags ?? [];
+  const visibleTags = tags.slice(0, 2);
+  const extraTags = tags.length - 2;
 
   return (
     <>

@@ -30,7 +30,10 @@ export function Shell() {
   const location = useLocation();
   const connect = useWebSocketStore((s) => s.connect);
   const disconnect = useWebSocketStore((s) => s.disconnect);
+  const wsStatus = useWebSocketStore((s) => s.status);
   const tokens = useAuthStore((s) => s.tokens);
+  const refresh = useAuthStore((s) => s.refresh);
+  const logout = useAuthStore((s) => s.logout);
   const isChatPage = location.pathname === '/chat';
 
   // Apply user theme + accent from settings
@@ -53,13 +56,35 @@ export function Shell() {
     }
   }, [isCompact, isMobile, setCollapsed]);
 
-  // Connect WebSocket on mount
+  // Connect WebSocket on mount — proactively refresh token first
   useEffect(() => {
-    if (tokens?.accessToken) {
-      connect(tokens.accessToken);
-    }
-    return () => disconnect();
-  }, [tokens?.accessToken, connect, disconnect]);
+    if (!tokens?.accessToken) return;
+    let cancelled = false;
+
+    refresh()
+      .catch(() => { /* ignore — will try with existing token */ })
+      .finally(() => {
+        if (cancelled) return;
+        const current = useAuthStore.getState().tokens;
+        if (current?.accessToken) connect(current.accessToken);
+      });
+
+    return () => { cancelled = true; disconnect(); };
+  }, [tokens?.accessToken, connect, disconnect, refresh]);
+
+  // Auto-reconnect on auth failure: refresh JWT and retry WS
+  useEffect(() => {
+    if (wsStatus !== 'auth_failed') return;
+
+    refresh()
+      .then(() => {
+        const fresh = useAuthStore.getState().tokens;
+        if (fresh?.accessToken) connect(fresh.accessToken);
+      })
+      .catch(() => {
+        logout();
+      });
+  }, [wsStatus, refresh, connect, logout]);
 
   // Keyboard shortcut: Cmd+B toggle sidebar (Cmd+K handled by useCommandPalette)
   useKeyboard([

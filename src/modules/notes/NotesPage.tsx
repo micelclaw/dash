@@ -25,7 +25,7 @@ export function Component() {
 
   const {
     notes, loading, error,
-    fetchNotes, createNote, deleteNote, archiveNote, togglePin,
+    fetchNotes, createNote, deleteNote, archiveNote, togglePin, patchLocalNote,
   } = useNotes(filters);
 
   // Sync URL params
@@ -82,7 +82,7 @@ export function Component() {
 
   // Mobile: push navigation
   if (isMobile && selectedNoteId) {
-    return <NoteEditor noteId={selectedNoteId} onBack={() => setSelectedNoteId(null)} />;
+    return <NoteEditor noteId={selectedNoteId} onBack={() => setSelectedNoteId(null)} onSaved={patchLocalNote} />;
   }
 
   const listPanel = (
@@ -103,7 +103,7 @@ export function Component() {
   );
 
   const editorPanel = selectedNoteId ? (
-    <NoteEditor noteId={selectedNoteId} />
+    <NoteEditor noteId={selectedNoteId} onSaved={patchLocalNote} />
   ) : (
     <EmptyState
       icon={StickyNote}

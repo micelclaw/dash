@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 import {
   Star, Paperclip, Archive, Clock, Trash2,
-  MailOpen, Mail as MailIcon, Inbox, ShieldAlert,
+  MailOpen, Mail as MailIcon, Inbox, ShieldAlert, Link2,
 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { RelateModal } from '@/components/shared/RelateModal';
 import { formatEmailTime } from '@/lib/date-helpers';
 import type { Email } from './types';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
@@ -40,6 +41,7 @@ export function MailListItem({
   onMoveToFolder,
 }: MailListItemProps) {
   const [hovered, setHovered] = useState(false);
+  const [relateOpen, setRelateOpen] = useState(false);
   const snoozeRef = useRef<HTMLButtonElement>(null);
 
   const unread = !email.is_read;
@@ -61,10 +63,13 @@ export function MailListItem({
     { label: 'Move to Inbox', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') },
     { label: 'Move to Spam', icon: ShieldAlert, onClick: () => onMoveToFolder?.('SPAM') },
     { label: '', separator: true, onClick: () => {} },
+    { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
+    { label: '', separator: true, onClick: () => {} },
     { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const },
   ];
 
   return (
+    <>
     <ContextMenu trigger={
     <div
       onMouseEnter={() => setHovered(true)}
@@ -354,5 +359,14 @@ export function MailListItem({
       )}
     </div>
     } items={contextItems} />
+      {relateOpen && (
+        <RelateModal
+          open={relateOpen}
+          sourceType="email"
+          sourceId={email.id}
+          onClose={() => setRelateOpen(false)}
+        />
+      )}
+    </>
   );
 }

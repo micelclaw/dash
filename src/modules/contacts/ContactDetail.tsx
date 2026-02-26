@@ -102,8 +102,8 @@ export function ContactDetail({
   const navigate = useNavigate();
   const [deleteHover, setDeleteHover] = useState(false);
   const initials = getInitials(contact.display_name);
-  const primaryEmail = contact.emails.find(e => e.primary)?.address || contact.emails[0]?.address;
-  const primaryPhone = contact.phones.find(p => p.primary)?.number || contact.phones[0]?.number;
+  const primaryEmail = contact.emails?.find(e => e.primary)?.address || contact.emails?.[0]?.address;
+  const primaryPhone = contact.phones?.find(p => p.primary)?.number || contact.phones?.[0]?.number;
 
   return (
     <div style={{
@@ -182,7 +182,7 @@ export function ContactDetail({
       {/* Content */}
       <div style={{ padding: '0 24px 24px', flex: 1 }}>
         {/* Emails */}
-        {contact.emails.length > 0 && (
+        {(contact.emails?.length ?? 0) > 0 && (
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
               <Mail size={12} />
@@ -208,7 +208,7 @@ export function ContactDetail({
         )}
 
         {/* Phones */}
-        {contact.phones.length > 0 && (
+        {(contact.phones?.length ?? 0) > 0 && (
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
               <Phone size={12} />
@@ -234,7 +234,7 @@ export function ContactDetail({
         )}
 
         {/* Addresses */}
-        {contact.addresses.length > 0 && (
+        {(contact.addresses?.length ?? 0) > 0 && (
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
               <MapPin size={12} />
@@ -271,7 +271,7 @@ export function ContactDetail({
         )}
 
         {/* Tags */}
-        {contact.tags.length > 0 && (
+        {(contact.tags?.length ?? 0) > 0 && (
           <div style={sectionStyle}>
             <div style={sectionHeaderStyle}>
               <Tag size={12} />
