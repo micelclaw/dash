@@ -19,6 +19,8 @@ export function PhotoLightbox({
 }: PhotoLightboxProps) {
   const photo = photos[currentIndex];
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   // Touch/swipe support
   const pointerStartX = useRef<number | null>(null);
@@ -75,9 +77,16 @@ export function PhotoLightbox({
     touchStartX.current = null;
   };
 
+  // Reset image state when photo changes
+  useEffect(() => {
+    setImgError(false);
+    setImgLoaded(false);
+  }, [photo?.id]);
+
   if (!photo) return null;
 
   const hue = simpleHash(photo.id) % 360;
+  const previewUrl = `/api/v1/files/${photo.id}/preview`;
   const dateObj = photo.taken_at ? new Date(photo.taken_at) : new Date(photo.created_at);
   const camera = photo.metadata?.camera;
   const gps = photo.metadata?.gps;
@@ -161,7 +170,7 @@ export function PhotoLightbox({
           <ChevronLeft size={20} />
         </button>
 
-        {/* Photo display (gradient placeholder with filename) */}
+        {/* Photo display */}
         <div
           style={{
             maxWidth: '90vw',
@@ -179,18 +188,44 @@ export function PhotoLightbox({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 12,
+            position: 'relative',
           }}
         >
-          <Image size={56} style={{ opacity: 0.25, color: '#fff' }} />
-          <span
-            style={{
-              fontSize: '0.8125rem',
-              color: 'rgba(255,255,255,0.4)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {photo.filename}
-          </span>
+          {!imgError ? (
+            <>
+              <img
+                src={previewUrl}
+                alt={photo.filename}
+                onError={() => setImgError(true)}
+                onLoad={() => setImgLoaded(true)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  opacity: imgLoaded ? 1 : 0,
+                  transition: 'opacity 0.2s',
+                }}
+              />
+              {!imgLoaded && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Image size={56} style={{ opacity: 0.25, color: '#fff' }} />
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <Image size={56} style={{ opacity: 0.25, color: '#fff' }} />
+              <span
+                style={{
+                  fontSize: '0.8125rem',
+                  color: 'rgba(255,255,255,0.4)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {photo.filename}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Next arrow */}
@@ -222,7 +257,7 @@ export function PhotoLightbox({
         {camera && <InfoChip label={camera} />}
         <InfoChip label={`${formatDateShort(dateObj)} ${formatTime(dateObj)}`} />
         {gps && <InfoChip label={`${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}`} />}
-        {photo.tags.length > 0 && <InfoChip label={photo.tags.join(', ')} />}
+        {photo.tags?.length > 0 && <InfoChip label={photo.tags.join(', ')} />}
       </div>
     </div>
   );

@@ -53,7 +53,10 @@ function PhotoThumbnail({
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const hue = simpleHash(photo.id) % 360;
+  const previewUrl = `/api/v1/files/${photo.id}/preview`;
 
   return (
     <EntityContextMenu
@@ -82,7 +85,7 @@ function PhotoThumbnail({
             transition: 'transform var(--transition-fast)',
           }}
         >
-          {/* Gradient placeholder */}
+          {/* Thumbnail image with gradient fallback */}
           <div
             style={{
               width: '100%',
@@ -93,7 +96,31 @@ function PhotoThumbnail({
               justifyContent: 'center',
             }}
           >
-            <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+            {!imgError ? (
+              <>
+                <img
+                  src={previewUrl}
+                  alt={photo.filename}
+                  loading="lazy"
+                  onError={() => setImgError(true)}
+                  onLoad={() => setImgLoaded(true)}
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    opacity: imgLoaded ? 1 : 0,
+                    transition: 'opacity 0.2s',
+                  }}
+                />
+                {!imgLoaded && (
+                  <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+                )}
+              </>
+            ) : (
+              <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+            )}
           </div>
 
           {/* Hover overlay */}

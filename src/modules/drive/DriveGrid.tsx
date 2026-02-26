@@ -7,6 +7,7 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { isImageMime, simpleHash } from '@/lib/file-utils';
+import { downloadFile } from '@/lib/file-download';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 
@@ -113,10 +114,10 @@ function GridItem({
   const contextItems: ContextMenuItem[] = [
     { label: 'Rename', icon: Pencil, onClick: onRename },
     { label: 'Move to...', icon: FolderInput, onClick: onMove },
+    { label: 'Download', icon: Download, onClick: () => { void downloadFile(file.id, isDir ? `${file.filename}.zip` : file.filename); } },
     ...(!isDir ? [
-      { label: 'Download', icon: Download, onClick: () => {} },
       { label: 'Share link', icon: Share2, onClick: onShare },
-      { label: 'Copy link', icon: Link2, onClick: () => {} },
+      { label: 'Copy link', icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } },
     ] : []),
     { label: '', separator: true, onClick: () => {} },
     { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const },

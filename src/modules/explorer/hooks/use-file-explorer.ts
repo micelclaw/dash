@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useFiles } from '@/hooks/use-files';
 import { SOURCE_ROOTS, type SourceRoot } from '../types';
 import type { FileRecord } from '@/types/files';
@@ -19,6 +19,8 @@ export function useFileExplorer() {
   const [currentPath, setCurrentPath] = useState('/drive/');
   const [currentSource, setCurrentSource] = useState<SourceRoot>(SOURCE_ROOTS[0]!);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const lastToggleRef = useRef<string | null>(null);
   const [view, setView] = useState<'grid' | 'list'>(
     () => (localStorage.getItem('fexp-view') as 'grid' | 'list') || 'list',
   );
@@ -32,6 +34,7 @@ export function useFileExplorer() {
     setCurrentSource(source);
     setCurrentPath(path);
     setSelectedFile(null);
+    setSelectedIds(new Set());
     setSearch('');
   }, []);
 
@@ -64,7 +67,69 @@ export function useFileExplorer() {
   const handleDelete = useCallback(async (id: string) => {
     await deleteFile(id);
     setSelectedFile(prev => prev?.id === id ? null : prev);
+    setSelectedIds(prev => {
+      if (prev.has(id)) {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      }
+      return prev;
+    });
   }, [deleteFile]);
+
+  // Multi-select
+  const toggleSelection = useCallback((id: string, shiftKey: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (shiftKey && lastToggleRef.current) {
+        const fromIdx = files.findIndex(f => f.id === lastToggleRef.current);
+        const toIdx = files.findIndex(f => f.id === id);
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const start = Math.min(fromIdx, toIdx);
+          const end = Math.max(fromIdx, toIdx);
+          for (let i = start; i <= end; i++) {
+            next.add(files[i]!.id);
+          }
+        }
+      } else {
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
+      }
+      lastToggleRef.current = id;
+      return next;
+    });
+  }, [files]);
+
+  const toggleAll = useCallback(() => {
+    setSelectedIds(prev => {
+      if (prev.size === files.length && files.length > 0) {
+        return new Set();
+      }
+      return new Set(files.map(f => f.id));
+    });
+  }, [files]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  const batchDelete = useCallback(async (ids: Set<string>) => {
+    for (const id of ids) {
+      await deleteFile(id);
+    }
+    setSelectedFile(null);
+    setSelectedIds(new Set());
+  }, [deleteFile]);
+
+  const batchMove = useCallback(async (ids: Set<string>, destPath: string) => {
+    for (const id of ids) {
+      await moveFile(id, destPath);
+    }
+    setSelectedIds(new Set());
+  }, [moveFile]);
 
   return {
     currentPath,
@@ -88,5 +153,12 @@ export function useFileExplorer() {
     renameFile,
     moveFile,
     deleteFile: handleDelete,
+    // Multi-select
+    selectedIds,
+    toggleSelection,
+    toggleAll,
+    clearSelection,
+    batchDelete,
+    batchMove,
   };
 }

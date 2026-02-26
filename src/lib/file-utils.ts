@@ -10,19 +10,21 @@ export function getFileExtension(filename: string): string {
   return i > 0 ? filename.slice(i + 1).toLowerCase() : '';
 }
 
-export function isImageMime(mime: string): boolean {
-  return mime.startsWith('image/');
+export function isImageMime(mime: string | null | undefined): boolean {
+  return !!mime && mime.startsWith('image/');
 }
 
-export function isVideoMime(mime: string): boolean {
-  return mime.startsWith('video/');
+export function isVideoMime(mime: string | null | undefined): boolean {
+  return !!mime && mime.startsWith('video/');
 }
 
-export function isPreviewable(mime: string): boolean {
+export function isPreviewable(mime: string | null | undefined): boolean {
+  if (!mime) return false;
   return isImageMime(mime) || mime === 'application/pdf' || mime.startsWith('text/');
 }
 
-export function getMimeLabel(mime: string): string {
+export function getMimeLabel(mime: string | null | undefined): string {
+  if (!mime) return 'File';
   if (mime === 'inode/directory') return 'Folder';
   if (mime.startsWith('image/')) return 'Image';
   if (mime.startsWith('video/')) return 'Video';

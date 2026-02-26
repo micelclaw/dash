@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { X, Download, Trash2 } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { RelatedItemsPanel } from './RelatedItemsPanel';
 import { formatFileSize, isImageMime, getMimeLabel } from '@/lib/file-utils';
+import { downloadFile } from '@/lib/file-download';
 import { formatRelative } from '@/lib/date-helpers';
 import type { FileRecord } from '@/types/files';
 import type { LinkedRecord } from '@/types/links';
@@ -20,6 +22,7 @@ export function FilePreviewPanel({
   linkedRecords = [], linkedRecordsLoading = false,
 }: FilePreviewPanelProps) {
   const isImage = isImageMime(file.mime_type);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <div
@@ -45,19 +48,17 @@ export function FilePreviewPanel({
             justifyContent: 'center',
           }}
         >
-          {isImage ? (
-            <div
+          {isImage && !imgError ? (
+            <img
+              src={`/api/v1/files/${file.id}/preview`}
+              alt={file.filename}
+              onError={() => setImgError(true)}
               style={{
                 width: '100%',
                 height: '100%',
-                background: `linear-gradient(135deg, hsl(${hashCode(file.id) % 360}, 35%, 25%), hsl(${(hashCode(file.id) + 40) % 360}, 35%, 18%))`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                objectFit: 'cover',
               }}
-            >
-              <FileIcon mime={file.mime_type} isDirectory={false} size="lg" />
-            </div>
+            />
           ) : (
             <FileIcon mime={file.mime_type} isDirectory={file.is_directory} size="lg" />
           )}
@@ -89,7 +90,7 @@ export function FilePreviewPanel({
             <span>Modified {formatRelative(new Date(file.updated_at))}</span>
           </div>
 
-          {file.tags.length > 0 && (
+          {file.tags?.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
               {file.tags.map(tag => (
                 <span
@@ -113,7 +114,7 @@ export function FilePreviewPanel({
           )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <PreviewAction icon={Download} label="Download" onClick={() => {}} disabled />
+            <PreviewAction icon={Download} label="Download" onClick={() => { void downloadFile(file.id, file.is_directory ? `${file.filename}.zip` : file.filename); }} />
             {onDelete && (
               <PreviewAction icon={Trash2} label="Delete" onClick={() => onDelete(file.id)} variant="danger" />
             )}

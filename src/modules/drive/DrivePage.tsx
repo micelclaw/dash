@@ -2,10 +2,12 @@ import { useState, useRef, useCallback } from 'react';
 import { FolderInput, Download, Trash2 } from 'lucide-react';
 import { DropZone } from '@/components/shared/DropZone';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { RenameDialog } from '@/components/shared/RenameDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
 import { ShareModal } from '@/components/shared/ShareModal';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { downloadFile, downloadBatch } from '@/lib/file-download';
 import { useDrive } from './hooks/use-drive';
 import { DriveToolbar } from './DriveToolbar';
 import { DriveGrid } from './DriveGrid';
@@ -37,6 +39,8 @@ export function Component() {
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerTargetIds, setFolderPickerTargetIds] = useState<Set<string>>(new Set());
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -52,6 +56,17 @@ export function Component() {
     e.target.value = '';
   }, [uploadFile]);
 
+  const handleBatchDownload = useCallback(() => {
+    const selected = files.filter(f => selectedIds.has(f.id));
+    if (selected.length === 0) return;
+    if (selected.length === 1) {
+      const f = selected[0];
+      void downloadFile(f.id, f.is_directory ? `${f.filename}.zip` : f.filename);
+    } else {
+      void downloadBatch([...selectedIds]);
+    }
+  }, [files, selectedIds]);
+
   const handleFilesDropped = useCallback((droppedFiles: File[]) => {
     for (const f of droppedFiles) {
       uploadFile(f);
@@ -59,20 +74,13 @@ export function Component() {
   }, [uploadFile]);
 
   const handleNewFolder = useCallback(() => {
-    const name = prompt('Folder name:');
-    if (name && name.trim()) {
-      createFolder(name.trim());
-    }
-  }, [createFolder]);
+    setNewFolderOpen(true);
+  }, []);
 
   const handleRename = useCallback((id: string) => {
     const file = files.find(f => f.id === id);
-    if (!file) return;
-    const newName = prompt('New name:', file.filename);
-    if (newName && newName.trim() && newName !== file.filename) {
-      renameFile(id, newName.trim());
-    }
-  }, [files, renameFile]);
+    if (file) setRenameTarget(file);
+  }, [files]);
 
   // Single file move — opens FolderPicker
   const handleMove = useCallback((id: string) => {
@@ -178,7 +186,7 @@ export function Component() {
           <div style={{ flex: 1 }} />
 
           <BatchButton icon={FolderInput} label={isMobile ? '' : 'Move'} onClick={handleBatchMove} />
-          <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={() => {}} disabled />
+          <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={handleBatchDownload} />
           <BatchButton icon={Trash2} label={isMobile ? '' : 'Delete'} onClick={handleBatchDeleteClick} variant="danger" />
 
           <button
@@ -271,6 +279,27 @@ export function Component() {
         description="This action cannot be undone."
         confirmLabel="Delete"
         variant="danger"
+      />
+
+      {/* Rename dialog */}
+      <RenameDialog
+        open={!!renameTarget}
+        currentName={renameTarget?.filename ?? ''}
+        title="New name:"
+        onConfirm={(name) => {
+          if (renameTarget) renameFile(renameTarget.id, name);
+        }}
+        onClose={() => setRenameTarget(null)}
+      />
+
+      {/* New folder dialog */}
+      <RenameDialog
+        open={newFolderOpen}
+        currentName=""
+        title="Folder name:"
+        confirmLabel="Create"
+        onConfirm={(name) => createFolder(name)}
+        onClose={() => setNewFolderOpen(false)}
       />
     </div>
   );
