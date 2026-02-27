@@ -105,6 +105,20 @@ export function useDrive() {
     await uploadFile(f, currentPath);
   }, [uploadFile, currentPath]);
 
+  const handleRename = useCallback(async (id: string, filename: string) => {
+    // Find the old record before rename to know its old filepath
+    const oldRecord = files.find(f => f.id === id);
+    const updated = await renameFile(id, filename);
+    // If a directory was renamed and it's part of the current path, update the path
+    if (updated && oldRecord?.isDirectory) {
+      const oldPath = oldRecord.filepath.endsWith('/') ? oldRecord.filepath : oldRecord.filepath + '/';
+      if (currentPath.startsWith(oldPath) || currentPath === oldPath) {
+        const newPath = updated.filepath.endsWith('/') ? updated.filepath : updated.filepath + '/';
+        setCurrentPath(currentPath.replace(oldPath, newPath));
+      }
+    }
+  }, [renameFile, currentPath, files]);
+
   const handleCreateFolder = useCallback(async (name: string) => {
     await createFolder(name, currentPath);
   }, [createFolder, currentPath]);
@@ -154,7 +168,7 @@ export function useDrive() {
     setSearch,
     uploadFile: handleUpload,
     createFolder: handleCreateFolder,
-    renameFile,
+    renameFile: handleRename,
     moveFile,
     deleteFile: handleDelete,
     handleItemDoubleClick,

@@ -68,6 +68,7 @@ export function useFiles(params: {
   const renameFile = async (id: string, filename: string) => {
     const res = await api.patch<ApiResponse<FileRecord>>(`/files/${id}`, { filename });
     setFiles(prev => prev.map(f => f.id === id ? res.data : f));
+    return res.data;
   };
 
   const moveFile = async (id: string, parentFolder: string) => {

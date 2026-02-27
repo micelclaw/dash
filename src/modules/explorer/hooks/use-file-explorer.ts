@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { useFiles } from '@/hooks/use-files';
+import { useVirtualSource, parseVirtualPath } from './use-virtual-source';
 import { SOURCE_ROOTS, type SourceRoot } from '../types';
 import type { FileRecord } from '@/types/files';
 
@@ -9,10 +10,9 @@ function findSource(path: string): SourceRoot {
       const child = s.children.find(c => path.startsWith(c.basePath));
       if (child) return s;
     }
-    // Skip 'system' (basePath '/') unless no other match — it's a catch-all
-    if (s.id !== 'system' && path.startsWith(s.basePath)) return s;
+    if (path.startsWith(s.basePath)) return s;
   }
-  return SOURCE_ROOTS[SOURCE_ROOTS.length - 1]!; // system fallback
+  return SOURCE_ROOTS[0]!; // drive fallback
 }
 
 export function useFileExplorer() {
@@ -26,8 +26,20 @@ export function useFileExplorer() {
   );
   const [search, setSearch] = useState('');
 
-  const { files, loading, error, fetchFiles, uploadFile, createFolder, renameFile, moveFile, deleteFile } =
-    useFiles({ parent_folder: currentPath, search: search || undefined });
+  // Detect if current path is a virtual source
+  const virtualInfo = useMemo(() => parseVirtualPath(currentPath), [currentPath]);
+  const isVirtual = !!virtualInfo;
+
+  // Both hooks are always called (rules of hooks), but only one is "active"
+  const dbFiles = useFiles({ parent_folder: isVirtual ? '__noop__' : currentPath, search: search || undefined });
+  const virtualFiles = useVirtualSource(virtualInfo?.sourceId ?? null, virtualInfo?.subPath ?? '');
+
+  // Select the active data source
+  const files = isVirtual ? virtualFiles.files : dbFiles.files;
+  const loading = isVirtual ? virtualFiles.loading : dbFiles.loading;
+  const error = isVirtual ? virtualFiles.error : dbFiles.error;
+  const fetchFiles = isVirtual ? virtualFiles.fetchFiles : dbFiles.fetchFiles;
+  const { uploadFile, createFolder, renameFile, moveFile, deleteFile } = dbFiles;
 
   const navigateTo = useCallback((path: string) => {
     const source = findSource(path);
@@ -43,9 +55,16 @@ export function useFileExplorer() {
 
   const handleItemDoubleClick = useCallback((file: FileRecord) => {
     if (file.is_directory) {
-      navigateTo(file.filepath.endsWith('/') ? file.filepath : file.filepath + '/');
+      let targetPath = file.filepath.endsWith('/') ? file.filepath : file.filepath + '/';
+      // For virtual sources, filepath is relative to the physical root.
+      // Prepend the virtual prefix so navigateTo resolves correctly.
+      if (virtualInfo) {
+        const prefix = currentPath.slice(0, currentPath.indexOf('/', 1) + 1); // e.g. '/gateway/'
+        targetPath = prefix + targetPath.replace(/^\//, '');
+      }
+      navigateTo(targetPath);
     }
-  }, [navigateTo]);
+  }, [navigateTo, virtualInfo, currentPath]);
 
   const handleItemClick = useCallback((file: FileRecord) => {
     setSelectedFile(prev => prev?.id === file.id ? null : file);

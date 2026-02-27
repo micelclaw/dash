@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { SOURCE_ROOTS } from './types';
 import { SourceTreeItem } from './SourceTreeItem';
+import { useAuthStore } from '@/stores/auth.store';
 
 interface SourceTreeProps {
   currentPath: string;
@@ -7,6 +9,14 @@ interface SourceTreeProps {
 }
 
 export function SourceTree({ currentPath, onNavigate }: SourceTreeProps) {
+  const { user } = useAuthStore();
+  const userRole = user?.role ?? 'user';
+
+  const visibleSources = useMemo(
+    () => SOURCE_ROOTS.filter(s => !s.requiredRoles || s.requiredRoles.includes(userRole)),
+    [userRole],
+  );
+
   return (
     <div
       style={{
@@ -32,7 +42,7 @@ export function SourceTree({ currentPath, onNavigate }: SourceTreeProps) {
       >
         Sources
       </div>
-      {SOURCE_ROOTS.map(source => (
+      {visibleSources.map(source => (
         <SourceTreeItem
           key={source.id}
           source={source}
