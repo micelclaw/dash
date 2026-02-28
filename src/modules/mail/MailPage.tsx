@@ -44,7 +44,7 @@ export function Component() {
   const {
     emails, loading, error, fetchEmails,
     markRead, markUnread, toggleStar,
-    archiveEmail, moveToFolder, deleteEmail, snoozeEmail,
+    archiveEmail, moveToFolder, deleteEmail, restoreEmail, snoozeEmail,
     sendEmail, batchAction,
   } = useEmails({
     folder: activeFolder,
@@ -66,6 +66,10 @@ export function Component() {
     const id = searchParams.get('id');
     if (id) setSelectedEmailId(id);
   }, [searchParams, setSelectedEmailId]);
+
+  const handleToggleSelection = useCallback((id: string, shiftKey: boolean) => {
+    toggleSelection(id, shiftKey, emails.map(e => e.id));
+  }, [toggleSelection, emails]);
 
   const handleToggleLabel = useCallback((label: string) => {
     setActiveLabels(prev => {
@@ -140,6 +144,19 @@ export function Component() {
 
   // Mobile: single column stack
   if (isMobile) {
+    if (composerData?.mode === 'new' && !selectedEmailId) {
+      return (
+        <div style={{ height: '100%', overflow: 'auto', padding: 16 }}>
+          <MailComposer
+            data={composerData}
+            onClose={closeComposer}
+            onSend={sendEmail}
+            accounts={accounts}
+            inline
+          />
+        </div>
+      );
+    }
     if (selectedEmailId) {
       return (
         <div style={{ height: '100%' }}>
@@ -148,10 +165,11 @@ export function Component() {
             onBack={() => setSelectedEmailId(null)}
             onReply={handleReply}
             onForward={handleForward}
+            composerData={composerData}
+            onSend={sendEmail}
+            onCloseComposer={closeComposer}
+            accounts={accounts}
           />
-          {composerData && (
-            <MailComposer data={composerData} onClose={closeComposer} onSend={sendEmail} accounts={accounts} />
-          )}
         </div>
       );
     }
@@ -164,7 +182,7 @@ export function Component() {
           selectedEmailId={selectedEmailId}
           onSelectEmail={setSelectedEmailId}
           selectedIds={selectedIds}
-          onToggleSelection={toggleSelection}
+          onToggleSelection={handleToggleSelection}
           onSelectAll={selectAll}
           onClearSelection={clearSelection}
           search={search}
@@ -179,15 +197,14 @@ export function Component() {
           onMarkRead={markRead}
           onMarkUnread={markUnread}
           onMoveToFolder={moveToFolder}
-          onBatchRead={() => batchAction([...selectedIds], 'read')}
-          onBatchUnread={() => batchAction([...selectedIds], 'unread')}
-          onBatchArchive={() => batchAction([...selectedIds], 'archive')}
+          onBatchRead={() => batchAction([...selectedIds], 'mark_read')}
+          onBatchUnread={() => batchAction([...selectedIds], 'mark_unread')}
+          onBatchArchive={() => batchAction([...selectedIds], 'move', { folder: 'Archive' })}
           onBatchDelete={() => batchAction([...selectedIds], 'delete')}
+          onRestore={restoreEmail}
+          activeFolder={activeFolder}
           accounts={accountColorMap}
         />
-        {composerData && (
-          <MailComposer data={composerData} onClose={closeComposer} onSend={sendEmail} accounts={accounts} />
-        )}
         {snoozeTarget && (
           <MailSnoozeMenu
             open
@@ -236,7 +253,7 @@ export function Component() {
           selectedEmailId={selectedEmailId}
           onSelectEmail={setSelectedEmailId}
           selectedIds={selectedIds}
-          onToggleSelection={toggleSelection}
+          onToggleSelection={handleToggleSelection}
           onSelectAll={selectAll}
           onClearSelection={clearSelection}
           search={search}
@@ -251,10 +268,12 @@ export function Component() {
           onMarkRead={markRead}
           onMarkUnread={markUnread}
           onMoveToFolder={moveToFolder}
-          onBatchRead={() => batchAction([...selectedIds], 'read')}
-          onBatchUnread={() => batchAction([...selectedIds], 'unread')}
-          onBatchArchive={() => batchAction([...selectedIds], 'archive')}
+          onBatchRead={() => batchAction([...selectedIds], 'mark_read')}
+          onBatchUnread={() => batchAction([...selectedIds], 'mark_unread')}
+          onBatchArchive={() => batchAction([...selectedIds], 'move', { folder: 'Archive' })}
           onBatchDelete={() => batchAction([...selectedIds], 'delete')}
+          onRestore={restoreEmail}
+          activeFolder={activeFolder}
           accounts={accountColorMap}
         />}
       </div>
@@ -285,11 +304,25 @@ export function Component() {
           </button>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {selectedEmailId ? (
+          {composerData?.mode === 'new' ? (
+            <div style={{ padding: 16 }}>
+              <MailComposer
+                data={composerData}
+                onClose={closeComposer}
+                onSend={sendEmail}
+                accounts={accounts}
+                inline
+              />
+            </div>
+          ) : selectedEmailId ? (
             <MailReadingPane
               emailId={selectedEmailId}
               onReply={handleReply}
               onForward={handleForward}
+              composerData={composerData?.mode !== 'new' ? composerData : null}
+              onSend={sendEmail}
+              onCloseComposer={closeComposer}
+              accounts={accounts}
             />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
@@ -302,11 +335,6 @@ export function Component() {
           )}
         </div>
       </div>
-
-      {/* Composer floats above everything */}
-      {composerData && (
-        <MailComposer data={composerData} onClose={closeComposer} onSend={sendEmail} accounts={accounts} />
-      )}
 
       {/* Snooze menu */}
       {snoozeTarget && (

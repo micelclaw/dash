@@ -15,20 +15,36 @@ export function useEmails(filters: EmailFilters = {}) {
     setLoading(true);
     setError(null);
     try {
+      // Translate virtual folder names to actual API params
+      let folder: string | undefined = filters.folder || undefined;
+      let is_starred: boolean | undefined = filters.is_starred;
+      let only_deleted = false;
+
+      if (folder === 'STARRED') {
+        folder = undefined;
+        is_starred = true;
+      } else if (folder === 'TRASH') {
+        folder = undefined;
+        only_deleted = true;
+      } else if (folder === 'ARCHIVE') {
+        folder = 'Archive';
+      }
+
       const res = await api.get<ApiListResponse<Email>>('/emails', {
         limit: filters.limit ?? 50,
         offset: filters.offset ?? 0,
         sort: 'received_at',
         order: 'desc',
-        folder: filters.folder || undefined,
+        folder,
         account_id: filters.account_id || undefined,
         search: filters.search || undefined,
         is_read: filters.is_read,
-        is_starred: filters.is_starred,
+        is_starred,
         has_attachments: filters.has_attachments,
         label: filters.label || undefined,
         status: filters.status || undefined,
         thread_id: filters.thread_id || undefined,
+        only_deleted: only_deleted || undefined,
       });
       setEmails(res.data);
       setMeta(res.meta);
@@ -148,21 +164,33 @@ export function useEmails(filters: EmailFilters = {}) {
     }
   };
 
+  const restoreEmail = async (id: string) => {
+    const removed = emails.find(e => e.id === id);
+    setEmails(prev => prev.filter(e => e.id !== id));
+    try {
+      await api.post(`/emails/${id}/restore`);
+      toast.success('Email restored to Inbox');
+    } catch {
+      if (removed) setEmails(prev => [removed, ...prev]);
+      toast.error('Failed to restore');
+    }
+  };
+
   const sendEmail = async (data: Record<string, unknown>) => {
     const res = await api.post<{ data: Email }>('/emails/send', data);
     toast.success('Email sent');
     return res.data;
   };
 
-  const batchAction = async (ids: string[], action: string) => {
-    await api.post('/emails/batch', { ids: Array.from(ids), action });
+  const batchAction = async (ids: string[], action: string, params?: Record<string, string>) => {
+    await api.post('/emails/batch', { ids: Array.from(ids), action, params });
     fetchEmails();
   };
 
   return {
     emails, meta, loading, error, fetchEmails,
     markRead, markUnread, toggleStar,
-    archiveEmail, moveToFolder, deleteEmail,
+    archiveEmail, moveToFolder, deleteEmail, restoreEmail,
     snoozeEmail, sendEmail, batchAction,
   };
 }

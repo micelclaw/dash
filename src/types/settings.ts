@@ -15,6 +15,8 @@ export interface Settings {
       ollama_url: string;
       ollama_status: 'connected' | 'disconnected' | 'error';
       available_models: string[];
+      embedding_model: string;
+      extraction_model: string;
     };
   };
   sync: {

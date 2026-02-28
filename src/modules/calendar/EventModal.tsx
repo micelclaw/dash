@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, MapPin, Calendar, Users, Pencil, Trash2, Link2 } from 'lucide-react';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { RelateModal } from '@/components/shared/RelateModal';
 import { formatTime, formatDateLong } from '@/lib/date-helpers';
 import { getCalendarColor, DEFAULT_CALENDAR_COLORS } from './types';
@@ -33,6 +36,7 @@ export function EventModal({
   linkedRecordsLoading,
   defaultDate,
 }: EventModalProps) {
+  useCoNavigation('event', event?.id ?? '');
   const [mode, setMode] = useState<Mode>('view');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
@@ -409,6 +413,8 @@ function ViewMode({
       {/* Related items */}
       <div style={{ borderTop: '1px solid var(--border)', marginTop: 4 }}>
         <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onNavigate} />
+        <SimilarContentPanel sourceType="event" sourceId={event.id} />
+        <GraphProximityPanel sourceType="event" sourceId={event.id} />
       </div>
     </div>
   );

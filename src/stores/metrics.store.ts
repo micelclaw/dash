@@ -111,14 +111,23 @@ export const useMetricsStore = create<MetricsState>()((set, get) => ({
       }
 
       const period = get().period;
-      const [summary, byApp, byModel, bySource] = await Promise.all([
+      const [summaryRes, byAppRes, byModelRes, bySourceRes] = await Promise.all([
         api.get<TokenSummary>(`/metrics/tokens?period=${period}`),
         api.get<AppBreakdown[]>('/metrics/tokens/by-app'),
         api.get<ModelBreakdown[]>('/metrics/tokens/by-model'),
         api.get<SourceBreakdown>('/metrics/tokens/by-source'),
       ]);
 
-      set({ summary, byApp, byModel, bySource, loading: false });
+      // Unwrap API envelope: { data: <payload>, tier } → <payload>
+      const unwrap = (res: any) => res?.data ?? res;
+
+      set({
+        summary: unwrap(summaryRes),
+        byApp: unwrap(byAppRes) ?? [],
+        byModel: unwrap(byModelRes) ?? [],
+        bySource: unwrap(bySourceRes),
+        loading: false,
+      });
     } catch {
       set({ loading: false });
     }

@@ -35,6 +35,8 @@ const DEFAULT_SETTINGS: Settings = {
       ollama_url: 'http://127.0.0.1:11434',
       ollama_status: 'disconnected',
       available_models: [],
+      embedding_model: 'nomic-embed-text',
+      extraction_model: 'gemma2:2b',
     },
   },
   sync: {

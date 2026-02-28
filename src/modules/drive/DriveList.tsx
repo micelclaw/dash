@@ -4,6 +4,7 @@ import {
   Pencil, FolderInput, Download, Share2, Link2, Trash2, Info,
 } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
@@ -334,6 +335,7 @@ function ListRow({
             >
               {file.filename}
             </span>
+            <HeatBadge score={file.heat_score ?? 0} />
           </div>
 
           {/* Size */}

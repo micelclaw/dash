@@ -28,6 +28,7 @@ export interface Email {
   pre_snooze_folder: string | null;
   scheduled_at: string | null;
   send_attempts: number;
+  heat_score?: number;
   next_retry_at: string | null;
   send_error: string | null;
   created_at: string;

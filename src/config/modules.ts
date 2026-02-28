@@ -7,7 +7,7 @@ import type { ModuleConfig } from '@/types/modules';
 
 export const MODULES: ModuleConfig[] = [
   { id: 'chat',     label: 'AI Chat',       icon: MessageSquare, color: 'var(--mod-chat)',     path: '/chat',     group: null },
-  { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-chat)',     path: null,        group: null },
+  { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-chat)',     path: '/search',   group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },

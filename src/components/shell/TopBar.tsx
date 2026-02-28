@@ -1,7 +1,10 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
-import { Menu, Search, Newspaper } from 'lucide-react';
+import { Menu, Search, Newspaper, Network } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { BriefingPanel } from '@/components/BriefingPanel';
+import { GraphViewModal } from '@/components/graph/GraphViewModal';
+import { ProUpsellModal } from '@/components/shared/ProUpsellModal';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -54,6 +57,22 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const isMobile = useIsMobile();
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const user = useAuthStore((s) => s.user);
+  const isPro = user?.tier === 'pro';
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [centerEntityId, setCenterEntityId] = useState<string | undefined>();
+  const [upsellOpen, setUpsellOpen] = useState(false);
+
+  // Listen for open-graph events from GraphProximityPanel
+  const handleOpenGraph = useCallback((e: Event) => {
+    const entityId = (e as CustomEvent<{ entityId: string }>).detail?.entityId;
+    setCenterEntityId(entityId);
+    setGraphOpen(true);
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('open-graph', handleOpenGraph);
+    return () => window.removeEventListener('open-graph', handleOpenGraph);
+  }, [handleOpenGraph]);
 
   const currentModule = MODULES.find((m) => m.path && location.pathname.startsWith(m.path));
   const ModIcon = currentModule?.icon;
@@ -158,6 +177,17 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
 
       {/* Right zone */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={() => isPro ? setGraphOpen(true) : setUpsellOpen(true)}
+          title="Knowledge Graph"
+          style={{
+            background: 'none', border: 'none',
+            cursor: 'pointer', color: 'var(--text-dim)',
+            padding: 4, display: 'flex',
+          }}
+        >
+          <Network size={18} />
+        </button>
         <BriefingButton />
         <NotificationBell />
         {!isMobile && (
@@ -166,6 +196,18 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
           </Avatar>
         )}
       </div>
+
+      {/* Graph View Modal (Pro) */}
+      <GraphViewModal open={graphOpen} onClose={() => { setGraphOpen(false); setCenterEntityId(undefined); }} centerEntityId={centerEntityId} />
+
+      {/* Upsell Modal (Free) */}
+      {upsellOpen && (
+        <ProUpsellModal
+          feature="Knowledge Graph"
+          description="Explore entities and connections discovered by AI across your records."
+          onClose={() => setUpsellOpen(false)}
+        />
+      )}
     </div>
   );
 }

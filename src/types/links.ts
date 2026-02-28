@@ -8,6 +8,7 @@ export interface EntityLink {
   link_type: string;
   confidence: number;
   strength: number | null;
+  heat_edge: number;
   created_by: 'user' | 'llm' | 'system';
   created_at: string;
 }

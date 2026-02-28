@@ -10,8 +10,12 @@ import { api } from '@/services/api';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
 import { useEmailLinks } from './hooks/use-email-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { MailThread } from './MailThread';
-import type { Email, ComposeData } from './types';
+import { MailComposer } from './MailComposer';
+import type { Email, ComposeData, EmailAccount } from './types';
 import type { ApiResponse, ApiListResponse } from '@/types/api';
 
 interface MailReadingPaneProps {
@@ -20,6 +24,11 @@ interface MailReadingPaneProps {
   onReply: (data: Partial<ComposeData>) => void;
   onForward: (data: Partial<ComposeData>) => void;
   onNavigate?: () => void;
+  /** Inline composer data (rendered below email body for reply/forward) */
+  composerData?: ComposeData | null;
+  onSend?: (data: Record<string, unknown>) => Promise<unknown>;
+  onCloseComposer?: () => void;
+  accounts?: EmailAccount[];
 }
 
 function formatFileSize(bytes: number): string {
@@ -54,7 +63,8 @@ function buildReplyData(email: Email, mode: 'reply' | 'reply_all' | 'forward'): 
   return base;
 }
 
-export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigate }: MailReadingPaneProps) {
+export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigate, composerData, onSend, onCloseComposer, accounts }: MailReadingPaneProps) {
+  useCoNavigation('email', emailId);
   const [email, setEmail] = useState<Email | null>(null);
   const [threadEmails, setThreadEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
@@ -356,7 +366,21 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         />
         <div style={{ padding: '0 16px 16px' }}>
           <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} />
+          <SimilarContentPanel sourceType="email" sourceId={emailId} />
+          <GraphProximityPanel sourceType="email" sourceId={emailId} />
         </div>
+        {/* Inline reply/forward composer */}
+        {composerData && onSend && onCloseComposer && accounts && (
+          <div style={{ padding: '0 16px 16px' }}>
+            <MailComposer
+              data={composerData}
+              onClose={onCloseComposer}
+              onSend={onSend}
+              accounts={accounts}
+              inline
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -543,6 +567,8 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
 
       {/* Related items */}
       <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} />
+      <SimilarContentPanel sourceType="email" sourceId={emailId} />
+      <GraphProximityPanel sourceType="email" sourceId={emailId} />
 
       {/* Action bar */}
       <div
@@ -773,6 +799,19 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           </span>
         </button>
       </div>
+
+      {/* Inline reply/forward composer */}
+      {composerData && onSend && onCloseComposer && accounts && (
+        <div style={{ padding: '0 16px 16px' }}>
+          <MailComposer
+            data={composerData}
+            onClose={onCloseComposer}
+            onSend={onSend}
+            accounts={accounts}
+            inline
+          />
+        </div>
+      )}
     </div>
   );
 }

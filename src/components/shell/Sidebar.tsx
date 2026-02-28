@@ -142,7 +142,6 @@ export function Sidebar({ onOpenCommandPalette, forceExpanded }: SidebarProps) {
                 key={mod.id}
                 module={mod}
                 collapsed={collapsed}
-                onAction={mod.id === 'search' ? onOpenCommandPalette : undefined}
                 onNavigate={() => setMobileOpen(false)}
               />
             ))}

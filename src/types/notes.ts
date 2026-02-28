@@ -13,6 +13,7 @@ export interface Note {
   updated_at: string;
   synced_at: string | null;
   deleted_at: string | null;
+  heat_score?: number;
 }
 
 export interface NoteCreateInput {

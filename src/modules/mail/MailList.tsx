@@ -12,7 +12,7 @@ interface MailListProps {
   selectedEmailId: string | null;
   onSelectEmail: (id: string) => void;
   selectedIds: Set<string>;
-  onToggleSelection: (id: string) => void;
+  onToggleSelection: (id: string, shiftKey: boolean) => void;
   onSelectAll: (ids: string[]) => void;
   onClearSelection: () => void;
   search: string;
@@ -31,6 +31,8 @@ interface MailListProps {
   onBatchUnread: () => void;
   onBatchArchive: () => void;
   onBatchDelete: () => void;
+  onRestore?: (id: string) => void;
+  activeFolder?: string;
   accounts: { id: string; color: string }[];
 }
 
@@ -116,6 +118,8 @@ export function MailList({
   onBatchUnread,
   onBatchArchive,
   onBatchDelete,
+  onRestore,
+  activeFolder,
   accounts,
 }: MailListProps) {
   const allIds = useMemo(() => emails.map((e) => e.id), [emails]);
@@ -225,7 +229,7 @@ export function MailList({
               email={email}
               selected={selectedIds.has(email.id)}
               active={email.id === selectedEmailId}
-              onSelect={() => onToggleSelection(email.id)}
+              onSelect={(shiftKey) => onToggleSelection(email.id, shiftKey)}
               onClick={() => onSelectEmail(email.id)}
               accountColor={email.account_id ? accountColorMap.get(email.account_id) : undefined}
               onArchive={() => onArchive(email.id)}
@@ -235,6 +239,13 @@ export function MailList({
               onMarkRead={onMarkRead ? () => onMarkRead(email.id) : undefined}
               onMarkUnread={onMarkUnread ? () => onMarkUnread(email.id) : undefined}
               onMoveToFolder={onMoveToFolder ? (folder) => onMoveToFolder(email.id, folder) : undefined}
+              onRestore={onRestore ? () => onRestore(email.id) : undefined}
+              activeFolder={activeFolder}
+              selectedCount={selectedIds.size}
+              onBatchRead={onBatchRead}
+              onBatchUnread={onBatchUnread}
+              onBatchArchive={onBatchArchive}
+              onBatchDelete={onBatchDelete}
             />
           ))
         )}

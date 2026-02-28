@@ -1,6 +1,7 @@
 import { useState, useCallback, type CSSProperties } from 'react';
 import { formatTime } from '@/lib/date-helpers';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
 
@@ -111,8 +112,9 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
           </div>
 
           {/* Time */}
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text)', opacity: 0.7 }}>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text)', opacity: 0.7, display: 'flex', alignItems: 'center', gap: 4 }}>
             {timeStr}
+            <HeatBadge score={event.heat_score ?? 0} size={6} />
           </div>
 
           {/* Location (4+ lines) */}

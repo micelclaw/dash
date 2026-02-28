@@ -33,7 +33,7 @@ interface SidebarItem {
 function buildSections(isAdmin: boolean): SidebarItem[] {
   const sections: SidebarItem[] = [
     { id: 'general', label: 'General', icon: Globe },
-    { id: 'ai', label: 'AI', icon: Cpu },
+    { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
     { id: 'sync', label: 'Sync', icon: RefreshCw },
     { id: 'mail', label: 'Mail', icon: Mail },
     { id: 'photos', label: 'Photos', icon: Image },

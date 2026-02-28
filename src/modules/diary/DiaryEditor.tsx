@@ -9,6 +9,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 import { ChevronLeft, Sparkles, X } from 'lucide-react';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { NoteEditorToolbar } from '@/modules/notes/NoteEditorToolbar';
 import { MoodSelector } from './MoodSelector';
 import { DayContext } from './DayContext';
@@ -32,6 +33,7 @@ interface DiaryEditorProps {
 }
 
 export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
+  useCoNavigation('diary', entry.id);
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const isDirtyRef = useRef(false);

@@ -1,4 +1,5 @@
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { Contact } from './types';
 
 interface ContactsListItemProps {
@@ -82,6 +83,7 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
               fontFamily: 'var(--font-sans)',
             }}>
               {contact.display_name}
+              <HeatBadge score={contact.heat_score ?? 0} />
             </div>
             {subtitle && (
               <div style={{

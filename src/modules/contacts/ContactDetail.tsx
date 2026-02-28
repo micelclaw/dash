@@ -5,6 +5,9 @@ import {
   Globe, Edit3, Trash2, PhoneCall,
 } from 'lucide-react';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityContactPanel } from '@/components/shared/GraphProximityContactPanel';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import type { Contact } from './types';
 import type { LinkedRecord } from '@/types/links';
 
@@ -99,6 +102,7 @@ const actionButtonStyle: React.CSSProperties = {
 export function ContactDetail({
   contact, onEdit, onDelete, onBack, linkedRecords, linkedRecordsLoading,
 }: ContactDetailProps) {
+  useCoNavigation('contact', contact.id);
   const navigate = useNavigate();
   const [deleteHover, setDeleteHover] = useState(false);
   const initials = getInitials(contact.display_name);
@@ -329,6 +333,8 @@ export function ContactDetail({
 
         {/* Related items */}
         <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onBack} />
+        <SimilarContentPanel sourceType="contact" sourceId={contact.id} />
+        <GraphProximityContactPanel contactId={contact.id} />
 
         {/* Quick actions */}
         <div style={{

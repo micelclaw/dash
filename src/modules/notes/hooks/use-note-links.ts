@@ -4,17 +4,24 @@ import type { EntityLink, LinkedRecord } from '@/types/links';
 import type { ApiListResponse } from '@/types/api';
 
 const ROUTE_MAP: Record<string, string> = {
-  note: '/notes',
-  event: '/calendar',
-  contact: '/contacts',
-  email: '/mail',
-  file: '/drive',
-  diary: '/diary',
+  note: '/notes', notes: '/notes',
+  event: '/calendar', events: '/calendar',
+  contact: '/contacts', contacts: '/contacts',
+  email: '/mail', emails: '/mail',
+  file: '/drive', files: '/drive',
+  diary: '/diary', diary_entries: '/diary',
+};
+
+// Normalize plural DB domains to singular for frontend display
+const SINGULAR: Record<string, string> = {
+  notes: 'note', events: 'event', contacts: 'contact',
+  emails: 'email', files: 'file', diary_entries: 'diary',
 };
 
 function resolveLink(link: EntityLink, currentId: string): LinkedRecord {
   const isSource = link.source_id === currentId;
-  const domain = isSource ? link.target_type : link.source_type;
+  const rawDomain = isSource ? link.target_type : link.source_type;
+  const domain = SINGULAR[rawDomain] ?? rawDomain;
   const recordId = isSource ? link.target_id : link.source_id;
 
   return {
@@ -54,13 +61,20 @@ export function useNoteLinks(noteId: string | null) {
     })
       .then(async (res) => {
         if (cancelled) return;
-        const resolved = res.data.map(link => resolveLink(link, noteId));
-        // Enrich titles by fetching each linked record
+        const resolved = res.data
+          .map(link => resolveLink(link, noteId))
+          // Filter out graph_entity links (shown in GraphProximityPanel)
+          .filter(r => r.domain !== 'graph_entity');
+
+        // Show links immediately with fallback titles
+        setLinks([...resolved]);
+        setLoading(false);
+
+        // Enrich titles in background (parallel), then update
         await enrichLinkedRecords(resolved);
-        if (!cancelled) setLinks(resolved);
+        if (!cancelled) setLinks([...resolved]);
       })
-      .catch(() => { if (!cancelled) setLinks([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(() => { if (!cancelled) { setLinks([]); setLoading(false); } });
 
     return () => { cancelled = true; };
   }, [noteId, version]);
@@ -78,7 +92,7 @@ const FIELDS_BY_DOMAIN: Record<string, string> = {
 };
 
 async function enrichLinkedRecords(records: LinkedRecord[]): Promise<void> {
-  for (const rec of records) {
+  await Promise.allSettled(records.map(async (rec) => {
     try {
       const endpoint = rec.domain === 'diary' ? 'diary' : `${rec.domain}s`;
       const fields = FIELDS_BY_DOMAIN[rec.domain] || 'id';
@@ -93,5 +107,5 @@ async function enrichLinkedRecords(records: LinkedRecord[]): Promise<void> {
     } catch {
       // Record may have been deleted — keep the fallback
     }
-  }
+  }));
 }

@@ -15,6 +15,9 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { useNoteLinks } from './hooks/use-note-links';
 import { NoteEditorToolbar } from './NoteEditorToolbar';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { SourceBadge } from '@/components/shared/SourceBadge';
 import { Tag } from '@/components/shared/Tag';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -44,6 +47,7 @@ function EditorSkeleton() {
 }
 
 export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
+  useCoNavigation('note', noteId);
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -340,12 +344,12 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         <EditorContent editor={editor} />
       </div>
 
-      {/* Related items */}
-      {(links.length > 0 || linksLoading) && (
-        <div style={{ borderTop: '1px solid var(--border)' }}>
-          <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
-        </div>
-      )}
+      {/* Intelligence panels */}
+      <div style={{ borderTop: '1px solid var(--border)' }}>
+        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
+        <SimilarContentPanel sourceType="note" sourceId={noteId} />
+        <GraphProximityPanel sourceType="note" sourceId={noteId} />
+      </div>
     </div>
   );
 }

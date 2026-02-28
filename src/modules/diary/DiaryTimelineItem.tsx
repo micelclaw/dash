@@ -1,4 +1,5 @@
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import { MOOD_CONFIG, type MoodLevel } from './types';
 import { getPreview } from '@/lib/text';
 
@@ -7,12 +8,13 @@ interface DiaryTimelineItemProps {
   entryDate: string;
   content: string;
   mood: MoodLevel | null;
+  heatScore?: number;
   selected: boolean;
   onClick: () => void;
   onDelete?: () => void;
 }
 
-export function DiaryTimelineItem({ id, entryDate, content, mood, selected, onClick, onDelete }: DiaryTimelineItemProps) {
+export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, selected, onClick, onDelete }: DiaryTimelineItemProps) {
   const d = new Date(entryDate + 'T12:00:00');
   const dayNum = d.getDate();
   const dayName = d.toLocaleDateString('en-GB', { weekday: 'short' });
@@ -66,6 +68,8 @@ export function DiaryTimelineItem({ id, entryDate, content, mood, selected, onCl
           <span style={{ fontSize: '1rem', flexShrink: 0, marginTop: 1 }}>
             {moodConfig ? moodConfig.emoji : '·'}
           </span>
+
+          <HeatBadge score={heatScore ?? 0} />
 
           {/* Preview */}
           <span style={{

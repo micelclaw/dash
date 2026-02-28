@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { X, Download, Trash2 } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { RelatedItemsPanel } from './RelatedItemsPanel';
+import { SimilarContentPanel } from './SimilarContentPanel';
+import { GraphProximityPanel } from './GraphProximityPanel';
+import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { formatFileSize, isImageMime, getMimeLabel, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
 import { formatRelative } from '@/lib/date-helpers';
@@ -21,6 +24,7 @@ export function FilePreviewPanel({
   file, onClose, onDelete, showRelated = true,
   linkedRecords = [], linkedRecordsLoading = false,
 }: FilePreviewPanelProps) {
+  useCoNavigation('file', file.id);
   const isImage = isImageMime(file.mime_type);
   const [imgError, setImgError] = useState(false);
 
@@ -112,6 +116,9 @@ export function FilePreviewPanel({
           {showRelated && (
             <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} />
           )}
+
+          <SimilarContentPanel sourceType="file" sourceId={file.id} />
+          <GraphProximityPanel sourceType="file" sourceId={file.id} />
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <PreviewAction icon={Download} label="Download" onClick={() => { void downloadFile(file.id, file.is_directory ? `${file.filename}.zip` : file.filename); }} />

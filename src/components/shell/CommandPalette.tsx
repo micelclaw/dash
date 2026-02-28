@@ -10,6 +10,7 @@ import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { api } from '@/services/api';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { SearchResult } from '@/types/search';
 
 interface CommandPaletteProps {
@@ -471,6 +472,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                                 {result.snippet}
                               </div>
                             </div>
+                            <HeatBadge score={result.provenance?.heat_score ?? 0} />
                             {result.score > 0 && (searchMode === 'semantic' || lastSearchType === 'hybrid_rrf') && (
                               <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>
                                 {result.score.toFixed(2)}

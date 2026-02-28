@@ -4,6 +4,7 @@ import {
   MailOpen, Mail as MailIcon, Inbox, ShieldAlert, Link2,
 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { HeatBadge } from '@/components/shared/HeatBadge';
 import { RelateModal } from '@/components/shared/RelateModal';
 import { formatEmailTime } from '@/lib/date-helpers';
 import type { Email } from './types';
@@ -13,16 +14,25 @@ interface MailListItemProps {
   email: Email;
   selected: boolean;
   active: boolean;
-  onSelect: () => void;
+  onSelect: (shiftKey: boolean) => void;
   onClick: () => void;
   accountColor?: string;
   onArchive: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
   onSnooze: (el: HTMLElement) => void;
   onToggleStar: () => void;
   onMarkRead?: () => void;
   onMarkUnread?: () => void;
   onMoveToFolder?: (folder: string) => void;
+  /** Current active folder — adapts context menu actions */
+  activeFolder?: string;
+  /** Number of selected emails (for multi-selection context menus) */
+  selectedCount?: number;
+  onBatchRead?: () => void;
+  onBatchUnread?: () => void;
+  onBatchArchive?: () => void;
+  onBatchDelete?: () => void;
 }
 
 export function MailListItem({
@@ -39,6 +49,13 @@ export function MailListItem({
   onMarkRead,
   onMarkUnread,
   onMoveToFolder,
+  onRestore,
+  activeFolder,
+  selectedCount = 0,
+  onBatchRead,
+  onBatchUnread,
+  onBatchArchive,
+  onBatchDelete,
 }: MailListItemProps) {
   const [hovered, setHovered] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
@@ -47,26 +64,53 @@ export function MailListItem({
   const unread = !email.is_read;
   const leftBorderColor = accountColor ?? 'var(--mod-mail)';
 
-  const contextItems: ContextMenuItem[] = [
-    {
-      label: unread ? 'Mark as read' : 'Mark as unread',
-      icon: unread ? MailOpen : MailIcon,
-      onClick: () => unread ? onMarkRead?.() : onMarkUnread?.(),
-    },
-    {
-      label: email.is_starred ? 'Unstar' : 'Star',
-      icon: Star,
-      onClick: onToggleStar,
-    },
-    { label: '', separator: true, onClick: () => {} },
-    { label: 'Archive', icon: Archive, onClick: onArchive },
-    { label: 'Move to Inbox', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') },
-    { label: 'Move to Spam', icon: ShieldAlert, onClick: () => onMoveToFolder?.('SPAM') },
-    { label: '', separator: true, onClick: () => {} },
-    { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
-    { label: '', separator: true, onClick: () => {} },
-    { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const },
-  ];
+  const isMulti = selected && selectedCount > 1;
+  const countLabel = isMulti ? ` (${selectedCount})` : '';
+  const inSpam = activeFolder === 'SPAM';
+  const inTrash = activeFolder === 'TRASH';
+  const inArchive = activeFolder === 'ARCHIVE';
+
+  const contextItems: ContextMenuItem[] = isMulti
+    ? [
+        { label: `Mark as read${countLabel}`, icon: MailOpen, onClick: () => onBatchRead?.() },
+        { label: `Mark as unread${countLabel}`, icon: MailIcon, onClick: () => onBatchUnread?.() },
+        { label: '', separator: true, onClick: () => {} },
+        { label: `Archive${countLabel}`, icon: Archive, onClick: () => onBatchArchive?.() },
+        { label: '', separator: true, onClick: () => {} },
+        { label: `Delete${countLabel}`, icon: Trash2, onClick: () => onBatchDelete?.(), variant: 'danger' as const },
+      ]
+    : [
+        {
+          label: unread ? 'Mark as read' : 'Mark as unread',
+          icon: unread ? MailOpen : MailIcon,
+          onClick: () => unread ? onMarkRead?.() : onMarkUnread?.(),
+        },
+        {
+          label: email.is_starred ? 'Unstar' : 'Star',
+          icon: Star,
+          onClick: onToggleStar,
+        },
+        { label: '', separator: true, onClick: () => {} },
+        // Archive / Unarchive
+        inArchive
+          ? { label: 'Unarchive', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') }
+          : { label: 'Archive', icon: Archive, onClick: onArchive },
+        // Move to Inbox (only when not in Inbox or Archive)
+        ...(!inArchive && activeFolder !== 'INBOX'
+          ? [{ label: 'Move to Inbox', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') }]
+          : []),
+        // Spam / Not Spam
+        inSpam
+          ? { label: 'Not Spam', icon: Inbox, onClick: () => onMoveToFolder?.('INBOX') }
+          : { label: 'Move to Spam', icon: ShieldAlert, onClick: () => onMoveToFolder?.('SPAM') },
+        { label: '', separator: true, onClick: () => {} },
+        { label: 'Relate', icon: Link2, onClick: () => setRelateOpen(true) },
+        { label: '', separator: true, onClick: () => {} },
+        // Delete / Restore
+        inTrash
+          ? { label: 'Restore', icon: Inbox, onClick: () => onRestore?.() }
+          : { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' as const },
+      ];
 
   return (
     <>
@@ -103,11 +147,11 @@ export function MailListItem({
         <input
           type="checkbox"
           checked={selected}
-          onChange={(e) => {
+          onChange={() => {}}
+          onClick={(e) => {
             e.stopPropagation();
-            onSelect();
+            onSelect(e.shiftKey);
           }}
-          onClick={(e) => e.stopPropagation()}
           style={{
             width: 14,
             height: 14,
@@ -158,6 +202,9 @@ export function MailListItem({
             transition: 'opacity var(--transition-fast)',
           }}
         >
+          {/* Heat */}
+          <HeatBadge score={email.heat_score ?? 0} />
+
           {/* Time */}
           <span
             style={{

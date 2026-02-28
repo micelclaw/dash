@@ -25,6 +25,7 @@ const router = createBrowserRouter([
         children: [
           { path: '/', element: <Navigate to="/chat" replace /> },
           { path: '/chat', lazy: () => import('@/modules/chat/ChatPage') },
+          { path: '/search', lazy: () => import('@/modules/search/SearchPage') },
           { path: '/notes', lazy: () => import('@/modules/notes/NotesPage') },
           { path: '/calendar', lazy: () => import('@/modules/calendar/CalendarPage') },
           { path: '/mail', lazy: () => import('@/modules/mail/MailPage') },

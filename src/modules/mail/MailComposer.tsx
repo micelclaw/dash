@@ -1,14 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Minus, Maximize2, X, Paperclip, Trash2, Send, ChevronDown } from 'lucide-react';
+import { Minus, Maximize2, X, Paperclip, Trash2, Send, ChevronDown, Save } from 'lucide-react';
 import { api } from '@/services/api';
+import { toast } from 'sonner';
 import type { ComposeData, EmailAccount } from './types';
 import type { ApiListResponse } from '@/types/api';
+
+interface Attachment {
+  filename: string;
+  size: number;
+  path: string;
+  mime: string;
+}
 
 interface MailComposerProps {
   data: ComposeData;
   onClose: () => void;
   onSend: (data: Record<string, unknown>) => Promise<unknown>;
   accounts: EmailAccount[];
+  /** Render inline (in-viewport) instead of fixed floating */
+  inline?: boolean;
 }
 
 interface Recipient {
@@ -22,7 +32,7 @@ interface ContactResult {
   email: string;
 }
 
-export function MailComposer({ data, onClose, onSend, accounts }: MailComposerProps) {
+export function MailComposer({ data, onClose, onSend, accounts, inline = false }: MailComposerProps) {
   // State
   const [minimized, setMinimized] = useState(false);
   const [maximized, setMaximized] = useState(false);
@@ -36,6 +46,9 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
   const [subject, setSubject] = useState(data.subject ?? '');
   const [body, setBody] = useState(data.body_html ?? '');
   const [sending, setSending] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Contact autocomplete state
   const [toInput, setToInput] = useState('');
@@ -91,6 +104,61 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
     [],
   );
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    for (const file of Array.from(files)) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/v1/files/upload', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('claw_token')}` },
+          body: formData,
+        });
+        if (!res.ok) throw new Error('Upload failed');
+        const json = await res.json();
+        const uploaded = json.data;
+        setAttachments(prev => [...prev, {
+          filename: uploaded.filename ?? file.name,
+          size: uploaded.size ?? file.size,
+          path: uploaded.path ?? uploaded.id,
+          mime: uploaded.mime_type ?? file.type,
+        }]);
+      } catch {
+        toast.error(`Failed to upload ${file.name}`);
+      }
+    }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    try {
+      await api.post('/emails/drafts', {
+        account_id: fromAccountId,
+        to: toRecipients.length > 0 ? toRecipients : undefined,
+        cc: ccRecipients.length > 0 ? ccRecipients : undefined,
+        bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
+        subject: subject || undefined,
+        body_plain: body || undefined,
+        in_reply_to: data.in_reply_to,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+      toast.success('Draft saved');
+      onClose();
+    } catch {
+      toast.error('Failed to save draft');
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
   const handleSend = async () => {
     if (toRecipients.length === 0 || !subject) return;
     setSending(true);
@@ -103,6 +171,7 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
         subject,
         body_plain: body,
         in_reply_to: data.in_reply_to,
+        attachments: attachments.length > 0 ? attachments : undefined,
       });
       onClose();
     } catch {
@@ -123,31 +192,42 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
   }
 
   // Position styles
-  const positionStyle: React.CSSProperties = {
-    position: 'fixed',
-    bottom: 0,
-    right: 24,
-    width: 560,
-    maxHeight: maximized ? '80vh' : 480,
-    zIndex: 'var(--z-modal)' as unknown as number,
-    display: 'flex',
-    flexDirection: 'column',
-    background: 'var(--card)',
-    border: '1px solid var(--border)',
-    borderBottom: 'none',
-    borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-    boxShadow: 'var(--shadow-lg)',
-    fontFamily: 'var(--font-sans)',
-  };
+  const positionStyle: React.CSSProperties = inline
+    ? {
+        position: 'relative',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        fontFamily: 'var(--font-sans)',
+      }
+    : {
+        position: 'fixed',
+        bottom: 0,
+        right: 24,
+        width: 560,
+        maxHeight: maximized ? '80vh' : 480,
+        zIndex: 'var(--z-modal)' as unknown as number,
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderBottom: 'none',
+        borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+        boxShadow: 'var(--shadow-lg)',
+        fontFamily: 'var(--font-sans)',
+      };
 
-  // Mobile override
-  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+  // Mobile override (only for floating mode)
+  if (!inline && typeof window !== 'undefined' && window.innerWidth < 768) {
     positionStyle.left = 0;
     positionStyle.right = 0;
     positionStyle.width = '100%';
   }
 
-  if (minimized) {
+  if (minimized && !inline) {
     return (
       <div
         ref={containerRef}
@@ -180,14 +260,11 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
   return (
     <div ref={containerRef} style={positionStyle}>
       {/* Title bar */}
-      <div style={titleBarStyle}>
+      <div style={inline ? { ...titleBarStyle, borderRadius: 'var(--radius-md) var(--radius-md) 0 0' } : titleBarStyle}>
         <span style={titleTextStyle}>{title}</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          <TitleBarButton icon={Minus} onClick={() => setMinimized(true)} />
-          <TitleBarButton
-            icon={Maximize2}
-            onClick={() => setMaximized(prev => !prev)}
-          />
+          {!inline && <TitleBarButton icon={Minus} onClick={() => setMinimized(true)} />}
+          {!inline && <TitleBarButton icon={Maximize2} onClick={() => setMaximized(prev => !prev)} />}
           <TitleBarButton
             icon={X}
             onClick={() => { if (confirmDiscard()) onClose(); }}
@@ -353,8 +430,50 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
           lineHeight: 1.6,
           resize: 'none',
           outline: 'none',
-          minHeight: 120,
+          minHeight: inline ? 300 : 120,
         }}
+      />
+
+      {/* Attachments chips */}
+      {attachments.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 12px' }}>
+          {attachments.map((att, idx) => (
+            <span
+              key={idx}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-full)', padding: '2px 8px',
+                fontSize: '0.75rem', color: 'var(--text)',
+              }}
+            >
+              <Paperclip size={10} style={{ color: 'var(--text-muted)' }} />
+              {att.filename}
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.625rem' }}>
+                {att.size < 1024 * 1024 ? `${(att.size / 1024).toFixed(0)} KB` : `${(att.size / (1024 * 1024)).toFixed(1)} MB`}
+              </span>
+              <button
+                onClick={() => removeAttachment(idx)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: 'none', background: 'transparent', color: 'var(--text-muted)',
+                  cursor: 'pointer', padding: 0,
+                }}
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
       />
 
       {/* Footer */}
@@ -368,8 +487,8 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
         }}
       >
         <button
-          disabled
-          title="Attach file (coming soon)"
+          onClick={() => fileInputRef.current?.click()}
+          title="Attach file"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -379,9 +498,8 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
             background: 'transparent',
-            color: 'var(--text-muted)',
-            cursor: 'not-allowed',
-            opacity: 0.5,
+            color: 'var(--text-dim)',
+            cursor: 'pointer',
           }}
         >
           <Paperclip size={14} />
@@ -406,6 +524,29 @@ export function MailComposer({ data, onClose, onSend, accounts }: MailComposerPr
           }}
         >
           <Trash2 size={14} />
+        </button>
+
+        <button
+          onClick={handleSaveDraft}
+          disabled={savingDraft}
+          title="Save as draft"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            color: 'var(--text-dim)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+            cursor: savingDraft ? 'not-allowed' : 'pointer',
+            opacity: savingDraft ? 0.5 : 1,
+          }}
+        >
+          <Save size={14} />
+          {savingDraft ? 'Saving...' : 'Draft'}
         </button>
 
         <button

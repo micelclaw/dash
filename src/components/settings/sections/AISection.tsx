@@ -10,6 +10,8 @@ import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
 import { SaveBar } from '../SaveBar';
+import { GraphHealthSection } from './GraphHealthSection';
+import { EntityExtractionConfig } from './EntityExtractionConfig';
 
 const CLOUD_MODELS = [
   'claude-opus-4-6',
@@ -311,6 +313,22 @@ export function AISection() {
             }
           </div>
         </div>
+        {ai.local_models.available_models.length > 0 && (
+          <>
+            <SettingSelect
+              label="Embedding Model"
+              value={ai.local_models.embedding_model}
+              options={ai.local_models.available_models.map((m) => ({ value: m, label: m }))}
+              onChange={(v) => setLocalValue('ai.local_models.embedding_model', v)}
+            />
+            <SettingSelect
+              label="Extraction Model"
+              value={ai.local_models.extraction_model}
+              options={ai.local_models.available_models.map((m) => ({ value: m, label: m }))}
+              onChange={(v) => setLocalValue('ai.local_models.extraction_model', v)}
+            />
+          </>
+        )}
         <div style={{ padding: '10px 0', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>
           Tip: Ollama provides free local AI processing. Run <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 2, fontSize: '0.6875rem' }}>ollama pull &lt;model&gt;</code> to add more models.
         </div>
@@ -325,6 +343,16 @@ export function AISection() {
         }>
           <LazyTokenDashboard />
         </Suspense>
+      </SettingSection>
+
+      {/* Entity Extraction */}
+      <SettingSection title="Entity Extraction">
+        <EntityExtractionConfig />
+      </SettingSection>
+
+      {/* Graph Health */}
+      <SettingSection title="Graph Health">
+        <GraphHealthSection />
       </SettingSection>
 
       <SaveBar visible={!!dirty.ai} saving={saving} onSave={handleSave} onDiscard={() => resetSection('ai')} />
