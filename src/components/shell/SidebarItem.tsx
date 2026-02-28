@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router';
 import type { ModuleConfig } from '@/types/modules';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { useSecurityStore } from '@/stores/security.store';
 
 interface SidebarItemProps {
   module: ModuleConfig;
@@ -14,6 +15,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
   const location = useLocation();
   const isActive = module.path ? location.pathname.startsWith(module.path) : false;
   const Icon = module.icon;
+  const pendingCount = useSecurityStore((s) => module.id === 'approvals' ? s.pendingCount : 0);
 
   function handleClick() {
     if (!module.path) {
@@ -57,7 +59,12 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
         size={20}
         style={{ color: module.color, flexShrink: 0, opacity: isActive ? 1 : 0.7 }}
       />
-      {!collapsed && <span>{module.label}</span>}
+      {!collapsed && <span style={{ flex: 1 }}>{module.label}</span>}
+      {!collapsed && pendingCount > 0 && (
+        <span style={{ fontSize: '0.625rem', minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--amber)', color: '#06060a', fontWeight: 700, fontFamily: 'var(--font-sans)', padding: '0 4px' }}>
+          {pendingCount > 99 ? '99+' : pendingCount}
+        </span>
+      )}
     </button>
   );
 

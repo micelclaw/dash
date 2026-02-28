@@ -1,62 +1,47 @@
 import { create } from 'zustand';
 import { api } from '@/services/api';
-import type { SecurityConfig, Approval } from '@/types/settings';
-
-const DEFAULT_CONFIG: SecurityConfig = {
-  approval_enabled: true,
-  approval_levels: {
-    destructive: 'confirm',
-    external: 'confirm',
-    financial: 'pin',
-    sensitive: 'confirm',
-  },
-  pin_configured: false,
-  session_timeout_minutes: 30,
-  auto_approve_trusted_skills: true,
-};
+import type { SecurityConfig, ApprovalRequest } from '@/types/settings';
 
 interface SecurityState {
   config: SecurityConfig | null;
-  approvals: Approval[];
+  approvals: ApprovalRequest[];
+  pendingCount: number;
   loading: boolean;
 
   fetchConfig: () => Promise<void>;
   updateConfig: (data: Partial<SecurityConfig>) => Promise<void>;
   fetchApprovals: (status?: string) => Promise<void>;
-  resolveApproval: (id: string, decision: 'approved' | 'denied', pin?: string) => Promise<void>;
-  setupPin: (pin: string) => Promise<void>;
-  verifyPin: (pin: string) => Promise<{ verified: boolean; session_token?: string }>;
+  fetchPendingCount: () => Promise<void>;
+  approveApproval: (id: string, pin?: string) => Promise<void>;
+  rejectApproval: (id: string, reason?: string) => Promise<void>;
+  setupPin: (pin: string, currentPassword: string) => Promise<void>;
+  removePin: (currentPassword: string) => Promise<void>;
+  verifyPin: (pin: string) => Promise<{ verified: boolean }>;
+  fetchPinStatus: () => Promise<boolean>;
+
+  // WS event handlers
+  onApprovalNew: (data: ApprovalRequest) => void;
+  onApprovalResolved: (data: { id: string; status: string }) => void;
 }
 
 export const useSecurityStore = create<SecurityState>()((set, get) => ({
   config: null,
   approvals: [],
+  pendingCount: 0,
   loading: false,
 
   fetchConfig: async () => {
     set({ loading: true });
     try {
-      const useMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (useMock) {
-        set({ config: DEFAULT_CONFIG, loading: false });
-        return;
-      }
       const res = await api.get<{ data: SecurityConfig }>('/settings/security');
       set({ config: res.data, loading: false });
     } catch {
-      set({ config: DEFAULT_CONFIG, loading: false });
+      set({ loading: false });
     }
   },
 
   updateConfig: async (data: Partial<SecurityConfig>) => {
-    const { config } = get();
-    if (!config) return;
     try {
-      const useMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (useMock) {
-        set({ config: { ...config, ...data } });
-        return;
-      }
       const res = await api.patch<{ data: SecurityConfig }>('/settings/security', data);
       set({ config: res.data });
     } catch {
@@ -66,46 +51,88 @@ export const useSecurityStore = create<SecurityState>()((set, get) => ({
 
   fetchApprovals: async (status?: string) => {
     try {
-      const useMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (useMock) {
-        set({ approvals: [] });
-        return;
-      }
       const params: Record<string, string> = {};
       if (status) params.status = status;
-      const res = await api.get<{ data: Approval[] }>('/approvals', params);
+      const res = await api.get<{ data: ApprovalRequest[] }>('/approvals', params);
       set({ approvals: res.data });
     } catch {
       set({ approvals: [] });
     }
   },
 
-  resolveApproval: async (id: string, decision: 'approved' | 'denied', pin?: string) => {
-    const useMock = import.meta.env.VITE_MOCK_API === 'true';
-    if (useMock) {
-      set({ approvals: get().approvals.filter((a) => a.id !== id) });
-      return;
+  fetchPendingCount: async () => {
+    try {
+      const res = await api.get<{ data: { pending: number } }>('/approvals/count');
+      set({ pendingCount: res.data.pending });
+    } catch {
+      // Silent
     }
-    await api.post(`/approvals/${id}/resolve`, { decision, pin });
-    set({ approvals: get().approvals.filter((a) => a.id !== id) });
   },
 
-  setupPin: async (pin: string) => {
-    const useMock = import.meta.env.VITE_MOCK_API === 'true';
-    if (useMock) {
-      set({ config: { ...get().config!, pin_configured: true } });
-      return;
+  approveApproval: async (id: string, pin?: string) => {
+    const body: Record<string, unknown> = {};
+    if (pin) body.pin = pin;
+    await api.post(`/approvals/${id}/approve`, body);
+    set({
+      approvals: get().approvals.filter((a) => a.id !== id),
+      pendingCount: Math.max(0, get().pendingCount - 1),
+    });
+  },
+
+  rejectApproval: async (id: string, reason?: string) => {
+    const body: Record<string, unknown> = {};
+    if (reason) body.reason = reason;
+    await api.post(`/approvals/${id}/reject`, body);
+    set({
+      approvals: get().approvals.filter((a) => a.id !== id),
+      pendingCount: Math.max(0, get().pendingCount - 1),
+    });
+  },
+
+  setupPin: async (pin: string, currentPassword: string) => {
+    await api.post('/auth/pin', { pin, current_password: currentPassword });
+    const config = get().config;
+    if (config) {
+      set({ config: { ...config, pin_configured: true } });
     }
-    await api.post('/auth/pin/setup', { pin });
-    set({ config: { ...get().config!, pin_configured: true } });
+  },
+
+  removePin: async (currentPassword: string) => {
+    await api.delete('/auth/pin', { current_password: currentPassword });
+    const config = get().config;
+    if (config) {
+      set({ config: { ...config, pin_configured: false } });
+    }
   },
 
   verifyPin: async (pin: string) => {
-    const useMock = import.meta.env.VITE_MOCK_API === 'true';
-    if (useMock) {
-      return { verified: true, session_token: 'mock-session' };
-    }
-    const res = await api.post<{ data: { verified: boolean; session_token?: string } }>('/auth/pin/verify', { pin });
+    const res = await api.post<{ data: { verified: boolean } }>('/auth/pin/verify', { pin });
     return res.data;
+  },
+
+  fetchPinStatus: async () => {
+    try {
+      const res = await api.get<{ data: { configured: boolean } }>('/auth/pin/status');
+      return res.data.configured;
+    } catch {
+      return false;
+    }
+  },
+
+  // WebSocket event handlers
+  onApprovalNew: (data: ApprovalRequest) => {
+    set({
+      approvals: [data, ...get().approvals],
+      pendingCount: get().pendingCount + 1,
+    });
+  },
+
+  onApprovalResolved: (data: { id: string; status: string }) => {
+    set({
+      approvals: get().approvals.map((a) =>
+        a.id === data.id ? { ...a, status: data.status as ApprovalRequest['status'] } : a,
+      ),
+      pendingCount: Math.max(0, get().pendingCount - 1),
+    });
   },
 }));

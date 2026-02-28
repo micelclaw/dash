@@ -1,7 +1,7 @@
 import {
   MessageSquare, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
-  Settings, Puzzle, Bookmark,
+  Settings, Puzzle, Bookmark, ShieldCheck,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -22,6 +22,7 @@ export const MODULES: ModuleConfig[] = [
   // System
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
+  { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },
   { id: 'settings', label: 'Settings',      icon: Settings,      color: 'var(--mod-settings)', path: '/settings', group: 'System' },
   { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: 'System' },
 ];

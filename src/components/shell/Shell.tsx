@@ -10,6 +10,7 @@ import { useKeyboard } from '@/hooks/use-keyboard';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useSecurityStore } from '@/stores/security.store';
 import { useTheme } from '@/hooks/use-theme';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -181,14 +182,23 @@ export function Shell() {
     });
   }, [systemEvent, addNotification]);
 
+  const fetchPendingCount = useSecurityStore((s) => s.fetchPendingCount);
+
+  // Fetch approval pending count on mount
+  useEffect(() => {
+    fetchPendingCount();
+  }, [fetchPendingCount]);
+
   useEffect(() => {
     if (!approvalEvent) return;
     addNotification({
       type: 'approval',
       title: `Approval needed: ${approvalEvent.data.summary as string}`,
-      action: { label: 'Review', route: approvalEvent.data.route as string | undefined },
+      action: { label: 'Review', route: '/approvals' },
     });
-  }, [approvalEvent, addNotification]);
+    // Refresh pending count on any approval event
+    fetchPendingCount();
+  }, [approvalEvent, addNotification, fetchPendingCount]);
 
   return (
     <TooltipProvider>
