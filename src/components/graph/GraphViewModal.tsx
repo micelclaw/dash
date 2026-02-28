@@ -11,6 +11,11 @@ import type { GraphNode, GraphEdge } from '@/types/intelligence';
 
 type GraphMode = 'entities' | 'records';
 
+const RECORD_DOMAIN: Record<string, string> = {
+  note: 'notes', contact: 'contacts', email: 'emails',
+  event: 'events', file: 'files', diary: 'diary_entries',
+};
+
 interface GraphViewModalProps {
   open: boolean;
   onClose: () => void;
@@ -38,6 +43,10 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [highlightEdgeIds, setHighlightEdgeIds] = useState<Set<string>>(new Set());
   const [categoryFilters, setCategoryFilters] = useState<Record<string, boolean>>({});
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Navigation state — tracks the current center for subgraph fetching
+  const [centerId, setCenterId] = useState<string | null>(centerEntityId ?? null);
+  const [centerType, setCenterType] = useState<string | null>(null);
 
   // Click state
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -69,22 +78,25 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     }
   };
 
-  // Load subgraph
+  // Load subgraph — re-runs when center, limit, or mode changes
   useEffect(() => {
     if (!open) return;
+    console.log('[GraphViewModal] fetchEffect firing', { centerId, centerType, graphMode, nodeLimit });
     setLoading(true);
-    setSelectedNode(null);
-    setCategoryFilters({});
-    setSearchQuery('');
     setHighlightNodeIds(new Set());
     setHighlightEdgeIds(new Set());
 
     const fetchFn = graphMode === 'records'
-      ? fetchRecordSubgraph({ limit: nodeLimit })
-      : fetchSubgraph({ limit: nodeLimit, centerId: centerEntityId });
+      ? fetchRecordSubgraph({
+          limit: nodeLimit,
+          centerId: centerId ?? undefined,
+          centerType: centerId && centerType ? RECORD_DOMAIN[centerType] : undefined,
+        })
+      : fetchSubgraph({ limit: nodeLimit, centerId: centerId ?? undefined });
 
     fetchFn
       .then(subgraph => {
+        console.log('[GraphViewModal] subgraph received', { nodeCount: subgraph?.nodes?.length, edgeCount: subgraph?.edges?.length });
         if (subgraph) {
           const fetchedNodes = subgraph.nodes;
           const fetchedEdges = subgraph.edges;
@@ -99,17 +111,18 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
             entities: subgraph.meta.total_entities,
             edges: subgraph.meta.total_edges,
           });
-          // Auto-select center entity or first node
-          if (graphMode === 'entities' && centerEntityId) {
-            const autoSelect = fetchedNodes.find(n => n.id === centerEntityId);
-            if (autoSelect) setSelectedNode(autoSelect);
+          // Auto-select center node or first node
+          if (centerId) {
+            const centerNode = fetchedNodes.find(n => n.id === centerId);
+            if (centerNode) setSelectedNode(centerNode);
+            else if (fetchedNodes[0]) setSelectedNode(fetchedNodes[0]);
           } else if (fetchedNodes[0]) {
             setSelectedNode(fetchedNodes[0]);
           }
         }
       })
       .finally(() => setLoading(false));
-  }, [open, centerEntityId, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
+  }, [open, centerId, centerType, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
 
   // Resize observer
   useEffect(() => {
@@ -137,42 +150,25 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   }, [open, onClose]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
+    console.log('[GraphViewModal] handleNodeClick', { nodeId: node.id, nodeName: node.name, currentCenterId: centerId, willRecenter: node.id !== centerId });
     if (pathMode) {
       pathFinder.handleNodeSelect(node.id);
       return;
     }
     setSelectedNode(node);
-  }, [pathMode, pathFinder]);
+    // Re-center the subgraph around the clicked node
+    if (node.id !== centerId) {
+      setCenterId(node.id);
+      setCenterType(node.entity_type);
+    }
+  }, [pathMode, pathFinder, centerId]);
 
   const handleCenterEntity = useCallback((entityId: string) => {
-    // If the entity is already in the current graph, just select it
+    // Look up entity_type from current nodes for record mode centering
     const targetNode = nodes.find(n => n.id === entityId);
-    if (targetNode) {
-      setSelectedNode(targetNode);
-      return;
-    }
-    // Otherwise re-fetch subgraph centered on this entity
-    setLoading(true);
-
-    const fetchFn = graphMode === 'records'
-      ? fetchRecordSubgraph({ limit: nodeLimit, centerId: entityId })
-      : fetchSubgraph({ limit: nodeLimit, centerId: entityId });
-
-    fetchFn
-      .then(subgraph => {
-        if (subgraph) {
-          const fetchedNodes = subgraph.nodes;
-          const fetchedEdges = subgraph.edges;
-          if (graphMode === 'records') applyDegree(fetchedNodes, fetchedEdges);
-          setNodes(fetchedNodes);
-          setEdges(fetchedEdges);
-          setStats({ entities: subgraph.meta.total_entities, edges: subgraph.meta.total_edges });
-          const newNode = fetchedNodes.find(n => n.id === entityId);
-          if (newNode) setSelectedNode(newNode);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [nodes, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
+    setCenterId(entityId);
+    setCenterType(targetNode?.entity_type ?? null);
+  }, [nodes]);
 
   const toggleCategory = useCallback((type: string) => {
     setCategoryFilters(prev => ({
@@ -225,7 +221,13 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
             return (
               <button
                 key={mode}
-                onClick={() => setGraphMode(mode)}
+                onClick={() => {
+                  setGraphMode(mode);
+                  setCenterId(null);
+                  setCenterType(null);
+                  setCategoryFilters({});
+                  setSearchQuery('');
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',

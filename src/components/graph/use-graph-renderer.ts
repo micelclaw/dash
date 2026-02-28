@@ -19,6 +19,7 @@ export interface UseGraphRendererParams {
 
 export function useGraphRenderer(params: UseGraphRendererParams) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const heatCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const instanceRef = useRef<D3GraphInstance | null>(null);
 
   // Hover / click overlay state
@@ -68,6 +69,7 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
 
     const instance = createD3Graph({
       svgElement: svgEl,
+      heatCanvas: heatCanvasRef.current,
       width: params.width || 800,
       height: params.height || 600,
       onNodeClick: (node: SimNode) => {
@@ -156,6 +158,7 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
 
   return {
     svgRef,
+    heatCanvasRef,
     hoveredNode,
     hoveredNodePosition: hoveredNodePos,
     clickedEdge,

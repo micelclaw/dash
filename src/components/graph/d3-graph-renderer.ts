@@ -1,7 +1,7 @@
 import * as d3 from 'd3';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 import {
-  entityTypeColor, entityTypeShape, nodeSize, heatColor,
+  entityTypeColor, entityTypeShape, nodeSize, heatColor, heatColorRGB,
   linkColor, linkDashArray, linkStrokeWidth, expandPolygon,
 } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
@@ -25,6 +25,7 @@ export interface SimLink extends d3.SimulationLinkDatum<SimNode> {
 
 export interface D3GraphConfig {
   svgElement: SVGSVGElement;
+  heatCanvas: HTMLCanvasElement | null;
   width: number;
   height: number;
   onNodeClick: (node: SimNode) => void;
@@ -87,6 +88,14 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let currentSearchMatches: Set<string> | null = null;
   let hoveredNodeId: string | null = null;
 
+  // ─── Heat canvas state ────────────────────────────────────────
+  const heatCanvas = config.heatCanvas;
+  const heatCtx = heatCanvas?.getContext('2d') ?? null;
+  let currentZoomTransform = d3.zoomIdentity;
+  let heatRenderThrottleId: number | null = null;
+  const HEAT_SPLAT_RADIUS = 120;
+  const HEAT_BASE_OPACITY = 0.35;
+
   // ─── Init SVG structure ─────────────────────────────────────────
 
   svg.selectAll('*').remove();
@@ -112,6 +121,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     .scaleExtent([0.2, 4])
     .on('zoom', (event) => {
       zoomContainer.attr('transform', event.transform);
+      currentZoomTransform = event.transform;
+      if (currentHeatMode) scheduleHeatRender();
     });
 
   svg.call(zoomBehavior);
@@ -192,6 +203,55 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     });
   }
 
+  // ─── Heat background renderer ──────────────────────────────────
+
+  function scheduleHeatRender() {
+    if (heatRenderThrottleId !== null) return;
+    heatRenderThrottleId = requestAnimationFrame(() => {
+      renderHeatBackground();
+      heatRenderThrottleId = null;
+    });
+  }
+
+  function renderHeatBackground() {
+    if (!heatCtx || !heatCanvas) return;
+
+    const w = heatCanvas.width;
+    const h = heatCanvas.height;
+
+    heatCtx.clearRect(0, 0, w, h);
+
+    if (!currentHeatMode || simNodes.length === 0) return;
+
+    const { x: tx, y: ty, k } = currentZoomTransform;
+    heatCtx.save();
+    heatCtx.setTransform(k, 0, 0, k, tx, ty);
+
+    for (const node of simNodes) {
+      const score = node.heat_score;
+      if (score < 0.01) continue;
+
+      const splatRadius = HEAT_SPLAT_RADIUS + node._r * 2;
+      const rgb = heatColorRGB(score);
+      const alpha = HEAT_BASE_OPACITY * Math.max(0.15, score);
+
+      const gradient = heatCtx.createRadialGradient(
+        node.x, node.y, 0,
+        node.x, node.y, splatRadius,
+      );
+      gradient.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`);
+      gradient.addColorStop(0.4, `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha * 0.5})`);
+      gradient.addColorStop(1, `rgba(${rgb.r},${rgb.g},${rgb.b},0)`);
+
+      heatCtx.fillStyle = gradient;
+      heatCtx.beginPath();
+      heatCtx.arc(node.x, node.y, splatRadius, 0, Math.PI * 2);
+      heatCtx.fill();
+    }
+
+    heatCtx.restore();
+  }
+
   // ─── Tick handler ───────────────────────────────────────────────
 
   function tickHandler() {
@@ -215,6 +275,9 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     if (simulation && simulation.alpha() > 0.001) {
       computeHulls();
     }
+
+    // Update heat background (already inside rAF, call directly)
+    if (currentHeatMode) renderHeatBackground();
   }
 
   // ─── Hull computation ───────────────────────────────────────────
@@ -339,35 +402,51 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     nodeEnter.each(function (d) {
       const g = d3.select(this);
       const r = d._r;
-      const color = currentHeatMode ? heatColor(d.heat_score) : entityTypeColor(d.entity_type);
       const shape: NodeShape = currentHeatMode ? 'circle' : entityTypeShape(d.entity_type);
 
-      // Solid background to occlude edges behind node
-      const bgPath = svgShapePath(shape, r);
-      if (bgPath) {
-        g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
+      // In heat mode, use rgba() directly (heatColor returns rgb() which can't take hex alpha suffix)
+      let color: string;
+      let fill: string;
+      let haloFill: string;
+      if (currentHeatMode) {
+        const rgb = heatColorRGB(d.heat_score);
+        color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
+        haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
       } else {
-        g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+        color = entityTypeColor(d.entity_type);
+        fill = color + '18';
+        haloFill = color + '08';
+      }
+
+      // Solid background to occlude edges behind node (skip in heat mode for transparency)
+      if (!currentHeatMode) {
+        const bgPath = svgShapePath(shape, r);
+        if (bgPath) {
+          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
+        } else {
+          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+        }
       }
 
       // Halo
       const dPath = svgShapePath(shape, r + 6);
       if (dPath) {
         g.append('path').attr('class', 'node-halo')
-          .attr('d', dPath).attr('fill', color + '08').attr('stroke', 'none');
+          .attr('d', dPath).attr('fill', haloFill).attr('stroke', 'none');
       } else {
         g.append('circle').attr('class', 'node-halo')
-          .attr('r', r + 6).attr('fill', color + '08').attr('stroke', 'none');
+          .attr('r', r + 6).attr('fill', haloFill).attr('stroke', 'none');
       }
 
       // Main shape
       const mainPath = svgShapePath(shape, r);
       if (mainPath) {
         g.append('path').attr('class', 'node-shape')
-          .attr('d', mainPath).attr('fill', color + '18').attr('stroke', color).attr('stroke-width', 1.5);
+          .attr('d', mainPath).attr('fill', fill).attr('stroke', color).attr('stroke-width', 1.5);
       } else {
         g.append('circle').attr('class', 'node-shape')
-          .attr('r', r).attr('fill', color + '18').attr('stroke', color).attr('stroke-width', 1.5);
+          .attr('r', r).attr('fill', fill).attr('stroke', color).attr('stroke-width', 1.5);
       }
     });
 
@@ -375,36 +454,51 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     nodeSel.each(function (d) {
       const g = d3.select(this);
       const r = d._r;
-      const color = currentHeatMode ? heatColor(d.heat_score) : entityTypeColor(d.entity_type);
       const shape: NodeShape = currentHeatMode ? 'circle' : entityTypeShape(d.entity_type);
+
+      let color: string;
+      let fill: string;
+      let haloFill: string;
+      if (currentHeatMode) {
+        const rgb = heatColorRGB(d.heat_score);
+        color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
+        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
+        haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
+      } else {
+        color = entityTypeColor(d.entity_type);
+        fill = color + '18';
+        haloFill = color + '08';
+      }
 
       // Rebuild bg + halo + shape on mode change
       g.selectAll('.node-bg, .node-halo, .node-shape').remove();
 
-      // Solid background
-      const bgPath = svgShapePath(shape, r);
-      if (bgPath) {
-        g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
-      } else {
-        g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+      // Solid background (skip in heat mode for transparency)
+      if (!currentHeatMode) {
+        const bgPath = svgShapePath(shape, r);
+        if (bgPath) {
+          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
+        } else {
+          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+        }
       }
 
       const dPath = svgShapePath(shape, r + 6);
       if (dPath) {
         g.append('path').attr('class', 'node-halo')
-          .attr('d', dPath).attr('fill', color + '08').attr('stroke', 'none');
+          .attr('d', dPath).attr('fill', haloFill).attr('stroke', 'none');
       } else {
         g.append('circle').attr('class', 'node-halo')
-          .attr('r', r + 6).attr('fill', color + '08').attr('stroke', 'none');
+          .attr('r', r + 6).attr('fill', haloFill).attr('stroke', 'none');
       }
 
       const mainPath = svgShapePath(shape, r);
       if (mainPath) {
         g.append('path').attr('class', 'node-shape')
-          .attr('d', mainPath).attr('fill', color + '18').attr('stroke', color).attr('stroke-width', 1.5);
+          .attr('d', mainPath).attr('fill', fill).attr('stroke', color).attr('stroke-width', 1.5);
       } else {
         g.append('circle').attr('class', 'node-shape')
-          .attr('r', r).attr('fill', color + '18').attr('stroke', color).attr('stroke-width', 1.5);
+          .attr('r', r).attr('fill', fill).attr('stroke', color).attr('stroke-width', 1.5);
       }
     });
 
@@ -424,12 +518,13 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     // ── Labels ──
     const nodeCount = simNodes.length;
     const showLabels = !currentHideLabels && nodeCount <= LABEL_HIDE_THRESHOLD;
-    labelGroup.attr('display', showLabels ? null : 'none');
 
     const labelSel = labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
       .data(simNodes, d => d.id);
 
     labelSel.exit().remove();
+
+    const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max) + '...' : s;
 
     labelSel.enter().append('text')
       .attr('class', 'node-label')
@@ -438,12 +533,13 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .attr('font-family', 'var(--font-sans)')
       .attr('pointer-events', 'none')
       .merge(labelSel)
-      .text(d => d.name)
+      .text(d => currentHideLabels ? truncate(d.name, 18) : d.name)
       .attr('fill', d => {
         if (currentSearchMatches !== null && !currentSearchMatches.has(d.id)) return 'rgba(255,255,255,0.15)';
         return 'rgba(255,255,255,0.7)';
       })
       .attr('opacity', d => {
+        if (!showLabels) return 0;
         if (currentHighlightNodeIds.size > 0 && !currentHighlightNodeIds.has(d.id)) return 0.15;
         return 1;
       });
@@ -473,23 +569,16 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       });
 
     labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
-      .attr('opacity', d => connectedIds.has(d.id) ? 0.9 : 0.1);
+      .attr('opacity', d => {
+        if (currentHideLabels || simNodes.length > LABEL_HIDE_THRESHOLD) return 0;
+        return connectedIds.has(d.id) ? 0.9 : 0.1;
+      });
 
-    // Show label for hovered node even when labels are hidden
+    // Show temp labels for hovered node + connections when labels are hidden
     if (currentHideLabels || simNodes.length > LABEL_HIDE_THRESHOLD) {
-      const hNode = simNodes.find(n => n.id === nodeId);
-      if (hNode) {
-        const tempLabel = labelGroup.append('text')
-          .attr('class', 'node-label-hover')
-          .attr('x', hNode.x)
-          .attr('y', hNode.y + hNode._r + 12)
-          .text(hNode.name)
-          .attr('text-anchor', 'middle')
-          .attr('font-size', '10px')
-          .attr('font-family', 'var(--font-sans)')
-          .attr('fill', 'rgba(255,255,255,0.9)')
-          .attr('pointer-events', 'none');
-        // Also show connected node labels
+      const trunc = (s: string) => currentHideLabels ? (s.length > 18 ? s.slice(0, 18) + '...' : s) : s;
+      // Only show labels for connected nodes (hovered node already has tooltip)
+      {
         for (const id of connectedIds) {
           if (id === nodeId) continue;
           const n = simNodes.find(nn => nn.id === id);
@@ -497,7 +586,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
             labelGroup.append('text')
               .attr('class', 'node-label-hover')
               .attr('x', n.x).attr('y', n.y + n._r + 12)
-              .text(n.name)
+              .text(trunc(n.name))
               .attr('text-anchor', 'middle')
               .attr('font-size', '10px')
               .attr('font-family', 'var(--font-sans)')
@@ -505,8 +594,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
               .attr('pointer-events', 'none');
           }
         }
-        // suppress unused var warning
-        void tempLabel;
       }
     }
   }
@@ -540,6 +627,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   // ─── Public API ─────────────────────────────────────────────────
 
   function update(params: D3GraphUpdateParams) {
+    const prevHeatMode = currentHeatMode;
     currentHeatMode = params.heatMapMode;
     currentShowHulls = params.showHulls;
     currentHideLabels = params.hideLabels;
@@ -579,12 +667,23 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       simulation.stop();
       simNodes.forEach(n => { n.fx = n.x; n.fy = n.y; });
     }
+
+    // Heat background: clear when toggled off, render when on
+    if (!currentHeatMode && prevHeatMode && heatCtx && heatCanvas) {
+      heatCtx.clearRect(0, 0, heatCanvas.width, heatCanvas.height);
+    }
+    if (currentHeatMode) scheduleHeatRender();
   }
 
   function resize(w: number, h: number) {
     width = w;
     height = h;
     svg.attr('width', width).attr('height', height);
+    if (heatCanvas) {
+      heatCanvas.width = w;
+      heatCanvas.height = h;
+      if (currentHeatMode) scheduleHeatRender();
+    }
     if (simulation) {
       const centerForce = simulation.force('center') as d3.ForceCenter<SimNode> | undefined;
       if (centerForce) centerForce.x(width / 2).y(height / 2);
@@ -638,7 +737,11 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
   function destroy() {
     if (frameId !== null) cancelAnimationFrame(frameId);
+    if (heatRenderThrottleId !== null) cancelAnimationFrame(heatRenderThrottleId);
     if (simulation) simulation.stop();
+    if (heatCtx && heatCanvas) {
+      heatCtx.clearRect(0, 0, heatCanvas.width, heatCanvas.height);
+    }
     svg.selectAll('*').remove();
     svg.on('.zoom', null);
   }

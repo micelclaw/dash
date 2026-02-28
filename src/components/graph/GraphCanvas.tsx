@@ -31,6 +31,7 @@ export function GraphCanvas({
 }: GraphCanvasProps) {
   const {
     svgRef,
+    heatCanvasRef,
     hoveredNode,
     hoveredNodePosition,
     clickedEdge,
@@ -54,11 +55,24 @@ export function GraphCanvas({
 
   return (
     <div style={{ width, height, position: 'relative', overflow: 'hidden' }}>
+      <canvas
+        ref={heatCanvasRef}
+        width={width}
+        height={height}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width,
+          height,
+          pointerEvents: 'none',
+        }}
+      />
       <svg
         ref={svgRef}
         width={width}
         height={height}
-        style={{ display: 'block', background: 'transparent' }}
+        style={{ display: 'block', background: 'transparent', position: 'relative' }}
       />
 
       {/* Overlays */}

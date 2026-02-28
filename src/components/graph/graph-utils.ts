@@ -30,6 +30,24 @@ export function heatColor(score: number): string {
   return '#dc2626';
 }
 
+/** Same interpolation as heatColor but returns numeric {r,g,b} for canvas rgba() usage. */
+export function heatColorRGB(score: number): { r: number; g: number; b: number } {
+  const s = Math.max(0, Math.min(1, score));
+  for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
+    const a = HEAT_STOPS[i]!;
+    const b = HEAT_STOPS[i + 1]!;
+    if (s >= a.t && s <= b.t) {
+      const t = (s - a.t) / (b.t - a.t);
+      return {
+        r: Math.round(lerp(a.r, b.r, t)),
+        g: Math.round(lerp(a.g, b.g, t)),
+        b: Math.round(lerp(a.b, b.b, t)),
+      };
+    }
+  }
+  return { r: 220, g: 38, b: 38 };
+}
+
 const TYPE_COLORS: Record<string, string> = {
   // Entity types
   person: '#60a5fa',
