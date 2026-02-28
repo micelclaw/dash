@@ -16,7 +16,9 @@ interface GraphDetailPanelProps {
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
   onCenterEntity: (entityId: string) => void;
+  onEntityHover?: (entityId: string | null) => void;
   onNavigateAway?: () => void;
+  mode?: 'entities' | 'records';
 }
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -75,7 +77,7 @@ interface MentionsResponse {
   };
 }
 
-export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onNavigateAway }: GraphDetailPanelProps) {
+export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onEntityHover, onNavigateAway, mode = 'entities' }: GraphDetailPanelProps) {
   const navigate = useNavigate();
   const [mentionGroups, setMentionGroups] = useState<MentionGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,9 +119,12 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
     return neighbors.sort((a, b) => b.weight - a.weight);
   }, [node?.id, graphNodes, graphEdges]);
 
-  // Mentions — fetched from API
+  // Mentions — fetched from API (entity mode only)
   useEffect(() => {
-    if (!node) return;
+    if (!node || mode === 'records') {
+      setMentionGroups([]);
+      return;
+    }
     setLoading(true);
     api.get<MentionsResponse>(`/graph/entities/${node.id}`)
       .then(res => {
@@ -138,7 +143,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
       })
       .catch(() => setMentionGroups([]))
       .finally(() => setLoading(false));
-  }, [node?.id]);
+  }, [node?.id, mode]);
 
   const toggleDomain = (domain: string) => {
     setExpandedDomains(prev => {
@@ -166,8 +171,14 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
     );
   }
 
-  const Icon = TYPE_ICONS[node.entity_type] ?? Hash;
-  const color = entityTypeColor(node.entity_type);
+  const isRecordMode = mode === 'records';
+  const domainMeta = isRecordMode ? DOMAIN_META[node.entity_type] : null;
+  const Icon = isRecordMode
+    ? (domainMeta?.icon ?? Hash)
+    : (TYPE_ICONS[node.entity_type] ?? Hash);
+  const color = isRecordMode
+    ? (domainMeta?.color ?? entityTypeColor(node.entity_type))
+    : entityTypeColor(node.entity_type);
 
   const visibleConnected = showAllConnected
     ? connectedEntities
@@ -231,7 +242,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
               {node.mention_count}
             </div>
-            Mentions
+            {isRecordMode ? 'Connections' : 'Mentions'}
           </div>
           <div>
             <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
@@ -241,8 +252,26 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
           </div>
         </div>
 
-        {/* Aliases */}
-        {(node.aliases?.length ?? 0) > 0 && (
+        {/* View record button (record mode) */}
+        {isRecordMode && domainMeta && (
+          <button
+            onClick={() => { onNavigateAway?.(); navigate(`${domainMeta.route}?id=${node.id}`); }}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              width: '100%', padding: '6px 12px', marginBottom: 16,
+              background: `${color}18`, border: `1px solid ${color}40`,
+              borderRadius: 6, cursor: 'pointer',
+              fontSize: '0.75rem', fontWeight: 500, color,
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Icon size={14} />
+            View {node.entity_type}
+          </button>
+        )}
+
+        {/* Aliases (entity mode only) */}
+        {!isRecordMode && (node.aliases?.length ?? 0) > 0 && (
           <div style={{ marginBottom: 16 }}>
             <div style={{
               fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
@@ -275,8 +304,8 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
           </div>
         ) : (
           <>
-            {/* ── Mentioned in (FIRST) ── */}
-            {mentionGroups.length > 0 && (
+            {/* ── Mentioned in (FIRST, entity mode only) ── */}
+            {!isRecordMode && mentionGroups.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{
                   fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
@@ -388,18 +417,23 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
               </div>
             )}
 
-            {/* ── Connected Entities (SECOND) ── */}
+            {/* ── Connected Entities / Records ── */}
             {connectedEntities.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <div style={{
                   fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)',
                   textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6,
                 }}>
-                  Connected entities
+                  {isRecordMode ? 'Connected records' : 'Connected entities'}
                 </div>
                 {visibleConnected.map(entity => {
-                  const EntityIcon = TYPE_ICONS[entity.entity_type] ?? Hash;
-                  const entityColor = entityTypeColor(entity.entity_type);
+                  const entityDomainMeta = isRecordMode ? DOMAIN_META[entity.entity_type] : null;
+                  const EntityIcon = isRecordMode
+                    ? (entityDomainMeta?.icon ?? Hash)
+                    : (TYPE_ICONS[entity.entity_type] ?? Hash);
+                  const entityColor = isRecordMode
+                    ? (entityDomainMeta?.color ?? entityTypeColor(entity.entity_type))
+                    : entityTypeColor(entity.entity_type);
                   return (
                     <button
                       key={entity.id}
@@ -411,8 +445,8 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                         fontSize: '0.8125rem', color: 'var(--text)',
                         fontFamily: 'var(--font-sans)', textAlign: 'left',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.color = 'var(--amber)'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text)'}
+                      onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; onEntityHover?.(entity.id); }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text)'; onEntityHover?.(null); }}
                     >
                       <EntityIcon size={14} style={{ color: entityColor, flexShrink: 0 }} />
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -445,12 +479,12 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             )}
 
             {/* Empty state */}
-            {connectedEntities.length === 0 && mentionGroups.length === 0 && (
+            {connectedEntities.length === 0 && (isRecordMode || mentionGroups.length === 0) && (
               <div style={{
                 fontSize: '0.75rem', color: 'var(--text-muted)',
                 textAlign: 'center', padding: '12px 0',
               }}>
-                No connections or mentions found
+                {isRecordMode ? 'No connected records found' : 'No connections or mentions found'}
               </div>
             )}
           </>
