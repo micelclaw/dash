@@ -5,7 +5,6 @@ import { GraphCanvas } from './GraphCanvas';
 import { GraphDetailPanel } from './GraphDetailPanel';
 import { GraphSearchInput } from './GraphSearchInput';
 import { GraphCategoryFilters } from './GraphCategoryFilters';
-import { GraphPathFinder } from './GraphPathFinder';
 import { GraphHeatMapToggle } from './GraphHeatMapToggle';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 
@@ -38,7 +37,6 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
   const [heatMapMode, setHeatMapMode] = useState(false);
-  const [pathMode, setPathMode] = useState(false);
   const [highlightNodeIds, setHighlightNodeIds] = useState<Set<string>>(new Set());
   const [highlightEdgeIds, setHighlightEdgeIds] = useState<Set<string>>(new Set());
   const [categoryFilters, setCategoryFilters] = useState<Record<string, boolean>>({});
@@ -51,20 +49,6 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   // Click state
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [detailHoverEntityId, setDetailHoverEntityId] = useState<string | null>(null);
-
-  // Path finder
-  const pathFinder = GraphPathFinder({
-    active: pathMode,
-    onToggle: () => setPathMode(p => !p),
-    onPathFound: (nodeIds, edgeIds) => {
-      setHighlightNodeIds(new Set(nodeIds));
-      setHighlightEdgeIds(new Set(edgeIds));
-    },
-    onClearPath: () => {
-      setHighlightNodeIds(new Set());
-      setHighlightEdgeIds(new Set());
-    },
-  });
 
   // Compute degree centrality for record mode nodes
   const applyDegree = (graphNodes: GraphNode[], graphEdges: GraphEdge[]) => {
@@ -81,7 +65,6 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   // Load subgraph — re-runs when center, limit, or mode changes
   useEffect(() => {
     if (!open) return;
-    console.log('[GraphViewModal] fetchEffect firing', { centerId, centerType, graphMode, nodeLimit });
     setLoading(true);
     setHighlightNodeIds(new Set());
     setHighlightEdgeIds(new Set());
@@ -96,7 +79,6 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
     fetchFn
       .then(subgraph => {
-        console.log('[GraphViewModal] subgraph received', { nodeCount: subgraph?.nodes?.length, edgeCount: subgraph?.edges?.length });
         if (subgraph) {
           const fetchedNodes = subgraph.nodes;
           const fetchedEdges = subgraph.edges;
@@ -150,18 +132,13 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   }, [open, onClose]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
-    console.log('[GraphViewModal] handleNodeClick', { nodeId: node.id, nodeName: node.name, currentCenterId: centerId, willRecenter: node.id !== centerId });
-    if (pathMode) {
-      pathFinder.handleNodeSelect(node.id);
-      return;
-    }
     setSelectedNode(node);
     // Re-center the subgraph around the clicked node
     if (node.id !== centerId) {
       setCenterId(node.id);
       setCenterType(node.entity_type);
     }
-  }, [pathMode, pathFinder, centerId]);
+  }, [centerId]);
 
   const handleCenterEntity = useCallback((entityId: string) => {
     // Look up entity_type from current nodes for record mode centering
@@ -254,7 +231,6 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
         <GraphSearchInput value={searchQuery} onChange={setSearchQuery} />
         <GraphCategoryFilters enabled={categoryFilters} onToggle={toggleCategory} mode={graphMode} />
-        {pathFinder.ui}
         <GraphHeatMapToggle active={heatMapMode} onToggle={() => setHeatMapMode(p => !p)} />
 
         <button
