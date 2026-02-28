@@ -1,21 +1,28 @@
-import { TYPE_COLORS, entityTypeShape, linkColor, linkDashArray } from './graph-utils';
+import { entityTypeColor, entityTypeShape, linkColor, linkDashArray } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
 
 interface GraphLegendProps {
   heatMapMode: boolean;
+  mode?: 'entities' | 'records';
 }
 
-const ENTITY_TYPES = Object.keys(TYPE_COLORS);
+const ENTITY_TYPE_LIST = ['person', 'project', 'location', 'topic', 'organization', 'event'];
+const RECORD_TYPE_LIST = ['contact', 'note', 'email', 'event', 'file', 'diary'];
 
-const LINK_TYPES = [
+const ENTITY_LINK_TYPES = [
   { key: 'manual', label: 'Manual' },
   { key: 'extracted', label: 'Extracted' },
   { key: 'inferred', label: 'Inferred' },
   { key: 'structural', label: 'Structural' },
 ];
 
+const RECORD_LINK_TYPES = [
+  { key: 'entity_link', label: 'Direct link' },
+  { key: 'co_entity', label: 'Shared entities' },
+];
+
 function ShapeSwatch({ entityType }: { entityType: string }) {
-  const color = TYPE_COLORS[entityType] ?? '#94a3b8';
+  const color = entityTypeColor(entityType);
   const shape = entityTypeShape(entityType);
   const r = 6;
   const path = svgShapePath(shape, r);
@@ -47,7 +54,11 @@ function LinkSwatch({ linkType }: { linkType: string }) {
   );
 }
 
-export function GraphLegend({ heatMapMode }: GraphLegendProps) {
+export function GraphLegend({ heatMapMode, mode = 'entities' }: GraphLegendProps) {
+  const isRecords = mode === 'records';
+  const typeList = isRecords ? RECORD_TYPE_LIST : ENTITY_TYPE_LIST;
+  const linkTypes = isRecords ? RECORD_LINK_TYPES : ENTITY_LINK_TYPES;
+
   return (
     <div style={{
       position: 'absolute',
@@ -82,10 +93,10 @@ export function GraphLegend({ heatMapMode }: GraphLegendProps) {
       ) : (
         <>
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
-            Entity Types
+            {isRecords ? 'Record Types' : 'Entity Types'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {ENTITY_TYPES.map(type => (
+            {typeList.map(type => (
               <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <ShapeSwatch entityType={type} />
                 <span style={{ textTransform: 'capitalize' }}>{type}</span>
@@ -99,7 +110,7 @@ export function GraphLegend({ heatMapMode }: GraphLegendProps) {
             Link Types
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            {LINK_TYPES.map(({ key, label }) => (
+            {linkTypes.map(({ key, label }) => (
               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <LinkSwatch linkType={key} />
                 <span>{label}</span>

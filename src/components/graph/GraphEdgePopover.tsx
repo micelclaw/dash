@@ -66,17 +66,40 @@ export function GraphEdgePopover({ edge, position, onClose }: GraphEdgePopoverPr
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>Type:</span>
             <LinkStylePreview linkType={edge.link_type} />
-            <span style={{ color: 'var(--text)' }}>{edge.link_type}</span>
+            <span style={{ color: 'var(--text)' }}>
+              {edge.link_type === 'entity_link' ? 'Direct link' : edge.link_type === 'co_entity' ? 'Shared entities' : edge.link_type}
+            </span>
           </div>
-          {edge.confidence != null && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span>Confidence:</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
-                {(edge.confidence * 100).toFixed(0)}%
-              </span>
-            </div>
+          {/* Entity mode: show confidence, strength, heat as before */}
+          {edge.link_type !== 'entity_link' && edge.link_type !== 'co_entity' && (
+            <>
+              {edge.confidence != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>Confidence:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                    {(edge.confidence * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              {edge.strength != null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>Strength:</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                    {(edge.strength * 100).toFixed(0)}%
+                  </span>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>Heat:</span>
+                <HeatBadge score={edge.heat_edge} size={6} />
+                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
+                  {(edge.heat_edge * 100).toFixed(0)}%
+                </span>
+              </div>
+            </>
           )}
-          {edge.strength != null && (
+          {/* Co-entity mode: show strength only (shared entity count) */}
+          {edge.link_type === 'co_entity' && edge.strength != null && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span>Strength:</span>
               <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
@@ -84,13 +107,6 @@ export function GraphEdgePopover({ edge, position, onClose }: GraphEdgePopoverPr
               </span>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span>Heat:</span>
-            <HeatBadge score={edge.heat_edge} size={6} />
-            <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>
-              {(edge.heat_edge * 100).toFixed(0)}%
-            </span>
-          </div>
         </div>
       </div>
     </>

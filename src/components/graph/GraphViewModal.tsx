@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Maximize2 } from 'lucide-react';
+import { X, Maximize2, Network, FileText } from 'lucide-react';
 import { useIntelligenceStore } from '@/stores/intelligence.store';
 import { GraphCanvas } from './GraphCanvas';
 import { GraphDetailPanel } from './GraphDetailPanel';
@@ -8,6 +8,8 @@ import { GraphCategoryFilters } from './GraphCategoryFilters';
 import { GraphPathFinder } from './GraphPathFinder';
 import { GraphHeatMapToggle } from './GraphHeatMapToggle';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
+
+type GraphMode = 'entities' | 'records';
 
 interface GraphViewModalProps {
   open: boolean;
@@ -18,6 +20,7 @@ interface GraphViewModalProps {
 export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fetchSubgraph = useIntelligenceStore(s => s.fetchSubgraph);
+  const fetchRecordSubgraph = useIntelligenceStore(s => s.fetchRecordSubgraph);
 
   // Data
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -26,6 +29,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [stats, setStats] = useState<{ entities: number; edges: number }>({ entities: 0, edges: 0 });
 
   // UI state
+  const [graphMode, setGraphMode] = useState<GraphMode>('entities');
   const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
   const [heatMapMode, setHeatMapMode] = useState(false);
@@ -53,28 +57,59 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     },
   });
 
+  // Compute degree centrality for record mode nodes
+  const applyDegree = (graphNodes: GraphNode[], graphEdges: GraphEdge[]) => {
+    const degree = new Map<string, number>();
+    for (const e of graphEdges) {
+      degree.set(e.source_id, (degree.get(e.source_id) || 0) + 1);
+      degree.set(e.target_id, (degree.get(e.target_id) || 0) + 1);
+    }
+    for (const n of graphNodes) {
+      n.mention_count = degree.get(n.id) || 0;
+    }
+  };
+
   // Load subgraph
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetchSubgraph({ limit: nodeLimit, centerId: centerEntityId })
+    setSelectedNode(null);
+    setCategoryFilters({});
+    setSearchQuery('');
+    setHighlightNodeIds(new Set());
+    setHighlightEdgeIds(new Set());
+
+    const fetchFn = graphMode === 'records'
+      ? fetchRecordSubgraph({ limit: nodeLimit })
+      : fetchSubgraph({ limit: nodeLimit, centerId: centerEntityId });
+
+    fetchFn
       .then(subgraph => {
         if (subgraph) {
-          setNodes(subgraph.nodes);
-          setEdges(subgraph.edges);
+          const fetchedNodes = subgraph.nodes;
+          const fetchedEdges = subgraph.edges;
+
+          if (graphMode === 'records') {
+            applyDegree(fetchedNodes, fetchedEdges);
+          }
+
+          setNodes(fetchedNodes);
+          setEdges(fetchedEdges);
           setStats({
             entities: subgraph.meta.total_entities,
             edges: subgraph.meta.total_edges,
           });
-          // Auto-select the center entity or first node
-          const autoSelect = centerEntityId
-            ? subgraph.nodes.find(n => n.id === centerEntityId)
-            : subgraph.nodes[0];
-          if (autoSelect) setSelectedNode(autoSelect);
+          // Auto-select center entity or first node
+          if (graphMode === 'entities' && centerEntityId) {
+            const autoSelect = fetchedNodes.find(n => n.id === centerEntityId);
+            if (autoSelect) setSelectedNode(autoSelect);
+          } else if (fetchedNodes[0]) {
+            setSelectedNode(fetchedNodes[0]);
+          }
         }
       })
       .finally(() => setLoading(false));
-  }, [open, centerEntityId, nodeLimit, fetchSubgraph]);
+  }, [open, centerEntityId, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
 
   // Resize observer
   useEffect(() => {
@@ -118,18 +153,26 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     }
     // Otherwise re-fetch subgraph centered on this entity
     setLoading(true);
-    fetchSubgraph({ limit: nodeLimit, centerId: entityId })
+
+    const fetchFn = graphMode === 'records'
+      ? fetchRecordSubgraph({ limit: nodeLimit, centerId: entityId })
+      : fetchSubgraph({ limit: nodeLimit, centerId: entityId });
+
+    fetchFn
       .then(subgraph => {
         if (subgraph) {
-          setNodes(subgraph.nodes);
-          setEdges(subgraph.edges);
+          const fetchedNodes = subgraph.nodes;
+          const fetchedEdges = subgraph.edges;
+          if (graphMode === 'records') applyDegree(fetchedNodes, fetchedEdges);
+          setNodes(fetchedNodes);
+          setEdges(fetchedEdges);
           setStats({ entities: subgraph.meta.total_entities, edges: subgraph.meta.total_edges });
-          const newNode = subgraph.nodes.find(n => n.id === entityId);
+          const newNode = fetchedNodes.find(n => n.id === entityId);
           if (newNode) setSelectedNode(newNode);
         }
       })
       .finally(() => setLoading(false));
-  }, [nodes, nodeLimit, fetchSubgraph]);
+  }, [nodes, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
 
   const toggleCategory = useCallback((type: string) => {
     setCategoryFilters(prev => ({
@@ -139,6 +182,9 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   }, []);
 
   if (!open) return null;
+
+  const isRecords = graphMode === 'records';
+  const modeLabel = isRecords ? 'records' : 'entities';
 
   return (
     <div style={{
@@ -165,10 +211,47 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
           Knowledge Graph
         </span>
 
+        {/* Mode toggle */}
+        <div style={{
+          display: 'flex',
+          borderRadius: 6,
+          border: '1px solid var(--border)',
+          overflow: 'hidden',
+          marginLeft: 8,
+        }}>
+          {(['entities', 'records'] as const).map(mode => {
+            const active = graphMode === mode;
+            const ModeIcon = mode === 'entities' ? Network : FileText;
+            return (
+              <button
+                key={mode}
+                onClick={() => setGraphMode(mode)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '3px 10px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '0.6875rem',
+                  fontWeight: active ? 600 : 400,
+                  fontFamily: 'var(--font-sans)',
+                  background: active ? 'var(--amber)' : 'transparent',
+                  color: active ? 'var(--bg)' : 'var(--text-muted)',
+                  textTransform: 'capitalize',
+                }}
+              >
+                <ModeIcon size={12} />
+                {mode}
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ flex: 1 }} />
 
         <GraphSearchInput value={searchQuery} onChange={setSearchQuery} />
-        <GraphCategoryFilters enabled={categoryFilters} onToggle={toggleCategory} />
+        <GraphCategoryFilters enabled={categoryFilters} onToggle={toggleCategory} mode={graphMode} />
         {pathFinder.ui}
         <GraphHeatMapToggle active={heatMapMode} onToggle={() => setHeatMapMode(p => !p)} />
 
@@ -202,7 +285,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               color: 'var(--text-muted)', fontSize: '0.875rem',
             }}>
               <Maximize2 size={32} style={{ opacity: 0.3 }} />
-              No entities in graph yet
+              {isRecords ? 'No connected records found' : 'No entities in graph yet'}
             </div>
           ) : (
             <GraphCanvas
@@ -217,6 +300,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               externalHoverNodeId={detailHoverEntityId}
               width={dimensions.width}
               height={dimensions.height}
+              mode={graphMode}
             />
           )}
         </div>
@@ -229,6 +313,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
           onCenterEntity={handleCenterEntity}
           onEntityHover={setDetailHoverEntityId}
           onNavigateAway={onClose}
+          mode={graphMode}
         />
       </div>
 
@@ -244,7 +329,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         color: 'var(--text-muted)',
         flexShrink: 0,
       }}>
-        <span>{stats.entities} entities</span>
+        <span>{stats.entities} {modeLabel}</span>
         <span>{stats.edges} connections</span>
         <span>Showing {nodes.length} of {stats.entities}</span>
         {heatMapMode && <span style={{ color: '#f43f5e' }}>Heat map</span>}

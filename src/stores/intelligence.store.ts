@@ -33,6 +33,7 @@ interface IntelligenceState {
   mergeEntities: (keepId: string, mergeId: string) => Promise<void>;
   cleanupOrphans: () => Promise<{ deleted_count: number }>;
   fetchSubgraph: (opts?: { limit?: number; centerId?: string }) => Promise<GraphSubgraph>;
+  fetchRecordSubgraph: (opts?: { limit?: number; centerId?: string; centerType?: string }) => Promise<GraphSubgraph>;
 }
 
 export const useIntelligenceStore = create<IntelligenceState>()((set, get) => ({
@@ -137,6 +138,20 @@ export const useIntelligenceStore = create<IntelligenceState>()((set, get) => ({
       if (opts?.centerId) params.set('center_entity_id', opts.centerId);
       const qs = params.toString() ? `?${params}` : '';
       const res = await api.get<{ data: GraphSubgraph }>(`/graph/subgraph${qs}`);
+      return (res as any).data ?? res;
+    } catch {
+      return { nodes: [], edges: [], meta: { total_entities: 0, total_edges: 0, returned_entities: 0, returned_edges: 0 } };
+    }
+  },
+
+  fetchRecordSubgraph: async (opts) => {
+    try {
+      const params = new URLSearchParams();
+      if (opts?.limit) params.set('limit', String(opts.limit));
+      if (opts?.centerId) params.set('center_record_id', opts.centerId);
+      if (opts?.centerType) params.set('center_record_type', opts.centerType);
+      const qs = params.toString() ? `?${params}` : '';
+      const res = await api.get<{ data: GraphSubgraph }>(`/graph/record-subgraph${qs}`);
       return (res as any).data ?? res;
     } catch {
       return { nodes: [], edges: [], meta: { total_entities: 0, total_edges: 0, returned_entities: 0, returned_edges: 0 } };

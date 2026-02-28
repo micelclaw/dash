@@ -14,6 +14,7 @@ export interface UseGraphRendererParams {
   externalHoverNodeId?: string | null;
   width: number;
   height: number;
+  hideLabels?: boolean;
 }
 
 export function useGraphRenderer(params: UseGraphRendererParams) {
@@ -106,6 +107,7 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
       edges: params.edges,
       heatMapMode: params.heatMapMode,
       showHulls,
+      hideLabels: params.hideLabels ?? false,
       highlightNodeIds: params.highlightNodeIds,
       highlightEdgeIds: params.highlightEdgeIds,
       searchMatches,
@@ -114,7 +116,7 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
   }, [
     params.nodes, params.edges, params.heatMapMode,
     params.highlightNodeIds, params.highlightEdgeIds,
-    searchMatches, visibleNodeIds, showHulls,
+    searchMatches, visibleNodeIds, showHulls, params.hideLabels,
   ]);
 
   // ── External hover (from detail panel) ──────────────────────────────

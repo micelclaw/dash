@@ -1,13 +1,17 @@
-import { User, Briefcase, MapPin, Hash, Building2, Calendar } from 'lucide-react';
+import {
+  User, Briefcase, MapPin, Hash, Building2, Calendar,
+  StickyNote, Mail, FolderOpen, BookOpen,
+} from 'lucide-react';
 import { entityTypeColor } from './graph-utils';
 import type { LucideIcon } from 'lucide-react';
 
 interface GraphCategoryFiltersProps {
   enabled: Record<string, boolean>;
   onToggle: (type: string) => void;
+  mode?: 'entities' | 'records';
 }
 
-const CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
+const ENTITY_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
   { type: 'person', label: 'People', icon: User },
   { type: 'project', label: 'Projects', icon: Briefcase },
   { type: 'location', label: 'Locations', icon: MapPin },
@@ -16,10 +20,21 @@ const CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
   { type: 'event', label: 'Events', icon: Calendar },
 ];
 
-export function GraphCategoryFilters({ enabled, onToggle }: GraphCategoryFiltersProps) {
+const RECORD_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
+  { type: 'contact', label: 'Contacts', icon: User },
+  { type: 'note', label: 'Notes', icon: StickyNote },
+  { type: 'email', label: 'Emails', icon: Mail },
+  { type: 'event', label: 'Events', icon: Calendar },
+  { type: 'file', label: 'Files', icon: FolderOpen },
+  { type: 'diary', label: 'Diary', icon: BookOpen },
+];
+
+export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: GraphCategoryFiltersProps) {
+  const categories = mode === 'records' ? RECORD_CATEGORIES : ENTITY_CATEGORIES;
+
   return (
     <div style={{ display: 'flex', gap: 4 }}>
-      {CATEGORIES.map(({ type, label, icon: Icon }) => {
+      {categories.map(({ type, label, icon: Icon }) => {
         const isOn = enabled[type] !== false; // default true
         const color = entityTypeColor(type);
         return (

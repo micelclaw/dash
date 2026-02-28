@@ -17,6 +17,7 @@ interface GraphCanvasProps {
   externalHoverNodeId?: string | null;
   width: number;
   height: number;
+  mode?: 'entities' | 'records';
 }
 
 export function GraphCanvas({
@@ -26,6 +27,7 @@ export function GraphCanvas({
   onNodeClick,
   externalHoverNodeId,
   width, height,
+  mode = 'entities',
 }: GraphCanvasProps) {
   const {
     svgRef,
@@ -47,6 +49,7 @@ export function GraphCanvas({
     searchQuery, categoryFilters,
     onNodeClick, externalHoverNodeId,
     width, height,
+    hideLabels: mode === 'records',
   });
 
   return (
@@ -70,7 +73,7 @@ export function GraphCanvas({
         onToggleHulls={toggleHulls}
         showHulls={showHulls}
       />
-      <GraphLegend heatMapMode={heatMapMode} />
+      <GraphLegend heatMapMode={heatMapMode} mode={mode} />
     </div>
   );
 }

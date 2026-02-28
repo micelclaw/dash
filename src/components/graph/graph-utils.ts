@@ -31,12 +31,19 @@ export function heatColor(score: number): string {
 }
 
 const TYPE_COLORS: Record<string, string> = {
+  // Entity types
   person: '#60a5fa',
   project: '#a78bfa',
   location: '#34d399',
   topic: '#fbbf24',
   organization: '#f472b6',
   event: '#fb923c',
+  // Record types
+  contact: '#ec4899',
+  note:    '#8b5cf6',
+  email:   '#06b6d4',
+  file:    '#84cc16',
+  diary:   '#f43f5e',
 };
 
 export function entityTypeColor(entityType: string): string {
@@ -54,12 +61,19 @@ export type NodeShape = 'circle' | 'diamond' | 'square' | 'triangle' | 'hexagon'
 
 export function entityTypeShape(entityType: string): NodeShape {
   switch (entityType) {
+    // Entity types
     case 'person': return 'circle';
     case 'project': return 'square';
     case 'location': return 'diamond';
     case 'topic': return 'hexagon';
     case 'organization': return 'octagon';
     case 'event': return 'triangle';
+    // Record types
+    case 'contact': return 'circle';
+    case 'note':    return 'square';
+    case 'email':   return 'diamond';
+    case 'file':    return 'triangle';
+    case 'diary':   return 'octagon';
     default: return 'circle';
   }
 }
@@ -134,6 +148,8 @@ export function linkColor(linkType: string, targetNodeType?: string): string {
     case 'extracted': return targetNodeType ? entityTypeColor(targetNodeType) : '#94a3b8';
     case 'inferred': return '#64748b';
     case 'structural': return '#10b981';
+    case 'entity_link': return '#fbbf24';  // amber — direct record-to-record link
+    case 'co_entity':   return '#a78bfa';  // purple — shared extracted entity
     default: return '#94a3b8';
   }
 }

@@ -37,6 +37,7 @@ export interface D3GraphUpdateParams {
   edges: GraphEdge[];
   heatMapMode: boolean;
   showHulls: boolean;
+  hideLabels: boolean;
   highlightNodeIds: Set<string>;
   highlightEdgeIds: Set<string>;
   searchMatches: Set<string> | null;
@@ -80,6 +81,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let frameId: number | null = null;
   let currentHeatMode = false;
   let currentShowHulls = false;
+  let currentHideLabels = false;
   let currentHighlightNodeIds = new Set<string>();
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
@@ -421,7 +423,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     // ── Labels ──
     const nodeCount = simNodes.length;
-    const showLabels = nodeCount <= LABEL_HIDE_THRESHOLD;
+    const showLabels = !currentHideLabels && nodeCount <= LABEL_HIDE_THRESHOLD;
     labelGroup.attr('display', showLabels ? null : 'none');
 
     const labelSel = labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
@@ -474,7 +476,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .attr('opacity', d => connectedIds.has(d.id) ? 0.9 : 0.1);
 
     // Show label for hovered node even when labels are hidden
-    if (simNodes.length > LABEL_HIDE_THRESHOLD) {
+    if (currentHideLabels || simNodes.length > LABEL_HIDE_THRESHOLD) {
       const hNode = simNodes.find(n => n.id === nodeId);
       if (hNode) {
         const tempLabel = labelGroup.append('text')
@@ -529,6 +531,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
       .attr('opacity', d => {
+        if (currentHideLabels) return 0;
         if (currentHighlightNodeIds.size > 0 && !currentHighlightNodeIds.has(d.id)) return 0.15;
         return 1;
       });
@@ -539,6 +542,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   function update(params: D3GraphUpdateParams) {
     currentHeatMode = params.heatMapMode;
     currentShowHulls = params.showHulls;
+    currentHideLabels = params.hideLabels;
     currentHighlightNodeIds = params.highlightNodeIds;
     currentHighlightEdgeIds = params.highlightEdgeIds;
     currentSearchMatches = params.searchMatches;
