@@ -55,7 +55,7 @@ export function SettingToggle({ label, description, checked, onChange, disabled 
           width: 36,
           height: 20,
           borderRadius: 10,
-          border: 'none',
+          border: checked ? 'none' : '1px solid var(--border)',
           background: checked ? 'var(--amber)' : 'var(--surface)',
           cursor: disabled ? 'not-allowed' : 'pointer',
           transition: 'background 0.15s ease',

@@ -66,26 +66,39 @@ export interface Settings {
 }
 
 export interface SecurityConfig {
-  approval_enabled: boolean;
-  approval_levels: {
-    destructive: 'pin' | 'confirm' | 'none';
-    external: 'pin' | 'confirm' | 'none';
-    financial: 'pin' | 'confirm' | 'none';
-    sensitive: 'pin' | 'confirm' | 'none';
+  unrestricted_shell: boolean;
+  approval_timeouts: {
+    reminder_minutes: number;
+    escalation_minutes: number;
+    expiry_minutes: number;
   };
+  approval_levels: Record<string, number>;
   pin_configured: boolean;
-  session_timeout_minutes: number;
-  auto_approve_trusted_skills: boolean;
+  operation_defaults: OperationLevelDefinition[];
 }
 
-export interface Approval {
-  id: string;
+export interface OperationLevelDefinition {
   operation: string;
-  description: string;
-  level: number;
+  label: string;
+  default_level: number;
+  min_level: number;
+  edit_role: 'owner' | 'admin' | 'user';
+}
+
+export interface ApprovalRequest {
+  id: string;
+  user_id: string;
   requested_by: string;
+  operation: string;
+  level: number;
+  summary: string;
+  params: Record<string, unknown> | null;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  channel: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  pin_verified: boolean;
   expires_at: string;
-  status: 'pending' | 'approved' | 'denied' | 'expired';
   created_at: string;
 }
 
