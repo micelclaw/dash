@@ -59,9 +59,9 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
         size={20}
         style={{ color: module.color, flexShrink: 0, opacity: isActive ? 1 : 0.7 }}
       />
-      {!collapsed && <span style={{ flex: 1 }}>{module.label}</span>}
+      {!collapsed && <span>{module.label}</span>}
       {!collapsed && pendingCount > 0 && (
-        <span style={{ fontSize: '0.625rem', minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--amber)', color: '#06060a', fontWeight: 700, fontFamily: 'var(--font-sans)', padding: '0 4px' }}>
+        <span style={{ marginLeft: 'auto', fontSize: '0.625rem', minWidth: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'var(--amber)', color: '#06060a', fontWeight: 700, fontFamily: 'var(--font-sans)', padding: '0 4px' }}>
           {pendingCount > 99 ? '99+' : pendingCount}
         </span>
       )}

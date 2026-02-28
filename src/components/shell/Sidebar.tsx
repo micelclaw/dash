@@ -75,9 +75,9 @@ export function Sidebar({ onOpenCommandPalette, forceExpanded }: SidebarProps) {
             minWidth: 0,
           }}
         >
-          <span style={{ fontSize: 20, flexShrink: 0 }}>🐾</span>
+          <img src="/favicon.png" width={20} height={20} alt="" style={{ flexShrink: 0 }} />
           {!collapsed && (
-            <span style={{ fontSize: '1rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: "'Orbitron', sans-serif", letterSpacing: '0.05em', textTransform: 'uppercase' as const }}>
               Micelclaw
             </span>
           )}

@@ -8,8 +8,8 @@
   --surface-hover: #16161f;
 
   /* Borders */
-  --border: #1e1e2a;
-  --border-hover: #2a2a3a;
+  --border: #3a3a50;
+  --border-hover: #4a4a62;
 
   /* Text */
   --text: #e0e0e8;
@@ -89,7 +89,6 @@
   --accent-foreground: var(--text);
   --destructive: var(--error);
   --destructive-foreground: #ffffff;
-  --border: var(--border);
   --input: var(--border);
   --ring: var(--amber);
   --radius: var(--radius-md);
