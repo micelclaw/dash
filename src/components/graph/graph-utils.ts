@@ -43,10 +43,10 @@ export function entityTypeColor(entityType: string): string {
   return TYPE_COLORS[entityType] ?? '#94a3b8';
 }
 
-/** Node size based on mention count (log scale, 8–32px) */
+/** Node size based on mention count (log scale, 6–44px) */
 export function nodeSize(mentionCount: number): number {
-  if (mentionCount <= 0) return 8;
-  return Math.min(32, 8 + Math.log2(mentionCount + 1) * 4);
+  if (mentionCount <= 0) return 6;
+  return Math.min(44, 6 + Math.log2(mentionCount + 1) * 6);
 }
 
 /** Shape paths for entity types */
@@ -124,3 +124,42 @@ export function drawNodeShape(
   ctx.fill();
   ctx.stroke();
 }
+
+// ─── SVG / D3 Link Utilities ──────────────────────────────────────
+
+/** Link color based on link_type. For 'extracted', pass the target node's entity_type. */
+export function linkColor(linkType: string, targetNodeType?: string): string {
+  switch (linkType) {
+    case 'manual': return '#d4a017';
+    case 'extracted': return targetNodeType ? entityTypeColor(targetNodeType) : '#94a3b8';
+    case 'inferred': return '#64748b';
+    case 'structural': return '#10b981';
+    default: return '#94a3b8';
+  }
+}
+
+/** SVG stroke-dasharray for link_type. Returns null for solid lines. */
+export function linkDashArray(linkType: string): string | null {
+  return linkType === 'inferred' ? '4 3' : null;
+}
+
+/** Link stroke width from strength (1–3px). */
+export function linkStrokeWidth(strength: number | null): number {
+  return Math.max(1, Math.min(3, 1 + (strength ?? 0.5) * 2));
+}
+
+/** Expand a polygon outward by `padding` pixels (for hull rendering). */
+export function expandPolygon(points: [number, number][], padding: number): [number, number][] {
+  if (points.length < 3) return points;
+  const cx = points.reduce((s, p) => s + p[0], 0) / points.length;
+  const cy = points.reduce((s, p) => s + p[1], 0) / points.length;
+  return points.map(([x, y]) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+    return [x + (dx / dist) * padding, y + (dy / dist) * padding] as [number, number];
+  });
+}
+
+/** Expose TYPE_COLORS for the legend component. */
+export { TYPE_COLORS };

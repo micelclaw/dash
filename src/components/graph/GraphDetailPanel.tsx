@@ -16,6 +16,7 @@ interface GraphDetailPanelProps {
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
   onCenterEntity: (entityId: string) => void;
+  onEntityHover?: (entityId: string | null) => void;
   onNavigateAway?: () => void;
 }
 
@@ -75,7 +76,7 @@ interface MentionsResponse {
   };
 }
 
-export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onNavigateAway }: GraphDetailPanelProps) {
+export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onEntityHover, onNavigateAway }: GraphDetailPanelProps) {
   const navigate = useNavigate();
   const [mentionGroups, setMentionGroups] = useState<MentionGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -411,8 +412,8 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                         fontSize: '0.8125rem', color: 'var(--text)',
                         fontFamily: 'var(--font-sans)', textAlign: 'left',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.color = 'var(--amber)'}
-                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text)'}
+                      onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; onEntityHover?.(entity.id); }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text)'; onEntityHover?.(null); }}
                     >
                       <EntityIcon size={14} style={{ color: entityColor, flexShrink: 0 }} />
                       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

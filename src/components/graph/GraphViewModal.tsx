@@ -26,6 +26,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [stats, setStats] = useState<{ entities: number; edges: number }>({ entities: 0, edges: 0 });
 
   // UI state
+  const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
   const [heatMapMode, setHeatMapMode] = useState(false);
   const [pathMode, setPathMode] = useState(false);
@@ -36,6 +37,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
   // Click state
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [detailHoverEntityId, setDetailHoverEntityId] = useState<string | null>(null);
 
   // Path finder
   const pathFinder = GraphPathFinder({
@@ -55,7 +57,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    fetchSubgraph(centerEntityId ? { centerId: centerEntityId } : undefined)
+    fetchSubgraph({ limit: nodeLimit, centerId: centerEntityId })
       .then(subgraph => {
         if (subgraph) {
           setNodes(subgraph.nodes);
@@ -72,7 +74,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         }
       })
       .finally(() => setLoading(false));
-  }, [open, centerEntityId, fetchSubgraph]);
+  }, [open, centerEntityId, nodeLimit, fetchSubgraph]);
 
   // Resize observer
   useEffect(() => {
@@ -116,7 +118,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     }
     // Otherwise re-fetch subgraph centered on this entity
     setLoading(true);
-    fetchSubgraph({ centerId: entityId })
+    fetchSubgraph({ limit: nodeLimit, centerId: entityId })
       .then(subgraph => {
         if (subgraph) {
           setNodes(subgraph.nodes);
@@ -127,7 +129,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         }
       })
       .finally(() => setLoading(false));
-  }, [nodes, fetchSubgraph]);
+  }, [nodes, nodeLimit, fetchSubgraph]);
 
   const toggleCategory = useCallback((type: string) => {
     setCategoryFilters(prev => ({
@@ -212,6 +214,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               searchQuery={searchQuery}
               categoryFilters={categoryFilters}
               onNodeClick={handleNodeClick}
+              externalHoverNodeId={detailHoverEntityId}
               width={dimensions.width}
               height={dimensions.height}
             />
@@ -224,6 +227,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
           graphNodes={nodes}
           graphEdges={edges}
           onCenterEntity={handleCenterEntity}
+          onEntityHover={setDetailHoverEntityId}
           onNavigateAway={onClose}
         />
       </div>
@@ -242,8 +246,35 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
       }}>
         <span>{stats.entities} entities</span>
         <span>{stats.edges} connections</span>
-        <span>Showing {nodes.length} nodes, {edges.length} edges</span>
-        {heatMapMode && <span style={{ color: '#f43f5e' }}>Heat map mode</span>}
+        <span>Showing {nodes.length} of {stats.entities}</span>
+        {heatMapMode && <span style={{ color: '#f43f5e' }}>Heat map</span>}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ marginRight: 4 }}>Limit:</span>
+          {[100, 250, 500, 2000].map(n => {
+            const label = n === 2000 ? 'All' : String(n);
+            const active = nodeLimit === n;
+            return (
+              <button
+                key={n}
+                onClick={() => setNodeLimit(n)}
+                style={{
+                  background: active ? 'var(--amber)' : 'transparent',
+                  color: active ? 'var(--bg)' : 'var(--text-muted)',
+                  border: active ? 'none' : '1px solid var(--border)',
+                  borderRadius: 4,
+                  padding: '1px 6px',
+                  fontSize: '0.625rem',
+                  fontWeight: active ? 600 : 400,
+                  cursor: 'pointer',
+                  lineHeight: '16px',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
     </div>
