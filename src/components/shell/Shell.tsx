@@ -11,6 +11,7 @@ import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useSecurityStore } from '@/stores/security.store';
+import { useChatStore } from '@/stores/chat.store';
 import { useTheme } from '@/hooks/use-theme';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -191,11 +192,68 @@ export function Shell() {
 
   useEffect(() => {
     if (!approvalEvent) return;
-    addNotification({
-      type: 'approval',
-      title: `Approval needed: ${approvalEvent.data.summary as string}`,
-      action: { label: 'Review', route: '/approvals' },
-    });
+
+    if (approvalEvent.event === 'approval.new') {
+      addNotification({
+        type: 'approval',
+        title: `Approval needed: ${approvalEvent.data.summary as string}`,
+        action: { label: 'Review', route: '/approvals' },
+      });
+
+      // Inject approval card into active chat conversation
+      const chatState = useChatStore.getState();
+      const activeConvId = chatState.activeConversationId;
+      if (activeConvId) {
+        chatState.addMessage({
+          id: `approval-${approvalEvent.data.id as string}`,
+          conversation_id: activeConvId,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date().toISOString(),
+          approval: {
+            id: approvalEvent.data.id as string,
+            operation: approvalEvent.data.operation as string,
+            summary: approvalEvent.data.summary as string,
+            level: approvalEvent.data.level as number,
+            expires_at: approvalEvent.data.expires_at as string,
+            status: 'pending',
+          },
+        });
+      }
+    } else if (approvalEvent.event === 'approval.resolved') {
+      // Update inline approval card status
+      useChatStore.getState().updateApprovalStatus(
+        approvalEvent.data.id as string,
+        approvalEvent.data.status as 'approved' | 'rejected' | 'expired',
+      );
+    } else if (approvalEvent.event === 'approval.executed') {
+      // Auto-execute result: inject as a system message in the active chat
+      const chatState = useChatStore.getState();
+      const activeConvId = chatState.activeConversationId;
+      if (activeConvId) {
+        chatState.addMessage({
+          id: `approval-exec-${approvalEvent.data.id as string}`,
+          conversation_id: activeConvId,
+          role: 'assistant',
+          content: approvalEvent.data.message as string,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } else if (approvalEvent.event === 'approval.agent_response') {
+      // Agent's follow-up response after approval notification
+      const chatState = useChatStore.getState();
+      const activeConvId = chatState.activeConversationId;
+      if (activeConvId && approvalEvent.data.text) {
+        chatState.addMessage({
+          id: `approval-agent-${Date.now()}`,
+          conversation_id: activeConvId,
+          role: 'assistant',
+          content: approvalEvent.data.text as string,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
     // Refresh pending count on any approval event
     fetchPendingCount();
   }, [approvalEvent, addNotification, fetchPendingCount]);

@@ -26,6 +26,7 @@ interface ChatStore {
   finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
+  updateApprovalStatus: (approvalId: string, status: 'approved' | 'rejected' | 'expired') => void;
 }
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
@@ -136,6 +137,21 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         c.id === id ? { ...c, first_message: title } : c,
       ),
     }));
+  },
+
+  updateApprovalStatus: (approvalId: string, status: 'approved' | 'rejected' | 'expired') => {
+    set((state) => {
+      const updated = new Map(state.messages);
+      for (const [convId, msgs] of updated) {
+        const changed = msgs.map((m) =>
+          m.approval && m.approval.id === approvalId
+            ? { ...m, approval: { ...m.approval, status } }
+            : m,
+        );
+        updated.set(convId, changed);
+      }
+      return { messages: updated };
+    });
   },
 
   finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number) => {

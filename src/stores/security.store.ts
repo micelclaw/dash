@@ -12,7 +12,7 @@ interface SecurityState {
   updateConfig: (data: Partial<SecurityConfig>) => Promise<void>;
   fetchApprovals: (status?: string) => Promise<void>;
   fetchPendingCount: () => Promise<void>;
-  approveApproval: (id: string, pin?: string) => Promise<void>;
+  approveApproval: (id: string, credential?: string) => Promise<void>;
   rejectApproval: (id: string, reason?: string) => Promise<void>;
   setupPin: (pin: string, currentPassword: string) => Promise<void>;
   removePin: (currentPassword: string) => Promise<void>;
@@ -69,9 +69,9 @@ export const useSecurityStore = create<SecurityState>()((set, get) => ({
     }
   },
 
-  approveApproval: async (id: string, pin?: string) => {
+  approveApproval: async (id: string, credential?: string) => {
     const body: Record<string, unknown> = {};
-    if (pin) body.pin = pin;
+    if (credential) body.credential = credential;
     await api.post(`/approvals/${id}/approve`, body);
     set({
       approvals: get().approvals.filter((a) => a.id !== id),

@@ -1,3 +1,12 @@
+export interface MessageApproval {
+  id: string;
+  operation: string;
+  summary: string;
+  level: number;
+  expires_at: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -7,6 +16,7 @@ export interface Message {
   model?: string;
   tokens_used?: number;
   timestamp: string;
+  approval?: MessageApproval;
 }
 
 export interface Conversation {

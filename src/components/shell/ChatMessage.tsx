@@ -1,10 +1,12 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import type { Message } from '@/types/chat';
+import type { Message, MessageApproval } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { useSecurityStore } from '@/stores/security.store';
+import { useChatStore } from '@/stores/chat.store';
 
 interface ChatMessageProps {
   message: Message;
@@ -14,6 +16,11 @@ interface ChatMessageProps {
 export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
   const navigate = useNavigate();
   const isUser = message.role === 'user';
+
+  // Render approval card if this message carries an approval
+  if (message.approval) {
+    return <ApprovalCard approval={message.approval} />;
+  }
 
   const handleLinkClick = useCallback(
     (href: string) => {
@@ -221,6 +228,191 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
         {timeStr}{message.model ? ` · ${message.model}` : ''}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function ApprovalCard({ approval }: { approval: MessageApproval }) {
+  const [loading, setLoading] = useState(false);
+  const [credentialInput, setCredentialInput] = useState('');
+  const [showCredentialInput, setShowCredentialInput] = useState(false);
+  const [error, setError] = useState('');
+  const approveApproval = useSecurityStore((s) => s.approveApproval);
+  const rejectApproval = useSecurityStore((s) => s.rejectApproval);
+  const updateApprovalStatus = useChatStore((s) => s.updateApprovalStatus);
+
+  const isPending = approval.status === 'pending';
+  const isL3 = approval.level === 3;
+  const expiresAt = new Date(approval.expires_at);
+  const now = new Date();
+  const minutesLeft = Math.max(0, Math.round((expiresAt.getTime() - now.getTime()) / 60000));
+  const isExpired = minutesLeft <= 0 && isPending;
+
+  const statusColor = {
+    pending: 'var(--amber)',
+    approved: '#22c55e',
+    rejected: '#ef4444',
+    expired: 'var(--text-dim)',
+  }[approval.status];
+
+  const statusLabel = {
+    pending: isExpired ? 'Expired' : 'Pending',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    expired: 'Expired',
+  }[approval.status];
+
+  const handleApprove = async () => {
+    if (isL3 && !showCredentialInput) {
+      setShowCredentialInput(true);
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      await approveApproval(approval.id, isL3 ? credentialInput : undefined);
+      updateApprovalStatus(approval.id, 'approved');
+    } catch (e: any) {
+      const code = e?.response?.data?.error?.code || e?.message || 'Error';
+      setError(
+        code === 'INVALID_CREDENTIAL' || code === 'INVALID_PIN'
+          ? 'PIN o contrasena incorrectos'
+          : code === 'CREDENTIAL_REQUIRED' || code === 'PIN_REQUIRED'
+            ? 'Se requiere PIN o contrasena'
+            : 'Failed to approve',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await rejectApproval(approval.id);
+      updateApprovalStatus(approval.id, 'rejected');
+    } catch {
+      setError('Failed to reject');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '4px 0' }}>
+      <div
+        style={{
+          maxWidth: '85%',
+          padding: '12px 16px',
+          background: 'var(--card)',
+          borderRadius: '12px 12px 12px 4px',
+          border: `1px solid ${statusColor}`,
+          fontSize: '0.875rem',
+          lineHeight: 1.5,
+        }}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: '1.1rem' }}>{'\u{1F6E1}'}</span>
+          <span style={{ fontWeight: 600, color: statusColor }}>
+            Approval Required (L{approval.level})
+          </span>
+        </div>
+
+        {/* Operation + summary */}
+        <div style={{ marginBottom: 8, color: 'var(--text)' }}>
+          <div style={{ fontWeight: 500 }}>{approval.operation}</div>
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>{approval.summary}</div>
+        </div>
+
+        {/* Expiry */}
+        {isPending && !isExpired && (
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8 }}>
+            Expires in {minutesLeft} min
+          </div>
+        )}
+
+        {/* Status badge for resolved */}
+        {!isPending && (
+          <div style={{
+            display: 'inline-block',
+            padding: '2px 8px',
+            borderRadius: 'var(--radius-sm)',
+            background: statusColor,
+            color: '#fff',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            marginBottom: 4,
+          }}>
+            {statusLabel}
+          </div>
+        )}
+
+        {/* Actions for pending */}
+        {isPending && !isExpired && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {showCredentialInput && (
+              <input
+                type="password"
+                placeholder="PIN o contrasena"
+                value={credentialInput}
+                onChange={(e) => setCredentialInput(e.target.value)}
+                autoFocus
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontSize: '0.875rem',
+                  width: 200,
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleApprove(); }}
+              />
+            )}
+            {error && (
+              <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{error}</div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleApprove}
+                disabled={loading || (isL3 && showCredentialInput && !credentialInput)}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: '#22c55e',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading ? 0.6 : 1,
+                }}
+              >
+                {loading ? '...' : showCredentialInput ? 'Confirm' : 'Approve'}
+              </button>
+              <button
+                onClick={handleReject}
+                disabled={loading}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: '#ef4444',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading ? 0.6 : 1,
+                }}
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
