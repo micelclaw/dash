@@ -8,6 +8,8 @@ export interface ClawProcess {
   name: string;
   status: 'running' | 'stopped' | 'error';
   has_logs: boolean;
+  restartable: boolean;
+  stoppable: boolean;
   uptime?: number;     // ms
   memory_mb?: number;
   cpu_percent?: number;
@@ -36,6 +38,8 @@ interface RawProcess {
   memory_bytes: number | null;
   uptime_seconds: number | null;
   has_logs: boolean;
+  restartable: boolean;
+  stoppable: boolean;
 }
 
 interface RawStats {
@@ -97,6 +101,8 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
         name: p.name,
         status: (p.status === 'failed' ? 'error' : p.status === 'idle' ? 'running' : p.status) as ClawProcess['status'],
         has_logs: p.has_logs,
+        restartable: p.restartable ?? false,
+        stoppable: p.stoppable ?? false,
         uptime: p.uptime_seconds != null ? p.uptime_seconds * 1000 : undefined,
         memory_mb: p.memory_bytes != null ? p.memory_bytes / (1024 * 1024) : undefined,
         cpu_percent: p.cpu_percent ?? undefined,

@@ -216,7 +216,7 @@ export function Component() {
                   <td style={{ padding: '0 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatUptime(p.uptime)}</td>
                   <td style={{ padding: '0 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
-                      {canManage && p.status === 'stopped' && (
+                      {canManage && p.restartable && p.status === 'stopped' && (
                         <button
                           onClick={() => handleAction('start', p)}
                           title="Start"
@@ -227,6 +227,7 @@ export function Component() {
                       )}
                       {canManage && p.status !== 'stopped' && (
                         <>
+                          {p.restartable && (
                           <button
                             onClick={() => handleAction('restart', p)}
                             title="Restart"
@@ -234,6 +235,8 @@ export function Component() {
                           >
                             <RotateCcw size={14} />
                           </button>
+                          )}
+                          {p.stoppable && (
                           <button
                             onClick={() => handleAction('stop', p)}
                             title="Stop"
@@ -241,6 +244,7 @@ export function Component() {
                           >
                             <Square size={14} />
                           </button>
+                          )}
                         </>
                       )}
                       {p.has_logs && (
