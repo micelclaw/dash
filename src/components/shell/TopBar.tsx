@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
 import { Menu, Search, Newspaper, Network } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
+import { ClipboardButton } from './ClipboardButton';
 import { BriefingPanel } from '@/components/BriefingPanel';
 import { GraphViewModal } from '@/components/graph/GraphViewModal';
 import { ProUpsellModal } from '@/components/shared/ProUpsellModal';
@@ -188,6 +189,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         >
           <Network size={18} />
         </button>
+        <ClipboardButton />
         <BriefingButton />
         <NotificationBell />
         {!isMobile && (

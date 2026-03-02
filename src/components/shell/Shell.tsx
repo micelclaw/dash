@@ -12,6 +12,7 @@ import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
+import { useClipboardStore } from '@/stores/clipboard.store';
 import { useTheme } from '@/hooks/use-theme';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -88,9 +89,11 @@ export function Shell() {
       });
   }, [wsStatus, refresh, connect, logout]);
 
-  // Keyboard shortcut: Cmd+B toggle sidebar (Cmd+K handled by useCommandPalette)
+  // Keyboard shortcuts
+  const toggleClipboard = useClipboardStore((s) => s.togglePanel);
   useKeyboard([
     { key: 'b', meta: true, handler: toggle },
+    { key: 'v', ctrl: true, shift: true, handler: toggleClipboard },
   ]);
 
   // Notification event listeners
@@ -101,6 +104,8 @@ export function Shell() {
   const digestEvent = useWebSocket('digest.*');
   const systemEvent = useWebSocket('system.*');
   const approvalEvent = useWebSocket('approval.*');
+  const clipboardEvent = useWebSocket('clipboard.*');
+  const processEvent = useWebSocket('process.*');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -257,6 +262,34 @@ export function Shell() {
     // Refresh pending count on any approval event
     fetchPendingCount();
   }, [approvalEvent, addNotification, fetchPendingCount]);
+
+  // Clipboard events
+  const addClipboardEntry = useClipboardStore((s) => s.addEntry);
+
+  useEffect(() => {
+    if (!clipboardEvent) return;
+    if (clipboardEvent.event === 'clipboard.new') {
+      addClipboardEntry(clipboardEvent.data as any);
+      toast('New clipboard entry', {
+        description: (clipboardEvent.data.content as string)?.slice(0, 60),
+        duration: 3000,
+      });
+    }
+  }, [clipboardEvent, addClipboardEntry]);
+
+  // Process events
+  useEffect(() => {
+    if (!processEvent) return;
+    if (processEvent.event === 'process.failure') {
+      const name = processEvent.data.name as string;
+      toast.error(`Process failed: ${name}`, { duration: 5000 });
+      addNotification({
+        type: 'system',
+        title: `Process failed: ${name}`,
+        action: { label: 'View', route: '/processes' },
+      });
+    }
+  }, [processEvent, addNotification]);
 
   return (
     <TooltipProvider>

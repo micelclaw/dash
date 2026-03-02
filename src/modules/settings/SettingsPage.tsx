@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
-  Search as SearchIcon, Newspaper, HardDrive, Users,
+  Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -21,6 +21,8 @@ import { LicenseSection } from '@/components/settings/sections/LicenseSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
 import { SearchSection } from '@/components/settings/sections/SearchSection';
 import { UsersSection } from '@/components/settings/sections/UsersSection';
+import { NetworkSection } from '@/components/settings/sections/NetworkSection';
+import { EnergySection } from '@/components/settings/sections/EnergySection';
 
 interface SidebarItem {
   id: string;
@@ -38,6 +40,8 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
     { id: 'mail', label: 'Mail', icon: Mail },
     { id: 'photos', label: 'Photos', icon: Image },
     { id: 'storage', label: 'Storage', icon: HardDrive },
+    { id: 'network', label: 'Red', icon: Network },
+    { id: 'energy', label: 'Energia', icon: Zap },
     { id: 'dash', label: 'Dash', icon: Palette },
     { id: 'search', label: 'Search', icon: SearchIcon, dividerBefore: true },
     { id: 'digest', label: 'Digest', icon: Newspaper },
@@ -58,6 +62,8 @@ function renderSection(section: string) {
     case 'mail': return <MailSection />;
     case 'photos': return <PhotosSection />;
     case 'storage': return <StorageSection />;
+    case 'network': return <NetworkSection />;
+    case 'energy': return <EnergySection />;
     case 'dash': return <DashSection />;
     case 'users': return <UsersSection />;
     case 'security': return <SecuritySection />;

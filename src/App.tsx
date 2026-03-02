@@ -37,6 +37,7 @@ const router = createBrowserRouter([
           { path: '/agents', lazy: () => import('@/modules/agents/AgentsPage') },
           { path: '/explorer', lazy: () => import('@/modules/explorer/ExplorerPage') },
           { path: '/storage', lazy: () => import('@/modules/storage/StoragePage') },
+          { path: '/processes', lazy: () => import('@/modules/processes/ProcessesPage') },
           { path: '/approvals', lazy: () => import('@/modules/approvals/ApprovalsPage') },
           { path: '/settings', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
