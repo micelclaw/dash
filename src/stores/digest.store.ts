@@ -74,8 +74,8 @@ export const useDigestStore = create<DigestState>()((set, get) => ({
         return;
       }
 
-      const result = await api.get<DigestEntry[]>(`/digest/history?from=${todayStart()}&limit=50`);
-      const digests = Array.isArray(result) ? result : [];
+      const res = await api.get<{ data: DigestEntry[]; total: number }>(`/digest/history?from=${todayStart()}&limit=50`);
+      const digests = Array.isArray(res.data) ? res.data : [];
       set({ todayDigests: digests, loading: false });
     } catch {
       set({ loading: false });

@@ -60,7 +60,7 @@ export function SyncSection() {
         return;
       }
       try {
-        const res = await api.get<{ data: SyncConnector[] }>('/sync-connectors');
+        const res = await api.get<{ data: SyncConnector[] }>('/sync/connectors');
         setConnectors(res.data);
       } catch {
         setConnectors([]);
@@ -87,7 +87,7 @@ export function SyncSection() {
     try {
       const useMock = import.meta.env.VITE_MOCK_API === 'true';
       if (!useMock) {
-        await api.post(`/sync-connectors/${id}/trigger`);
+        await api.post(`/sync/connectors/${id}/run`);
       }
       toast.success('Sync triggered');
     } catch {
