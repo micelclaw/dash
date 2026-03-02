@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { api } from '@/services/api';
 
+import type { Photo } from '@/types/files';
+
 // ─── Types ──────────────────────────────────────────────
 
 export interface PhotoSearchResult {
@@ -16,6 +18,15 @@ export interface SimilarPhotoResult {
   filename: string;
   similarity: number;
   metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface FaceCluster {
+  id: string;
+  name: string | null;
+  representative_file_id: string | null;
+  photo_count: number;
+  linked_contact_id: string | null;
   created_at: string;
 }
 
@@ -47,12 +58,25 @@ interface PhotoAiState {
   similarLoading: boolean;
   similarFileId: string | null;
 
+  // Face clusters
+  faceClusters: FaceCluster[] | null;
+  faceClustersLoading: boolean;
+  selectedClusterId: string | null;
+  clusterPhotos: Photo[] | null;
+  clusterPhotosLoading: boolean;
+
   // Actions
   searchPhotos: (query: string) => Promise<void>;
   clearSearch: () => void;
   fetchSimilar: (fileId: string, mode?: 'visual' | 'concept') => Promise<void>;
   setSimilarMode: (mode: 'visual' | 'concept') => void;
   closeSimilarPanel: () => void;
+  fetchFaceClusters: () => Promise<void>;
+  selectCluster: (id: string | null) => void;
+  fetchClusterPhotos: (clusterId: string) => Promise<void>;
+  renameFaceCluster: (clusterId: string, name: string) => Promise<void>;
+  mergeFaceClusters: (targetId: string, sourceId: string) => Promise<void>;
+  deleteFaceCluster: (clusterId: string) => Promise<void>;
 }
 
 export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
@@ -65,6 +89,12 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   similarResults: null,
   similarLoading: false,
   similarFileId: null,
+
+  faceClusters: null,
+  faceClustersLoading: false,
+  selectedClusterId: null,
+  clusterPhotos: null,
+  clusterPhotosLoading: false,
 
   searchPhotos: async (query: string) => {
     if (!query.trim()) {
@@ -112,5 +142,57 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
 
   closeSimilarPanel: () => {
     set({ similarPanelOpen: false, similarResults: null, similarFileId: null });
+  },
+
+  // ─── Face Clusters ──────────────────────────────────────
+
+  fetchFaceClusters: async () => {
+    set({ faceClustersLoading: true });
+    try {
+      const res = await api.get<{ data: FaceCluster[] }>('/photos/faces', { limit: 200 });
+      set({ faceClusters: res.data, faceClustersLoading: false });
+    } catch {
+      set({ faceClusters: [], faceClustersLoading: false });
+    }
+  },
+
+  selectCluster: (id: string | null) => {
+    set({ selectedClusterId: id, clusterPhotos: null });
+    if (id) get().fetchClusterPhotos(id);
+  },
+
+  fetchClusterPhotos: async (clusterId: string) => {
+    set({ clusterPhotosLoading: true });
+    try {
+      const res = await api.get<{ data: Photo[] }>(`/photos/faces/${clusterId}`, { limit: 100 });
+      set({ clusterPhotos: res.data, clusterPhotosLoading: false });
+    } catch {
+      set({ clusterPhotos: [], clusterPhotosLoading: false });
+    }
+  },
+
+  renameFaceCluster: async (clusterId: string, name: string) => {
+    await api.patch(`/photos/faces/${clusterId}`, { name });
+    const clusters = get().faceClusters;
+    if (clusters) {
+      set({ faceClusters: clusters.map((c) => (c.id === clusterId ? { ...c, name } : c)) });
+    }
+  },
+
+  mergeFaceClusters: async (targetId: string, sourceId: string) => {
+    await api.post(`/photos/faces/${targetId}/merge`, { source_cluster_id: sourceId });
+    // Re-fetch clusters after merge
+    get().fetchFaceClusters();
+  },
+
+  deleteFaceCluster: async (clusterId: string) => {
+    await api.delete(`/photos/faces/${clusterId}`);
+    const clusters = get().faceClusters;
+    if (clusters) {
+      set({
+        faceClusters: clusters.filter((c) => c.id !== clusterId),
+        selectedClusterId: get().selectedClusterId === clusterId ? null : get().selectedClusterId,
+      });
+    }
   },
 }));

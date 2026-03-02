@@ -1,6 +1,6 @@
 import type { Photo } from '@/types/files';
 
-export type PhotosView = 'timeline' | 'albums';
+export type PhotosView = 'timeline' | 'albums' | 'people' | 'dejavu';
 
 export interface PhotoGroup {
   label: string;       // "February 2026"

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Camera, Plus, Pencil, Upload, Share2, Trash2 } from 'lucide-react';
+import { Camera, Plus, Pencil, Upload, Share2, Trash2, Sparkles } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
@@ -14,6 +14,9 @@ interface PhotosAlbumsProps {
   onRequestFiles: (album: Album) => void;
   onShareAlbum: (album: Album) => void;
   onDeleteAlbum: (album: Album) => void;
+  bestOfCount?: number;
+  bestOfCoverId?: string | null;
+  onBestOfClick?: () => void;
 }
 
 function AlbumCard({
@@ -129,6 +132,92 @@ function AlbumCard({
   );
 }
 
+function BestOfAlbumCard({ count, coverId, onClick }: { count: number; coverId: string | null; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        borderRadius: 'var(--radius-md)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        background: hovered ? 'var(--surface-hover)' : 'var(--surface)',
+        boxShadow: hovered ? 'var(--shadow-md)' : 'none',
+        border: '2px solid var(--amber)',
+        transition: 'background var(--transition-fast), box-shadow var(--transition-fast)',
+      }}
+    >
+      {/* Cover area */}
+      <div
+        style={{
+          height: 160,
+          background: 'linear-gradient(135deg, hsl(40, 50%, 22%), hsl(30, 45%, 16%))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {coverId && !imgError ? (
+          <img
+            src={getPreviewUrl(coverId, 400)}
+            alt=""
+            loading="lazy"
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgError(true)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: imgLoaded ? 1 : 0,
+              transition: 'opacity 0.2s',
+            }}
+          />
+        ) : null}
+        {(!coverId || imgError || !imgLoaded) && (
+          <Sparkles size={36} style={{ opacity: 0.4, color: 'var(--amber)' }} />
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: '10px 12px' }}>
+        <div
+          style={{
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: 'var(--text)',
+            fontFamily: 'var(--font-sans)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
+          <Sparkles size={13} style={{ color: 'var(--amber)' }} />
+          Best Of
+        </div>
+        <div
+          style={{
+            fontSize: '0.75rem',
+            color: 'var(--amber)',
+            fontFamily: 'var(--font-sans)',
+            marginTop: 2,
+          }}
+        >
+          {count} photo{count !== 1 ? 's' : ''} · Auto-generated
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NewAlbumCard({ onClick }: { onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
 
@@ -175,6 +264,9 @@ export function PhotosAlbums({
   onRequestFiles,
   onShareAlbum,
   onDeleteAlbum,
+  bestOfCount = 0,
+  bestOfCoverId,
+  onBestOfClick,
 }: PhotosAlbumsProps) {
   if (!loading && albums.length === 0) {
     return (
@@ -222,6 +314,9 @@ export function PhotosAlbums({
             gap: 16,
           }}
         >
+          {bestOfCount > 0 && onBestOfClick && (
+            <BestOfAlbumCard count={bestOfCount} coverId={bestOfCoverId ?? null} onClick={onBestOfClick} />
+          )}
           {albums.map((album) => (
             <AlbumCard
               key={album.id}

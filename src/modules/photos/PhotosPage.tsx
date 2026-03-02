@@ -11,6 +11,8 @@ import { useAuthStore } from '@/stores/auth.store';
 import { PhotosToolbar } from './PhotosToolbar';
 import { PhotosTimeline } from './PhotosTimeline';
 import { PhotosAlbums } from './PhotosAlbums';
+import { PhotosPeople } from './PhotosPeople';
+import { PhotosDejaVu } from './PhotosDejaVu';
 import { AlbumDetail } from './AlbumDetail';
 import { PhotoLightbox } from './PhotoLightbox';
 import { ExifPanel } from './ExifPanel';
@@ -176,12 +178,20 @@ export function Component() {
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
+  // Best Of state
+  const [bestOfCount, setBestOfCount] = useState(0);
+  const [bestOfCoverId, setBestOfCoverId] = useState<string | null>(null);
+
   // Photo AI store
   const searchResults = usePhotoAiStore((s) => s.searchResults);
   const searchLoading = usePhotoAiStore((s) => s.searchLoading);
   const searchMeta = usePhotoAiStore((s) => s.searchMeta);
   const searchPhotosAi = usePhotoAiStore((s) => s.searchPhotos);
   const clearSearch = usePhotoAiStore((s) => s.clearSearch);
+  const fetchFaceClusters = usePhotoAiStore((s) => s.fetchFaceClusters);
+  const selectedClusterId = usePhotoAiStore((s) => s.selectedClusterId);
+  const clusterPhotos = usePhotoAiStore((s) => s.clusterPhotos);
+  const selectCluster = usePhotoAiStore((s) => s.selectCluster);
   const isPro = useAuthStore((s) => s.user?.tier === 'pro');
 
   // Modal/panel state
@@ -226,6 +236,22 @@ export function Component() {
   useEffect(() => {
     fetchPhotos(true);
   }, [fetchPhotos]);
+
+  // Fetch Best Of count
+  useEffect(() => {
+    api.get<{ data: Photo[]; meta?: { total?: number } }>('/photos/timeline', { min_stars: 4, limit: 1 })
+      .then((res) => {
+        const total = res.meta?.total ?? res.data.length;
+        setBestOfCount(total);
+        setBestOfCoverId(res.data[0]?.id ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch face clusters when switching to people view
+  useEffect(() => {
+    if (view === 'people') fetchFaceClusters();
+  }, [view, fetchFaceClusters]);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -277,7 +303,8 @@ export function Component() {
     setSelectedAlbumId(null);
     timelineSelection.clearSelection();
     albumSelection.clearSelection();
-  }, [timelineSelection, albumSelection]);
+    selectCluster(null);
+  }, [timelineSelection, albumSelection, selectCluster]);
 
   // ── Photo actions ──────────────────────────────────────
 
@@ -443,7 +470,14 @@ export function Component() {
     thumbnail_url: '',
   })) ?? [];
 
-  const lightboxPhotos = searchResults !== null ? searchPhotosForLightbox : isAlbumView ? albumPhotos : photos;
+  const isClusterView = view === 'people' && !!selectedClusterId;
+  const lightboxPhotos = searchResults !== null
+    ? searchPhotosForLightbox
+    : isClusterView && clusterPhotos
+      ? clusterPhotos
+      : isAlbumView
+        ? albumPhotos
+        : photos;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -503,6 +537,9 @@ export function Component() {
           onRequestFiles={(album) => setRequestFilesAlbum(album)}
           onShareAlbum={(album) => setShareAlbum(album)}
           onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
+          bestOfCount={bestOfCount}
+          bestOfCoverId={bestOfCoverId}
+          onBestOfClick={() => { setMinStars(4); setView('timeline'); }}
         />
       )}
 
@@ -526,6 +563,16 @@ export function Component() {
           onBatchDelete={() => setBatchDeleteOpen(true)}
           onClearSelection={albumSelection.clearSelection}
         />
+      )}
+
+      {view === 'people' && (
+        <PhotosPeople
+          onPhotoClick={handlePhotoClick}
+        />
+      )}
+
+      {view === 'dejavu' && (
+        <PhotosDejaVu />
       )}
 
       {/* Lightbox overlay */}

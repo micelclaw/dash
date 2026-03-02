@@ -155,6 +155,22 @@ export function PhotosToolbar({
         >
           Albums
         </button>
+        <button
+          style={viewBtnStyle('people')}
+          onClick={() => onViewChange('people')}
+          onMouseEnter={() => setHoveredBtn('people')}
+          onMouseLeave={() => setHoveredBtn(null)}
+        >
+          People
+        </button>
+        <button
+          style={viewBtnStyle('dejavu')}
+          onClick={() => onViewChange('dejavu')}
+          onMouseEnter={() => setHoveredBtn('dejavu')}
+          onMouseLeave={() => setHoveredBtn(null)}
+        >
+          Déjà Vu
+        </button>
       </div>
 
       {/* Star filter pills */}
