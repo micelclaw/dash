@@ -5,7 +5,7 @@ import type { ApiListResponse } from '@/types/api';
 
 const PAGE_SIZE = 50;
 
-export function usePhotos(params: { search?: string }) {
+export function usePhotos(params: { search?: string; minStars?: number | null }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -24,6 +24,7 @@ export function usePhotos(params: { search?: string }) {
         limit: PAGE_SIZE,
         offset: offsetRef.current,
         search: params.search || undefined,
+        min_stars: params.minStars || undefined,
       });
 
       const incoming = res.data;
@@ -42,7 +43,7 @@ export function usePhotos(params: { search?: string }) {
     } finally {
       setLoading(false);
     }
-  }, [params.search]);
+  }, [params.search, params.minStars]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {

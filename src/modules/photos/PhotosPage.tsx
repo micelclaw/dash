@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Image, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { usePhotos } from './hooks/use-photos';
 import { useAlbums } from './hooks/use-albums';
 import { useAlbumPhotos } from './hooks/use-album-photos';
 import { usePhotoSelection } from './hooks/use-photo-selection';
+import { usePhotoAiStore } from '@/stores/photo-ai.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { PhotosToolbar } from './PhotosToolbar';
 import { PhotosTimeline } from './PhotosTimeline';
 import { PhotosAlbums } from './PhotosAlbums';
@@ -17,14 +20,169 @@ import { AlbumShareModal } from './AlbumShareModal';
 import { AlbumPickerDropdown } from './AlbumPickerDropdown';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ShareModal } from '@/components/shared/ShareModal';
+import { getPreviewUrl } from '@/lib/file-utils';
 import type { PhotosView } from './types';
 import type { Photo, Album } from '@/types/files';
+
+// ─── Search Results Grid ────────────────────────────────
+
+function SearchResultsGrid({
+  results,
+  loading,
+  searchType,
+  isPro,
+  search,
+  onPhotoClick,
+}: {
+  results: { id: string; filename: string; similarity: number; metadata: Record<string, unknown> | null; created_at: string }[];
+  loading: boolean;
+  searchType: 'semantic' | 'fulltext';
+  isPro: boolean;
+  search: string;
+  onPhotoClick: (id: string) => void;
+}) {
+  if (loading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
+        Searching...
+      </div>
+    );
+  }
+
+  if (results.length === 0) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+        <Image size={40} style={{ opacity: 0.3 }} />
+        <div style={{ fontSize: '0.875rem' }}>No photos matching &quot;{search}&quot;</div>
+        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Try a different search term</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
+      {/* Upsell banner for free tier */}
+      {searchType === 'fulltext' && !isPro && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', margin: '12px 0 4px',
+          background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)',
+          borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-sans)',
+        }}>
+          <Lock size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            Upgrade to <strong style={{ color: 'var(--amber)' }}>Pro</strong> for AI-powered semantic search
+          </span>
+        </div>
+      )}
+
+      {/* Results grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+        gap: 4,
+        marginTop: 12,
+      }}>
+        {results.map((result) => (
+          <SearchResultThumbnail
+            key={result.id}
+            result={result}
+            showSimilarity={searchType === 'semantic'}
+            onClick={() => onPhotoClick(result.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SearchResultThumbnail({
+  result,
+  showSimilarity,
+  onClick,
+}: {
+  result: { id: string; filename: string; similarity: number };
+  showSimilarity: boolean;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const previewUrl = getPreviewUrl(result.id, 300);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        aspectRatio: '1 / 1',
+        borderRadius: 'var(--radius-sm)',
+        overflow: 'hidden',
+        cursor: 'pointer',
+        transform: hovered ? 'scale(1.02)' : 'scale(1)',
+        transition: 'transform var(--transition-fast)',
+        background: 'var(--surface)',
+      }}
+    >
+      {!imgError ? (
+        <img
+          src={previewUrl}
+          alt={result.filename}
+          loading="lazy"
+          onLoad={() => setImgLoaded(true)}
+          onError={() => setImgError(true)}
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            opacity: imgLoaded ? 1 : 0, transition: 'opacity 0.2s',
+          }}
+        />
+      ) : (
+        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Image size={32} style={{ opacity: 0.3, color: 'var(--text)' }} />
+        </div>
+      )}
+
+      {/* Similarity badge */}
+      {showSimilarity && result.similarity > 0 && (
+        <div style={{
+          position: 'absolute', top: 4, right: 4,
+          background: 'rgba(0,0,0,0.7)', borderRadius: 'var(--radius-sm)',
+          padding: '2px 5px', fontSize: '0.5625rem', fontWeight: 600,
+          color: 'var(--amber)', fontFamily: 'var(--font-sans)',
+          lineHeight: 1,
+        }}>
+          {Math.round(result.similarity * 100)}%
+        </div>
+      )}
+
+      {/* Hover overlay */}
+      {hovered && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(to top, rgba(0,0,0,0.4), transparent)',
+          pointerEvents: 'none',
+        }} />
+      )}
+    </div>
+  );
+}
 
 export function Component() {
   const [view, setView] = useState<PhotosView>('timeline');
   const [search, setSearch] = useState('');
+  const [minStars, setMinStars] = useState<number | null>(null);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Photo AI store
+  const searchResults = usePhotoAiStore((s) => s.searchResults);
+  const searchLoading = usePhotoAiStore((s) => s.searchLoading);
+  const searchMeta = usePhotoAiStore((s) => s.searchMeta);
+  const searchPhotosAi = usePhotoAiStore((s) => s.searchPhotos);
+  const clearSearch = usePhotoAiStore((s) => s.clearSearch);
+  const isPro = useAuthStore((s) => s.user?.tier === 'pro');
 
   // Modal/panel state
   const [exifPhoto, setExifPhoto] = useState<Photo | null>(null);
@@ -40,7 +198,7 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos } = usePhotos({ search });
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos } = usePhotos({ search, minStars });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -71,13 +229,18 @@ export function Component() {
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
-  }, []);
+    if (value.trim()) {
+      searchPhotosAi(value);
+    } else {
+      clearSearch();
+    }
+  }, [searchPhotosAi, clearSearch]);
 
-  // Re-fetch when search changes
+  // Re-fetch timeline when search or minStars changes
   useEffect(() => {
     fetchPhotos(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, minStars]);
 
   const handleUpload = useCallback(async (incoming: File[]) => {
     let success = 0;
@@ -257,7 +420,30 @@ export function Component() {
   const selectedAlbum = selectedAlbumId ? albums.find(a => a.id === selectedAlbumId) : null;
 
   // Determine which photos to show in lightbox
-  const lightboxPhotos = isAlbumView ? albumPhotos : photos;
+  // When search is active, build Photo-like objects from search results
+  const searchPhotosForLightbox: Photo[] = searchResults?.map((r) => ({
+    id: r.id,
+    filename: r.filename,
+    filepath: '',
+    mime_type: 'image/jpeg',
+    size_bytes: 0,
+    checksum_sha256: null,
+    source: 'local',
+    source_id: null,
+    parent_folder: '',
+    is_directory: false,
+    metadata: r.metadata as Photo['metadata'],
+    tags: [],
+    custom_fields: null,
+    created_at: r.created_at,
+    updated_at: r.created_at,
+    synced_at: null,
+    deleted_at: null,
+    taken_at: null,
+    thumbnail_url: '',
+  })) ?? [];
+
+  const lightboxPhotos = searchResults !== null ? searchPhotosForLightbox : isAlbumView ? albumPhotos : photos;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -271,10 +457,24 @@ export function Component() {
         onBatchAddToAlbum={handleBatchAddToAlbum}
         onBatchDelete={() => setBatchDeleteOpen(true)}
         onClearSelection={timelineSelection.clearSelection}
+        minStars={minStars}
+        onMinStarsChange={setMinStars}
       />
 
       {/* Content */}
-      {view === 'timeline' && (
+      {view === 'timeline' && searchResults !== null ? (
+        <SearchResultsGrid
+          results={searchResults}
+          loading={searchLoading}
+          searchType={searchMeta?.search_type ?? 'fulltext'}
+          isPro={!!isPro}
+          search={search}
+          onPhotoClick={(id) => {
+            const idx = searchResults.findIndex((r) => r.id === id);
+            if (idx >= 0) setLightboxIndex(idx);
+          }}
+        />
+      ) : view === 'timeline' ? (
         <PhotosTimeline
           photos={photos}
           loading={photosLoading}
@@ -291,7 +491,7 @@ export function Component() {
           selectedIds={timelineSelection.selectedIds}
           onToggleSelect={timelineSelection.toggleSelection}
         />
-      )}
+      ) : null}
 
       {view === 'albums' && !selectedAlbum && (
         <PhotosAlbums

@@ -106,6 +106,7 @@ export function Shell() {
   const approvalEvent = useWebSocket('approval.*');
   const clipboardEvent = useWebSocket('clipboard.*');
   const processEvent = useWebSocket('process.*');
+  const photoWorkerEvent = useWebSocket('photo.worker.*');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -290,6 +291,18 @@ export function Shell() {
       });
     }
   }, [processEvent, addNotification]);
+
+  // Photo worker events
+  useEffect(() => {
+    if (!photoWorkerEvent) return;
+    if (photoWorkerEvent.event === 'photo.worker.complete') {
+      const count = photoWorkerEvent.data.photos_processed as number;
+      toast.success(`Photo processing complete: ${count} photos`);
+    } else if (photoWorkerEvent.event === 'photo.worker.error') {
+      const error = photoWorkerEvent.data.error as string;
+      toast.error(`Photo worker error: ${error}`, { duration: 5000 });
+    }
+  }, [photoWorkerEvent]);
 
   return (
     <TooltipProvider>

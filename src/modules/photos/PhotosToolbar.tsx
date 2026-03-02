@@ -12,6 +12,8 @@ interface PhotosToolbarProps {
   onBatchAddToAlbum?: () => void;
   onBatchDelete?: () => void;
   onClearSelection?: () => void;
+  minStars?: number | null;
+  onMinStarsChange?: (value: number | null) => void;
 }
 
 function BatchButton({ icon: Icon, label, onClick, disabled, variant }: {
@@ -61,6 +63,8 @@ export function PhotosToolbar({
   onBatchAddToAlbum,
   onBatchDelete,
   onClearSelection,
+  minStars,
+  onMinStarsChange,
 }: PhotosToolbarProps) {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState(search);
@@ -152,6 +156,51 @@ export function PhotosToolbar({
           Albums
         </button>
       </div>
+
+      {/* Star filter pills */}
+      {view === 'timeline' && onMinStarsChange && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 2,
+            background: 'var(--surface)',
+            borderRadius: 'var(--radius-sm)',
+            padding: 2,
+          }}
+        >
+          {([
+            { label: 'All', value: null },
+            { label: '★ 3+', value: 3 },
+            { label: '★ 4+', value: 4 },
+            { label: '★ 5', value: 5 },
+          ] as const).map((pill) => {
+            const active = minStars === pill.value;
+            return (
+              <button
+                key={pill.label}
+                onClick={() => onMinStarsChange(pill.value)}
+                onMouseEnter={() => setHoveredBtn(`star-${pill.label}`)}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '0.6875rem',
+                  fontFamily: 'var(--font-sans)',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                  background: active ? 'var(--amber)' : hoveredBtn === `star-${pill.label}` ? 'var(--surface-hover)' : 'transparent',
+                  color: active ? '#06060a' : 'var(--text-dim)',
+                  fontWeight: active ? 600 : 400,
+                  transition: 'background var(--transition-fast)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />

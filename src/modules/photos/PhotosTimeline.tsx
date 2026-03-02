@@ -206,13 +206,35 @@ function PhotoThumbnail({
               />
             )}
 
+            {/* Star badge for aesthetic score >= 3 */}
+            {(photo.custom_fields as Record<string, number> | null)?.aesthetic_stars >= 3 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: 4,
+                  background: 'rgba(0,0,0,0.65)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '2px 5px',
+                  fontSize: '0.5625rem',
+                  fontWeight: 600,
+                  color: 'var(--amber)',
+                  fontFamily: 'var(--font-sans)',
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                ★ {((photo.custom_fields as Record<string, number>)?.aesthetic_override ?? (photo.custom_fields as Record<string, number>)?.aesthetic_stars)?.toFixed(1)}
+              </div>
+            )}
+
             {/* Source badge for non-local photos */}
             {photo.source !== 'local' && (
               <div
                 style={{
                   position: 'absolute',
                   bottom: 4,
-                  left: 4,
+                  right: 4,
                   background: 'rgba(0,0,0,0.6)',
                   borderRadius: 'var(--radius-sm)',
                   padding: '2px 4px',
