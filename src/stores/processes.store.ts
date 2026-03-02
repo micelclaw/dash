@@ -26,6 +26,26 @@ export interface LogEntry {
   line: string;
 }
 
+// Raw shapes from backend (field names differ from frontend)
+interface RawProcess {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  cpu_percent: number | null;
+  memory_bytes: number | null;
+  uptime_seconds: number | null;
+  has_logs: boolean;
+}
+
+interface RawStats {
+  total: number;
+  running: number;
+  failed?: number;
+  cpu_total: number | null;
+  memory_total: number | null;
+}
+
 // ─── Store ──────────────────────────────────────────────
 
 type SortKey = 'cpu' | 'mem' | 'name' | 'pid' | 'status';
@@ -68,10 +88,28 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
     set({ loading: true, error: null });
     try {
       const [procRes, statsRes] = await Promise.all([
-        api.get<{ data: ClawProcess[] }>('/hal/processes'),
-        api.get<{ data: ProcessStats }>('/hal/processes/stats'),
+        api.get<{ data: RawProcess[] }>('/hal/processes'),
+        api.get<{ data: RawStats }>('/hal/processes/stats'),
       ]);
-      set({ processes: procRes.data, stats: statsRes.data, loading: false });
+      // Transform backend field names to frontend shape
+      const processes: ClawProcess[] = procRes.data.map((p) => ({
+        id: p.id,
+        name: p.name,
+        status: (p.status === 'failed' ? 'error' : p.status === 'idle' ? 'running' : p.status) as ClawProcess['status'],
+        has_logs: p.has_logs,
+        uptime: p.uptime_seconds != null ? p.uptime_seconds * 1000 : undefined,
+        memory_mb: p.memory_bytes != null ? p.memory_bytes / (1024 * 1024) : undefined,
+        cpu_percent: p.cpu_percent ?? undefined,
+      }));
+      const raw = statsRes.data;
+      const stats: ProcessStats = {
+        total: raw.total,
+        running: raw.running,
+        stopped: raw.failed ?? 0,
+        cpu_total: raw.cpu_total ?? 0,
+        memory_total_mb: (raw.memory_total ?? 0) / (1024 * 1024),
+      };
+      set({ processes, stats, loading: false });
     } catch {
       set({ error: 'Failed to fetch processes', loading: false });
     }

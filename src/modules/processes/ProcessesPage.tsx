@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Search, RefreshCw, Play, Square, RotateCcw, FileText, ChevronUp, ChevronDown } from 'lucide-react';
 import { useProcessesStore } from '@/stores/processes.store';
 import type { ClawProcess } from '@/stores/processes.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { LogsPanel } from './LogsPanel';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -72,6 +73,8 @@ export function Component() {
   const restartProcess = useProcessesStore((s) => s.restartProcess);
   const stopProcess = useProcessesStore((s) => s.stopProcess);
   const startProcess = useProcessesStore((s) => s.startProcess);
+  const userRole = useAuthStore((s) => s.user?.role ?? 'user');
+  const canManage = userRole === 'admin' || userRole === 'owner';
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
@@ -120,8 +123,8 @@ export function Component() {
           <div style={{ display: 'flex', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)', flexWrap: 'wrap' }}>
             {[
               { label: 'Processes', value: `${stats.running}/${stats.total}` },
-              { label: 'CPU', value: `${stats.cpu_total.toFixed(1)}%` },
-              { label: 'Memory', value: `${stats.memory_total_mb.toFixed(0)} MB` },
+              { label: 'CPU', value: `${(stats.cpu_total ?? 0).toFixed(1)}%` },
+              { label: 'Memory', value: `${(stats.memory_total_mb ?? 0).toFixed(0)} MB` },
             ].map((item) => (
               <div key={item.label} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
@@ -213,7 +216,7 @@ export function Component() {
                   <td style={{ padding: '0 8px', textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{formatUptime(p.uptime)}</td>
                   <td style={{ padding: '0 8px', textAlign: 'right' }}>
                     <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
-                      {p.status === 'stopped' ? (
+                      {canManage && p.status === 'stopped' && (
                         <button
                           onClick={() => handleAction('start', p)}
                           title="Start"
@@ -221,7 +224,8 @@ export function Component() {
                         >
                           <Play size={14} />
                         </button>
-                      ) : (
+                      )}
+                      {canManage && p.status !== 'stopped' && (
                         <>
                           <button
                             onClick={() => handleAction('restart', p)}
