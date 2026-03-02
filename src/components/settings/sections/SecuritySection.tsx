@@ -137,16 +137,16 @@ export function SecuritySection() {
   return (
     <>
       {/* Agent Shell Access */}
-      <SettingSection title="Agent Shell Access" description="Control whether the AI agent can execute arbitrary shell commands.">
+      <SettingSection title="Agent Shell Access" description="Controls which shell commands the agent can execute across ALL channels (webchat, Telegram, etc.). Enforced at the code level by OpenClaw exec-approvals.">
         <SettingToggle
           label="Unrestricted Shell Mode"
-          description="When enabled, the agent can run any command. When disabled, only safe binaries are allowed."
+          description="When disabled, only safe commands (curl, jq, grep...) are allowed. When enabled, extended commands (ls, find, python3, git...) are also available. Destructive commands and database tools always require explicit approval regardless of this setting."
           checked={config.unrestricted_shell}
           onChange={handleToggleUnrestrictedShell}
         />
         {config.unrestricted_shell && (
           <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', color: '#ef4444', fontFamily: 'var(--font-sans)', marginTop: 4 }}>
-            Warning: Unrestricted shell mode allows the agent to execute any command on your system.
+            Extended commands enabled. Destructive commands (rm, kill, apt, docker...) and database tools (psql, mysql, sudo...) still require exec approval.
           </div>
         )}
 
@@ -158,7 +158,7 @@ export function SecuritySection() {
                 Enable Unrestricted Shell?
               </div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginBottom: 16, lineHeight: 1.5 }}>
-                This allows the AI agent to execute any shell command on your system, including destructive operations. Only enable if you trust the agent configuration.
+                This expands the agent's command allowlist to include extended tools (ls, find, python3, git, etc.) across all channels. Destructive commands and database tools still require explicit approval.
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button
