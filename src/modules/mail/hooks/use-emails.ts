@@ -24,7 +24,7 @@ export function useEmails(filters: EmailFilters = {}) {
         folder = undefined;
         is_starred = true;
       } else if (folder === 'TRASH') {
-        folder = undefined;
+        // Show both: emails in TRASH folder (IMAP) AND soft-deleted emails
         only_deleted = true;
       } else if (folder === 'ARCHIVE') {
         folder = 'Archive';
@@ -95,6 +95,7 @@ export function useEmails(filters: EmailFilters = {}) {
 
   const archiveEmail = async (id: string) => {
     const removed = emails.find(e => e.id === id);
+    const previousFolder = removed?.folder ?? 'INBOX';
     setEmails(prev => prev.filter(e => e.id !== id));
     try {
       await api.patch(`/emails/${id}`, { folder: 'Archive' });
@@ -103,7 +104,7 @@ export function useEmails(filters: EmailFilters = {}) {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.patch(`/emails/${id}`, { folder: 'INBOX' });
+              await api.patch(`/emails/${id}`, { folder: previousFolder });
               if (removed) setEmails(prev => [removed, ...prev]);
             } catch { toast.error('Failed to undo'); }
           },
@@ -178,7 +179,6 @@ export function useEmails(filters: EmailFilters = {}) {
 
   const sendEmail = async (data: Record<string, unknown>) => {
     const res = await api.post<{ data: Email }>('/emails/send', data);
-    toast.success('Email sent');
     return res.data;
   };
 

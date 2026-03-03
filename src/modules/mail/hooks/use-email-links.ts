@@ -5,20 +5,26 @@ import type { ApiListResponse, ApiResponse } from '@/types/api';
 
 const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
   note: { endpoint: '/notes', titleField: 'title' },
+  notes: { endpoint: '/notes', titleField: 'title' },
   email: { endpoint: '/emails', titleField: 'subject' },
+  emails: { endpoint: '/emails', titleField: 'subject' },
   event: { endpoint: '/events', titleField: 'title' },
+  events: { endpoint: '/events', titleField: 'title' },
   contact: { endpoint: '/contacts', titleField: 'display_name' },
+  contacts: { endpoint: '/contacts', titleField: 'display_name' },
   file: { endpoint: '/files', titleField: 'filename' },
+  files: { endpoint: '/files', titleField: 'filename' },
   diary: { endpoint: '/diary', titleField: 'entry_date' },
+  diary_entries: { endpoint: '/diary', titleField: 'entry_date' },
 };
 
 const ROUTE_MAP: Record<string, string> = {
-  note: '/notes',
-  event: '/calendar',
-  contact: '/contacts',
-  email: '/mail',
-  file: '/drive',
-  diary: '/diary',
+  note: '/notes', notes: '/notes',
+  event: '/calendar', events: '/calendar',
+  contact: '/contacts', contacts: '/contacts',
+  email: '/mail', emails: '/mail',
+  file: '/drive', files: '/drive',
+  diary: '/diary', diary_entries: '/diary',
 };
 
 export function useEmailLinks(emailId: string | null) {

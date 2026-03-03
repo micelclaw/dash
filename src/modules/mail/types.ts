@@ -67,7 +67,7 @@ export interface EmailFilters {
 }
 
 export interface ComposeData {
-  mode: 'new' | 'reply' | 'reply_all' | 'forward';
+  mode: 'new' | 'reply' | 'reply_all' | 'forward' | 'edit_draft';
   to?: { address: string; name?: string }[];
   cc?: { address: string; name?: string }[];
   subject?: string;
@@ -75,6 +75,7 @@ export interface ComposeData {
   in_reply_to?: string;
   original_email?: Email;
   account_id?: string;
+  draft_id?: string;
 }
 
 export const SYSTEM_FOLDERS = ['INBOX', 'SENT', 'DRAFTS', 'TRASH', 'SPAM', 'OUTBOX', 'SNOOZED'] as const;

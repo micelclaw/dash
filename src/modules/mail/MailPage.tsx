@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { Mail, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
@@ -54,6 +56,31 @@ export function Component() {
   });
 
   const { accounts } = useEmailAccounts();
+
+  // Sync
+  const [syncing, setSyncing] = useState(false);
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      // Find IMAP connectors and trigger sync
+      const res = await api.get<{ data: Array<{ id: string; connector_type: string; status: string }> }>('/sync/connectors', { connector_type: 'imap-generic' });
+      const connectors = res.data.filter(c => c.status !== 'disconnected');
+      if (connectors.length === 0) {
+        toast.error('No email connectors configured');
+      } else {
+        for (const c of connectors) {
+          await api.post(`/sync/connectors/${c.id}/run`);
+        }
+        toast.success('Sync started');
+        // Refresh emails after a delay
+        setTimeout(() => { fetchEmails(); setSyncing(false); }, 5000);
+        return;
+      }
+    } catch {
+      toast.error('Sync failed');
+    }
+    setSyncing(false);
+  }, [fetchEmails]);
 
   // Collapsible list
   const [listCollapsed, setListCollapsed] = useState(false);
@@ -235,6 +262,8 @@ export function Component() {
         onFolderChange={setActiveFolder}
         collapsed={isTablet}
         onCompose={handleCompose}
+        onSync={handleSync}
+        syncing={syncing}
         accounts={accounts}
         emails={emails}
       />

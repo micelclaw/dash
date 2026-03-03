@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { Newspaper, Lightbulb, ChevronRight } from 'lucide-react';
 import { useDigestStore, type DigestEntry } from '@/stores/digest.store';
 
@@ -8,19 +9,66 @@ const ALERT_COLORS: Record<string, string> = {
   URGENT: '#ef4444',
 };
 
+const DOMAIN_ROUTE: Record<string, string> = {
+  notes: '/notes',
+  emails: '/mail',
+  email: '/mail',
+  events: '/calendar',
+  event: '/calendar',
+  contacts: '/contacts',
+  contact: '/contacts',
+  diary_entries: '/diary',
+  diary: '/diary',
+  files: '/drive',
+  file: '/drive',
+  photos: '/photos',
+  bookmarks: '/bookmarks',
+};
+
+const DOMAIN_LABEL: Record<string, string> = {
+  notes: 'Notes',
+  emails: 'Mail',
+  email: 'Mail',
+  events: 'Calendar',
+  event: 'Calendar',
+  contacts: 'Contacts',
+  contact: 'Contacts',
+  diary_entries: 'Diary',
+  diary: 'Diary',
+  files: 'Drive',
+  file: 'Drive',
+  photos: 'Photos',
+  bookmarks: 'Bookmarks',
+};
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function DigestItem({ entry }: { entry: DigestEntry }) {
+interface DigestItemProps {
+  entry: DigestEntry;
+  onNavigate: (path: string) => void;
+  onClose: () => void;
+}
+
+function DigestItem({ entry, onNavigate, onClose }: DigestItemProps) {
   const color = ALERT_COLORS[entry.alert_level || 'SILENT'] || 'var(--text-muted)';
   const summary = entry.intelligent_summary || entry.raw_summary;
+
+  const handleDomainClick = (domain: string) => {
+    const route = DOMAIN_ROUTE[domain];
+    if (route) {
+      onClose();
+      onNavigate(route);
+    }
+  };
 
   return (
     <div style={{
       padding: '10px 0',
       borderBottom: '1px solid var(--border)',
     }}>
+      {/* Header: time + alert level + count */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{
           width: 6, height: 6, borderRadius: '50%',
@@ -44,7 +92,18 @@ function DigestItem({ entry }: { entry: DigestEntry }) {
         }}>
           {entry.alert_level || 'SILENT'}
         </span>
+        {entry.changes_count > 0 && (
+          <span style={{
+            fontSize: '0.625rem',
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-sans)',
+          }}>
+            {entry.changes_count} change{entry.changes_count !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
+
+      {/* Summary */}
       <div style={{
         fontSize: '0.8125rem', color: 'var(--text)',
         fontFamily: 'var(--font-sans)', lineHeight: 1.5,
@@ -52,14 +111,63 @@ function DigestItem({ entry }: { entry: DigestEntry }) {
       }}>
         {summary}
       </div>
+
+      {/* Domain chips */}
+      {entry.domains.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 4,
+          paddingLeft: 14, marginTop: 6,
+        }}>
+          {entry.domains.map((domain) => {
+            const route = DOMAIN_ROUTE[domain];
+            const label = DOMAIN_LABEL[domain] || domain.replace(/_/g, ' ');
+            return (
+              <button
+                key={domain}
+                onClick={route ? () => handleDomainClick(domain) : undefined}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: '2px 8px',
+                  fontSize: '0.6875rem',
+                  fontFamily: 'var(--font-sans)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 999,
+                  color: route ? 'var(--amber)' : 'var(--text-muted)',
+                  cursor: route ? 'pointer' : 'default',
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={(e) => {
+                  if (route) {
+                    e.currentTarget.style.background = 'var(--card)';
+                    e.currentTarget.style.borderColor = 'var(--amber)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--surface)';
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                {label}
+                {route && <ChevronRight size={10} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Action suggested */}
       {entry.action_suggested && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 4,
+          display: 'flex', alignItems: 'flex-start', gap: 6,
           fontSize: '0.75rem', color: 'var(--amber)',
-          fontFamily: 'var(--font-sans)', marginTop: 4,
-          paddingLeft: 14,
+          fontFamily: 'var(--font-sans)', marginTop: 6,
+          padding: '6px 12px 6px 14px',
+          background: 'rgba(212, 160, 23, 0.06)',
+          borderRadius: 'var(--radius-sm)',
+          lineHeight: 1.4,
         }}>
-          <Lightbulb size={12} />
+          <Lightbulb size={12} style={{ flexShrink: 0, marginTop: 2 }} />
           {entry.action_suggested}
         </div>
       )}
@@ -74,6 +182,7 @@ export function BriefingPanel() {
   const loading = useDigestStore((s) => s.loading);
   const fetchTodayHistory = useDigestStore((s) => s.fetchTodayHistory);
   const panelRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (panelOpen) {
@@ -101,7 +210,9 @@ export function BriefingPanel() {
       style={{
         position: 'absolute', top: 44, right: 0,
         width: 360, maxHeight: 480,
-        background: 'var(--card)',
+        background: 'rgba(17, 17, 24, 0.75)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
@@ -145,7 +256,12 @@ export function BriefingPanel() {
           </div>
         ) : (
           todayDigests.map((entry) => (
-            <DigestItem key={entry.id} entry={entry} />
+            <DigestItem
+              key={entry.id}
+              entry={entry}
+              onNavigate={navigate}
+              onClose={() => setPanelOpen(false)}
+            />
           ))
         )}
       </div>
@@ -158,7 +274,7 @@ export function BriefingPanel() {
         <button
           onClick={() => {
             setPanelOpen(false);
-            // Navigate to settings/digest or future full history view
+            navigate('/settings/digest');
           }}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,

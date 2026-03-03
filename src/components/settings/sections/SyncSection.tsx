@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { api } from '@/services/api';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
-import type { SyncConnector } from '@/types/settings';
+import { ConnectorCard } from '../ConnectorCard';
+import { AddIntegrationModal } from '../AddIntegrationModal';
+import { EditConnectorModal } from '../EditConnectorModal';
 
 const INTERVAL_OPTIONS = [
   { value: '5', label: '5 minutes' },
@@ -16,27 +18,15 @@ const INTERVAL_OPTIONS = [
   { value: '120', label: '120 minutes' },
 ];
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = { active: '#22c55e', error: '#f59e0b', disabled: '#6b7280' };
-  const color = colors[status] || '#6b7280';
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color }} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
-  );
+interface ConnectorInfo {
+  id: string;
+  connector_type: string;
+  name: string;
+  display_name: string | null;
+  domains: string[];
+  status: string;
+  last_sync_at: string | null;
+  errors_count: number;
 }
 
 export function SyncSection() {
@@ -46,28 +36,28 @@ export function SyncSection() {
   const updateSection = useSettingsStore((s) => s.updateSection);
   const resetSection = useSettingsStore((s) => s.resetSection);
   const [saving, setSaving] = useState(false);
-  const [connectors, setConnectors] = useState<SyncConnector[]>([]);
-  const [syncing, setSyncing] = useState<string | null>(null);
+  const [connectors, setConnectors] = useState<ConnectorInfo[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      const useMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (useMock) {
-        setConnectors([
-          { id: '1', provider: 'Google Calendar', account_name: 'user@gmail.com', status: 'active', last_sync_at: new Date(Date.now() - 300000).toISOString(), error_message: null },
-          { id: '2', provider: 'Gmail', account_name: 'user@gmail.com', status: 'active', last_sync_at: new Date(Date.now() - 120000).toISOString(), error_message: null },
-        ]);
-        return;
-      }
-      try {
-        const res = await api.get<{ data: SyncConnector[] }>('/sync/connectors');
-        setConnectors(res.data);
-      } catch {
-        setConnectors([]);
-      }
+  const loadConnectors = useCallback(async () => {
+    const useMock = import.meta.env.VITE_MOCK_API === 'true';
+    if (useMock) {
+      setConnectors([
+        { id: '1', connector_type: 'google-calendar', name: 'google — google-calendar', display_name: 'Google Calendar', domains: ['events'], status: 'connected', last_sync_at: new Date(Date.now() - 300000).toISOString(), errors_count: 0 },
+        { id: '2', connector_type: 'gmail', name: 'google — gmail', display_name: 'Gmail', domains: ['emails'], status: 'connected', last_sync_at: new Date(Date.now() - 120000).toISOString(), errors_count: 0 },
+      ]);
+      return;
     }
-    load();
+    try {
+      const res = await api.get<{ data: ConnectorInfo[] }>('/sync/connectors');
+      setConnectors(res.data);
+    } catch {
+      setConnectors([]);
+    }
   }, []);
+
+  useEffect(() => { loadConnectors(); }, [loadConnectors]);
 
   if (!settings) return null;
 
@@ -82,63 +72,73 @@ export function SyncSection() {
     setSaving(false);
   };
 
-  const handleSyncNow = async (id: string) => {
-    setSyncing(id);
-    try {
-      const useMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (!useMock) {
-        await api.post(`/sync/connectors/${id}/run`);
-      }
-      toast.success('Sync triggered');
-    } catch {
-      toast.error('Sync failed');
-    }
-    setSyncing(null);
-  };
-
   return (
     <>
-      <SettingSection title="Sync Connectors" description="Connected services and their sync status.">
+      <SettingSection
+        title="Integrations"
+        description="Connected services and data sources."
+        action={
+          <button
+            onClick={() => setModalOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              height: 28, padding: '0 10px',
+              background: 'none',
+              border: '1px solid var(--amber)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--amber)',
+              fontSize: '0.75rem', fontWeight: 500,
+              fontFamily: 'var(--font-sans)',
+              cursor: 'pointer',
+              transition: 'all var(--transition-fast)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(212, 160, 23, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'none';
+            }}
+          >
+            <Plus size={14} />
+            Add
+          </button>
+        }
+      >
         {connectors.length === 0 ? (
-          <div style={{ padding: '16px 0', fontSize: '0.8125rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-            No sync connectors configured.
+          <div style={{
+            padding: '32px 0', textAlign: 'center',
+            fontSize: '0.8125rem', color: 'var(--text-muted)',
+            fontFamily: 'var(--font-sans)',
+          }}>
+            <div style={{ marginBottom: 8 }}>No integrations configured yet.</div>
+            <button
+              onClick={() => setModalOpen(true)}
+              style={{
+                background: 'var(--amber)', color: '#000',
+                border: 'none', borderRadius: 'var(--radius-md)',
+                padding: '6px 16px', cursor: 'pointer',
+                fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+                fontWeight: 500,
+              }}
+            >
+              Add your first integration
+            </button>
           </div>
         ) : (
-          connectors.map((c) => (
-            <div key={c.id} style={{ padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-                    {c.provider}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{c.account_name}</div>
-                </div>
-                <StatusBadge status={c.status} />
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                  Last: {timeAgo(c.last_sync_at)}
-                </span>
-                <button
-                  onClick={() => handleSyncNow(c.id)}
-                  disabled={syncing === c.id}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    height: 26, padding: '0 8px',
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
-                    fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer',
-                  }}
-                >
-                  {syncing === c.id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={12} />}
-                  Sync
-                </button>
-              </div>
-              {c.status === 'error' && c.error_message && (
-                <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 4, paddingLeft: 4 }}>
-                  {c.error_message} — <button style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', padding: 0, textDecoration: 'underline' }}>Reconnect</button>
-                </div>
-              )}
-            </div>
-          ))
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: 8,
+          }}>
+            {connectors.map((c) => (
+              <ConnectorCard
+                key={c.id}
+                connector={c}
+                onRefresh={loadConnectors}
+                onConfigure={(id) => setEditingId(id)}
+              />
+            ))}
+          </div>
         )}
       </SettingSection>
 
@@ -153,6 +153,18 @@ export function SyncSection() {
       </SettingSection>
 
       <SaveBar visible={!!dirty.sync} saving={saving} onSave={handleSave} onDiscard={() => resetSection('sync')} />
+
+      <AddIntegrationModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onConnected={loadConnectors}
+      />
+
+      <EditConnectorModal
+        connectorId={editingId}
+        onClose={() => setEditingId(null)}
+        onSaved={loadConnectors}
+      />
     </>
   );
 }

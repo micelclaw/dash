@@ -60,17 +60,19 @@ export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPane
 
   useEffect(() => {
     if (!isPro || !sourceId) return;
+    let cancelled = false;
 
     setLoading(true);
     setExpanded(false);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      const results = await fetchSimilar(sourceType, sourceId, 3);
-      setItems(results);
-      setLoading(false);
-    }, 1500);
 
-    return () => clearTimeout(debounceRef.current);
+    fetchSimilar(sourceType, sourceId, 3).then(results => {
+      if (!cancelled) {
+        setItems(results);
+        setLoading(false);
+      }
+    });
+
+    return () => { cancelled = true; };
   }, [sourceType, sourceId, isPro, fetchSimilar]);
 
   const handleShowMore = async () => {

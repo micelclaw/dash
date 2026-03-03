@@ -23,6 +23,7 @@ interface DigestState {
   markAllRead: () => void;
   handleDigestReady: (data: Record<string, unknown>) => void;
   handleDigestUrgent: (data: Record<string, unknown>) => void;
+  handleDigestEnriched: (data: Record<string, unknown>) => void;
   dismissUrgent: () => void;
   setPanelOpen: (open: boolean) => void;
 }
@@ -120,6 +121,24 @@ export const useDigestStore = create<DigestState>()((set, get) => ({
       todayDigests: [entry, ...s.todayDigests],
       unreadCount: s.unreadCount + 1,
       latestUrgent: entry,
+    }));
+  },
+
+  handleDigestEnriched: (data) => {
+    const digestId = data.digest_id as string;
+    const intelligentSummary = (data.intelligent_summary as string) || null;
+    const actionSuggested = (data.action_suggested as string) || null;
+
+    set((s) => ({
+      todayDigests: s.todayDigests.map((d) =>
+        d.id === digestId
+          ? { ...d, intelligent_summary: intelligentSummary, action_suggested: actionSuggested }
+          : d
+      ),
+      latestUrgent:
+        s.latestUrgent?.id === digestId
+          ? { ...s.latestUrgent, intelligent_summary: intelligentSummary, action_suggested: actionSuggested }
+          : s.latestUrgent,
     }));
   },
 

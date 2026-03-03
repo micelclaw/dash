@@ -29,7 +29,12 @@ interface Recipient {
 interface ContactResult {
   id: string;
   display_name: string | null;
-  email: string;
+  emails: string[] | null;
+}
+
+/** Extract first email from contact's emails array */
+function contactEmail(c: ContactResult): string {
+  return c.emails?.[0] ?? '';
 }
 
 export function MailComposer({ data, onClose, onSend, accounts, inline = false }: MailComposerProps) {
@@ -39,6 +44,14 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
   const [fromAccountId, setFromAccountId] = useState<string>(
     data.account_id || accounts.find(a => a.is_default)?.id || accounts[0]?.id || '',
   );
+
+  // Update fromAccountId when accounts load (may be empty on first render)
+  useEffect(() => {
+    if (!fromAccountId && accounts.length > 0) {
+      setFromAccountId(accounts.find(a => a.is_default)?.id || accounts[0].id);
+    }
+  }, [accounts, fromAccountId]);
+
   const [toRecipients, setToRecipients] = useState<Recipient[]>(data.to ?? []);
   const [ccRecipients, setCcRecipients] = useState<Recipient[]>(data.cc ?? []);
   const [bccRecipients, setBccRecipients] = useState<Recipient[]>([]);
@@ -70,16 +83,14 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
     return true;
   }, [isDirty]);
 
-  // Escape to close
+  // Escape to close (auto-saves draft if dirty)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (confirmDiscard()) onClose();
-      }
+      if (e.key === 'Escape') handleClose();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [confirmDiscard, onClose]);
+  }, [isDirty, fromAccountId, toRecipients, subject, body]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Contact search
   const searchContacts = useCallback(
@@ -103,6 +114,18 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
     },
     [],
   );
+
+  const handleSaveContact = useCallback(async (address: string, name: string) => {
+    try {
+      await api.post('/contacts', {
+        display_name: name,
+        emails: [address],
+      });
+      toast.success(`Contact "${name}" saved`);
+    } catch {
+      toast.error('Failed to save contact');
+    }
+  }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -137,55 +160,83 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSaveDraft = async () => {
-    setSavingDraft(true);
+  const saveDraft = async (silent = false): Promise<boolean> => {
     try {
       await api.post('/emails/drafts', {
-        account_id: fromAccountId,
-        to: toRecipients.length > 0 ? toRecipients : undefined,
-        cc: ccRecipients.length > 0 ? ccRecipients : undefined,
-        bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
+        account_id: fromAccountId || undefined,
+        to_addresses: toRecipients.length > 0 ? toRecipients.map(r => r.address) : undefined,
+        cc_addresses: ccRecipients.length > 0 ? ccRecipients.map(r => r.address) : undefined,
+        bcc_addresses: bccRecipients.length > 0 ? bccRecipients.map(r => r.address) : undefined,
         subject: subject || undefined,
         body_plain: body || undefined,
         in_reply_to: data.in_reply_to,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
-      toast.success('Draft saved');
-      onClose();
-    } catch {
-      toast.error('Failed to save draft');
-    } finally {
-      setSavingDraft(false);
+      if (!silent) toast.success('Draft saved');
+      return true;
+    } catch (err: any) {
+      if (!silent) toast.error(err?.message || 'Failed to save draft');
+      return false;
     }
   };
 
+  const handleSaveDraft = async () => {
+    setSavingDraft(true);
+    const ok = await saveDraft();
+    setSavingDraft(false);
+    if (ok) onClose();
+  };
+
   const handleSend = async () => {
-    if (toRecipients.length === 0 || !subject) return;
+    // Auto-commit any typed-but-uncommitted recipient
+    let finalTo = toRecipients;
+    if (toInput.trim()) {
+      finalTo = [...toRecipients, { address: toInput.trim() }];
+      setToRecipients(finalTo);
+      setToInput('');
+    }
+    if (finalTo.length === 0 || !subject) return;
     setSending(true);
     try {
       await onSend({
         account_id: fromAccountId,
-        to: toRecipients,
-        cc: ccRecipients.length > 0 ? ccRecipients : undefined,
-        bcc: bccRecipients.length > 0 ? bccRecipients : undefined,
+        to_addresses: finalTo.map(r => r.address),
+        cc_addresses: ccRecipients.length > 0 ? ccRecipients.map(r => r.address) : undefined,
+        bcc_addresses: bccRecipients.length > 0 ? bccRecipients.map(r => r.address) : undefined,
         subject,
         body_plain: body,
         in_reply_to: data.in_reply_to,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
+      toast.success('Email sent');
       onClose();
-    } catch {
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to send email');
       setSending(false);
     }
   };
 
+  const handleClose = async () => {
+    if (!isDirty) {
+      onClose();
+      return;
+    }
+    // Auto-save as draft instead of discarding
+    await saveDraft(true);
+    toast('Draft saved', { duration: 2000 });
+    onClose();
+  };
+
   const handleDiscard = () => {
-    if (confirmDiscard()) onClose();
+    if (isDirty && !window.confirm('Discard this email? It will not be saved.')) return;
+    onClose();
   };
 
   // Title text
   let title = 'New message';
-  if (data.mode === 'reply' || data.mode === 'reply_all') {
+  if (data.mode === 'edit_draft') {
+    title = `Draft: ${data.subject ?? ''}`;
+  } else if (data.mode === 'reply' || data.mode === 'reply_all') {
     title = `Re: ${data.original_email?.subject ?? ''}`;
   } else if (data.mode === 'forward') {
     title = `Fwd: ${data.original_email?.subject ?? ''}`;
@@ -249,7 +300,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
             />
             <TitleBarButton
               icon={X}
-              onClick={(e) => { e.stopPropagation(); if (confirmDiscard()) onClose(); }}
+              onClick={(e) => { e.stopPropagation(); handleClose(); }}
             />
           </div>
         </div>
@@ -267,7 +318,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           {!inline && <TitleBarButton icon={Maximize2} onClick={() => setMaximized(prev => !prev)} />}
           <TitleBarButton
             icon={X}
-            onClick={() => { if (confirmDiscard()) onClose(); }}
+            onClick={() => handleClose()}
           />
         </div>
       </div>
@@ -324,11 +375,12 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         }}
         suggestions={toSuggestions}
         onSuggestionSelect={(c) => {
-          setToRecipients(prev => [...prev, { address: c.email, name: c.display_name || undefined }]);
+          setToRecipients(prev => [...prev, { address: contactEmail(c), name: c.display_name || undefined }]);
           setToInput('');
           setToSuggestions([]);
         }}
         onSuggestionsClear={() => setToSuggestions([])}
+        onSaveContact={handleSaveContact}
       />
 
       {/* Cc/Bcc toggle */}
@@ -365,11 +417,12 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           }}
           suggestions={ccSuggestions}
           onSuggestionSelect={(c) => {
-            setCcRecipients(prev => [...prev, { address: c.email, name: c.display_name || undefined }]);
+            setCcRecipients(prev => [...prev, { address: contactEmail(c), name: c.display_name || undefined }]);
             setCcInput('');
             setCcSuggestions([]);
           }}
           onSuggestionsClear={() => setCcSuggestions([])}
+          onSaveContact={handleSaveContact}
         />
       )}
 
@@ -386,11 +439,12 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
           }}
           suggestions={bccSuggestions}
           onSuggestionSelect={(c) => {
-            setBccRecipients(prev => [...prev, { address: c.email, name: c.display_name || undefined }]);
+            setBccRecipients(prev => [...prev, { address: contactEmail(c), name: c.display_name || undefined }]);
             setBccInput('');
             setBccSuggestions([]);
           }}
           onSuggestionsClear={() => setBccSuggestions([])}
+          onSaveContact={handleSaveContact}
         />
       )}
 
@@ -551,7 +605,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
 
         <button
           onClick={handleSend}
-          disabled={sending || toRecipients.length === 0 || !subject}
+          disabled={sending || (toRecipients.length === 0 && !toInput.trim()) || !subject}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -559,7 +613,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
             padding: '6px 16px',
             border: 'none',
             borderRadius: 'var(--radius-md)',
-            background: (sending || toRecipients.length === 0 || !subject)
+            background: (sending || (toRecipients.length === 0 && !toInput.trim()) || !subject)
               ? 'var(--amber-dim)'
               : 'var(--amber)',
             color: '#000',
@@ -619,6 +673,7 @@ interface ChipInputProps {
   suggestions: ContactResult[];
   onSuggestionSelect: (contact: ContactResult) => void;
   onSuggestionsClear: () => void;
+  onSaveContact?: (address: string, name: string) => void;
 }
 
 function ChipInput({
@@ -630,18 +685,34 @@ function ChipInput({
   suggestions,
   onSuggestionSelect,
   onSuggestionsClear,
+  onSaveContact,
 }: ChipInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [saveContactMode, setSaveContactMode] = useState(false);
+  const [saveContactName, setSaveContactName] = useState('');
+  const saveNameRef = useRef<HTMLInputElement>(null);
+
+  const commitInput = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed) {
+      onRecipientsChange([...recipients, { address: trimmed }]);
+      onInputChange('');
+      onSuggestionsClear();
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {
       e.preventDefault();
-      onRecipientsChange([...recipients, { address: inputValue.trim() }]);
-      onInputChange('');
-      onSuggestionsClear();
+      commitInput();
     } else if (e.key === 'Backspace' && !inputValue && recipients.length > 0) {
       onRecipientsChange(recipients.slice(0, -1));
     }
+  };
+
+  const handleBlur = () => {
+    // Auto-commit typed address when focus leaves the input
+    commitInput();
   };
 
   const removeRecipient = (idx: number) => {
@@ -674,9 +745,15 @@ function ChipInput({
               padding: '2px 8px',
               fontSize: '0.75rem',
               color: 'var(--text)',
+              maxWidth: 260,
             }}
+            title={r.name ? `${r.name} <${r.address}>` : r.address}
           >
-            {r.name ?? r.address}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {r.name ? (
+                <>{r.name} <span style={{ color: 'var(--text-muted)' }}>&lt;{r.address}&gt;</span></>
+              ) : r.address}
+            </span>
             <button
               onClick={() => removeRecipient(idx)}
               style={{
@@ -690,6 +767,7 @@ function ChipInput({
                 padding: 0,
                 fontSize: '0.75rem',
                 lineHeight: 1,
+                flexShrink: 0,
               }}
             >
               <X size={10} />
@@ -703,7 +781,8 @@ function ChipInput({
           onChange={e => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => {
-            // Delay to allow suggestion clicks
+            // Auto-commit typed address + delay to allow suggestion clicks
+            handleBlur();
             setTimeout(() => onSuggestionsClear(), 150);
           }}
           style={{
@@ -720,7 +799,7 @@ function ChipInput({
         />
 
         {/* Autocomplete dropdown */}
-        {suggestions.length > 0 && (
+        {(suggestions.length > 0 || (inputValue.includes('@') && inputValue.length > 4 && suggestions.length === 0 && onSaveContact)) && (
           <div
             style={{
               position: 'absolute',
@@ -733,7 +812,7 @@ function ChipInput({
               borderRadius: 'var(--radius-md)',
               boxShadow: 'var(--shadow-md)',
               zIndex: 'var(--z-dropdown)' as unknown as number,
-              maxHeight: 160,
+              maxHeight: 200,
               overflow: 'auto',
             }}
           >
@@ -746,7 +825,8 @@ function ChipInput({
                 }}
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8,
                   width: '100%',
                   padding: '6px 10px',
                   border: 'none',
@@ -758,16 +838,94 @@ function ChipInput({
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
-                <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
-                  {contact.display_name || contact.email}
+                {/* Avatar circle */}
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: 'var(--surface)', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.6875rem', color: 'var(--text-dim)', flexShrink: 0,
+                }}>
+                  {(contact.display_name?.[0] ?? contactEmail(contact)[0] ?? '?').toUpperCase()}
                 </span>
-                {contact.display_name && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {contact.email}
-                  </span>
-                )}
+                <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                  <div style={{ fontSize: '0.8125rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {contact.display_name || contactEmail(contact)}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {contactEmail(contact)}
+                  </div>
+                </div>
               </button>
             ))}
+
+            {/* Save as contact — shown when typed email has no match */}
+            {inputValue.includes('@') && inputValue.length > 4 && suggestions.length === 0 && onSaveContact && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '6px 10px' }}>
+                {!saveContactMode ? (
+                  <button
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSaveContactMode(true);
+                      setSaveContactName(inputValue.trim().split('@')[0]);
+                      setTimeout(() => saveNameRef.current?.focus(), 50);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      width: '100%', padding: '2px 0',
+                      border: 'none', background: 'transparent', cursor: 'pointer',
+                      textAlign: 'left', fontFamily: 'var(--font-sans)',
+                      color: 'var(--amber)', fontSize: '0.75rem',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
+                    onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                  >
+                    + Save &quot;{inputValue.trim()}&quot; as contact
+                  </button>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (saveContactName.trim()) {
+                        onSaveContact(inputValue.trim(), saveContactName.trim());
+                        setSaveContactMode(false);
+                        setSaveContactName('');
+                      }
+                    }}
+                    style={{ display: 'flex', gap: 6, alignItems: 'center' }}
+                  >
+                    <input
+                      ref={saveNameRef}
+                      value={saveContactName}
+                      onChange={(e) => setSaveContactName(e.target.value)}
+                      placeholder="Contact name"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Escape') { setSaveContactMode(false); inputRef.current?.focus(); }
+                      }}
+                      style={{
+                        flex: 1, height: 26, padding: '0 6px',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                        fontFamily: 'var(--font-sans)', fontSize: '0.75rem', outline: 'none',
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      onMouseDown={(e) => e.preventDefault()}
+                      style={{
+                        padding: '2px 8px', height: 26,
+                        background: 'var(--amber)', color: '#000', border: 'none',
+                        borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                        fontFamily: 'var(--font-sans)', fontSize: '0.6875rem', fontWeight: 500,
+                      }}
+                    >
+                      Save
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

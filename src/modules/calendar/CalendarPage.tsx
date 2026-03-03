@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { api } from '@/services/api';
 import { useEvents } from './hooks/use-events';
 import { useEventLinks } from './hooks/use-event-links';
 import { CalendarToolbar } from './CalendarToolbar';
@@ -26,6 +27,26 @@ export function Component() {
 
   // Add calendar modal
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
+
+  // Fetch calendars from API
+  const [calendars, setCalendars] = useState<Array<{ id: string; name: string; color: string; source: string; connector_id: string | null; visible: boolean }>>([]);
+  const [connectors, setConnectors] = useState<Array<{ id: string; connector_type: string; display_name: string | null }>>([]);
+
+  const fetchCalendars = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: typeof calendars }>('/calendars');
+      setCalendars(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchConnectors = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: typeof connectors }>('/sync/connectors');
+      setConnectors(res.data);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => { fetchCalendars(); fetchConnectors(); }, [fetchCalendars, fetchConnectors]);
 
   // Fetch events for the current view
   const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useEvents({
@@ -154,6 +175,8 @@ export function Component() {
       events={events}
       onAddCalendar={() => setAddCalendarOpen(true)}
       onRefresh={fetchEvents}
+      calendars={calendars}
+      onCalendarsChange={fetchCalendars}
     />
   );
 
@@ -190,6 +213,8 @@ export function Component() {
       <AddCalendarModal
         open={addCalendarOpen}
         onClose={() => setAddCalendarOpen(false)}
+        onCreated={fetchCalendars}
+        connectors={connectors}
       />
     </>
   );

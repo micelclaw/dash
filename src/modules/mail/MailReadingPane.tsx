@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  ChevronLeft, Reply, ReplyAll, Forward,
+  ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Archive, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
   Printer, ExternalLink, Trash2, Ban, ShieldAlert,
   AlertTriangle, Languages, Code, Download, Sparkles,
@@ -148,6 +148,45 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     onForward(buildReplyData(email, 'forward'));
   };
 
+  const isDraft = email?.status === 'draft';
+
+  const handleEditDraft = () => {
+    if (!email) return;
+    const toAddrs = (email.to_addresses as string[] | null) ?? [];
+    const ccAddrs = (email.cc_addresses as string[] | null) ?? [];
+    onReply({
+      mode: 'edit_draft',
+      draft_id: email.id,
+      to: toAddrs.map(a => ({ address: a })),
+      cc: ccAddrs.map(a => ({ address: a })),
+      subject: email.subject ?? '',
+      body_html: email.body_html ?? email.body_plain ?? '',
+      account_id: email.account_id ?? undefined,
+    });
+  };
+
+  const handleSendDraft = async () => {
+    if (!email || !onSend) return;
+    try {
+      const toAddrs = (email.to_addresses as string[] | null) ?? [];
+      await onSend({
+        account_id: email.account_id,
+        to_addresses: toAddrs,
+        cc_addresses: email.cc_addresses ?? undefined,
+        bcc_addresses: email.bcc_addresses ?? undefined,
+        subject: email.subject,
+        body_plain: email.body_plain,
+        body_html: email.body_html,
+      });
+      // Delete the draft after sending
+      await api.delete(`/emails/${email.id}`).catch(() => {});
+      toast.success('Email sent');
+      onBack?.();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to send');
+    }
+  };
+
   const handleMarkUnread = () => {
     if (!email) return;
     api.post(`/emails/${email.id}/unread`).catch(() => {});
@@ -215,6 +254,24 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
       onBack?.();
     } catch {
       toast.error('Failed to delete email');
+    }
+    setMoreOpen(false);
+  };
+
+  const isArchived = email?.folder === 'Archive';
+
+  const handleUnarchive = async () => {
+    if (!email) return;
+    // Restore to the folder that makes sense based on status
+    const targetFolder = email.status === 'draft' ? 'DRAFTS'
+      : email.status === 'sent' ? 'SENT'
+      : email.pre_snooze_folder ?? 'INBOX';
+    try {
+      await api.patch(`/emails/${email.id}`, { folder: targetFolder });
+      toast.success(`Moved back to ${targetFolder}`);
+      onBack?.();
+    } catch {
+      toast.error('Failed to unarchive');
     }
     setMoreOpen(false);
   };
@@ -582,9 +639,18 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           flexWrap: 'wrap',
         }}
       >
-        <ActionButton icon={Reply} label="Reply" onClick={handleReply} />
-        <ActionButton icon={ReplyAll} label="Reply All" onClick={handleReplyAll} />
-        <ActionButton icon={Forward} label="Forward" onClick={handleForward} />
+        {isDraft ? (
+          <>
+            <ActionButton icon={Pencil} label="Edit" onClick={handleEditDraft} />
+            <ActionButton icon={Send} label="Send" onClick={handleSendDraft} />
+          </>
+        ) : (
+          <>
+            <ActionButton icon={Reply} label="Reply" onClick={handleReply} />
+            <ActionButton icon={ReplyAll} label="Reply All" onClick={handleReplyAll} />
+            <ActionButton icon={Forward} label="Forward" onClick={handleForward} />
+          </>
+        )}
 
         {/* Star button */}
         <button
@@ -696,16 +762,33 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                 overflowY: 'auto',
               }}
             >
-              <button onClick={() => { handleReplyAll(); setMoreOpen(false); }} style={menuItemStyle}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <ReplyAll size={14} /> Reply all
-              </button>
-              <button onClick={() => { handleForward(); setMoreOpen(false); }} style={menuItemStyle}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Forward size={14} /> Forward
-              </button>
+              {isDraft ? (
+                <>
+                  <button onClick={() => { handleEditDraft(); setMoreOpen(false); }} style={menuItemStyle}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Pencil size={14} /> Edit draft
+                  </button>
+                  <button onClick={() => { handleSendDraft(); setMoreOpen(false); }} style={menuItemStyle}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Send size={14} /> Send
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => { handleReplyAll(); setMoreOpen(false); }} style={menuItemStyle}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <ReplyAll size={14} /> Reply all
+                  </button>
+                  <button onClick={() => { handleForward(); setMoreOpen(false); }} style={menuItemStyle}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Forward size={14} /> Forward
+                  </button>
+                </>
+              )}
 
               <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
 
@@ -714,6 +797,13 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <BookOpen size={14} /> Mark unread
               </button>
+              {isArchived && (
+                <button onClick={handleUnarchive} style={menuItemStyle}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <Undo2 size={14} /> Unarchive
+                </button>
+              )}
               <button onClick={handleDelete}
                 style={{ ...menuItemStyle, color: 'var(--danger, #ef4444)' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}

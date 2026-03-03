@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Settings, Trash2, Type } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -15,6 +15,14 @@ import {
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
 
+interface CalendarInfo {
+  id: string;
+  name: string;
+  color: string;
+  source: string;
+  visible: boolean;
+}
+
 interface CalendarMiniSidebarProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
@@ -23,6 +31,8 @@ interface CalendarMiniSidebarProps {
   events: CalendarEvent[];
   onAddCalendar?: () => void;
   onRefresh?: () => void;
+  calendars?: CalendarInfo[];
+  onCalendarsChange?: () => void;
 }
 
 const DAY_NAMES = getWeekDayNames(1);
@@ -38,6 +48,8 @@ export function CalendarMiniSidebar({
   events,
   onAddCalendar,
   onRefresh,
+  calendars: apiCalendars,
+  onCalendarsChange,
 }: CalendarMiniSidebarProps) {
   const [miniMonth, setMiniMonth] = useState(() => new Date(currentDate));
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -65,19 +77,20 @@ export function CalendarMiniSidebar({
     }
   };
 
-  const handleDeleteCalendar = async (name: string) => {
-    const matching = events.filter(e => e.calendar_name === name);
-    if (matching.length === 0) {
-      toast.info(`No events in "${name}"`);
-      return;
-    }
-    if (!confirm(`Delete all ${matching.length} events in "${name}"? This cannot be undone.`)) return;
+  const handleDeleteCalendar = async (cal: CalendarInfo) => {
+    const matching = events.filter(e => e.calendar_name === cal.name);
+    const msg = matching.length > 0
+      ? `Delete "${cal.name}" and its ${matching.length} events? This cannot be undone.`
+      : `Delete calendar "${cal.name}"?`;
+    if (!confirm(msg)) return;
     try {
-      await Promise.all(matching.map(e => api.delete(`/events/${e.id}`)));
-      toast.success(`Deleted ${matching.length} events from "${name}"`);
+      // Delete via API (also deletes events on the backend)
+      await api.delete(`/calendars/${cal.id}`);
+      toast.success(`Calendar "${cal.name}" deleted`);
+      onCalendarsChange?.();
       onRefresh?.();
     } catch {
-      toast.error('Failed to delete calendar events');
+      toast.error('Failed to delete calendar');
     }
   };
 
@@ -93,14 +106,35 @@ export function CalendarMiniSidebar({
     return dates;
   }, [events]);
 
-  // Extract unique calendar names from events, merged with defaults
-  const calendarNames = useMemo(() => {
+  // Calendar list: use API calendars if available, else derive from events
+  const calendarList = useMemo(() => {
+    if (apiCalendars && apiCalendars.length > 0) {
+      // Merge API calendars with any event calendar_names not in the list
+      const apiNames = new Set(apiCalendars.map(c => c.name));
+      const extras: CalendarInfo[] = [];
+      for (const ev of events) {
+        if (ev.calendar_name && !apiNames.has(ev.calendar_name)) {
+          apiNames.add(ev.calendar_name);
+          extras.push({
+            id: ev.calendar_name,
+            name: ev.calendar_name,
+            color: getCalendarColor(ev.calendar_name),
+            source: ev.source === 'caldav' ? 'caldav' : 'local',
+            visible: true,
+          });
+        }
+      }
+      return [...apiCalendars, ...extras];
+    }
+    // Fallback: derive from events + defaults
     const names = new Set<string>(DEFAULT_CALENDARS);
     for (const ev of events) {
       if (ev.calendar_name) names.add(ev.calendar_name);
     }
-    return Array.from(names);
-  }, [events]);
+    return Array.from(names).map(name => ({
+      id: name, name, color: getCalendarColor(name), source: 'local', visible: true,
+    }));
+  }, [apiCalendars, events]);
 
   const hasEvent = (d: Date) =>
     eventDates.has(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
@@ -250,8 +284,9 @@ export function CalendarMiniSidebar({
         >
           Calendars
         </div>
-        {calendarNames.map((name) => {
-          const color = getCalendarColor(name);
+        {calendarList.map((cal) => {
+          const name = cal.name;
+          const color = cal.color;
           const hidden = hiddenCalendars.has(name);
           const isRenaming = renaming === name;
 
@@ -326,11 +361,9 @@ export function CalendarMiniSidebar({
                 </label>
               }
               items={[
-                { label: 'Rename', icon: Type, onClick: () => { setRenameTo(name); setRenaming(name); } },
-                { label: 'Edit', icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
-                { label: 'Settings', icon: Settings, onClick: () => toast.info(`Calendar settings — coming soon`) },
+                { label: 'Rename', icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
                 { label: '', icon: undefined, onClick: () => {}, separator: true },
-                { label: 'Delete', icon: Trash2, onClick: () => handleDeleteCalendar(name), variant: 'danger' as const },
+                { label: 'Delete', icon: Trash2, onClick: () => handleDeleteCalendar(cal), variant: 'danger' as const },
               ]}
             />
           );

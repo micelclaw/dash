@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router';
-import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck, Zap } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Notification } from '@/types/notifications';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useDigestStore } from '@/stores/digest.store';
 
 const TYPE_ICONS: Record<Notification['type'], LucideIcon> = {
   sync: RefreshCw,
@@ -11,6 +12,7 @@ const TYPE_ICONS: Record<Notification['type'], LucideIcon> = {
   digest: BarChart3,
   system: AlertTriangle,
   approval: ShieldCheck,
+  change: Zap,
 };
 
 const TYPE_COLORS: Record<Notification['type'], string> = {
@@ -20,6 +22,7 @@ const TYPE_COLORS: Record<Notification['type'], string> = {
   digest: 'var(--mod-chat)',
   system: 'var(--warning)',
   approval: 'var(--error)',
+  change: 'var(--success)',
 };
 
 function timeAgo(ts: string): string {
@@ -45,21 +48,29 @@ export function NotificationItem({ notification, onClose }: NotificationItemProp
   const Icon = TYPE_ICONS[notification.type];
   const iconColor = notification.color ?? TYPE_COLORS[notification.type];
 
-  const handleClick = () => {
-    markAsRead(notification.id);
+  const dispatchAction = () => {
+    if (notification.action?.callback === 'openBriefing') {
+      useDigestStore.getState().setPanelOpen(true);
+      onClose();
+      return true;
+    }
     if (notification.action?.route) {
       navigate(notification.action.route);
       onClose();
+      return true;
     }
+    return false;
+  };
+
+  const handleClick = () => {
+    markAsRead(notification.id);
+    dispatchAction();
   };
 
   const handleActionClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     markAsRead(notification.id);
-    if (notification.action?.route) {
-      navigate(notification.action.route);
-      onClose();
-    }
+    dispatchAction();
   };
 
   return (
@@ -69,7 +80,7 @@ export function NotificationItem({ notification, onClose }: NotificationItemProp
         display: 'flex',
         gap: 10,
         padding: '10px 12px',
-        cursor: notification.action?.route ? 'pointer' : 'default',
+        cursor: (notification.action?.route || notification.action?.callback) ? 'pointer' : 'default',
         borderLeft: notification.read ? '2px solid transparent' : '2px solid var(--amber)',
         opacity: notification.read ? 0.6 : 1,
         transition: 'background var(--transition-fast)',

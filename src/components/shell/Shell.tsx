@@ -107,13 +107,14 @@ export function Shell() {
   const clipboardEvent = useWebSocket('clipboard.*');
   const processEvent = useWebSocket('process.*');
   const photoWorkerEvent = useWebSocket('photo.worker.*');
+  const changeEvent = useWebSocket('change.*');
 
   useEffect(() => {
     if (!syncEvent) return;
     if (syncEvent.event === 'sync.completed') {
       addNotification({
         type: 'sync',
-        title: `Sync completed: ${syncEvent.data.provider as string}`,
+        title: (syncEvent.data.title as string) ?? `Sync completed: ${syncEvent.data.provider as string}`,
       });
     } else if (syncEvent.event === 'sync.error') {
       addNotification({
@@ -149,37 +150,40 @@ export function Shell() {
 
   const handleDigestReady = useDigestStore((s) => s.handleDigestReady);
   const handleDigestUrgent = useDigestStore((s) => s.handleDigestUrgent);
+  const handleDigestEnriched = useDigestStore((s) => s.handleDigestEnriched);
+  const setDigestPanelOpen = useDigestStore((s) => s.setPanelOpen);
 
   useEffect(() => {
     if (!digestEvent) return;
     if (digestEvent.event === 'digest.ready') {
       handleDigestReady(digestEvent.data);
-      addNotification({
-        type: 'digest',
-        title: digestEvent.data.summary as string,
-        action: { label: 'Open', route: '/chat' },
-      });
 
       const alertLevel = digestEvent.data.alert_level as string;
-      if (alertLevel === 'NORMAL' || alertLevel === 'URGENT') {
-        toast(alertLevel === 'URGENT' ? 'Urgent Alert' : 'Digest', {
-          description: digestEvent.data.summary as string,
-          duration: alertLevel === 'URGENT' ? 10000 : 5000,
-        });
-      }
+      toast(alertLevel === 'URGENT' ? 'Urgent Briefing' : 'New Briefing', {
+        description: digestEvent.data.summary as string,
+        duration: alertLevel === 'URGENT' ? 10000 : 5000,
+        action: {
+          label: 'Open Briefing',
+          onClick: () => setDigestPanelOpen(true),
+        },
+      });
     } else if (digestEvent.event === 'digest.urgent') {
       handleDigestUrgent(digestEvent.data);
+
       addNotification({
         type: 'digest',
-        title: digestEvent.data.summary as string,
-        action: digestEvent.data.route ? { label: 'View', route: digestEvent.data.route as string } : undefined,
+        title: 'Urgent briefing available',
+        action: { label: 'Open Briefing', callback: 'openBriefing' },
       });
+
       toast.warning('Urgent Alert', {
         description: digestEvent.data.summary as string,
         duration: 10000,
       });
+    } else if (digestEvent.event === 'digest.enriched') {
+      handleDigestEnriched(digestEvent.data);
     }
-  }, [digestEvent, addNotification, handleDigestReady, handleDigestUrgent]);
+  }, [digestEvent, addNotification, handleDigestReady, handleDigestUrgent, handleDigestEnriched, setDigestPanelOpen]);
 
   useEffect(() => {
     if (!systemEvent) return;
@@ -303,6 +307,29 @@ export function Shell() {
       toast.error(`Photo worker error: ${error}`, { duration: 5000 });
     }
   }, [photoWorkerEvent]);
+
+  // Individual change notifications (agent/background sources)
+  useEffect(() => {
+    if (!changeEvent) return;
+    const domain = changeEvent.data.domain as string;
+    const summary = changeEvent.data.summary as string;
+    const source = changeEvent.data.source as string;
+
+    const DOMAIN_ROUTE: Record<string, string> = {
+      notes: '/notes', emails: '/mail', events: '/calendar',
+      contacts: '/contacts', diary_entries: '/diary', files: '/drive',
+      bookmarks: '/bookmarks',
+    };
+
+    const route = DOMAIN_ROUTE[domain];
+    const sourceLabel = source === 'agent_primary' ? 'Agent' : 'Background';
+
+    addNotification({
+      type: 'change',
+      title: `${sourceLabel}: ${summary}`,
+      action: route ? { label: 'View', route } : undefined,
+    });
+  }, [changeEvent, addNotification]);
 
   return (
     <TooltipProvider>

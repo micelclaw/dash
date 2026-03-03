@@ -10,6 +10,7 @@ import {
   Archive,
   Trash2,
   AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { MailSidebarItem } from './MailSidebarItem';
@@ -22,6 +23,8 @@ interface MailSidebarProps {
   onFolderChange: (folder: string) => void;
   collapsed: boolean;
   onCompose: () => void;
+  onSync?: () => void;
+  syncing?: boolean;
   accounts: EmailAccount[];
   emails: Email[];
 }
@@ -44,6 +47,8 @@ export function MailSidebar({
   onFolderChange,
   collapsed,
   onCompose,
+  onSync,
+  syncing,
   accounts,
   emails,
 }: MailSidebarProps) {
@@ -76,36 +81,59 @@ export function MailSidebar({
   }, [emails, activeAccount]);
 
   const composeButton = (
-    <button
-      onClick={onCompose}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.opacity = '0.9';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.opacity = '1';
-      }}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        width: '100%',
-        height: 36,
-        padding: collapsed ? '0' : '0 12px',
-        background: 'var(--amber)',
-        color: '#06060a',
-        border: 'none',
-        borderRadius: 'var(--radius-md)',
-        cursor: 'pointer',
-        fontSize: '0.8125rem',
-        fontWeight: 600,
-        fontFamily: 'var(--font-sans)',
-        transition: 'opacity var(--transition-fast)',
-      }}
-    >
-      <Pencil size={collapsed ? 24 : 16} />
-      {!collapsed && <span>Compose</span>}
-    </button>
+    <div style={{ display: 'flex', gap: 4 }}>
+      <button
+        onClick={onCompose}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 6,
+          flex: 1,
+          height: 32,
+          padding: collapsed ? '0' : '0 10px',
+          background: 'var(--amber)',
+          color: '#06060a',
+          border: 'none',
+          borderRadius: 'var(--radius-md)',
+          cursor: 'pointer',
+          fontSize: '0.8125rem',
+          fontWeight: 600,
+          fontFamily: 'var(--font-sans)',
+          transition: 'opacity var(--transition-fast)',
+        }}
+      >
+        <Pencil size={collapsed ? 18 : 14} />
+        {!collapsed && <span>Compose</span>}
+      </button>
+      {onSync && (
+        <button
+          onClick={onSync}
+          disabled={syncing}
+          title="Sync emails"
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 32,
+            height: 32,
+            background: 'var(--amber)',
+            color: '#06060a',
+            border: 'none',
+            borderRadius: 'var(--radius-md)',
+            cursor: syncing ? 'not-allowed' : 'pointer',
+            transition: 'opacity var(--transition-fast)',
+            flexShrink: 0,
+          }}
+        >
+          <RefreshCw size={14} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} />
+        </button>
+      )}
+    </div>
   );
 
   return (

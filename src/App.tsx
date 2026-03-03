@@ -51,6 +51,7 @@ const router = createBrowserRouter([
     ],
   },
   { path: '/login', element: <LoginPage /> },
+  { path: '/oauth/callback', lazy: () => import('@/modules/oauth/OAuthCallbackPage') },
 ]);
 
 export function App() {
