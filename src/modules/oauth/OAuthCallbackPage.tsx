@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/services/api';
 
 /**
- * Minimal page mounted at /oauth/callback.
- * Receives the OAuth redirect from Google/Microsoft, exchanges the code,
- * then notifies the opener window and auto-closes.
+ * OAuth callback page — receives redirect from Google/Microsoft.
+ * Passes code+state back to the opener window via postMessage.
+ * The opener (AddIntegrationModal) handles the actual API call
+ * since it has the authenticated session.
  */
 export function Component() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
@@ -28,27 +28,24 @@ export function Component() {
       return;
     }
 
-    // Read provider from localStorage (stashed by the opener before opening the popup)
+    // Read provider from localStorage
     const stored = localStorage.getItem('claw_oauth_pending');
     const provider = stored ? JSON.parse(stored).provider : 'google';
 
-    api.post('/sync/oauth/callback', { provider, code, state })
-      .then(() => {
-        setStatus('success');
-        localStorage.removeItem('claw_oauth_pending');
-
-        // Notify opener window
-        if (window.opener) {
-          window.opener.postMessage({ type: 'oauth_complete', status: 'connected', provider }, '*');
-        }
-
-        // Auto-close after 1.5s
-        setTimeout(() => window.close(), 1500);
-      })
-      .catch((err: any) => {
-        setStatus('error');
-        setErrorMsg(err?.message || 'Failed to complete authorization.');
-      });
+    // Send code+state back to opener — the opener will do the API call
+    if (window.opener) {
+      window.opener.postMessage({
+        type: 'oauth_callback',
+        provider,
+        code,
+        state,
+      }, '*');
+      setStatus('success');
+      setTimeout(() => window.close(), 1000);
+    } else {
+      setStatus('error');
+      setErrorMsg('No opener window found. Please try again from Settings.');
+    }
   }, []);
 
   return (
@@ -59,12 +56,7 @@ export function Component() {
     }}>
       <div style={{ textAlign: 'center', maxWidth: 360 }}>
         {status === 'loading' && (
-          <>
-            <div style={{ fontSize: '1.25rem', marginBottom: 8 }}>Connecting...</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              Completing authorization...
-            </div>
-          </>
+          <div style={{ fontSize: '1.25rem' }}>Connecting...</div>
         )}
         {status === 'success' && (
           <>

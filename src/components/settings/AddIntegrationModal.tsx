@@ -106,11 +106,31 @@ export function AddIntegrationModal({ open, onClose, onConnected }: AddIntegrati
     }
   }, [open]);
 
-  // Listen for OAuth popup completion
+  // Listen for OAuth callback from popup — do the token exchange here (we have the session)
   useEffect(() => {
     if (step !== 'oauth-pending') return;
 
-    const handler = (event: MessageEvent) => {
+    const handler = async (event: MessageEvent) => {
+      if (event.data?.type === 'oauth_callback') {
+        // Exchange code for tokens via our authenticated API
+        try {
+          await api.post('/sync/oauth/callback', {
+            provider: event.data.provider,
+            code: event.data.code,
+            state: event.data.state,
+          });
+          localStorage.removeItem('claw_oauth_pending');
+          setStep('pick');
+          toast.success(`${selectedService?.name ?? 'Service'} connected`);
+          onConnected();
+          onClose();
+        } catch (err: any) {
+          toast.error(err?.message || 'Failed to complete authorization');
+          setStep('pick');
+        }
+        return;
+      }
+      // Legacy: direct oauth_complete (for future providers that handle it in the popup)
       if (event.data?.type === 'oauth_complete' && event.data?.status === 'connected') {
         setStep('pick');
         toast.success(`${selectedService?.name ?? 'Service'} connected`);
