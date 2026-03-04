@@ -35,8 +35,8 @@ const DEFAULT_SETTINGS: Settings = {
       ollama_url: 'http://127.0.0.1:11434',
       ollama_status: 'disconnected',
       available_models: [],
-      embedding_model: 'nomic-embed-text',
-      extraction_model: 'gemma2:2b',
+      embedding_model: 'qwen3-embedding:0.6b',
+      multimodal_model: 'qwen3-vl:2b',
     },
   },
   sync: {
@@ -64,7 +64,6 @@ const DEFAULT_SETTINGS: Settings = {
       enabled: false,
       paused: false,
       rate_limit: 5,
-      llava_model: 'llava',
       face_recognition: false,
       face_threshold: 0.6,
     },
@@ -87,6 +86,20 @@ const DEFAULT_SETTINGS: Settings = {
     accent_color: '#d4a017',
     sidebar_collapsed: false,
     default_module: 'chat',
+  },
+  notifications: {
+    toast_position: 'bottom-right',
+    toast_duration_ms: 5000,
+    sound_enabled: false,
+    show_digest_toasts: true,
+    show_sync_toasts: true,
+  },
+  calendar: {
+    first_day_of_week: 1,
+    default_view: 'week',
+    working_hours_start: '09:00',
+    working_hours_end: '18:00',
+    default_reminder_minutes: null,
   },
 };
 
@@ -118,8 +131,15 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
         set({ settings: DEFAULT_SETTINGS, original: DEFAULT_SETTINGS, loading: false, dirty: {} });
         return;
       }
-      const res = await api.get<{ data: Settings }>('/settings');
-      set({ settings: res.data, original: JSON.parse(JSON.stringify(res.data)), loading: false, dirty: {} });
+      const res = await api.get<{ data: Partial<Settings> }>('/settings');
+      // Merge with defaults so new sections always have values
+      const merged: Settings = { ...DEFAULT_SETTINGS };
+      for (const key of Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[]) {
+        if (res.data[key]) {
+          (merged as any)[key] = { ...(DEFAULT_SETTINGS as any)[key], ...(res.data as any)[key] };
+        }
+      }
+      set({ settings: merged, original: JSON.parse(JSON.stringify(merged)), loading: false, dirty: {} });
     } catch {
       set({ settings: DEFAULT_SETTINGS, original: DEFAULT_SETTINGS, loading: false, error: 'Failed to load settings' });
     }

@@ -16,7 +16,7 @@ export interface Settings {
       ollama_status: 'connected' | 'disconnected' | 'error';
       available_models: string[];
       embedding_model: string;
-      extraction_model: string;
+      multimodal_model: string;
     };
   };
   sync: {
@@ -44,7 +44,6 @@ export interface Settings {
       enabled: boolean;
       paused: boolean;
       rate_limit: number;
-      llava_model: string;
       face_recognition: boolean;
       face_threshold: number;
     };
@@ -58,10 +57,24 @@ export interface Settings {
     snooze_default_options: Array<{ label: string; relative: string }>;
   };
   dash: {
-    theme: 'dark' | 'light' | 'system';
+    theme: 'dark' | 'light' | 'midnight' | 'ember' | 'moss' | 'lucid';
     accent_color: string;
     sidebar_collapsed: boolean;
     default_module: string;
+  };
+  notifications: {
+    toast_position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+    toast_duration_ms: number;
+    sound_enabled: boolean;
+    show_digest_toasts: boolean;
+    show_sync_toasts: boolean;
+  };
+  calendar: {
+    first_day_of_week: 0 | 1;
+    default_view: 'day' | 'week' | 'month' | 'agenda';
+    working_hours_start: string;
+    working_hours_end: string;
+    default_reminder_minutes: number | null;
   };
 }
 

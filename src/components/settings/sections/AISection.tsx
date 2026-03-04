@@ -12,6 +12,7 @@ import { SettingInput } from '../SettingInput';
 import { SaveBar } from '../SaveBar';
 import { GraphHealthSection } from './GraphHealthSection';
 import { EntityExtractionConfig } from './EntityExtractionConfig';
+import { MultimodalModelSection } from './MultimodalModelSection';
 
 const CLOUD_MODELS = [
   'claude-opus-4-6',
@@ -313,25 +314,35 @@ export function AISection() {
             }
           </div>
         </div>
-        {ai.local_models.available_models.length > 0 && (
-          <>
+        {(() => {
+          const current = ai.local_models.embedding_model;
+          const embedModels = ai.local_models.available_models.filter(m => {
+            const lower = m.toLowerCase();
+            return lower.includes('embed') && !lower.includes('nomic');
+          });
+          // Always include the current value even if not installed yet
+          if (current && !embedModels.includes(current)) embedModels.unshift(current);
+          return embedModels.length > 0 ? (
             <SettingSelect
               label="Embedding Model"
-              value={ai.local_models.embedding_model}
-              options={ai.local_models.available_models.map((m) => ({ value: m, label: m }))}
+              value={current}
+              options={embedModels.map((m) => ({ value: m, label: m }))}
               onChange={(v) => setLocalValue('ai.local_models.embedding_model', v)}
             />
-            <SettingSelect
-              label="Extraction Model"
-              value={ai.local_models.extraction_model}
-              options={ai.local_models.available_models.map((m) => ({ value: m, label: m }))}
-              onChange={(v) => setLocalValue('ai.local_models.extraction_model', v)}
-            />
-          </>
-        )}
+          ) : (
+            <div style={{ padding: '10px 0', fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+              No embedding models installed. Run <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 2, fontSize: '0.6875rem' }}>ollama pull qwen3-embedding:0.6b</code>
+            </div>
+          );
+        })()}
         <div style={{ padding: '10px 0', fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>
           Tip: Ollama provides free local AI processing. Run <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 2, fontSize: '0.6875rem' }}>ollama pull &lt;model&gt;</code> to add more models.
         </div>
+      </SettingSection>
+
+      {/* Multimodal Model */}
+      <SettingSection title="Multimodal Model" description="Ollama vision model for photo scene descriptions. Install via ollama pull qwen3-vl:2b.">
+        <MultimodalModelSection />
       </SettingSection>
 
       {/* Token Usage Dashboard */}
