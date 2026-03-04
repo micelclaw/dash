@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useSettingsStore } from '@/stores/settings.store';
 import { api } from '@/services/api';
 import { useEvents } from './hooks/use-events';
 import { useEventLinks } from './hooks/use-event-links';
@@ -16,8 +17,11 @@ export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isMobile = useIsMobile();
 
+  const calSettings = useSettingsStore(s => s.settings?.calendar);
+  const defaultView = (calSettings?.default_view ?? 'week') as CalendarView;
+
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<CalendarView>(isMobile ? 'agenda' : 'week');
+  const [view, setView] = useState<CalendarView>(isMobile ? 'agenda' : defaultView);
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
 
   // Modal state

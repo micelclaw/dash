@@ -12,7 +12,10 @@ import { ChevronLeft, Sparkles, X } from 'lucide-react';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { NoteEditorToolbar } from '@/modules/notes/NoteEditorToolbar';
 import { MoodSelector } from './MoodSelector';
-import { DayContext } from './DayContext';
+import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
+import { useDiaryLinks } from './hooks/use-diary-links';
 import { formatDateLong } from '@/lib/date-helpers';
 import type { DiaryEntry, MoodLevel } from './types';
 
@@ -34,6 +37,7 @@ interface DiaryEditorProps {
 
 export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   useCoNavigation('diary', entry.id);
+  const { links, loading: linksLoading } = useDiaryLinks(entry.id);
   const [saving, setSaving] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const isDirtyRef = useRef(false);
@@ -216,9 +220,13 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
       {/* Editor */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
         {editor && <EditorContent editor={editor} />}
+      </div>
 
-        {/* Day context */}
-        <DayContext entryDate={entry.entry_date} />
+      {/* Intelligence panels */}
+      <div style={{ borderTop: '1px solid var(--border)' }}>
+        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
+        <SimilarContentPanel sourceType="diary_entry" sourceId={entry.id} />
+        <GraphProximityPanel sourceType="diary_entry" sourceId={entry.id} />
       </div>
     </div>
   );

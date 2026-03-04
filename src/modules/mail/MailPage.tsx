@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { Mail, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
@@ -39,12 +40,16 @@ export function Component() {
     composerData, openComposer, closeComposer,
   } = useMailState();
 
-  // Filters
+  // Filters + pagination
   const [search, setSearch] = useState('');
-  const [activeLabels, setActiveLabels] = useState<Set<string>>(new Set());
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+
+  // Reset page when folder/account/search changes
+  useEffect(() => { setPage(0); }, [activeFolder, activeAccount, search]);
 
   const {
-    emails, loading, error, fetchEmails,
+    emails, meta, loading, error, fetchEmails,
     markRead, markUnread, toggleStar,
     archiveEmail, moveToFolder, deleteEmail, restoreEmail, snoozeEmail,
     sendEmail, batchAction,
@@ -52,7 +57,8 @@ export function Component() {
     folder: activeFolder,
     account_id: activeAccount || undefined,
     search: search || undefined,
-    label: activeLabels.size === 1 ? [...activeLabels][0] : undefined,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
   });
 
   const { accounts } = useEmailAccounts();
@@ -97,15 +103,6 @@ export function Component() {
   const handleToggleSelection = useCallback((id: string, shiftKey: boolean) => {
     toggleSelection(id, shiftKey, emails.map(e => e.id));
   }, [toggleSelection, emails]);
-
-  const handleToggleLabel = useCallback((label: string) => {
-    setActiveLabels(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  }, []);
 
   const handleCompose = useCallback(() => {
     openComposer({ mode: 'new' });
@@ -214,8 +211,6 @@ export function Component() {
           onClearSelection={clearSelection}
           search={search}
           onSearchChange={setSearch}
-          activeLabels={activeLabels}
-          onToggleLabel={handleToggleLabel}
           onRefresh={fetchEmails}
           onArchive={archiveEmail}
           onDelete={deleteEmail}
@@ -231,6 +226,10 @@ export function Component() {
           onRestore={restoreEmail}
           activeFolder={activeFolder}
           accounts={accountColorMap}
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={meta?.total ?? 0}
+          onPageChange={setPage}
         />
         {snoozeTarget && (
           <MailSnoozeMenu
@@ -244,36 +243,34 @@ export function Component() {
     );
   }
 
-  // Desktop / Tablet: 3-column grid
-  const listWidth = listCollapsed ? '0px' : isTablet ? '1fr' : '340px';
+  // Desktop / Tablet: sidebar + resizable split pane
+  const sidebarWidth = isTablet ? 56 : 200;
   return (
-    <div
-      style={{
-        display: 'grid',
-        height: '100%',
-        gridTemplateColumns: isTablet ? `56px ${listWidth} 1fr` : `200px ${listWidth} 1fr`,
-        overflow: 'hidden',
-      }}
-    >
-      <MailSidebar
-        activeAccount={activeAccount}
-        activeFolder={activeFolder}
-        onAccountChange={setActiveAccount}
-        onFolderChange={setActiveFolder}
-        collapsed={isTablet}
-        onCompose={handleCompose}
-        onSync={handleSync}
-        syncing={syncing}
-        accounts={accounts}
-        emails={emails}
-      />
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
+        <MailSidebar
+          activeAccount={activeAccount}
+          activeFolder={activeFolder}
+          onAccountChange={setActiveAccount}
+          onFolderChange={setActiveFolder}
+          collapsed={isTablet}
+          onCompose={handleCompose}
+          onSync={handleSync}
+          syncing={syncing}
+          accounts={accounts}
+          emails={emails}
+        />
+      </div>
 
+      <SplitPane
+        defaultSizes={listCollapsed ? [0, 100] : [35, 65]}
+        minSizes={[200, 300]}
+        id="mail-split"
+      >
       <div style={{
-        borderRight: listCollapsed ? 'none' : '1px solid var(--border)',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        transition: 'width var(--transition-fast)',
       }}>
         {!listCollapsed && <MailList
           emails={emails}
@@ -287,8 +284,6 @@ export function Component() {
           onClearSelection={clearSelection}
           search={search}
           onSearchChange={setSearch}
-          activeLabels={activeLabels}
-          onToggleLabel={handleToggleLabel}
           onRefresh={fetchEmails}
           onArchive={archiveEmail}
           onDelete={deleteEmail}
@@ -304,6 +299,10 @@ export function Component() {
           onRestore={restoreEmail}
           activeFolder={activeFolder}
           accounts={accountColorMap}
+          page={page}
+          pageSize={PAGE_SIZE}
+          total={meta?.total ?? 0}
+          onPageChange={setPage}
         />}
       </div>
 
@@ -364,6 +363,7 @@ export function Component() {
           )}
         </div>
       </div>
+      </SplitPane>
 
       {/* Snooze menu */}
       {snoozeTarget && (

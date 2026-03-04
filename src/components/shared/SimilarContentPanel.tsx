@@ -107,7 +107,15 @@ export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPane
     );
   }
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <IntelligencePanelHeader title="Similar Semantic" storageKey="similar">
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          No similar items found
+        </span>
+      </IntelligencePanelHeader>
+    );
+  }
 
   const visible = expanded ? items : items.slice(0, 3);
 

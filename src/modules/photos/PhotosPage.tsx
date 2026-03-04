@@ -174,7 +174,7 @@ function SearchResultThumbnail({
 export function Component() {
   const [view, setView] = useState<PhotosView>('timeline');
   const [search, setSearch] = useState('');
-  const [minStars, setMinStars] = useState<number | null>(null);
+  const [selectedStars, setSelectedStars] = useState<Set<number>>(new Set());
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
@@ -208,7 +208,7 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos } = usePhotos({ search, minStars });
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos } = usePhotos({ search, selectedStars });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -262,11 +262,11 @@ export function Component() {
     }
   }, [searchPhotosAi, clearSearch]);
 
-  // Re-fetch timeline when search or minStars changes
+  // Re-fetch timeline when search or selectedStars changes
   useEffect(() => {
     fetchPhotos(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, minStars]);
+  }, [search, selectedStars]);
 
   const handleUpload = useCallback(async (incoming: File[]) => {
     let success = 0;
@@ -405,6 +405,18 @@ export function Component() {
     }
   }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos]);
 
+  const handleBatchProcess = useCallback(async () => {
+    const ids = [...activeSelection.selectedIds];
+    try {
+      const res = await api.post('/photos/ai/reprocess-selected', { file_ids: ids }) as any;
+      const data = res.data ?? res;
+      toast.success(`${data.reset} photo${data.reset !== 1 ? 's' : ''} queued for processing`);
+      activeSelection.clearSelection();
+    } catch {
+      toast.error('Failed to queue photos for processing');
+    }
+  }, [activeSelection]);
+
   const handleBatchRemoveFromAlbum = useCallback(async () => {
     if (!selectedAlbumId) return;
     const ids = [...albumSelection.selectedIds];
@@ -487,12 +499,17 @@ export function Component() {
         search={search}
         onSearchChange={handleSearchChange}
         onUpload={handleUpload}
-        selectedCount={view === 'timeline' ? timelineSelection.selectedIds.size : 0}
+        selectedCount={activeSelection.selectedIds.size}
         onBatchAddToAlbum={handleBatchAddToAlbum}
+        onBatchProcess={handleBatchProcess}
         onBatchDelete={() => setBatchDeleteOpen(true)}
-        onClearSelection={timelineSelection.clearSelection}
-        minStars={minStars}
-        onMinStarsChange={setMinStars}
+        onClearSelection={activeSelection.clearSelection}
+        selectedStars={selectedStars}
+        onStarsToggle={(n) => setSelectedStars(prev => {
+          const s = new Set(prev);
+          s.has(n) ? s.delete(n) : s.add(n);
+          return s;
+        })}
       />
 
       {/* Content */}

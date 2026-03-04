@@ -112,10 +112,35 @@ export function Shell() {
   useEffect(() => {
     if (!syncEvent) return;
     if (syncEvent.event === 'sync.completed') {
-      addNotification({
-        type: 'sync',
-        title: (syncEvent.data.title as string) ?? `Sync completed: ${syncEvent.data.provider as string}`,
-      });
+      const created = (syncEvent.data.created as number) ?? 0;
+      // Only notify if there are genuinely NEW items — skip updates-only syncs
+      if (created > 0) {
+        const domainBreakdown = syncEvent.data.domain_breakdown as Record<string, { created?: number }> | undefined;
+        const primaryDomain = domainBreakdown
+          ? Object.entries(domainBreakdown).find(([, v]) => (v.created ?? 0) > 0)?.[0]
+            ?? Object.keys(domainBreakdown)[0]
+          : undefined;
+        const domainTypeMap: Record<string, 'email' | 'calendar' | 'contacts' | 'sync'> = {
+          emails: 'email', events: 'calendar', contacts: 'contacts',
+        };
+        const notifType = (primaryDomain && domainTypeMap[primaryDomain]) ?? 'sync';
+
+        // Deep link for single-record notifications
+        const singleRecord = syncEvent.data.single_record as { domain: string; id: string } | null;
+        const domainRouteMap: Record<string, string> = {
+          emails: '/mail', events: '/calendar', contacts: '/contacts',
+          notes: '/notes', files: '/drive', diary_entries: '/diary',
+        };
+        const action = singleRecord
+          ? { label: 'View', route: `${domainRouteMap[singleRecord.domain] ?? '/'}?id=${singleRecord.id}` }
+          : undefined;
+
+        addNotification({
+          type: notifType,
+          title: (syncEvent.data.title as string) ?? `Sync completed: ${syncEvent.data.provider as string}`,
+          action,
+        });
+      }
     } else if (syncEvent.event === 'sync.error') {
       addNotification({
         type: 'system',

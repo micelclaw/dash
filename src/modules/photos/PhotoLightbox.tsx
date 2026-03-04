@@ -153,8 +153,12 @@ export function PhotoLightbox({
   const gps = photo.metadata?.gps;
 
   const cf = photo.custom_fields as Record<string, number> | null;
-  const aestheticStars = cf?.aesthetic_override ?? cf?.aesthetic_stars ?? 0;
   const hasOverride = cf?.aesthetic_override != null;
+  const aiFloat = photo.metadata?.ai_aesthetic_score;
+  const aiStars = aiFloat != null
+    ? (aiFloat >= 0.8 ? 5 : aiFloat >= 0.6 ? 4 : aiFloat >= 0.4 ? 3 : aiFloat >= 0.2 ? 2 : 1)
+    : 0;
+  const aestheticStars = cf?.aesthetic_override ?? aiStars;
 
   const navBtnStyle = (id: string, disabled: boolean): React.CSSProperties => ({
     width: 36,

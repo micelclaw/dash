@@ -9,6 +9,7 @@ export interface ContextMenuItem {
   variant?: 'default' | 'danger';
   disabled?: boolean;
   separator?: boolean;
+  subItems?: ContextMenuItem[];
 }
 
 interface ContextMenuProps {
@@ -22,6 +23,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
   const rawPos = useRef({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
+  const [activeSubIdx, setActiveSubIdx] = useState<number | null>(null);
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -106,44 +108,103 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
             }
             const Icon = item.icon;
             const isDanger = item.variant === 'danger';
+            const hasSub = item.subItems && item.subItems.length > 0;
             return (
-              <button
+              <div
                 key={i}
-                onClick={() => {
-                  if (!item.disabled) {
-                    item.onClick();
-                    setOpen(false);
-                  }
-                }}
-                disabled={item.disabled}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  height: 32,
-                  padding: '0 12px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: item.disabled ? 'default' : 'pointer',
-                  color: item.disabled ? 'var(--text-muted)' : isDanger ? 'var(--error)' : 'var(--text)',
-                  fontSize: '0.8125rem',
-                  fontFamily: 'var(--font-sans)',
-                  textAlign: 'left',
-                  opacity: item.disabled ? 0.5 : 1,
-                  transition: 'background var(--transition-fast)',
-                }}
-                onMouseEnter={(e) => { if (!item.disabled) e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                style={{ position: 'relative' }}
+                onMouseEnter={() => hasSub && setActiveSubIdx(i)}
+                onMouseLeave={() => hasSub && setActiveSubIdx(null)}
               >
-                {Icon && <Icon size={14} />}
-                <span style={{ flex: 1 }}>{item.label}</span>
-                {item.shortcut && (
-                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                    {item.shortcut}
-                  </span>
+                <button
+                  onClick={() => {
+                    if (!item.disabled && !hasSub) {
+                      item.onClick();
+                      setOpen(false);
+                    }
+                  }}
+                  disabled={item.disabled}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    width: '100%',
+                    height: 32,
+                    padding: '0 12px',
+                    background: activeSubIdx === i ? 'var(--surface-hover)' : 'transparent',
+                    border: 'none',
+                    cursor: item.disabled ? 'default' : 'pointer',
+                    color: item.disabled ? 'var(--text-muted)' : isDanger ? 'var(--error)' : 'var(--text)',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-sans)',
+                    textAlign: 'left',
+                    opacity: item.disabled ? 0.5 : 1,
+                    transition: 'background var(--transition-fast)',
+                  }}
+                  onMouseEnter={(e) => { if (!item.disabled) e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                  onMouseLeave={(e) => { if (activeSubIdx !== i) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {Icon && <Icon size={14} />}
+                  <span style={{ flex: 1 }}>{item.label}</span>
+                  {hasSub && <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>▶</span>}
+                  {!hasSub && item.shortcut && (
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                      {item.shortcut}
+                    </span>
+                  )}
+                </button>
+                {hasSub && activeSubIdx === i && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '100%',
+                      top: 0,
+                      minWidth: 160,
+                      background: 'rgba(17, 17, 24, 0.95)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: 'var(--shadow-lg)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      padding: '4px 0',
+                      zIndex: 1,
+                    }}
+                  >
+                    {item.subItems!.map((sub, j) => {
+                      const SubIcon = sub.icon;
+                      return (
+                        <button
+                          key={j}
+                          onClick={() => {
+                            sub.onClick();
+                            setOpen(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            width: '100%',
+                            height: 32,
+                            padding: '0 12px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text)',
+                            fontSize: '0.8125rem',
+                            fontFamily: 'var(--font-sans)',
+                            textAlign: 'left',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          {SubIcon && <SubIcon size={14} />}
+                          <span style={{ flex: 1 }}>{sub.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>

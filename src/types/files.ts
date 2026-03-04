@@ -27,6 +27,9 @@ export interface Photo extends FileRecord {
     height?: number;
     camera?: string;
     gps?: { latitude: number; longitude: number };
+    ai_description?: string;
+    ai_aesthetic_score?: number;
+    ai_processed_at?: string;
   } | null;
 }
 

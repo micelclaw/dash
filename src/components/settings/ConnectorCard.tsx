@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { RefreshCw, Settings, Pause, Play, Loader2, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { useWebSocket } from '@/hooks/use-websocket';
 
 // ─── Connector icons (inline SVG) ────────────────────────
 
@@ -77,6 +78,28 @@ interface ConnectorCardProps {
 
 export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCardProps) {
   const [syncing, setSyncing] = useState(false);
+  const [progress, setProgress] = useState<{ processed: number; total?: number; folder?: string; phase?: string } | null>(null);
+
+  // Listen for sync progress WS events
+  const progressEvent = useWebSocket('sync.progress');
+  const completedEvent = useWebSocket('sync.completed');
+
+  useEffect(() => {
+    if (progressEvent?.data?.connector_id === connector.id) {
+      setProgress(progressEvent.data as any);
+      if (!syncing) setSyncing(true);
+    }
+  }, [progressEvent, connector.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!completedEvent) return;
+    // Clear syncing state when this connector's sync completes
+    if (completedEvent.data?.connector_id === connector.id) {
+      setProgress(null);
+      setSyncing(false);
+      onRefresh();
+    }
+  }, [completedEvent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const label = connector.display_name || TYPE_LABELS[connector.connector_type] || connector.name;
   const statusColor = STATUS_COLORS[connector.status] ?? 'var(--text-muted)';
@@ -95,12 +118,21 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
 
   const handleTogglePause = async () => {
     try {
+      const isSyncing = syncing || connector.status === 'syncing';
       if (connector.status === 'paused') {
+        // Resume — trigger immediate sync
         await api.post(`/sync/connectors/${connector.id}/resume`);
         toast.success(`Resumed: ${label}`);
       } else {
+        // Pause — will also abort running sync if active
         await api.post(`/sync/connectors/${connector.id}/pause`);
-        toast.success(`Paused: ${label}`);
+        if (isSyncing) {
+          setSyncing(false);
+          setProgress(null);
+          toast.success(`Sync cancelled: ${label}`);
+        } else {
+          toast.success(`Paused: ${label}`);
+        }
       }
       onRefresh();
     } catch {
@@ -159,10 +191,28 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
         </div>
       </div>
 
+      {/* Progress bar */}
+      {syncing && progress && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{
+            height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%', borderRadius: 2, background: 'var(--amber)',
+              width: progress.total ? `${Math.min(100, (progress.processed / progress.total) * 100)}%` : '50%',
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+          <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
+            {progress.phase ?? 'Syncing'}: {progress.processed}{progress.total ? `/${progress.total}` : ''}{progress.folder ? ` (${progress.folder})` : ''}
+          </span>
+        </div>
+      )}
+
       {/* Bottom: last sync + actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          Last sync: {timeAgo(connector.last_sync_at)}
+          {syncing && !progress ? 'Syncing...' : `Last sync: ${timeAgo(connector.last_sync_at)}`}
         </span>
         <div style={{ display: 'flex', gap: 2 }}>
           <button
@@ -173,7 +223,24 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
           >
             {syncing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
           </button>
-          <button onClick={handleTogglePause} style={iconBtnStyle} title={connector.status === 'paused' ? 'Resume' : 'Pause'}>
+          <button
+            onClick={handleTogglePause}
+            style={{
+              ...iconBtnStyle,
+              color: (syncing || connector.status === 'syncing')
+                ? 'var(--amber)'
+                : connector.status === 'paused'
+                  ? '#22c55e'
+                  : 'var(--text-dim)',
+            }}
+            title={
+              (syncing || connector.status === 'syncing')
+                ? 'Stop sync'
+                : connector.status === 'paused'
+                  ? 'Resume'
+                  : 'Pause'
+            }
+          >
             {connector.status === 'paused' ? <Play size={14} /> : <Pause size={14} />}
           </button>
           {onConfigure && (

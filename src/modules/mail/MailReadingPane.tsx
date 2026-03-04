@@ -13,6 +13,7 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { MailThread } from './MailThread';
 import { MailComposer } from './MailComposer';
 import type { Email, ComposeData, EmailAccount } from './types';
@@ -113,6 +114,15 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
 
     return () => { cancelled = true; };
   }, [emailId]);
+
+  // Re-fetch email after sync completes (body_html might have been backfilled)
+  const syncCompleted = useWebSocket('sync.completed');
+  useEffect(() => {
+    if (!syncCompleted || !emailId) return;
+    api.get<ApiResponse<Email>>(`/emails/${emailId}`)
+      .then(res => setEmail(res.data))
+      .catch(() => {});
+  }, [syncCompleted, emailId]);
 
   // Auto mark-as-read
   useEffect(() => {
@@ -540,12 +550,20 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         {email.body_html ? (
           <iframe
             srcDoc={DARK_MODE_STYLES + email.body_html}
-            sandbox=""
-            style={{ width: '100%', border: 'none', minHeight: 100, background: 'var(--bg)' }}
+            sandbox="allow-same-origin"
+            style={{ width: '100%', border: 'none', minHeight: 300, background: 'var(--bg)' }}
             onLoad={(e) => {
               const iframe = e.target as HTMLIFrameElement;
               if (iframe.contentDocument) {
-                iframe.style.height = iframe.contentDocument.body.scrollHeight + 'px';
+                const h = iframe.contentDocument.body.scrollHeight;
+                iframe.style.height = Math.max(h, 300) + 'px';
+                // Re-check after images load
+                const imgs = iframe.contentDocument.querySelectorAll('img');
+                imgs.forEach(img => {
+                  if (!img.complete) img.onload = () => {
+                    iframe.style.height = Math.max(iframe.contentDocument!.body.scrollHeight, 300) + 'px';
+                  };
+                });
               }
             }}
           />

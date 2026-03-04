@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
+  Bell, Calendar, Keyboard,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -23,6 +24,9 @@ import { SearchSection } from '@/components/settings/sections/SearchSection';
 import { UsersSection } from '@/components/settings/sections/UsersSection';
 import { NetworkSection } from '@/components/settings/sections/NetworkSection';
 import { EnergySection } from '@/components/settings/sections/EnergySection';
+import { NotificationsSection } from '@/components/settings/sections/NotificationsSection';
+import { CalendarSection } from '@/components/settings/sections/CalendarSection';
+import { ShortcutsSection } from '@/components/settings/sections/ShortcutsSection';
 
 interface SidebarItem {
   id: string;
@@ -38,12 +42,15 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
     { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
     { id: 'sync', label: 'Sync', icon: RefreshCw },
     { id: 'mail', label: 'Mail', icon: Mail },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'photos', label: 'Photos', icon: Image },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'network', label: 'Red', icon: Network },
     { id: 'energy', label: 'Energia', icon: Zap },
     { id: 'dash', label: 'Dash', icon: Palette },
-    { id: 'search', label: 'Search', icon: SearchIcon, dividerBefore: true },
+    { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
+    { id: 'notifications', label: 'Notifications', icon: Bell, dividerBefore: true },
+    { id: 'search', label: 'Search', icon: SearchIcon },
     { id: 'digest', label: 'Digest', icon: Newspaper },
   ];
   if (isAdmin) {
@@ -68,6 +75,9 @@ function renderSection(section: string) {
     case 'users': return <UsersSection />;
     case 'security': return <SecuritySection />;
     case 'license': return <LicenseSection />;
+    case 'notifications': return <NotificationsSection />;
+    case 'calendar': return <CalendarSection />;
+    case 'shortcuts': return <ShortcutsSection />;
     case 'search': return <SearchSection />;
     case 'digest': return <DigestSection />;
     default: return <GeneralSection />;

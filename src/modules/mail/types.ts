@@ -79,5 +79,3 @@ export interface ComposeData {
 }
 
 export const SYSTEM_FOLDERS = ['INBOX', 'SENT', 'DRAFTS', 'TRASH', 'SPAM', 'OUTBOX', 'SNOOZED'] as const;
-
-export const SMART_CATEGORIES = ['Primary', 'Updates', 'Social', 'Promotions'] as const;

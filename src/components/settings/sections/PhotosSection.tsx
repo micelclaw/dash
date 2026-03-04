@@ -4,8 +4,8 @@ import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
-import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
+import { PhotoPipelineProgress } from './PhotoPipelineProgress';
 
 export function PhotosSection() {
   const settings = useSettingsStore((s) => s.settings);
@@ -81,17 +81,6 @@ export function PhotosSection() {
           min={1}
         />
 
-        <SettingSelect
-          label="LLaVA Model"
-          value={p.ai_worker.llava_model}
-          options={[
-            { value: 'llava', label: 'llava' },
-            { value: 'llava:13b', label: 'llava:13b' },
-            { value: 'llava:34b', label: 'llava:34b' },
-          ]}
-          onChange={(v) => setLocalValue('photos.ai_worker.llava_model', v)}
-        />
-
         <SettingToggle
           label="Face Recognition"
           checked={p.ai_worker.face_recognition}
@@ -122,6 +111,8 @@ export function PhotosSection() {
           </div>
         </div>
       </SettingSection>
+
+      {p.ai_worker.enabled && <PhotoPipelineProgress />}
 
       <SaveBar visible={!!dirty.photos} saving={saving} onSave={handleSave} onDiscard={() => resetSection('photos')} />
     </>

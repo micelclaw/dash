@@ -11,6 +11,7 @@ import {
   addDays,
   startOfDay,
 } from '@/lib/date-helpers';
+import { useSettingsStore } from '@/stores/settings.store';
 import { getCalendarColor } from './types';
 import type { CalendarView, CalendarEvent, EventUpdateInput } from './types';
 import { EventBlock } from './EventBlock';
@@ -33,6 +34,33 @@ const TOTAL_HEIGHT = ROW_HEIGHT * TOTAL_ROWS;
 const TIME_GUTTER_WIDTH = 56;
 const DAY_NAMES = getWeekDayNames(1);
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+function WorkingHoursOverlay() {
+  const cal = useSettingsStore(s => s.settings?.calendar);
+  if (!cal?.working_hours_start || !cal?.working_hours_end) return null;
+
+  const [startH, startM] = cal.working_hours_start.split(':').map(Number);
+  const [endH, endM] = cal.working_hours_end.split(':').map(Number);
+  const startTop = (startH * 60 + startM) * (ROW_HEIGHT * 2) / 60;
+  const endTop = (endH * 60 + endM) * (ROW_HEIGHT * 2) / 60;
+
+  if (endTop <= startTop) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: startTop,
+        left: 0,
+        right: 0,
+        height: endTop - startTop,
+        background: 'rgba(212, 160, 23, 0.04)',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }}
+    />
+  );
+}
 
 /** Snap minutes to nearest 15-minute interval */
 function snapMinutes(minutes: number): number {
@@ -514,6 +542,9 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
                   cursor: 'pointer',
                 }}
               >
+                {/* Working hours highlight */}
+                <WorkingHoursOverlay />
+
                 {/* Hour gridlines */}
                 {HOURS.map((hour) => (
                   <div

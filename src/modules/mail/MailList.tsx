@@ -17,8 +17,6 @@ interface MailListProps {
   onClearSelection: () => void;
   search: string;
   onSearchChange: (val: string) => void;
-  activeLabels: Set<string>;
-  onToggleLabel: (label: string) => void;
   onRefresh: () => void;
   onArchive: (id: string) => void;
   onDelete: (id: string) => void;
@@ -34,6 +32,11 @@ interface MailListProps {
   onRestore?: (id: string) => void;
   activeFolder?: string;
   accounts: { id: string; color: string }[];
+  // Pagination
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }
 
 /** Shimmer keyframes injected once */
@@ -104,8 +107,6 @@ export function MailList({
   onClearSelection,
   search,
   onSearchChange,
-  activeLabels,
-  onToggleLabel,
   onRefresh,
   onArchive,
   onDelete,
@@ -121,6 +122,10 @@ export function MailList({
   onRestore,
   activeFolder,
   accounts,
+  page,
+  pageSize,
+  total,
+  onPageChange,
 }: MailListProps) {
   const allIds = useMemo(() => emails.map((e) => e.id), [emails]);
   const allSelected = emails.length > 0 && selectedIds.size === emails.length;
@@ -150,14 +155,16 @@ export function MailList({
         onDeselectAll={onClearSelection}
         search={search}
         onSearchChange={onSearchChange}
-        activeLabels={activeLabels}
-        onToggleLabel={onToggleLabel}
         onRefresh={onRefresh}
         selectedCount={selectedIds.size}
         onBatchRead={onBatchRead}
         onBatchUnread={onBatchUnread}
         onBatchArchive={onBatchArchive}
         onBatchDelete={onBatchDelete}
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={onPageChange}
       />
 
       <div

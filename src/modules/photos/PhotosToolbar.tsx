@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Camera, Search, Upload, FolderPlus, Trash2, X } from 'lucide-react';
+import { Camera, Search, Upload, FolderPlus, Trash2, X, Cpu } from 'lucide-react';
 import type { PhotosView } from './types';
 
 interface PhotosToolbarProps {
@@ -11,9 +11,10 @@ interface PhotosToolbarProps {
   selectedCount?: number;
   onBatchAddToAlbum?: () => void;
   onBatchDelete?: () => void;
+  onBatchProcess?: () => void;
   onClearSelection?: () => void;
-  minStars?: number | null;
-  onMinStarsChange?: (value: number | null) => void;
+  selectedStars?: Set<number>;
+  onStarsToggle?: (value: number) => void;
 }
 
 function BatchButton({ icon: Icon, label, onClick, disabled, variant }: {
@@ -62,9 +63,10 @@ export function PhotosToolbar({
   selectedCount = 0,
   onBatchAddToAlbum,
   onBatchDelete,
+  onBatchProcess,
   onClearSelection,
-  minStars,
-  onMinStarsChange,
+  selectedStars,
+  onStarsToggle,
 }: PhotosToolbarProps) {
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [localSearch, setLocalSearch] = useState(search);
@@ -174,7 +176,7 @@ export function PhotosToolbar({
       </div>
 
       {/* Star filter pills */}
-      {view === 'timeline' && onMinStarsChange && (
+      {view === 'timeline' && onStarsToggle && (
         <div
           style={{
             display: 'flex',
@@ -185,30 +187,33 @@ export function PhotosToolbar({
           }}
         >
           {([
-            { label: 'All', value: null },
-            { label: '★ 3+', value: 3 },
-            { label: '★ 4+', value: 4 },
-            { label: '★ 5', value: 5 },
+            { label: '☆', value: 0 },
+            { label: '★', value: 1 },
+            { label: '★★', value: 2 },
+            { label: '★★★', value: 3 },
+            { label: '★★★★', value: 4 },
+            { label: '★★★★★', value: 5 },
           ] as const).map((pill) => {
-            const active = minStars === pill.value;
+            const active = selectedStars?.has(pill.value) ?? false;
             return (
               <button
-                key={pill.label}
-                onClick={() => onMinStarsChange(pill.value)}
-                onMouseEnter={() => setHoveredBtn(`star-${pill.label}`)}
+                key={pill.value}
+                onClick={() => onStarsToggle(pill.value)}
+                onMouseEnter={() => setHoveredBtn(`star-${pill.value}`)}
                 onMouseLeave={() => setHoveredBtn(null)}
                 style={{
-                  padding: '4px 10px',
+                  padding: '4px 8px',
                   fontSize: '0.6875rem',
                   fontFamily: 'var(--font-sans)',
                   border: 'none',
                   borderRadius: 'var(--radius-sm)',
                   cursor: 'pointer',
-                  background: active ? 'var(--amber)' : hoveredBtn === `star-${pill.label}` ? 'var(--surface-hover)' : 'transparent',
+                  background: active ? 'var(--amber)' : hoveredBtn === `star-${pill.value}` ? 'var(--surface-hover)' : 'transparent',
                   color: active ? '#06060a' : 'var(--text-dim)',
                   fontWeight: active ? 600 : 400,
                   transition: 'background var(--transition-fast)',
                   whiteSpace: 'nowrap',
+                  letterSpacing: '-1px',
                 }}
               >
                 {pill.label}
@@ -229,6 +234,9 @@ export function PhotosToolbar({
           </span>
           {onBatchAddToAlbum && (
             <BatchButton icon={FolderPlus} label="Add to album" onClick={onBatchAddToAlbum} />
+          )}
+          {onBatchProcess && (
+            <BatchButton icon={Cpu} label="Process" onClick={onBatchProcess} />
           )}
           {onBatchDelete && (
             <BatchButton icon={Trash2} label="Delete" onClick={onBatchDelete} variant="danger" />

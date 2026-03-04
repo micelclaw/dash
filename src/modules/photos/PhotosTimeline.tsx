@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2 } from 'lucide-react';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2, Star } from 'lucide-react';
+import { api } from '@/services/api';
+import { toast } from 'sonner';
 import { DropZone } from '@/components/shared/DropZone';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
@@ -103,8 +105,22 @@ function PhotoThumbnail({
               setAlbumPicker({ mode: 'add', pos: { x: window.innerWidth / 2, y: window.innerHeight / 3 } });
             },
           },
-          { label: 'View EXIF', icon: Info, onClick: () => onViewExif(photo) },
+          { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
           { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+          {
+            label: 'Assign stars',
+            icon: Star,
+            onClick: () => {},
+            subItems: [
+              { label: '★★★★★  5 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 5 } }); toast.success('5 stars'); } catch { toast.error('Failed'); } } },
+              { label: '★★★★☆  4 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 4 } }); toast.success('4 stars'); } catch { toast.error('Failed'); } } },
+              { label: '★★★☆☆  3 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 3 } }); toast.success('3 stars'); } catch { toast.error('Failed'); } } },
+              { label: '★★☆☆☆  2 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 2 } }); toast.success('2 stars'); } catch { toast.error('Failed'); } } },
+              { label: '★☆☆☆☆  1 star',  onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 1 } }); toast.success('1 star'); } catch { toast.error('Failed'); } } },
+              { label: '☆☆☆☆☆  0 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 0 } }); toast.success('0 stars'); } catch { toast.error('Failed'); } } },
+              { label: '🤖  Auto (AI)',    onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success('Reset to AI score'); } catch { toast.error('Failed'); } } },
+            ],
+          },
           {
             label: 'Set as cover',
             icon: ImageIcon,
@@ -207,26 +223,35 @@ function PhotoThumbnail({
             )}
 
             {/* Star badge for aesthetic score >= 3 */}
-            {(photo.custom_fields as Record<string, number> | null)?.aesthetic_stars >= 3 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 4,
-                  left: 4,
-                  background: 'rgba(0,0,0,0.65)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '2px 5px',
-                  fontSize: '0.5625rem',
-                  fontWeight: 600,
-                  color: 'var(--amber)',
-                  fontFamily: 'var(--font-sans)',
-                  lineHeight: 1,
-                  pointerEvents: 'none',
-                }}
-              >
-                ★ {((photo.custom_fields as Record<string, number>)?.aesthetic_override ?? (photo.custom_fields as Record<string, number>)?.aesthetic_stars)?.toFixed(1)}
-              </div>
-            )}
+            {(() => {
+              const cf = photo.custom_fields as Record<string, number> | null;
+              const aiFloat = photo.metadata?.ai_aesthetic_score;
+              const aiStars = aiFloat != null
+                ? (aiFloat >= 0.8 ? 5 : aiFloat >= 0.6 ? 4 : aiFloat >= 0.4 ? 3 : aiFloat >= 0.2 ? 2 : 1)
+                : 0;
+              const stars = cf?.aesthetic_override ?? aiStars;
+              if (stars < 3) return null;
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 4,
+                    left: 4,
+                    background: 'rgba(0,0,0,0.65)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '2px 5px',
+                    fontSize: '0.5625rem',
+                    fontWeight: 600,
+                    color: 'var(--amber)',
+                    fontFamily: 'var(--font-sans)',
+                    lineHeight: 1,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {'★'.repeat(stars)}
+                </div>
+              );
+            })()}
 
             {/* Source badge for non-local photos */}
             {photo.source !== 'local' && (

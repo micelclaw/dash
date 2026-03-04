@@ -7,8 +7,9 @@ import {
   Mail,
   Archive,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
-import { SMART_CATEGORIES } from './types';
 
 interface MailListToolbarProps {
   allSelected: boolean;
@@ -17,14 +18,17 @@ interface MailListToolbarProps {
   onDeselectAll: () => void;
   search: string;
   onSearchChange: (val: string) => void;
-  activeLabels: Set<string>;
-  onToggleLabel: (label: string) => void;
   onRefresh: () => void;
   selectedCount: number;
   onBatchRead: () => void;
   onBatchUnread: () => void;
   onBatchArchive: () => void;
   onBatchDelete: () => void;
+  // Pagination
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
 }
 
 export function MailListToolbar({
@@ -34,14 +38,16 @@ export function MailListToolbar({
   onDeselectAll,
   search,
   onSearchChange,
-  activeLabels,
-  onToggleLabel,
   onRefresh,
   selectedCount,
   onBatchRead,
   onBatchUnread,
   onBatchArchive,
   onBatchDelete,
+  page,
+  pageSize,
+  total,
+  onPageChange,
 }: MailListToolbarProps) {
   const [localSearch, setLocalSearch] = useState(search);
   const [refreshHovered, setRefreshHovered] = useState(false);
@@ -81,6 +87,20 @@ export function MailListToolbar({
     { key: 'archive', label: 'Archive', icon: Archive, onClick: onBatchArchive },
     { key: 'delete', label: 'Delete', icon: Trash2, onClick: onBatchDelete },
   ];
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total === 0 ? 0 : page * pageSize + 1;
+  const to = Math.min((page + 1) * pageSize, total);
+  const hasPrev = page > 0;
+  const hasNext = page < totalPages - 1;
+
+  const pagerBtnStyle: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: 24, height: 24, border: 'none', borderRadius: 'var(--radius-sm)',
+    background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer',
+    padding: 0, flexShrink: 0,
+  };
 
   return (
     <div style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -238,41 +258,38 @@ export function MailListToolbar({
         )}
       </div>
 
-      {/* Smart category chips row (always visible) */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 12px 8px',
-          overflowX: 'auto',
-        }}
-      >
-        {SMART_CATEGORIES.map((cat) => {
-          const isActive = activeLabels.has(cat);
-          return (
-            <button
-              key={cat}
-              onClick={() => onToggleLabel(cat)}
-              style={{
-                padding: '3px 10px',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-sans)',
-                fontWeight: 500,
-                border: isActive ? '1px solid var(--amber)' : '1px solid var(--border)',
-                borderRadius: 'var(--radius-full)',
-                background: isActive ? 'var(--amber-dim)' : 'var(--surface)',
-                color: isActive ? 'var(--amber)' : 'var(--text-dim)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all var(--transition-fast)',
-              }}
-            >
-              {cat}
-            </button>
-          );
-        })}
-      </div>
+      {/* Pagination row */}
+      {total > pageSize && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 6,
+            padding: '2px 12px 6px',
+          }}
+        >
+          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+            {from}–{to} of {total}
+          </span>
+          <button
+            onClick={() => onPageChange(page - 1)}
+            disabled={!hasPrev}
+            style={{ ...pagerBtnStyle, opacity: hasPrev ? 1 : 0.3, cursor: hasPrev ? 'pointer' : 'default' }}
+            title="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            onClick={() => onPageChange(page + 1)}
+            disabled={!hasNext}
+            style={{ ...pagerBtnStyle, opacity: hasNext ? 1 : 0.3, cursor: hasNext ? 'pointer' : 'default' }}
+            title="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -274,7 +274,7 @@ export function BriefingPanel() {
         <button
           onClick={() => {
             setPanelOpen(false);
-            navigate('/settings/digest');
+            navigate('/digest/history');
           }}
           style={{
             display: 'flex', alignItems: 'center', gap: 4,

@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import {
   ChevronLeft, Share2, Trash2, Pencil, Image, Mail,
-  FolderMinus, Info, Download, ImageIcon, X,
+  FolderMinus, Info, Download, ImageIcon, X, Star,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
 import { formatDateShort } from '@/lib/date-helpers';
+import { api } from '@/services/api';
+import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
 import type { Album, Photo } from '@/types/files';
 
@@ -70,9 +72,23 @@ function AlbumPhotoThumbnail({
       onDelete={() => onDelete(photo.id)}
       extraItems={[
         { label: 'Remove from album', icon: FolderMinus, onClick: onRemove },
-        { label: 'View EXIF', icon: Info, onClick: () => onViewExif(photo) },
+        { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
         { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
         { label: 'Set as cover', icon: ImageIcon, onClick: () => onSetAsCover(photo.id) },
+        {
+          label: 'Assign stars',
+          icon: Star,
+          onClick: () => {},
+          subItems: [
+            { label: '★★★★★  5 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 5 } }); toast.success('5 stars'); } catch { toast.error('Failed'); } } },
+            { label: '★★★★☆  4 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 4 } }); toast.success('4 stars'); } catch { toast.error('Failed'); } } },
+            { label: '★★★☆☆  3 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 3 } }); toast.success('3 stars'); } catch { toast.error('Failed'); } } },
+            { label: '★★☆☆☆  2 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 2 } }); toast.success('2 stars'); } catch { toast.error('Failed'); } } },
+            { label: '★☆☆☆☆  1 star',  onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 1 } }); toast.success('1 star'); } catch { toast.error('Failed'); } } },
+            { label: '☆☆☆☆☆  0 stars', onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: 0 } }); toast.success('0 stars'); } catch { toast.error('Failed'); } } },
+            { label: '🤖  Auto (AI)',    onClick: async () => { try { await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } }); toast.success('Reset to AI score'); } catch { toast.error('Failed'); } } },
+          ],
+        },
       ]}
       trigger={
         <div

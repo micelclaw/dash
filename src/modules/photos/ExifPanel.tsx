@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import { getPreviewUrl, formatFileSize } from '@/lib/file-utils';
 import { useExif } from './hooks/use-exif';
+import { StarRating } from './StarRating';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type { Photo } from '@/types/files';
@@ -17,6 +18,35 @@ export function ExifPanel({ photo, onClose, onSaved }: ExifPanelProps) {
   const [filename, setFilename] = useState(photo.filename);
   const [saving, setSaving] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
+
+  const cf = photo.custom_fields as Record<string, number | null> | null;
+  const hasOverride = cf?.aesthetic_override != null;
+  const aiScoreFloat = photo.metadata?.ai_aesthetic_score;
+  const aiStars = aiScoreFloat != null
+    ? (aiScoreFloat >= 0.8 ? 5 : aiScoreFloat >= 0.6 ? 4 : aiScoreFloat >= 0.4 ? 3 : aiScoreFloat >= 0.2 ? 2 : 1)
+    : 0;
+  const aestheticStars = hasOverride ? (cf!.aesthetic_override ?? 0) : aiStars;
+  const hasAiData = photo.metadata?.ai_aesthetic_score != null || photo.metadata?.ai_description != null;
+
+  const handleStarChange = async (value: number) => {
+    try {
+      await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: value } });
+      toast.success(`Rating set to ${value} star${value !== 1 ? 's' : ''}`);
+      onSaved?.();
+    } catch {
+      toast.error('Failed to set rating');
+    }
+  };
+
+  const handleStarReset = async () => {
+    try {
+      await api.patch(`/files/${photo.id}`, { custom_fields: { aesthetic_override: null } });
+      toast.success('Rating reset to AI score');
+      onSaved?.();
+    } catch {
+      toast.error('Failed to reset rating');
+    }
+  };
 
   useEffect(() => { setFilename(photo.filename); }, [photo.filename]);
 
@@ -168,6 +198,33 @@ export function ExifPanel({ photo, onClose, onSaved }: ExifPanelProps) {
             <FieldGroup title="Location">
               <ReadonlyField label="Latitude" value={String(photo.metadata.gps.latitude)} />
               <ReadonlyField label="Longitude" value={String(photo.metadata.gps.longitude)} />
+            </FieldGroup>
+          )}
+
+          {/* AI analysis */}
+          {(hasAiData || hasOverride) && (
+            <FieldGroup title="AI">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>Rating</span>
+                <StarRating
+                  value={aestheticStars}
+                  onChange={handleStarChange}
+                  size={16}
+                  isOverride={hasOverride}
+                  onReset={hasOverride ? handleStarReset : undefined}
+                />
+              </div>
+              {photo.metadata?.ai_description && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90, paddingTop: 2 }}>Description</span>
+                  <p style={{
+                    margin: 0, fontSize: '0.8125rem', color: 'var(--text)',
+                    lineHeight: 1.5, flex: 1,
+                  }}>
+                    {String(photo.metadata.ai_description)}
+                  </p>
+                </div>
+              )}
             </FieldGroup>
           )}
         </div>

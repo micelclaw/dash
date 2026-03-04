@@ -49,6 +49,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
   const [interval, setInterval] = useState(15);
+  const [maxMessages, setMaxMessages] = useState(2000);
 
   // Load connector detail
   useEffect(() => {
@@ -81,6 +82,11 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           setServerUrl(c.config.server_url ?? '');
           setUsername(c.config.username ?? '');
         }
+
+        // Load max_messages for connectors that support it
+        if (c.config.max_initial_messages) {
+          setMaxMessages(c.config.max_initial_messages);
+        }
       } catch {
         setError('Failed to load connector details');
       } finally {
@@ -110,8 +116,16 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
         await api.patch(`/sync/connectors/${connectorId}/config`, {
           display_name: displayName,
           sync_interval_minutes: interval,
+          max_initial_messages: maxMessages,
           host: imapHost,
           port: imapPort,
+        });
+      } else if (isOAuth) {
+        // OAuth connectors (Gmail, Google Calendar, etc.)
+        await api.patch(`/sync/connectors/${connectorId}/config`, {
+          display_name: displayName,
+          sync_interval_minutes: interval,
+          max_initial_messages: maxMessages,
         });
       } else {
         // CalDAV/CardDAV
@@ -137,6 +151,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   if (!connectorId) return null;
 
   const isImap = connector?.connector_type === 'imap-generic';
+  const isOAuth = connector?.connector_type?.startsWith('google') || connector?.connector_type === 'gmail';
 
   const inputStyle: React.CSSProperties = {
     width: '100%', height: 32, padding: '0 8px',
@@ -235,7 +250,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                 </>
               )}
 
-              {!isImap && (
+              {!isImap && !isOAuth && (
                 <>
                   <div>
                     <label style={labelStyle}>Server URL</label>
@@ -248,10 +263,18 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                 </>
               )}
 
-              <div>
-                <label style={labelStyle}>Password <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave empty to keep current)</span></label>
-                <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-              </div>
+              {!isOAuth && (
+                <div>
+                  <label style={labelStyle}>Password <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave empty to keep current)</span></label>
+                  <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+                </div>
+              )}
+
+              {isOAuth && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0' }}>
+                  Authenticated via Google OAuth. To re-authenticate, disconnect and reconnect.
+                </div>
+              )}
 
               <div>
                 <label style={labelStyle}>Sync Interval</label>
@@ -262,6 +285,22 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                   <option value={60}>Every hour</option>
                 </select>
               </div>
+
+              {(isImap || isOAuth) && (
+                <div>
+                  <label style={labelStyle}>Max Emails (initial sync)</label>
+                  <select value={maxMessages} onChange={(e) => setMaxMessages(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                    <option value={500}>500 emails</option>
+                    <option value={1000}>1,000 emails</option>
+                    <option value={2000}>2,000 emails</option>
+                    <option value={5000}>5,000 emails</option>
+                    <option value={10000}>10,000 emails (slow)</option>
+                  </select>
+                  <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                    Only affects the first sync. Subsequent syncs fetch new emails incrementally.
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div style={{ fontSize: '0.75rem', color: 'var(--error)', padding: '4px 0' }}>{error}</div>

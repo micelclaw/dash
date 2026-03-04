@@ -1,6 +1,6 @@
 export interface Notification {
   id: string;
-  type: 'sync' | 'agent_action' | 'system' | 'email' | 'digest' | 'approval' | 'change';
+  type: 'sync' | 'agent_action' | 'system' | 'email' | 'digest' | 'approval' | 'change' | 'calendar' | 'contacts';
   title: string;
   body?: string;
   read: boolean;

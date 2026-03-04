@@ -17,6 +17,17 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
 
   addNotification: (n) =>
     set((state) => {
+      // Deduplicate: skip if same title+type was added in last 30 minutes
+      const DEDUP_WINDOW = 30 * 60_000;
+      const now = Date.now();
+      const isDuplicate = state.notifications.some(
+        (existing) =>
+          existing.title === n.title &&
+          existing.type === n.type &&
+          now - new Date(existing.timestamp).getTime() < DEDUP_WINDOW,
+      );
+      if (isDuplicate) return state;
+
       const notification: Notification = {
         ...n,
         id: crypto.randomUUID(),

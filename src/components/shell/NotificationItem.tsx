@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck, Zap } from 'lucide-react';
+import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck, Zap, Calendar, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Notification } from '@/types/notifications';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -9,6 +9,8 @@ const TYPE_ICONS: Record<Notification['type'], LucideIcon> = {
   sync: RefreshCw,
   agent_action: Bot,
   email: Mail,
+  calendar: Calendar,
+  contacts: Users,
   digest: BarChart3,
   system: AlertTriangle,
   approval: ShieldCheck,
@@ -19,6 +21,8 @@ const TYPE_COLORS: Record<Notification['type'], string> = {
   sync: 'var(--info)',
   agent_action: 'var(--mod-agents)',
   email: 'var(--mod-mail)',
+  calendar: 'var(--mod-calendar)',
+  contacts: 'var(--mod-contacts)',
   digest: 'var(--mod-chat)',
   system: 'var(--warning)',
   approval: 'var(--error)',

@@ -5,7 +5,7 @@ import type { ApiListResponse } from '@/types/api';
 
 const PAGE_SIZE = 50;
 
-export function usePhotos(params: { search?: string; minStars?: number | null }) {
+export function usePhotos(params: { search?: string; selectedStars?: Set<number> }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -20,11 +20,15 @@ export function usePhotos(params: { search?: string; minStars?: number | null })
 
     setLoading(true);
     try {
+      const starsParam = params.selectedStars && params.selectedStars.size > 0
+        ? [...params.selectedStars].join(',')
+        : undefined;
+
       const res = await api.get<ApiListResponse<Photo>>('/photos/timeline', {
         limit: PAGE_SIZE,
         offset: offsetRef.current,
         search: params.search || undefined,
-        min_stars: params.minStars || undefined,
+        stars: starsParam,
       });
 
       const incoming = res.data;
@@ -43,7 +47,7 @@ export function usePhotos(params: { search?: string; minStars?: number | null })
     } finally {
       setLoading(false);
     }
-  }, [params.search, params.minStars]);
+  }, [params.search, params.selectedStars]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {

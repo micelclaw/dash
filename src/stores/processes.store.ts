@@ -28,6 +28,25 @@ export interface LogEntry {
   line: string;
 }
 
+export interface OllamaLoadedModel {
+  name: string;
+  size_bytes: number;
+  size_vram_bytes: number;
+  parameter_size: string;
+  expires_at: string;
+}
+
+export interface GpuStats {
+  gpu_percent: number;
+  vram_used_mb: number;
+  vram_total_mb: number;
+}
+
+export interface OllamaStatus {
+  models: OllamaLoadedModel[];
+  gpu: GpuStats | null;
+}
+
 // Raw shapes from backend (field names differ from frontend)
 interface RawProcess {
   id: string;
@@ -65,6 +84,8 @@ interface ProcessesState {
   selectedId: string | null;
   logs: string[];
   logsLoading: boolean;
+  ollamaStatus: OllamaStatus;
+  expandedProcessId: string | null;
 
   fetchProcesses: () => Promise<void>;
   restartProcess: (id: string) => Promise<void>;
@@ -74,6 +95,9 @@ interface ProcessesState {
   setSort: (by: SortKey) => void;
   setFilter: (f: string) => void;
   selectProcess: (id: string | null) => void;
+  fetchOllamaStatus: () => Promise<void>;
+  unloadOllamaModel: (model: string) => Promise<void>;
+  toggleExpandProcess: (id: string) => void;
 }
 
 export const useProcessesStore = create<ProcessesState>()((set, get) => ({
@@ -87,6 +111,8 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
   selectedId: null,
   logs: [],
   logsLoading: false,
+  ollamaStatus: { models: [], gpu: null },
+  expandedProcessId: null,
 
   fetchProcesses: async () => {
     set({ loading: true, error: null });
@@ -116,9 +142,30 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
         memory_total_mb: (raw.memory_total ?? 0) / (1024 * 1024),
       };
       set({ processes, stats, loading: false });
+      // Always refresh ollama status (GPU + loaded models) in background
+      get().fetchOllamaStatus();
     } catch {
       set({ error: 'Failed to fetch processes', loading: false });
     }
+  },
+
+  fetchOllamaStatus: async () => {
+    try {
+      const res = await api.get<{ data: OllamaStatus }>('/hal/processes/ollama/status');
+      set({ ollamaStatus: res.data });
+    } catch {
+      // Non-fatal — Ollama may not be running
+    }
+  },
+
+  unloadOllamaModel: async (model: string) => {
+    await api.post('/hal/processes/ollama/unload', { model });
+    await get().fetchOllamaStatus();
+  },
+
+  toggleExpandProcess: (id: string) => {
+    const { expandedProcessId } = get();
+    set({ expandedProcessId: expandedProcessId === id ? null : id });
   },
 
   restartProcess: async (id: string) => {

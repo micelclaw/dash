@@ -63,32 +63,38 @@ export function DashSection() {
           <div>
             <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Theme</div>
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['dark', 'light', 'system'] as const).map((t) => {
-              const icons: Record<string, string> = { dark: '\u{1F319}', light: '\u{2600}\u{FE0F}', system: '\u{1F4BB}' };
-              const isActive = d.theme === t;
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {([
+              { id: 'dark', label: 'Dark', dot: '#0c0c12' },
+              { id: 'light', label: 'Light', dot: '#e0ded8' },
+              { id: 'midnight', label: 'Midnight', dot: '#101828' },
+              { id: 'ember', label: 'Ember', dot: '#1a1410' },
+              { id: 'moss', label: 'Moss', dot: '#0e1410' },
+              { id: 'lucid', label: 'Lucid', dot: '#12101a' },
+            ] as const).map(({ id, label, dot }) => {
+              const isActive = d.theme === id;
               return (
                 <button
-                  key={t}
-                  onClick={() => setLocalValue('dash.theme', t)}
+                  key={id}
+                  onClick={() => setLocalValue('dash.theme', id)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 5,
                     height: 30,
-                    padding: '0 12px',
+                    padding: '0 10px',
                     background: isActive ? 'var(--amber)' : 'var(--surface)',
                     color: isActive ? '#06060a' : 'var(--text-dim)',
                     border: isActive ? 'none' : '1px solid var(--border)',
                     borderRadius: 'var(--radius-md)',
-                    fontSize: '0.8125rem',
+                    fontSize: '0.75rem',
                     fontFamily: 'var(--font-sans)',
                     cursor: 'pointer',
                     fontWeight: isActive ? 600 : 400,
                   }}
                 >
-                  <span style={{ fontSize: '0.75rem' }}>{icons[t]}</span>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: dot, border: '1px solid rgba(128,128,128,0.3)', flexShrink: 0 }} />
+                  {label}
                 </button>
               );
             })}

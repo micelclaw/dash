@@ -8,6 +8,7 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityContactPanel } from '@/components/shared/GraphProximityContactPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
+import { useMailState } from '@/modules/mail/hooks/use-mail-state';
 import type { Contact } from './types';
 import type { LinkedRecord } from '@/types/links';
 
@@ -347,7 +348,13 @@ export function ContactDetail({
         }}>
           {primaryEmail && (
             <button
-              onClick={() => { window.location.href = `mailto:${primaryEmail}`; }}
+              onClick={() => {
+                useMailState.getState().openComposer({
+                  mode: 'new',
+                  to: [{ address: primaryEmail, name: contact.display_name || undefined }],
+                });
+                navigate('/mail');
+              }}
               style={actionButtonStyle}
             >
               <Mail size={14} />

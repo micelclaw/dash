@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet, RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSettingsStore } from '@/stores/settings.store';
 import { LoginPage } from '@/pages/LoginPage';
 
 function AuthGate() {
@@ -39,6 +40,7 @@ const router = createBrowserRouter([
           { path: '/storage', lazy: () => import('@/modules/storage/StoragePage') },
           { path: '/processes', lazy: () => import('@/modules/processes/ProcessesPage') },
           { path: '/approvals', lazy: () => import('@/modules/approvals/ApprovalsPage') },
+          { path: '/digest/history', lazy: () => import('@/modules/digest/DigestHistoryPage') },
           { path: '/settings', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/clawhub', lazy: () => import('@/modules/clawhub/ClawHubPage') },
@@ -55,11 +57,16 @@ const router = createBrowserRouter([
 ]);
 
 export function App() {
+  const notifSettings = useSettingsStore(s => s.settings?.notifications);
+  const toastPosition = notifSettings?.toast_position ?? 'bottom-right';
+  const toastDuration = notifSettings?.toast_duration_ms ?? 5000;
+
   return (
     <>
       <RouterProvider router={router} />
       <Toaster
-        position="bottom-right"
+        position={toastPosition}
+        duration={toastDuration}
         toastOptions={{
           style: {
             background: 'var(--card)',
