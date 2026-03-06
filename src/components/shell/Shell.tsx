@@ -13,6 +13,7 @@ import { useNotificationStore } from '@/stores/notification.store';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useClipboardStore } from '@/stores/clipboard.store';
+import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { useTheme } from '@/hooks/use-theme';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -21,6 +22,8 @@ import { TopBar } from './TopBar';
 import { BottomBar } from './BottomBar';
 import { CommandPalette } from './CommandPalette';
 import { UrgentAlertModal } from '@/components/UrgentAlertModal';
+import { FloatingPanelsLayer } from '@/components/floating-panel/FloatingPanelsLayer';
+import { MinimizedPanelsTray } from '@/components/floating-panel/MinimizedPanelsTray';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -91,9 +94,13 @@ export function Shell() {
 
   // Keyboard shortcuts
   const toggleClipboard = useClipboardStore((s) => s.togglePanel);
+  const togglePanel = useFloatingPanelsStore((s) => s.togglePanel);
   useKeyboard([
     { key: 'b', meta: true, handler: toggle },
     { key: 'v', ctrl: true, shift: true, handler: toggleClipboard },
+    { key: 'c', ctrl: true, shift: true, handler: () => togglePanel('calculator') },
+    { key: 'u', ctrl: true, shift: true, handler: () => togglePanel('converter') },
+    { key: 'p', ctrl: true, shift: true, handler: () => togglePanel('pomodoro') },
   ]);
 
   // Notification event listeners
@@ -391,6 +398,10 @@ export function Shell() {
 
         {/* Urgent Digest Alert Modal */}
         <UrgentAlertModal />
+
+        {/* Floating tool panels */}
+        <FloatingPanelsLayer />
+        <MinimizedPanelsTray />
       </div>
     </TooltipProvider>
   );

@@ -5,10 +5,12 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
 import { useSidebarStore } from '@/stores/sidebar.store';
+import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { api } from '@/services/api';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { SearchResult } from '@/types/search';
@@ -119,6 +121,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const sidebarToggle = useSidebarStore((s) => s.toggle);
+  const openPanel = useFloatingPanelsStore((s) => s.openPanel);
 
   const commands: CommandItem[] = useMemo(() => [
     { id: 'goto-chat', label: 'Go to AI Chat', icon: MessageSquare, group: 'Navigation', action: () => navigate('/chat') },
@@ -136,9 +139,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'create-event', label: 'Create new event', icon: Plus, group: 'Actions', action: () => navigate('/calendar?action=new') },
     { id: 'create-diary', label: 'Create diary entry', icon: Plus, group: 'Actions', action: () => navigate('/diary?action=new') },
     { id: 'save-bookmark', label: 'Save a bookmark', icon: Bookmark, group: 'Actions', action: () => navigate('/bookmarks?action=new') },
+    { id: 'open-calculator', label: 'Open Calculator', icon: Calculator, group: 'Actions', action: () => openPanel('calculator') },
+    { id: 'open-converter', label: 'Open Converter', icon: ArrowLeftRight, group: 'Actions', action: () => openPanel('converter') },
+    { id: 'open-pomodoro', label: 'Open Pomodoro', icon: Timer, group: 'Actions', action: () => openPanel('pomodoro') },
+    { id: 'open-recorder', label: 'Open Voice Recorder', icon: Mic, group: 'Actions', action: () => openPanel('voice-recorder') },
+    { id: 'open-whiteboard', label: 'Open Whiteboard', icon: PenTool, group: 'Actions', action: () => navigate('/tools/whiteboard') },
+    { id: 'goto-tools', label: 'Go to Tools', icon: Wrench, group: 'Navigation', action: () => navigate('/tools') },
     { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
     { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
-  ], [navigate, sidebarToggle]);
+  ], [navigate, sidebarToggle, openPanel]);
 
   // Detect mode from input prefix
   useEffect(() => {
