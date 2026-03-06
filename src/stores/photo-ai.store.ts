@@ -30,6 +30,15 @@ export interface FaceCluster {
   created_at: string;
 }
 
+export interface FaceDetection {
+  id: string;
+  bounding_box: { x: number; y: number; width: number; height: number };
+  confidence: number;
+  face_cluster_id: string | null;
+  cluster_name: string | null;
+  linked_contact_id: string | null;
+}
+
 interface SearchMeta {
   total: number;
   limit: number;
@@ -65,6 +74,12 @@ interface PhotoAiState {
   clusterPhotos: Photo[] | null;
   clusterPhotosLoading: boolean;
 
+  // Face detections (per-photo bounding boxes)
+  faceDetections: FaceDetection[] | null;
+  faceDetectionsLoading: boolean;
+  faceDetectionsFileId: string | null;
+  showFaceOverlay: boolean;
+
   // Actions
   searchPhotos: (query: string) => Promise<void>;
   clearSearch: () => void;
@@ -75,8 +90,12 @@ interface PhotoAiState {
   selectCluster: (id: string | null) => void;
   fetchClusterPhotos: (clusterId: string) => Promise<void>;
   renameFaceCluster: (clusterId: string, name: string) => Promise<void>;
+  linkFaceToContact: (clusterId: string, contactId: string | null) => Promise<void>;
   mergeFaceClusters: (targetId: string, sourceId: string) => Promise<void>;
   deleteFaceCluster: (clusterId: string) => Promise<void>;
+  fetchFaceDetections: (fileId: string) => Promise<void>;
+  clearFaceDetections: () => void;
+  toggleFaceOverlay: () => void;
 }
 
 export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
@@ -95,6 +114,11 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   selectedClusterId: null,
   clusterPhotos: null,
   clusterPhotosLoading: false,
+
+  faceDetections: null,
+  faceDetectionsLoading: false,
+  faceDetectionsFileId: null,
+  showFaceOverlay: true,
 
   searchPhotos: async (query: string) => {
     if (!query.trim()) {
@@ -179,6 +203,14 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
     }
   },
 
+  linkFaceToContact: async (clusterId: string, contactId: string | null) => {
+    await api.patch(`/photos/faces/${clusterId}`, { contact_id: contactId });
+    const clusters = get().faceClusters;
+    if (clusters) {
+      set({ faceClusters: clusters.map((c) => (c.id === clusterId ? { ...c, linked_contact_id: contactId } : c)) });
+    }
+  },
+
   mergeFaceClusters: async (targetId: string, sourceId: string) => {
     await api.post(`/photos/faces/${targetId}/merge`, { source_cluster_id: sourceId });
     // Re-fetch clusters after merge
@@ -194,5 +226,26 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
         selectedClusterId: get().selectedClusterId === clusterId ? null : get().selectedClusterId,
       });
     }
+  },
+
+  // ─── Face Detections (per-photo) ──────────────────────────
+
+  fetchFaceDetections: async (fileId: string) => {
+    if (get().faceDetectionsFileId === fileId && get().faceDetections) return;
+    set({ faceDetectionsLoading: true, faceDetectionsFileId: fileId });
+    try {
+      const res = await api.get<{ data: FaceDetection[] }>(`/photos/faces/by-photo/${fileId}`);
+      set({ faceDetections: res.data, faceDetectionsLoading: false });
+    } catch {
+      set({ faceDetections: [], faceDetectionsLoading: false });
+    }
+  },
+
+  clearFaceDetections: () => {
+    set({ faceDetections: null, faceDetectionsFileId: null });
+  },
+
+  toggleFaceOverlay: () => {
+    set({ showFaceOverlay: !get().showFaceOverlay });
   },
 }));

@@ -67,6 +67,8 @@ const DEFAULT_SETTINGS: Settings = {
       face_recognition: false,
       face_threshold: 0.6,
     },
+    similar_visual_threshold: 0.2,
+    similar_concept_threshold: 0.2,
   },
   mail: {
     default_account_id: null,

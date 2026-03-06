@@ -47,6 +47,8 @@ export interface Settings {
       face_recognition: boolean;
       face_threshold: number;
     };
+    similar_visual_threshold: number;
+    similar_concept_threshold: number;
   };
   mail: {
     default_account_id: string | null;

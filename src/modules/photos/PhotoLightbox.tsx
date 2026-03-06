@@ -1,13 +1,16 @@
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Image, Search } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Image, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { simpleHash, formatFileSize, getPreviewUrl } from '@/lib/file-utils';
 import { formatDateShort, formatTime } from '@/lib/date-helpers';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
+import type { FaceDetection } from '@/stores/photo-ai.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { StarRating } from './StarRating';
 import { SimilarPhotosPanel } from './SimilarPhotosPanel';
+import { FaceOverlay } from './FaceOverlay';
+import { ContactLinkDialog } from './ContactLinkDialog';
 import type { Photo } from '@/types/files';
 
 interface PhotoLightboxProps {
@@ -35,6 +38,16 @@ export function PhotoLightbox({
   const fetchSimilar = usePhotoAiStore((s) => s.fetchSimilar);
   const closeSimilarPanel = usePhotoAiStore((s) => s.closeSimilarPanel);
   const isPro = useAuthStore((s) => s.user?.tier === 'pro');
+
+  // Face detection overlay
+  const fetchFaceDetections = usePhotoAiStore((s) => s.fetchFaceDetections);
+  const clearFaceDetections = usePhotoAiStore((s) => s.clearFaceDetections);
+  const faceDetections = usePhotoAiStore((s) => s.faceDetections);
+  const showFaceOverlay = usePhotoAiStore((s) => s.showFaceOverlay);
+  const toggleFaceOverlay = usePhotoAiStore((s) => s.toggleFaceOverlay);
+  const linkFaceToContact = usePhotoAiStore((s) => s.linkFaceToContact);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [contactDialogFace, setContactDialogFace] = useState<FaceDetection | null>(null);
 
   // Touch/swipe support
   const pointerStartX = useRef<number | null>(null);
@@ -67,6 +80,14 @@ export function PhotoLightbox({
   useEffect(() => {
     return () => closeSimilarPanel();
   }, [closeSimilarPanel]);
+
+  // Fetch face detections for current photo
+  useEffect(() => {
+    if (photo?.id) {
+      fetchFaceDetections(photo.id);
+    }
+    return () => clearFaceDetections();
+  }, [photo?.id, fetchFaceDetections, clearFaceDetections]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     pointerStartX.current = e.clientX;
@@ -260,6 +281,7 @@ export function PhotoLightbox({
 
             {/* Photo display */}
             <div
+              ref={imageContainerRef}
               style={{
                 maxWidth: similarPanelOpen ? '70vw' : '90vw',
                 maxHeight: '75vh',
@@ -299,6 +321,15 @@ export function PhotoLightbox({
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Image size={56} style={{ opacity: 0.25, color: '#fff' }} />
                     </div>
+                  )}
+                  {/* Face detection overlay */}
+                  {imgLoaded && photo.metadata?.width && photo.metadata?.height && (
+                    <FaceOverlay
+                      imageWidth={photo.metadata.width}
+                      imageHeight={photo.metadata.height}
+                      containerRef={imageContainerRef}
+                      onFaceClick={(face) => setContactDialogFace(face)}
+                    />
                   )}
                 </>
               ) : (
@@ -348,6 +379,16 @@ export function PhotoLightbox({
             >
               <Search size={12} /> Find similar
             </button>
+            {faceDetections && faceDetections.length > 0 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleFaceOverlay(); }}
+                onMouseEnter={() => setHoveredBtn('faces')}
+                onMouseLeave={() => setHoveredBtn(null)}
+                style={actionBtnStyle('faces')}
+              >
+                <Users size={12} /> {showFaceOverlay ? 'Hide' : 'Show'} faces ({faceDetections.length})
+              </button>
+            )}
           </div>
 
           {/* Info bar */}
@@ -363,7 +404,7 @@ export function PhotoLightbox({
             }}
           >
             <InfoChip label={photo.filename} />
-            {aestheticStars > 0 && (
+            {(aestheticStars > 0 || photo.metadata?.ai_processed_at) && (
               <StarRating
                 value={aestheticStars}
                 onChange={(v) => handleSetStars(photo.id, v)}
@@ -378,6 +419,9 @@ export function PhotoLightbox({
             <InfoChip label={`${formatDateShort(dateObj)} ${formatTime(dateObj)}`} />
             {gps && <InfoChip label={`${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}`} />}
             {photo.tags?.length > 0 && <InfoChip label={photo.tags.join(', ')} />}
+            {faceDetections && faceDetections.length > 0 && (
+              <InfoChip label={`${faceDetections.length} face${faceDetections.length !== 1 ? 's' : ''}`} />
+            )}
           </div>
         </div>
 
@@ -386,6 +430,34 @@ export function PhotoLightbox({
           <SimilarPhotosPanel onNavigateToPhoto={handleNavigateToSimilar} />
         )}
       </div>
+
+      {/* Contact link dialog for face bounding boxes */}
+      <ContactLinkDialog
+        open={contactDialogFace !== null}
+        clusterName={contactDialogFace?.cluster_name ?? null}
+        linkedContactId={contactDialogFace?.linked_contact_id ?? null}
+        onClose={() => setContactDialogFace(null)}
+        onLink={async (contactId) => {
+          if (contactDialogFace?.face_cluster_id) {
+            try {
+              await linkFaceToContact(contactDialogFace.face_cluster_id, contactId);
+              toast.success('Contact linked');
+              clearFaceDetections();
+              if (photo?.id) fetchFaceDetections(photo.id);
+            } catch { toast.error('Failed to link contact'); }
+          }
+        }}
+        onUnlink={async () => {
+          if (contactDialogFace?.face_cluster_id) {
+            try {
+              await linkFaceToContact(contactDialogFace.face_cluster_id, null);
+              toast.success('Contact unlinked');
+              clearFaceDetections();
+              if (photo?.id) fetchFaceDetections(photo.id);
+            } catch { toast.error('Failed to unlink contact'); }
+          }
+        }}
+      />
     </div>
   );
 }

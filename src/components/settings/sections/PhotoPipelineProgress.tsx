@@ -11,8 +11,10 @@ interface AiStats {
   total: number;
   processed: number;
   pending: number;
+  queued: number;
   with_description: number;
   skipped: number;
+  worker_paused: boolean;
   models: {
     multimodal: { available: boolean; id: string | null; loaded: boolean };
     siglip: { available: boolean; size_mb: number };
@@ -27,16 +29,16 @@ interface LogEntry {
   type: 'info' | 'phase' | 'error' | 'done';
 }
 
-type Phase = 'starting' | 'multimodal' | 'onnx' | 'faces' | 'post';
+type Phase = 'multimodal' | 'siglip' | 'dinov2' | 'laion' | 'faces' | 'post';
 
 const PHASES: { key: Phase; label: string; icon: typeof Eye }[] = [
-  { key: 'multimodal', label: 'Vision AI', icon: Eye },
-  { key: 'onnx', label: 'Embeddings', icon: Cpu },
-  { key: 'faces', label: 'Faces', icon: Users },
-  { key: 'post', label: 'Indexing', icon: Database },
+  { key: 'multimodal', label: 'Vision AI',  icon: Eye },
+  { key: 'siglip',     label: 'SigLIP',     icon: Cpu },
+  { key: 'dinov2',     label: 'DINOv2',     icon: Cpu },
+  { key: 'laion',      label: 'Aesthetic',  icon: Cpu },
+  { key: 'faces',      label: 'Faces',      icon: Users },
+  { key: 'post',       label: 'Indexing',   icon: Database },
 ];
-
-const PHASE_ORDER: Phase[] = ['starting', 'multimodal', 'onnx', 'faces', 'post'];
 
 // ─── Component ──────────────────────────────────────────
 
@@ -49,6 +51,12 @@ export function PhotoPipelineProgress() {
   const [batchCurrent, setBatchCurrent] = useState(0);
   const [batchTotal, setBatchTotal] = useState(0);
   const [etaSeconds, setEtaSeconds] = useState(0);
+  const [phaseIdx, setPhaseIdx] = useState(0);
+  const [totalPhases, setTotalPhases] = useState(6);
+  const [batchNumber, setBatchNumber] = useState(0);
+  const [totalBatches, setTotalBatches] = useState(0);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [pendingRemaining, setPendingRemaining] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [reprocessing, setReprocessing] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -56,17 +64,31 @@ export function PhotoPipelineProgress() {
   const [paused, setPaused] = useState(false);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef(false);
 
-  // ─── Fetch stats ────────────────────────────────────
+  // ─── Fetch stats (only updates stats + paused, never WS-driven state) ──
 
   const fetchStats = useCallback(async () => {
     try {
       const res = await api.get<{ data: AiStats }>('/photos/ai/stats');
       setStats(res.data);
-    } catch { /* silent */ }
+      setPaused(res.data.worker_paused);
+      return res.data;
+    } catch { return null; }
   }, []);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  // Initial mount: restore processing state from server once
+  useEffect(() => {
+    fetchStats().then(data => {
+      if (!data || initializedRef.current) return;
+      initializedRef.current = true;
+      if (data.queued > 0 && !data.worker_paused) {
+        setPendingRemaining(data.queued);
+        setPendingTotal(data.queued);
+        setRunning(true);
+      }
+    });
+  }, [fetchStats]);
 
   // ─── Logging ────────────────────────────────────────
 
@@ -88,21 +110,30 @@ export function PhotoPipelineProgress() {
     if (!client) return;
 
     const unsub1 = client.on('photo.worker.progress', (e) => {
-      const { phase, current, total, eta_seconds } = e.data as {
+      const { phase, current, total, eta_seconds, phase_index, total_phases,
+              batch_number, pending_total, pending_remaining } = e.data as {
         file_id: string; phase: Phase; current: number; total: number; eta_seconds: number;
+        phase_index: number; total_phases: number;
+        batch_number: number; pending_total: number; pending_remaining: number;
       };
 
       if (!running) setRunning(true);
+      if (paused) setPaused(false);
       setCurrentPhase(phase);
       setBatchCurrent(current);
       setBatchTotal(total);
       setEtaSeconds(eta_seconds);
+      setPhaseIdx(phase_index);
+      setTotalPhases(total_phases);
+      setBatchNumber(batch_number);
+      setPendingTotal(pending_total);
+      // Don't update pendingRemaining here — it represents "remaining after batch",
+      // not "remaining right now". Update only on batch complete.
 
-      if (phase === 'starting') {
-        addLog(`Photo ${current}/${total}`, 'info');
-      } else {
-        addLog(`  ${phase}`, 'phase');
-      }
+      const batchLabel = totalBatches > 1
+        ? ` (Batch ${batch_number}/${totalBatches})`
+        : '';
+      addLog(`${phase} (${current} de ${total})${batchLabel}`, 'phase');
     });
 
     const unsub2 = client.on('photo.worker.error', (e) => {
@@ -111,10 +142,17 @@ export function PhotoPipelineProgress() {
     });
 
     const unsub3 = client.on('photo.worker.complete', (e) => {
-      const { photos_processed, duration_seconds } = e.data as { photos_processed: number; duration_seconds: number };
-      setRunning(false);
-      setCurrentPhase(null);
-      addLog(`Batch complete: ${photos_processed} photos in ${duration_seconds}s`, 'done');
+      const { photos_processed, duration_seconds, batch_number: bn, pending_remaining: pr } = e.data as {
+        photos_processed: number; duration_seconds: number;
+        batch_number: number; pending_total: number; pending_remaining: number;
+      };
+      // pendingRemaining is already updated per-photo by photo_done events
+      if (pr <= 0) {
+        setRunning(false);
+        setCurrentPhase(null);
+      }
+      const suffix = pr > 0 ? ` — ${pr} remaining` : '';
+      addLog(`Batch ${bn} complete: ${photos_processed} photos in ${duration_seconds}s${suffix}`, 'done');
       fetchStats();
     });
 
@@ -141,8 +179,36 @@ export function PhotoPipelineProgress() {
       addLog(`Download ${model}: ${error}`, 'error');
     });
 
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
-  }, [client, addLog, running, fetchStats]);
+    const unsub8 = client.on('photo.worker.photo_done', () => {
+      // Per-photo granular counter update
+      setPendingRemaining(prev => Math.max(0, prev - 1));
+      setStats(prev => ({
+        ...prev,
+        processed: prev.processed + 1,
+        pending: Math.max(0, prev.pending - 1),
+        queued: Math.max(0, prev.queued - 1),
+      }));
+    });
+
+    const unsub7 = client.on('photo.worker.queued', (e) => {
+      const { queued, pending_total, total_batches } = e.data as {
+        queued: number; pending_total: number; total_batches: number;
+      };
+      setPendingRemaining(pending_total);
+      setPendingTotal(pending_total);
+      setTotalBatches(total_batches);
+      setPhaseIdx(0);
+      setCurrentPhase(null);
+      setBatchCurrent(0);
+      setBatchTotal(0);
+      setBatchNumber(0);
+      setPaused(false);
+      setRunning(true);
+      addLog(`${queued} photos queued — ${total_batches} batch${total_batches !== 1 ? 'es' : ''}`, 'phase');
+    });
+
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
+  }, [client, addLog, running, paused, fetchStats]);
 
   // ─── Re-process handler ─────────────────────────────
 
@@ -166,10 +232,27 @@ export function PhotoPipelineProgress() {
   const handlePauseResume = async () => {
     try {
       if (paused) {
-        await api.post('/photos/ai/resume');
-        setPaused(false);
-        addLog('Pipeline resumed', 'info');
-        toast.success('Pipeline resumed');
+        if (pendingRemaining > 0) {
+          // There are photos in the queue — just resume
+          await api.post('/photos/ai/resume');
+          setPaused(false);
+          addLog('Pipeline resumed', 'info');
+          toast.success('Pipeline resumed');
+        } else if (stats.pending > 0) {
+          // Queue is empty but there are unprocessed photos (skipped by abort)
+          if (!confirm(`No hay fotos en cola. ¿Quieres procesar las ${stats.pending} fotos pendientes?`)) return;
+          const res = await api.post('/photos/ai/resume-all') as any;
+          const pending = res.data?.pending ?? 0;
+          setPaused(false);
+          setPendingRemaining(pending);
+          setPendingTotal(pending);
+          setRunning(true);
+          addLog(`Pipeline resumed — ${pending} photos queued`, 'info');
+          toast.success(`${pending} photos queued for processing`);
+        } else {
+          // Nothing to process
+          toast.info('No hay fotos pendientes de procesar');
+        }
       } else {
         await api.post('/photos/ai/pause');
         setPaused(true);
@@ -185,12 +268,15 @@ export function PhotoPipelineProgress() {
     if (!confirm('Abort processing and clear the pending queue?')) return;
     try {
       const res = await api.post('/photos/ai/abort') as any;
-      const cleared = res.data?.cleared ?? 0;
+      const pending = res.data?.pending ?? 0;
       setPaused(true);
       setRunning(false);
       setCurrentPhase(null);
-      addLog(`Aborted — ${cleared} photos removed from queue`, 'error');
-      toast.success(`Queue cleared: ${cleared} photos`);
+      setBatchNumber(0);
+      setPendingTotal(0);
+      setPendingRemaining(0);
+      addLog('Aborted — pipeline stopped, queue cleared', 'error');
+      toast.success('Pipeline aborted');
       fetchStats();
     } catch {
       toast.error('Failed to abort');
@@ -217,7 +303,24 @@ export function PhotoPipelineProgress() {
 
   const pct = stats.total > 0 ? Math.round((stats.processed / stats.total) * 100) : 0;
 
-  const phaseIndex = currentPhase ? PHASE_ORDER.indexOf(currentPhase) : -1;
+  // Granular overall session progress (photo-level)
+  const overallSessionPct = (() => {
+    if (pendingTotal <= 0) return 0;
+    const batchSteps = batchTotal > 0 && totalPhases > 0 ? batchTotal * totalPhases : 1;
+    const batchCompleted = phaseIdx * batchTotal + batchCurrent;
+    const batchFraction = batchSteps > 0 ? batchCompleted / batchSteps : 0;
+    const alreadyDone = pendingTotal - pendingRemaining - batchTotal;
+    const effectiveDone = Math.max(0, alreadyDone) + batchTotal * batchFraction;
+    return Math.round((effectiveDone / pendingTotal) * 100);
+  })();
+
+  // Within-batch granular progress
+  const batchGranularPct = (() => {
+    if (!running || batchTotal <= 0 || totalPhases <= 0) return 0;
+    const totalSteps = batchTotal * totalPhases;
+    const completedSteps = phaseIdx * batchTotal + batchCurrent;
+    return Math.round((completedSteps / totalSteps) * 100);
+  })();
 
   const formatEta = (s: number) => {
     if (s <= 0) return '';
@@ -298,6 +401,7 @@ export function PhotoPipelineProgress() {
         {[
           { label: 'Total', value: stats.total, color: 'var(--text)' },
           { label: 'Processed', value: stats.processed, color: '#22c55e' },
+          { label: 'Processing', value: running ? pendingRemaining : stats.queued, color: (running || stats.queued > 0) ? '#06b6d4' : 'var(--text-muted)' },
           { label: 'Pending', value: stats.pending, color: stats.pending > 0 ? 'var(--amber)' : 'var(--text-muted)' },
           { label: 'Described', value: stats.with_description, color: 'var(--text-dim)' },
         ].map(s => (
@@ -335,10 +439,10 @@ export function PhotoPipelineProgress() {
           display: 'flex', gap: 6, padding: '8px 0',
           justifyContent: 'space-between',
         }}>
-          {PHASES.map((p, i) => {
-            const pIdx = PHASE_ORDER.indexOf(p.key);
+          {PHASES.filter(p => p.key !== 'faces' || totalPhases > 5).map((p) => {
+            const pIdxInPhases = PHASES.findIndex(pp => pp.key === p.key);
             const isActive = currentPhase === p.key;
-            const isDone = phaseIndex > pIdx;
+            const isDone = phaseIdx > pIdxInPhases;
             const color = isActive ? 'var(--amber)' : isDone ? '#22c55e' : 'var(--text-muted)';
             const bg = isActive ? 'rgba(212, 160, 23, 0.1)' : isDone ? 'rgba(34, 197, 94, 0.06)' : 'transparent';
             const Icon = p.icon;
@@ -359,14 +463,48 @@ export function PhotoPipelineProgress() {
         </div>
       )}
 
-      {/* Batch progress line */}
+      {/* Overall session progress bar */}
+      {running && pendingTotal > 0 && (
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-sans)' }}>
+            <span>Overall — {overallSessionPct}%</span>
+            <span>{pendingTotal - pendingRemaining} / {pendingTotal} photos</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${overallSessionPct}%`, borderRadius: 2,
+              background: '#22c55e',
+              transition: 'width 0.5s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Current batch progress bar */}
+      {running && batchTotal > 0 && (
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.625rem', color: 'var(--text-muted)', marginBottom: 3, fontFamily: 'var(--font-sans)' }}>
+            <span>Batch {batchNumber}{totalBatches > 0 ? `/${totalBatches}` : ''} — {batchGranularPct}%</span>
+            <span>Photo {batchCurrent}/{batchTotal}</span>
+          </div>
+          <div style={{ height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${batchGranularPct}%`, borderRadius: 2,
+              background: 'var(--amber)',
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Batch info line */}
       {running && batchTotal > 0 && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0 8px',
-          fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0 8px',
+          fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)',
         }}>
           <Clock size={11} />
-          <span>Photo {batchCurrent}/{batchTotal}</span>
+          <span>Photo {batchCurrent}/{batchTotal} — Batch {batchNumber}{totalBatches > 0 ? `/${totalBatches}` : ''}</span>
           {etaSeconds > 0 && <span style={{ color: 'var(--text-dim)' }}>{formatEta(etaSeconds)} remaining</span>}
         </div>
       )}

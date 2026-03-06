@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Users, ArrowLeft, Pencil, Trash2, Image } from 'lucide-react';
+import { Users, ArrowLeft, Pencil, Trash2, Image, UserPlus, UserX } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { getPreviewUrl } from '@/lib/file-utils';
 import { usePhotoAiStore, type FaceCluster } from '@/stores/photo-ai.store';
+import { ContactLinkDialog } from './ContactLinkDialog';
 
 interface PhotosPeopleProps {
   onPhotoClick: (index: number) => void;
@@ -15,11 +16,13 @@ function ClusterCard({
   onClick,
   onRename,
   onDelete,
+  onLinkContact,
 }: {
   cluster: FaceCluster;
   onClick: () => void;
   onRename: (name: string) => void;
   onDelete: () => void;
+  onLinkContact: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -42,6 +45,11 @@ function ClusterCard({
 
   const contextItems: ContextMenuItem[] = [
     { label: 'Rename', icon: Pencil, onClick: () => setEditing(true) },
+    {
+      label: cluster.linked_contact_id ? 'Change Contact' : 'Link Contact',
+      icon: UserPlus,
+      onClick: onLinkContact,
+    },
     { label: '', separator: true, onClick: () => {} },
     { label: 'Delete', icon: Trash2, onClick: onDelete, variant: 'danger' },
   ];
@@ -161,7 +169,7 @@ function ClusterCard({
             </span>
           )}
 
-          {/* Photo count */}
+          {/* Photo count + linked indicator */}
           <span
             style={{
               fontSize: '0.6875rem',
@@ -170,6 +178,9 @@ function ClusterCard({
             }}
           >
             {cluster.photo_count} photo{cluster.photo_count !== 1 ? 's' : ''}
+            {cluster.linked_contact_id && (
+              <span style={{ color: 'var(--amber)', marginLeft: 4 }}> (linked)</span>
+            )}
           </span>
         </div>
       }
@@ -368,8 +379,10 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
   const selectedClusterId = usePhotoAiStore((s) => s.selectedClusterId);
   const selectCluster = usePhotoAiStore((s) => s.selectCluster);
   const renameFaceCluster = usePhotoAiStore((s) => s.renameFaceCluster);
+  const linkFaceToContact = usePhotoAiStore((s) => s.linkFaceToContact);
   const deleteFaceCluster = usePhotoAiStore((s) => s.deleteFaceCluster);
 
+  const [linkDialogCluster, setLinkDialogCluster] = useState<FaceCluster | null>(null);
   const selectedCluster = faceClusters?.find((c) => c.id === selectedClusterId) ?? null;
 
   const handleRename = useCallback(async (clusterId: string, name: string) => {
@@ -389,6 +402,24 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
       toast.error('Failed to delete cluster');
     }
   }, [deleteFaceCluster]);
+
+  const handleLinkContact = useCallback(async (clusterId: string, contactId: string) => {
+    try {
+      await linkFaceToContact(clusterId, contactId);
+      toast.success('Contact linked');
+    } catch {
+      toast.error('Failed to link contact');
+    }
+  }, [linkFaceToContact]);
+
+  const handleUnlinkContact = useCallback(async (clusterId: string) => {
+    try {
+      await linkFaceToContact(clusterId, null);
+      toast.success('Contact unlinked');
+    } catch {
+      toast.error('Failed to unlink contact');
+    }
+  }, [linkFaceToContact]);
 
   // Show cluster detail if a cluster is selected
   if (selectedCluster) {
@@ -440,9 +471,19 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
             onClick={() => selectCluster(cluster.id)}
             onRename={(name) => handleRename(cluster.id, name)}
             onDelete={() => handleDelete(cluster.id)}
+            onLinkContact={() => setLinkDialogCluster(cluster)}
           />
         ))}
       </div>
+
+      <ContactLinkDialog
+        open={linkDialogCluster !== null}
+        clusterName={linkDialogCluster?.name ?? null}
+        linkedContactId={linkDialogCluster?.linked_contact_id ?? null}
+        onClose={() => setLinkDialogCluster(null)}
+        onLink={(contactId) => linkDialogCluster && handleLinkContact(linkDialogCluster.id, contactId)}
+        onUnlink={() => linkDialogCluster && handleUnlinkContact(linkDialogCluster.id)}
+      />
     </div>
   );
 }

@@ -7,6 +7,8 @@ import { useAlbums } from './hooks/use-albums';
 import { useAlbumPhotos } from './hooks/use-album-photos';
 import { usePhotoSelection } from './hooks/use-photo-selection';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
+import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
+import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { PhotosToolbar } from './PhotosToolbar';
 import { PhotosTimeline } from './PhotosTimeline';
@@ -194,6 +196,16 @@ export function Component() {
   const selectCluster = usePhotoAiStore((s) => s.selectCluster);
   const isPro = useAuthStore((s) => s.user?.tier === 'pro');
 
+  // Detail panel collapse state + responsive
+  const [detailsCollapsed, setDetailsCollapsed] = useState(() => window.innerWidth < 1024);
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth < 1024) setDetailsCollapsed(true);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Modal/panel state
   const [exifPhoto, setExifPhoto] = useState<Photo | null>(null);
   const [deletePhotoId, setDeletePhotoId] = useState<string | null>(null);
@@ -237,6 +249,13 @@ export function Component() {
     fetchPhotos(true);
   }, [fetchPhotos]);
 
+  // Auto-open ExifPanel with first photo when photos load
+  useEffect(() => {
+    if (!exifPhoto && photos.length > 0 && !photosLoading) {
+      setExifPhoto(photos[0]);
+    }
+  }, [photos, photosLoading]);
+
   // Fetch Best Of count
   useEffect(() => {
     api.get<{ data: Photo[]; meta?: { total?: number } }>('/photos/timeline', { min_stars: 4, limit: 1 })
@@ -252,6 +271,44 @@ export function Component() {
   useEffect(() => {
     if (view === 'people') fetchFaceClusters();
   }, [view, fetchFaceClusters]);
+
+  // Track per-photo processing progress via WebSocket
+  const wsClient = useWebSocketStore((s) => s.client);
+  const setFilePhase = usePhotoProcessingStore((s) => s.setFilePhase);
+  const setFilesPending = usePhotoProcessingStore((s) => s.setFilesPending);
+  const clearNonPending = usePhotoProcessingStore((s) => s.clearNonPending);
+  const clearAllProcessing = usePhotoProcessingStore((s) => s.clearAll);
+  const clearFile = usePhotoProcessingStore((s) => s.clearFile);
+  const setProcessingPaused = usePhotoProcessingStore((s) => s.setPaused);
+  useEffect(() => {
+    if (!wsClient) return;
+    const unsub0 = wsClient.on('photo.worker.batch_start', (e) => {
+      const { file_ids } = e.data as { file_ids: string[] };
+      setFilesPending(file_ids);
+    });
+    const unsub1 = wsClient.on('photo.worker.progress', (e) => {
+      const { file_id, phase } = e.data as { file_id: string; phase: string };
+      setFilePhase(file_id, phase);
+    });
+    const unsub2 = wsClient.on('photo.worker.complete', () => {
+      clearNonPending();
+      fetchPhotos(true);
+    });
+    const unsub3 = wsClient.on('photo.worker.abort', () => {
+      clearAllProcessing();
+    });
+    const unsub4 = wsClient.on('photo.worker.photo_done', (e) => {
+      const { file_id } = e.data as { file_id: string };
+      clearFile(file_id);
+    });
+    const unsub5 = wsClient.on('photo.worker.paused', () => {
+      setProcessingPaused(true);
+    });
+    const unsub6 = wsClient.on('photo.worker.resumed', () => {
+      setProcessingPaused(false);
+    });
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+  }, [wsClient, setFilesPending, setFilePhase, clearNonPending, clearAllProcessing, clearFile, setProcessingPaused, fetchPhotos]);
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -310,7 +367,9 @@ export function Component() {
 
   const handlePhotoClick = useCallback((index: number) => {
     setLightboxIndex(index);
-  }, []);
+    const photo = activePhotos[index];
+    if (photo) setExifPhoto(photo);
+  }, [activePhotos]);
 
   const handleLightboxClose = useCallback(() => {
     setLightboxIndex(null);
@@ -318,6 +377,8 @@ export function Component() {
 
   const handleLightboxNavigate = useCallback((index: number) => {
     setLightboxIndex(index);
+    const photo = activePhotos[index];
+    if (photo) setExifPhoto(photo);
   }, []);
 
   const handleAddToAlbum = useCallback(async (photoId: string, albumId: string) => {
@@ -407,6 +468,7 @@ export function Component() {
 
   const handleBatchProcess = useCallback(async () => {
     const ids = [...activeSelection.selectedIds];
+    setFilesPending(ids);
     try {
       const res = await api.post('/photos/ai/reprocess-selected', { file_ids: ids }) as any;
       const data = res.data ?? res;
@@ -415,7 +477,7 @@ export function Component() {
     } catch {
       toast.error('Failed to queue photos for processing');
     }
-  }, [activeSelection]);
+  }, [activeSelection, setFilesPending]);
 
   const handleBatchRemoveFromAlbum = useCallback(async () => {
     if (!selectedAlbumId) return;
@@ -512,102 +574,108 @@ export function Component() {
         })}
       />
 
-      {/* Content */}
-      {view === 'timeline' && searchResults !== null ? (
-        <SearchResultsGrid
-          results={searchResults}
-          loading={searchLoading}
-          searchType={searchMeta?.search_type ?? 'fulltext'}
-          isPro={!!isPro}
-          search={search}
-          onPhotoClick={(id) => {
-            const idx = searchResults.findIndex((r) => r.id === id);
-            if (idx >= 0) setLightboxIndex(idx);
-          }}
-        />
-      ) : view === 'timeline' ? (
-        <PhotosTimeline
-          photos={photos}
-          loading={photosLoading}
-          hasMore={hasMore}
-          onLoadMore={loadMore}
-          onPhotoClick={handlePhotoClick}
-          onFilesDropped={handleUpload}
-          albums={albums}
-          onAddToAlbum={handleAddToAlbum}
-          onSetAsCover={handleSetAsCover}
-          onCreateAlbum={handleCreateAlbumInline}
-          onViewExif={(photo) => setExifPhoto(photo)}
-          onDeletePhoto={(id) => setDeletePhotoId(id)}
-          selectedIds={timelineSelection.selectedIds}
-          onToggleSelect={timelineSelection.toggleSelection}
-        />
-      ) : null}
+      {/* Content + Sidebar */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Main content area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
+          {view === 'timeline' && searchResults !== null ? (
+            <SearchResultsGrid
+              results={searchResults}
+              loading={searchLoading}
+              searchType={searchMeta?.search_type ?? 'fulltext'}
+              isPro={!!isPro}
+              search={search}
+              onPhotoClick={(id) => {
+                const idx = searchResults.findIndex((r) => r.id === id);
+                if (idx >= 0) setLightboxIndex(idx);
+              }}
+            />
+          ) : view === 'timeline' ? (
+            <PhotosTimeline
+              photos={photos}
+              loading={photosLoading}
+              hasMore={hasMore}
+              onLoadMore={loadMore}
+              onPhotoClick={handlePhotoClick}
+              onFilesDropped={handleUpload}
+              albums={albums}
+              onAddToAlbum={handleAddToAlbum}
+              onSetAsCover={handleSetAsCover}
+              onCreateAlbum={handleCreateAlbumInline}
+              onViewExif={(photo) => setExifPhoto(photo)}
+              onDeletePhoto={(id) => setDeletePhotoId(id)}
+              selectedIds={timelineSelection.selectedIds}
+              onToggleSelect={timelineSelection.toggleSelection}
+            />
+          ) : null}
 
-      {view === 'albums' && !selectedAlbum && (
-        <PhotosAlbums
-          albums={albums}
-          loading={albumsLoading}
-          onAlbumClick={handleAlbumClick}
-          onCreateAlbumClick={() => setCreateAlbumOpen(true)}
-          onEditAlbum={(album) => setEditAlbum(album)}
-          onRequestFiles={(album) => setRequestFilesAlbum(album)}
-          onShareAlbum={(album) => setShareAlbum(album)}
-          onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
-          bestOfCount={bestOfCount}
-          bestOfCoverId={bestOfCoverId}
-          onBestOfClick={() => { setMinStars(4); setView('timeline'); }}
-        />
-      )}
+          {view === 'albums' && !selectedAlbum && (
+            <PhotosAlbums
+              albums={albums}
+              loading={albumsLoading}
+              onAlbumClick={handleAlbumClick}
+              onCreateAlbumClick={() => setCreateAlbumOpen(true)}
+              onEditAlbum={(album) => setEditAlbum(album)}
+              onRequestFiles={(album) => setRequestFilesAlbum(album)}
+              onShareAlbum={(album) => setShareAlbum(album)}
+              onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
+              bestOfCount={bestOfCount}
+              bestOfCoverId={bestOfCoverId}
+              onBestOfClick={() => { setMinStars(4); setView('timeline'); }}
+            />
+          )}
 
-      {view === 'albums' && selectedAlbum && (
-        <AlbumDetail
-          album={selectedAlbum}
-          photos={albumPhotos}
-          loading={albumPhotosLoading}
-          onBack={handleAlbumBack}
-          onDelete={async (albumId) => { await deleteAlbum(albumId); setSelectedAlbumId(null); }}
-          onPhotoClick={handlePhotoClick}
-          onShareAlbum={() => setShareAlbum(selectedAlbum)}
-          onEditAlbum={() => setEditAlbum(selectedAlbum)}
-          onRemoveFromAlbum={handleRemoveFromAlbum}
-          onViewExif={(photo) => setExifPhoto(photo)}
-          onDeletePhoto={(id) => setDeletePhotoId(id)}
-          onSetAsCover={handleSetAsCoverForCurrentAlbum}
-          selectedIds={albumSelection.selectedIds}
-          onToggleSelect={albumSelection.toggleSelection}
-          onBatchRemove={() => setBatchRemoveOpen(true)}
-          onBatchDelete={() => setBatchDeleteOpen(true)}
-          onClearSelection={albumSelection.clearSelection}
-        />
-      )}
+          {view === 'albums' && selectedAlbum && (
+            <AlbumDetail
+              album={selectedAlbum}
+              photos={albumPhotos}
+              loading={albumPhotosLoading}
+              onBack={handleAlbumBack}
+              onDelete={async (albumId) => { await deleteAlbum(albumId); setSelectedAlbumId(null); }}
+              onPhotoClick={handlePhotoClick}
+              onShareAlbum={() => setShareAlbum(selectedAlbum)}
+              onEditAlbum={() => setEditAlbum(selectedAlbum)}
+              onRemoveFromAlbum={handleRemoveFromAlbum}
+              onViewExif={(photo) => setExifPhoto(photo)}
+              onDeletePhoto={(id) => setDeletePhotoId(id)}
+              onSetAsCover={handleSetAsCoverForCurrentAlbum}
+              selectedIds={albumSelection.selectedIds}
+              onToggleSelect={albumSelection.toggleSelection}
+              onBatchRemove={() => setBatchRemoveOpen(true)}
+              onBatchDelete={() => setBatchDeleteOpen(true)}
+              onClearSelection={albumSelection.clearSelection}
+            />
+          )}
 
-      {view === 'people' && (
-        <PhotosPeople
-          onPhotoClick={handlePhotoClick}
-        />
-      )}
+          {view === 'people' && (
+            <PhotosPeople
+              onPhotoClick={handlePhotoClick}
+            />
+          )}
 
-      {view === 'dejavu' && (
-        <PhotosDejaVu />
-      )}
+          {view === 'dejavu' && (
+            <PhotosDejaVu />
+          )}
+        </div>
 
-      {/* Lightbox overlay */}
+        {/* ExifPanel sidebar */}
+        {exifPhoto && (
+          <ExifPanel
+            photo={exifPhoto}
+            onSaved={() => { fetchPhotos(true); if (selectedAlbumId) fetchAlbumPhotos(true); }}
+            collapsed={detailsCollapsed}
+            onToggleCollapse={() => setDetailsCollapsed(c => !c)}
+          />
+        )}
+      </div>
+
+      {/* Lightbox overlay (outside flex — fullscreen) */}
       {lightboxIndex !== null && (
         <PhotoLightbox
           photos={lightboxPhotos}
           currentIndex={lightboxIndex}
           onClose={handleLightboxClose}
           onNavigate={handleLightboxNavigate}
-        />
-      )}
-
-      {/* EXIF panel */}
-      {exifPhoto && (
-        <ExifPanel
-          photo={exifPhoto}
-          onClose={() => setExifPhoto(null)}
-          onSaved={() => { fetchPhotos(true); if (selectedAlbumId) fetchAlbumPhotos(true); }}
         />
       )}
 

@@ -3,6 +3,7 @@ import { Toaster } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LoginPage } from '@/pages/LoginPage';
+import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 
 function AuthGate() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
     children: [
       {
         lazy: ShellModule,
+        errorElement: <RouteErrorBoundary />,
         children: [
           { path: '/', element: <Navigate to="/chat" replace /> },
           { path: '/chat', lazy: () => import('@/modules/chat/ChatPage') },

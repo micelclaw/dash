@@ -30,6 +30,7 @@ export interface Photo extends FileRecord {
     ai_description?: string;
     ai_aesthetic_score?: number;
     ai_processed_at?: string;
+    faces_detected?: number;
   } | null;
 }
 

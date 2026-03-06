@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2, Star } from 'lucide-react';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2, Star, Loader2, Clock, CheckCircle2, PauseCircle } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
 import { DropZone } from '@/components/shared/DropZone';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
@@ -87,6 +88,9 @@ function PhotoThumbnail({
   const [albumPicker, setAlbumPicker] = useState<{ mode: 'add' | 'cover'; pos: { x: number; y: number } } | null>(null);
   const hue = simpleHash(photo.id) % 360;
   const previewUrl = getPreviewUrl(photo.id, 300);
+  const processingPhase = usePhotoProcessingStore((s) => s.processingFiles.get(photo.id));
+  const isCurrentFile = usePhotoProcessingStore((s) => s.currentFileId === photo.id);
+  const isPipelinePaused = usePhotoProcessingStore((s) => s.isPaused);
 
   const showCb = showCheckbox || hovered || selected;
 
@@ -230,7 +234,7 @@ function PhotoThumbnail({
                 ? (aiFloat >= 0.8 ? 5 : aiFloat >= 0.6 ? 4 : aiFloat >= 0.4 ? 3 : aiFloat >= 0.2 ? 2 : 1)
                 : 0;
               const stars = cf?.aesthetic_override ?? aiStars;
-              if (stars < 3) return null;
+              if (stars < 1) return null;
               return (
                 <div
                   style={{
@@ -253,6 +257,30 @@ function PhotoThumbnail({
               );
             })()}
 
+            {/* Processed / Unprocessed badge */}
+            {!processingPhase && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 4,
+                  right: 4,
+                  background: 'rgba(0,0,0,0.65)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '2px 5px',
+                  fontSize: '0.5rem',
+                  fontWeight: 600,
+                  color: photo.metadata?.ai_processed_at ? '#22c55e' : '#f59e0b',
+                  fontFamily: 'var(--font-sans)',
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.03em',
+                }}
+              >
+                {photo.metadata?.ai_processed_at ? 'Processed' : 'Unprocessed'}
+              </div>
+            )}
+
             {/* Source badge for non-local photos */}
             {photo.source !== 'local' && (
               <div
@@ -270,6 +298,54 @@ function PhotoThumbnail({
                 <Mail size={10} style={{ color: 'var(--text-dim)' }} />
               </div>
             )}
+
+            {/* Processing overlay */}
+            {processingPhase && (() => {
+              const isPending = processingPhase.phase === 'pending';
+              const isActive = isCurrentFile && !isPending && !isPipelinePaused;
+              const showPaused = isPipelinePaused && (isCurrentFile || isPending);
+              const Icon = showPaused ? PauseCircle : isPending ? Clock : isActive ? Loader2 : CheckCircle2;
+              const iconColor = showPaused ? '#94a3b8' : processingPhase.color;
+              const spin = isPending && !isPipelinePaused
+                ? 'spin 2s ease-in-out infinite'
+                : isActive ? 'spin 1s linear infinite' : undefined;
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0,0,0,0.6)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 4,
+                    pointerEvents: 'none',
+                    zIndex: 1,
+                  }}
+                >
+                  <Icon
+                    size={20}
+                    style={{
+                      color: iconColor,
+                      animation: spin,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '0.5625rem',
+                      fontWeight: 600,
+                      color: iconColor,
+                      fontFamily: 'var(--font-sans)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                    }}
+                  >
+                    {showPaused ? 'Paused' : processingPhase.label}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         }
       />
@@ -313,7 +389,7 @@ export function PhotosTimeline({
   selectedIds,
   onToggleSelect,
 }: PhotosTimelineProps) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   const hasSelection = selectedIds.size > 0;
@@ -331,22 +407,21 @@ export function PhotosTimeline({
     return 0;
   }, [photos]);
 
-  // Infinite scroll via IntersectionObserver
+  // Infinite scroll via scroll event
   useEffect(() => {
-    const sentinel = sentinelRef.current;
-    if (!sentinel) return;
+    const container = scrollRef.current;
+    if (!container) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasMore && !loading) {
-          onLoadMore();
-        }
-      },
-      { threshold: 0.1 },
-    );
+    const handleScroll = () => {
+      if (!hasMore || loading) return;
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollHeight - scrollTop - clientHeight < 300) {
+        onLoadMore();
+      }
+    };
 
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMore, loading, onLoadMore]);
 
   const groups = groupPhotosByMonth(photos);
@@ -365,7 +440,9 @@ export function PhotosTimeline({
 
   return (
     <DropZone onFilesDropped={onFilesDropped}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div
+        ref={scrollRef}
         style={{
           overflowY: 'auto',
           flex: 1,
@@ -438,8 +515,8 @@ export function PhotosTimeline({
           </div>
         )}
 
-        {/* Sentinel for infinite scroll */}
-        <div ref={sentinelRef} style={{ height: 1 }} />
+        {/* Spacer for scroll trigger */}
+        <div style={{ height: 1 }} />
       </div>
     </DropZone>
   );

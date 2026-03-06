@@ -112,6 +112,56 @@ export function PhotosSection() {
         </div>
       </SettingSection>
 
+      <SettingSection title="Find Similar" description="Minimum similarity threshold for photo similarity search.">
+        {/* Visual similarity slider */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Visual Threshold</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-sans)' }}>
+              Pixel-level similarity (DINOv2)
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="range"
+              min="0.05"
+              max="0.8"
+              step="0.05"
+              value={p.similar_visual_threshold}
+              onChange={(e) => setLocalValue('photos.similar_visual_threshold', parseFloat(e.target.value))}
+              style={{ width: 120, accentColor: 'var(--amber)' }}
+            />
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)', minWidth: 30, textAlign: 'right' }}>
+              {p.similar_visual_threshold.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        {/* Concept similarity slider */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Concept Threshold</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-sans)' }}>
+              Semantic similarity (SigLIP)
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="range"
+              min="0.05"
+              max="0.8"
+              step="0.05"
+              value={p.similar_concept_threshold}
+              onChange={(e) => setLocalValue('photos.similar_concept_threshold', parseFloat(e.target.value))}
+              style={{ width: 120, accentColor: 'var(--amber)' }}
+            />
+            <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)', minWidth: 30, textAlign: 'right' }}>
+              {p.similar_concept_threshold.toFixed(2)}
+            </span>
+          </div>
+        </div>
+      </SettingSection>
+
       {p.ai_worker.enabled && <PhotoPipelineProgress />}
 
       <SaveBar visible={!!dirty.photos} saving={saving} onSave={handleSave} onDiscard={() => resetSection('photos')} />

@@ -43,7 +43,7 @@ export function DropZone({ onFilesDropped, disabled, children }: DropZoneProps) 
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      style={{ position: 'relative', flex: 1, minHeight: 0 }}
+      style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
     >
       {children}
       {dragging && (
