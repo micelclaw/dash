@@ -319,11 +319,9 @@ export function Component() {
     }
   }, [searchPhotosAi, clearSearch]);
 
-  // Re-fetch timeline when search or selectedStars changes
-  useEffect(() => {
-    fetchPhotos(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, selectedStars]);
+  // Note: search/selectedStars changes are already handled by the initial-load
+  // effect above — fetchPhotos depends on params.search & params.selectedStars,
+  // so it's recreated (and the effect re-fires) when those change.
 
   const handleUpload = useCallback(async (incoming: File[]) => {
     let success = 0;

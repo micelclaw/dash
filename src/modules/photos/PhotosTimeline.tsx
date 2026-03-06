@@ -446,6 +446,7 @@ export function PhotosTimeline({
         style={{
           overflowY: 'auto',
           flex: 1,
+          minHeight: 0,
           padding: '0 16px 16px',
         }}
       >

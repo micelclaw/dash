@@ -10,8 +10,11 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
+  const fetchIdRef = useRef(0); // guard against concurrent fetches
 
   const fetchPhotos = useCallback(async (reset?: boolean) => {
+    const id = ++fetchIdRef.current; // invalidate any in-flight request
+
     if (reset) {
       offsetRef.current = 0;
       setPhotos([]);
@@ -31,6 +34,9 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
         stars: starsParam,
       });
 
+      // If a newer fetch was started while we were awaiting, discard this result
+      if (id !== fetchIdRef.current) return;
+
       const incoming = res.data;
 
       if (reset || offsetRef.current === 0) {
@@ -42,10 +48,11 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
       offsetRef.current += incoming.length;
       setHasMore(incoming.length >= PAGE_SIZE);
     } catch (err) {
+      if (id !== fetchIdRef.current) return;
       const message = err instanceof ApiError ? err.message : 'Failed to load photos';
       console.error(message);
     } finally {
-      setLoading(false);
+      if (id === fetchIdRef.current) setLoading(false);
     }
   }, [params.search, params.selectedStars]);
 
