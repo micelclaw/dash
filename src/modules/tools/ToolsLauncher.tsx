@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Calculator, ArrowLeftRight, Timer, Mic, PenTool, FileText } from 'lucide-react';
+import { Calculator, ArrowLeftRight, Timer, Mic, PenTool, FileText, Pencil, Trash2 } from 'lucide-react';
 import { useFloatingPanelsStore, type PanelId } from '@/stores/floating-panels.store';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import { api } from '@/services/api';
 import type { FileRecord } from '@/types/files';
 
@@ -29,18 +31,56 @@ const CANVAS: ToolCard[] = [
 export function ToolsLauncher() {
   const navigate = useNavigate();
   const openPanel = useFloatingPanelsStore((s) => s.openPanel);
-  const [recentWhiteboards, setRecentWhiteboards] = useState<FileRecord[]>([]);
+  const [whiteboards, setWhiteboards] = useState<FileRecord[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => {
     api.get<{ data: FileRecord[] }>('/files', {
       parent_folder: '/Tools/Whiteboards',
       sort: 'updated_at',
       order: 'desc',
-      limit: 5,
+      limit: 200,
     })
-      .then((res) => setRecentWhiteboards(res.data))
+      .then((res) => setWhiteboards(res.data))
       .catch(() => {});
   }, []);
+
+  const handleDeleteWb = useCallback(async (file: FileRecord) => {
+    try {
+      await api.delete(`/files/${file.id}`);
+      setWhiteboards((prev) => prev.filter((f) => f.id !== file.id));
+    } catch {}
+  }, []);
+
+  const handleRenameWb = useCallback(async (fileId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const filename = trimmed.endsWith('.excalidraw') ? trimmed : `${trimmed}.excalidraw`;
+    try {
+      await api.patch(`/files/${fileId}`, { filename });
+      setWhiteboards((prev) => prev.map((f) => f.id === fileId ? { ...f, filename } : f));
+    } catch {}
+    setRenamingId(null);
+  }, []);
+
+  const getWbContextItems = useCallback((file: FileRecord): ContextMenuItem[] => [
+    {
+      label: 'Rename',
+      icon: Pencil,
+      onClick: () => {
+        setRenamingId(file.id);
+        setRenameValue(file.filename.replace(/\.(excalidraw|json)$/, ''));
+      },
+    },
+    { label: '', onClick: () => {}, separator: true },
+    {
+      label: 'Delete',
+      icon: Trash2,
+      variant: 'danger',
+      onClick: () => handleDeleteWb(file),
+    },
+  ], [handleDeleteWb]);
 
   const handleClick = (tool: ToolCard) => {
     if (tool.type === 'floating' && tool.panelId) {
@@ -84,36 +124,72 @@ export function ToolsLauncher() {
         </div>
       </div>
 
-      {/* Recent Whiteboards */}
-      {recentWhiteboards.length > 0 && (
+      {/* All Whiteboards */}
+      {whiteboards.length > 0 && (
         <div>
           <div style={{
             fontSize: '0.6875rem', fontWeight: 500, textTransform: 'uppercase',
             letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 12,
           }}>
-            Recent Whiteboards
+            All Whiteboards
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {recentWhiteboards.map((wb) => (
-              <button
+            {whiteboards.map((wb) => (
+              <ContextMenu
                 key={wb.id}
-                onClick={() => navigate(`/tools/whiteboard/${wb.id}`)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 12px', background: 'var(--card)',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer', color: 'var(--text)', textAlign: 'left',
-                  transition: 'border-color var(--transition-fast)',
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-tools)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
-              >
-                <FileText size={14} style={{ color: 'var(--mod-tools)', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{wb.filename}</span>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>
-                  {new Date(wb.updated_at).toLocaleDateString()}
-                </span>
-              </button>
+                items={getWbContextItems(wb)}
+                trigger={
+                  <button
+                    onClick={() => {
+                      if (renamingId !== wb.id) navigate(`/tools/whiteboard/${wb.id}`);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      width: '100%',
+                      padding: '8px 12px', background: 'var(--card)',
+                      border: `1px solid ${renamingId === wb.id ? 'var(--mod-tools)' : 'var(--border)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      cursor: 'pointer', color: 'var(--text)', textAlign: 'left',
+                      transition: 'border-color var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-tools)'; }}
+                    onMouseLeave={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; }}
+                  >
+                    <FileText size={14} style={{ color: 'var(--mod-tools)', flexShrink: 0 }} />
+                    {renamingId === wb.id ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => handleRenameWb(wb.id, renameValue)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameWb(wb.id, renameValue);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          flex: 1,
+                          fontSize: '0.8125rem',
+                          fontWeight: 500,
+                          fontFamily: 'var(--font-sans, system-ui)',
+                          background: 'var(--background, #111)',
+                          border: '1px solid var(--mod-tools)',
+                          borderRadius: 4,
+                          color: 'var(--text)',
+                          padding: '2px 6px',
+                          outline: 'none',
+                          minWidth: 0,
+                        }}
+                      />
+                    ) : (
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{wb.filename}</span>
+                    )}
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 'auto', flexShrink: 0 }}>
+                      {new Date(wb.updated_at).toLocaleDateString()}
+                    </span>
+                  </button>
+                }
+              />
             ))}
           </div>
         </div>

@@ -1,13 +1,15 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useSettingsStore } from '@/stores/settings.store';
 import { api } from '@/services/api';
+import { getDateRange } from '@/lib/date-helpers';
 import { useEvents } from './hooks/use-events';
 import { useEventLinks } from './hooks/use-event-links';
 import { CalendarToolbar } from './CalendarToolbar';
 import { CalendarMiniSidebar } from './CalendarMiniSidebar';
+import type { CalendarInfo } from './CalendarMiniSidebar';
 import { CalendarGrid } from './CalendarGrid';
 import { EventModal } from './EventModal';
 import { AddCalendarModal } from './AddCalendarModal';
@@ -32,9 +34,15 @@ export function Component() {
   // Add calendar modal
   const [addCalendarOpen, setAddCalendarOpen] = useState(false);
 
+  const navigate = useNavigate();
+
   // Fetch calendars from API
   const [calendars, setCalendars] = useState<Array<{ id: string; name: string; color: string; source: string; connector_id: string | null; visible: boolean }>>([]);
   const [connectors, setConnectors] = useState<Array<{ id: string; connector_type: string; display_name: string | null }>>([]);
+
+  // Kanban boards as virtual calendars
+  const [boardCalendars, setBoardCalendars] = useState<CalendarInfo[]>([]);
+  const [kanbanEvents, setKanbanEvents] = useState<CalendarEvent[]>([]);
 
   const fetchCalendars = useCallback(async () => {
     try {
@@ -50,13 +58,62 @@ export function Component() {
     } catch { /* ignore */ }
   }, []);
 
-  useEffect(() => { fetchCalendars(); fetchConnectors(); }, [fetchCalendars, fetchConnectors]);
+  // Fetch boards for sidebar
+  const fetchBoards = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: Array<{ id: string; title: string; color: string | null }> }>('/projects/boards', { archived: false });
+      setBoardCalendars(res.data.map(b => ({
+        id: b.id,
+        name: `kanban:${b.id}`,
+        displayName: b.title,
+        color: b.color || '#d4a017',
+        source: 'kanban',
+        visible: true,
+      })));
+    } catch { /* ignore */ }
+  }, []);
+
+  // Fetch kanban card events for the current view range
+  const fetchKanbanFeed = useCallback(async () => {
+    try {
+      const range = getDateRange(view, currentDate);
+      const res = await api.get<{ data: CalendarEvent[] }>('/projects/calendar-feed', {
+        from: range.from,
+        to: range.to,
+      });
+      setKanbanEvents(res.data);
+    } catch { /* ignore */ }
+  }, [view, currentDate]);
+
+  useEffect(() => { fetchCalendars(); fetchConnectors(); fetchBoards(); }, [fetchCalendars, fetchConnectors, fetchBoards]);
+  useEffect(() => { fetchKanbanFeed(); }, [fetchKanbanFeed]);
+
+  // Merge API calendars with board calendars
+  const mergedCalendars = useMemo<CalendarInfo[]>(() => [
+    ...calendars,
+    ...boardCalendars,
+  ], [calendars, boardCalendars]);
+
+  // Build a color map for all calendars (used by CalendarGrid)
+  const calendarColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const cal of mergedCalendars) {
+      map[cal.name] = cal.color;
+    }
+    return map;
+  }, [mergedCalendars]);
 
   // Fetch events for the current view
-  const { events, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useEvents({
+  const { events: regularEvents, loading, fetchEvents, createEvent, updateEvent, deleteEvent } = useEvents({
     view,
     currentDate,
   });
+
+  // Merge regular events + kanban events
+  const events = useMemo(
+    () => [...regularEvents, ...kanbanEvents],
+    [regularEvents, kanbanEvents],
+  );
 
   // Linked records for the selected event
   const { linkedRecords, loading: linkedRecordsLoading } = useEventLinks(
@@ -90,9 +147,15 @@ export function Component() {
   }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEventClick = useCallback((event: CalendarEvent) => {
+    // Kanban events: navigate to the board and open the card
+    if (event.source === 'kanban' && event.source_id) {
+      const boardId = event.calendar_name.replace('kanban:', '');
+      navigate(`/projects/${boardId}?card=${event.source_id}`);
+      return;
+    }
     setSelectedEvent(event);
     setModalOpen(true);
-  }, []);
+  }, [navigate]);
 
   const handleSlotClick = useCallback((date: Date) => {
     setSelectedEvent(null);
@@ -165,6 +228,7 @@ export function Component() {
           onSlotClick={handleSlotClick}
           onEventUpdate={updateEvent}
           onEventDelete={deleteEvent}
+          calendarColorMap={calendarColorMap}
         />
       )}
     </div>
@@ -179,7 +243,7 @@ export function Component() {
       events={events}
       onAddCalendar={() => setAddCalendarOpen(true)}
       onRefresh={fetchEvents}
-      calendars={calendars}
+      calendars={mergedCalendars}
       onCalendarsChange={fetchCalendars}
     />
   );

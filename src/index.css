@@ -41,6 +41,8 @@
   --mod-storage: #6b7280;
   --mod-settings: #9ca3af;
   --mod-tools: #8b5cf6;
+  --mod-diagrams: #06b6d4;
+  --mod-projects: #f97316;
   --mod-clawhub: #d4a017;
 
   /* Typography */
@@ -76,7 +78,7 @@
   /* Shadcn/ui mapping (oklch values for Tailwind v4 compatibility) */
   --background: var(--bg);
   --foreground: var(--text);
-  --card: var(--card);
+  --card: #111118;
   --card-foreground: var(--text);
   --popover: var(--card);
   --popover-foreground: var(--text);
@@ -226,4 +228,38 @@ pre code.hljs {
   border: none;
   border-top: 1px solid var(--border);
   margin: 1rem 0;
+}
+
+/* Kanban card — show multi-select checkbox on hover */
+div:has(> .kanban-card-checkbox):hover > .kanban-card-checkbox {
+  display: flex !important;
+}
+
+/* Kanban animations */
+@keyframes kanban-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes kanban-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.kanban-card-anim {
+  animation: kanban-card-enter 0.2s ease-out;
+}
+.kanban-view-anim {
+  animation: kanban-fade-in 0.15s ease-out;
+}
+
+/* Kanban mobile responsive */
+@media (max-width: 768px) {
+  .kanban-board-columns {
+    scroll-snap-type: x mandatory;
+  }
+  .kanban-board-columns > * {
+    scroll-snap-align: center;
+    min-width: 85vw !important;
+    width: 85vw !important;
+  }
 }

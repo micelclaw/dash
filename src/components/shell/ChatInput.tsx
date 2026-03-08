@@ -24,6 +24,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     sendMessage(trimmed, {
       module: moduleContext.moduleId,
       active_item: moduleContext.activeItem,
+      editor_context: moduleContext.editorContext,
     });
     setText('');
     if (textareaRef.current) {

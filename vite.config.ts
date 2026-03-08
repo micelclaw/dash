@@ -6,6 +6,7 @@ import path from 'path';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: true,
     port: 7100,
     proxy: {
       '/api': 'http://127.0.0.1:7200',

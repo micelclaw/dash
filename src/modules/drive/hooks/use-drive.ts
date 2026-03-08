@@ -1,9 +1,16 @@
 import { useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { useFiles } from '@/hooks/use-files';
 import type { FileRecord } from '@/types/files';
 import type { DriveView } from '../types';
 
+/** MIME types that can be opened in specialized editors */
+const OPENABLE_MIMES: Record<string, string> = {
+  'application/vnd.claw.diagram+json': '/diagrams/',
+};
+
 export function useDrive() {
+  const navigate = useNavigate();
   const [currentPath, setCurrentPath] = useState('/drive/');
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -50,8 +57,14 @@ export function useDrive() {
   const handleItemDoubleClick = useCallback((file: FileRecord) => {
     if (file.is_directory) {
       navigateTo(file.filepath.endsWith('/') ? file.filepath : file.filepath + '/');
+      return;
     }
-  }, [navigateTo]);
+    // Open in specialized editor if supported
+    const editorPath = OPENABLE_MIMES[file.mime_type];
+    if (editorPath) {
+      navigate(`${editorPath}${file.id}`);
+    }
+  }, [navigateTo, navigate]);
 
   const handleItemClick = useCallback((file: FileRecord) => {
     setSelectedFile(prev => prev?.id === file.id ? null : file);

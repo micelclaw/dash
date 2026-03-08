@@ -1,6 +1,6 @@
 import {
   Folder, File, Image, Film, Music, FileText,
-  FileSpreadsheet, FileArchive, FileCode, Presentation,
+  FileSpreadsheet, FileArchive, FileCode, Presentation, Waypoints,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -13,6 +13,7 @@ interface FileIconProps {
 const SIZE_MAP = { sm: 16, md: 24, lg: 32 } as const;
 
 const MIME_ICONS: [string, LucideIcon][] = [
+  ['application/vnd.claw.diagram+json', Waypoints],
   ['text/plain', FileText],
   ['text/markdown', FileText],
   ['text/', FileCode],

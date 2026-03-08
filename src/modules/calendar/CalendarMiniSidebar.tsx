@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, LayoutGrid } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -15,9 +15,10 @@ import {
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
 
-interface CalendarInfo {
+export interface CalendarInfo {
   id: string;
   name: string;
+  displayName?: string;
   color: string;
   source: string;
   visible: boolean;
@@ -284,7 +285,7 @@ export function CalendarMiniSidebar({
         >
           Calendars
         </div>
-        {calendarList.map((cal) => {
+        {calendarList.filter(c => c.source !== 'kanban').map((cal) => {
           const name = cal.name;
           const color = cal.color;
           const hidden = hiddenCalendars.has(name);
@@ -356,7 +357,7 @@ export function CalendarMiniSidebar({
                     }}
                   />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {name}
+                    {cal.displayName ?? name}
                   </span>
                 </label>
               }
@@ -392,6 +393,72 @@ export function CalendarMiniSidebar({
           <Plus size={14} />
           Add calendar
         </button>
+
+        {/* Kanban Projects section */}
+        {calendarList.some(c => c.source === 'kanban') && (
+          <>
+            <div style={{ height: 1, background: 'var(--border)', margin: '12px 0' }} />
+            <div
+              style={{
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <LayoutGrid size={11} />
+              Projects
+            </div>
+            {calendarList.filter(c => c.source === 'kanban').map((cal) => {
+              const hidden = hiddenCalendars.has(cal.name);
+              return (
+                <label
+                  key={cal.name}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '4px 0',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-sans)',
+                    color: hidden ? 'var(--text-muted)' : 'var(--text)',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!hidden}
+                    onChange={() => onToggleCalendar(cal.name)}
+                    style={{
+                      accentColor: cal.color,
+                      width: 14,
+                      height: 14,
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 2,
+                      background: cal.color,
+                      flexShrink: 0,
+                      opacity: hidden ? 0.3 : 1,
+                    }}
+                  />
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {cal.displayName ?? cal.name}
+                  </span>
+                </label>
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );

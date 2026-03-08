@@ -1,0 +1,109 @@
+/* ─── Diagram Animations ────────────────────────── */
+
+/* Data flow particle moving along an edge path */
+@keyframes diagram-particle {
+  0% { offset-distance: 0%; }
+  100% { offset-distance: 100%; }
+}
+
+/* Node pulse ring expanding outward */
+@keyframes diagram-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(212, 160, 23, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(212, 160, 23, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 160, 23, 0);
+  }
+}
+
+/* Edge glow effect */
+@keyframes diagram-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px var(--glow-color, #d4a017));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px var(--glow-color, #d4a017));
+  }
+}
+
+/* Fade-in for newly created nodes */
+@keyframes diagram-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Presentation mode transitions */
+.diagram-presentation-enter {
+  animation: diagram-fade-in 0.3s ease-out;
+}
+
+/* Particle dot on edge */
+.diagram-particle-dot {
+  offset-distance: 0%;
+  animation: diagram-particle 2s linear infinite;
+}
+
+/* Pulse node wrapper */
+.diagram-node-pulse {
+  animation: diagram-pulse 2s ease-out infinite;
+}
+
+/* Glow edge */
+.diagram-edge-glow {
+  animation: diagram-glow 2s ease-in-out infinite;
+}
+
+/* ─── Selection & Visual Polish ────────────────── */
+
+/* Amber glow on selected nodes */
+.react-flow__node.selected {
+  filter: drop-shadow(0 0 4px rgba(212, 160, 23, 0.5));
+}
+
+/* Smooth transitions for panels */
+.react-flow__panel {
+  transition: opacity 0.15s ease-out;
+}
+
+/* Smooth handle appearance */
+.react-flow__handle {
+  transition: opacity 0.15s ease-out, transform 0.15s ease-out;
+}
+
+/* Minimap rounded corners */
+.react-flow__minimap {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+/* ─── Touch / Mobile Optimizations ──────────────── */
+
+/* Larger connection handles on touch devices */
+@media (pointer: coarse) {
+  .react-flow__handle {
+    width: 12px !important;
+    height: 12px !important;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Larger resize handles */
+  .react-flow__resize-control.handle {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
+  /* Ensure minimum touch target for nodes */
+  .react-flow__node {
+    touch-action: manipulation;
+  }
+}

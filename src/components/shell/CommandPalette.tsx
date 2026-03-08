@@ -5,7 +5,7 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
-  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
@@ -144,7 +144,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'open-pomodoro', label: 'Open Pomodoro', icon: Timer, group: 'Actions', action: () => openPanel('pomodoro') },
     { id: 'open-recorder', label: 'Open Voice Recorder', icon: Mic, group: 'Actions', action: () => openPanel('voice-recorder') },
     { id: 'open-whiteboard', label: 'Open Whiteboard', icon: PenTool, group: 'Actions', action: () => navigate('/tools/whiteboard') },
+    { id: 'goto-diagrams', label: 'Go to Diagrams', icon: Waypoints, group: 'Navigation', action: () => navigate('/diagrams') },
     { id: 'goto-tools', label: 'Go to Tools', icon: Wrench, group: 'Navigation', action: () => navigate('/tools') },
+    { id: 'create-diagram', label: 'Create new diagram', icon: Waypoints, group: 'Actions', action: () => navigate('/diagrams/new') },
+    { id: 'goto-projects', label: 'Go to Projects', icon: Kanban, group: 'Navigation', action: () => navigate('/projects') },
+    { id: 'create-board', label: 'Create new board', icon: Kanban, group: 'Actions', action: () => navigate('/projects?action=new') },
     { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
     { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
   ], [navigate, sidebarToggle, openPanel]);

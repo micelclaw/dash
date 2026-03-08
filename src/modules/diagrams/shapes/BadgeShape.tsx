@@ -1,0 +1,68 @@
+import { memo } from 'react';
+import type { NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeResizer } from '@xyflow/react';
+import { icons } from 'lucide-react';
+import type { DiagramNodeData } from '../types';
+
+function BadgeShapeInner({ data: _d, selected }: NodeProps) {
+  const data = _d as unknown as DiagramNodeData;
+  const color = data.color || '#06b6d4';
+  const IconComponent = data.icon ? icons[data.icon as keyof typeof icons] : null;
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        outline: selected ? '2px solid var(--amber, #d4a017)' : 'none',
+        outlineOffset: 2,
+        borderRadius: 999,
+        overflow: 'hidden',
+        background: `${color}15`,
+        border: `1.5px solid ${color}60`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 5,
+        padding: '0 12px',
+      }}
+    >
+      <NodeResizer color="var(--amber, #d4a017)" isVisible={!!selected} minWidth={80} minHeight={28}
+        handleStyle={resizerStyle} lineStyle={{ borderColor: 'var(--amber, #d4a017)', borderWidth: 1, opacity: 0.5 }} />
+
+      {IconComponent && <IconComponent size={14} style={{ color, flexShrink: 0 }} />}
+      <span
+        style={{
+          fontSize: data.fontSize || 11,
+          fontWeight: 600,
+          color: data.textColor || '#e2e8f0',
+          fontFamily: 'var(--font-sans, system-ui)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
+        {data.label}
+      </span>
+
+      {/* Handles */}
+      <Handle type="target" position={Position.Top} style={handleStyle} />
+      <Handle type="source" position={Position.Bottom} style={handleStyle} />
+      <Handle type="target" position={Position.Left} id="left" style={handleStyle} />
+      <Handle type="source" position={Position.Right} id="right" style={handleStyle} />
+    </div>
+  );
+}
+
+const resizerStyle: React.CSSProperties = {
+  width: 8, height: 8, borderRadius: 2,
+  background: 'var(--amber, #d4a017)', border: '1px solid var(--surface, #1e1e1e)',
+};
+
+const handleStyle: React.CSSProperties = {
+  width: 8, height: 8,
+  background: 'var(--text-dim, #64748b)',
+  border: '2px solid var(--surface, #1e1e1e)',
+};
+
+export const BadgeShape = memo(BadgeShapeInner);

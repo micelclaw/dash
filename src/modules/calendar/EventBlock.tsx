@@ -18,11 +18,13 @@ interface EventBlockProps {
   /** Enable bottom-edge resize */
   resizable?: boolean;
   onResizeStart?: (event: CalendarEvent, clientY: number) => void;
+  /** Optional color overrides map (e.g. for kanban board colors) */
+  calendarColorMap?: Record<string, string>;
 }
 
-export function EventBlock({ event, onClick, onDelete, style, heightPx, draggable, onDragStart, resizable, onResizeStart }: EventBlockProps) {
+export function EventBlock({ event, onClick, onDelete, style, heightPx, draggable, onDragStart, resizable, onResizeStart, calendarColorMap }: EventBlockProps) {
   const [hovered, setHovered] = useState(false);
-  const color = getCalendarColor(event.calendar_name);
+  const color = getCalendarColor(event.calendar_name, calendarColorMap);
   const lines = heightPx ? Math.floor(heightPx / 18) : 1;
 
   const startDate = new Date(event.start_at);

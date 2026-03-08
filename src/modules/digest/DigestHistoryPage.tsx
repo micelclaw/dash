@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/services/api';
 
 interface DigestEntry {
@@ -14,6 +15,16 @@ interface DigestEntry {
   delivered_at: string;
 }
 
+interface ChangeEntry {
+  id: string;
+  domain: string;
+  record_id: string;
+  action: string;
+  summary: string;
+  source: string;
+  created_at: string;
+}
+
 const PAGE_SIZE = 20;
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -22,11 +33,39 @@ const LEVEL_COLORS: Record<string, string> = {
   URGENT: 'var(--error)',
 };
 
+const DOMAIN_ROUTES: Record<string, string> = {
+  contacts: '/contacts',
+  notes: '/notes',
+  events: '/calendar',
+  emails: '/mail',
+  files: '/drive',
+  bookmarks: '/bookmarks',
+  diary_entries: '/diary',
+  kanban_cards: '/kanban',
+  kanban_boards: '/kanban',
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  insert: 'New',
+  update: 'Updated',
+  delete: 'Deleted',
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  insert: 'var(--success, #22c55e)',
+  update: 'var(--amber, #d4a017)',
+  delete: 'var(--error, #ef4444)',
+};
+
 export function Component() {
+  const navigate = useNavigate();
   const [entries, setEntries] = useState<DigestEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [changes, setChanges] = useState<Record<string, ChangeEntry[]>>({});
+  const [loadingChanges, setLoadingChanges] = useState<string | null>(null);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -44,6 +83,32 @@ export function Component() {
   }, [page]);
 
   useEffect(() => { fetchHistory(); }, [fetchHistory]);
+
+  const toggleExpand = useCallback(async (digestId: string) => {
+    if (expandedId === digestId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(digestId);
+
+    if (!changes[digestId]) {
+      setLoadingChanges(digestId);
+      try {
+        const res = await api.get<{ data: ChangeEntry[] }>(`/digest/history/${digestId}/changes`);
+        setChanges(prev => ({ ...prev, [digestId]: res.data }));
+      } catch {
+        setChanges(prev => ({ ...prev, [digestId]: [] }));
+      }
+      setLoadingChanges(null);
+    }
+  }, [expandedId, changes]);
+
+  const handleChangeClick = useCallback((change: ChangeEntry) => {
+    const baseRoute = DOMAIN_ROUTES[change.domain];
+    if (baseRoute) {
+      navigate(`${baseRoute}/${change.record_id}`);
+    }
+  }, [navigate]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -76,73 +141,168 @@ export function Component() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {entries.map(entry => (
-            <div
-              key={entry.id}
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                padding: '12px 16px',
-              }}
-            >
-              {/* Header: time + level + count */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{
-                  fontSize: '0.6875rem',
-                  fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-muted)',
-                }}>
-                  {new Date(entry.delivered_at).toLocaleString()}
-                </span>
-                {entry.alert_level && (
+          {entries.map(entry => {
+            const isExpanded = expandedId === entry.id;
+            const entryChanges = changes[entry.id];
+
+            return (
+              <div
+                key={entry.id}
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '12px 16px',
+                }}
+              >
+                {/* Header: time + level + count + expand toggle */}
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}
+                  onClick={() => toggleExpand(entry.id)}
+                >
                   <span style={{
-                    fontSize: '0.625rem',
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: `color-mix(in srgb, ${LEVEL_COLORS[entry.alert_level] ?? 'var(--text-muted)'} 15%, transparent)`,
-                    color: LEVEL_COLORS[entry.alert_level] ?? 'var(--text-muted)',
+                    fontSize: '0.6875rem',
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-muted)',
                   }}>
-                    {entry.alert_level}
+                    {new Date(entry.delivered_at).toLocaleString()}
                   </span>
+                  {entry.alert_level && (
+                    <span style={{
+                      fontSize: '0.625rem',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: `color-mix(in srgb, ${LEVEL_COLORS[entry.alert_level] ?? 'var(--text-muted)'} 15%, transparent)`,
+                      color: LEVEL_COLORS[entry.alert_level] ?? 'var(--text-muted)',
+                    }}>
+                      {entry.alert_level}
+                    </span>
+                  )}
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+                    {entry.changes_count} changes
+                  </span>
+                  <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>
+                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </span>
+                </div>
+
+                {/* AI Summary */}
+                {entry.intelligent_summary && (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--text)', margin: '0 0 6px', lineHeight: 1.5 }}>
+                    {entry.intelligent_summary}
+                  </p>
                 )}
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                  {entry.changes_count} changes
-                </span>
-              </div>
 
-              {/* AI Summary */}
-              {entry.intelligent_summary && (
-                <p style={{ fontSize: '0.8125rem', color: 'var(--text)', margin: '0 0 6px', lineHeight: 1.5 }}>
-                  {entry.intelligent_summary}
-                </p>
-              )}
+                {/* Action suggested */}
+                {entry.action_suggested && entry.action_suggested !== 'null' && (
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 8px', fontStyle: 'italic' }}>
+                    {entry.action_suggested}
+                  </p>
+                )}
 
-              {/* Action suggested */}
-              {entry.action_suggested && entry.action_suggested !== 'null' && (
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 8px', fontStyle: 'italic' }}>
-                  {entry.action_suggested}
-                </p>
-              )}
+                {/* Domain chips */}
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                  {entry.domains.map(d => (
+                    <span key={d} style={{
+                      fontSize: '0.625rem',
+                      padding: '1px 6px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface-hover)',
+                      color: 'var(--text-dim)',
+                      textTransform: 'capitalize',
+                    }}>
+                      {d}
+                    </span>
+                  ))}
+                </div>
 
-              {/* Domain chips */}
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                {entry.domains.map(d => (
-                  <span key={d} style={{
-                    fontSize: '0.625rem',
-                    padding: '1px 6px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'var(--surface-hover)',
-                    color: 'var(--text-dim)',
-                    textTransform: 'capitalize',
+                {/* Expanded changes list */}
+                {isExpanded && (
+                  <div style={{
+                    marginTop: 10,
+                    paddingTop: 10,
+                    borderTop: '1px solid var(--border)',
                   }}>
-                    {d}
-                  </span>
-                ))}
+                    {loadingChanges === entry.id ? (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>
+                        Loading changes...
+                      </div>
+                    ) : !entryChanges || entryChanges.length === 0 ? (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>
+                        No change details available.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {entryChanges.map(change => (
+                          <button
+                            key={change.id}
+                            onClick={() => handleChangeClick(change)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '5px 8px',
+                              background: 'transparent',
+                              border: 'none',
+                              borderRadius: 'var(--radius-sm)',
+                              cursor: DOMAIN_ROUTES[change.domain] ? 'pointer' : 'default',
+                              textAlign: 'left',
+                              color: 'var(--text)',
+                              fontSize: '0.75rem',
+                              fontFamily: 'var(--font-sans)',
+                              transition: 'background 0.1s',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (DOMAIN_ROUTES[change.domain]) {
+                                (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.background = 'transparent';
+                            }}
+                          >
+                            <span style={{
+                              fontSize: '0.5625rem',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              background: `color-mix(in srgb, ${ACTION_COLORS[change.action] ?? 'var(--text-muted)'} 15%, transparent)`,
+                              color: ACTION_COLORS[change.action] ?? 'var(--text-muted)',
+                              flexShrink: 0,
+                              textTransform: 'uppercase',
+                            }}>
+                              {ACTION_LABELS[change.action] ?? change.action}
+                            </span>
+                            <span style={{
+                              fontSize: '0.5625rem',
+                              color: 'var(--text-muted)',
+                              flexShrink: 0,
+                              textTransform: 'capitalize',
+                            }}>
+                              {change.domain}
+                            </span>
+                            <span style={{
+                              flex: 1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              color: DOMAIN_ROUTES[change.domain] ? 'var(--link, #60a5fa)' : 'var(--text)',
+                              textDecoration: DOMAIN_ROUTES[change.domain] ? 'underline' : 'none',
+                              textDecorationColor: 'color-mix(in srgb, var(--link, #60a5fa) 40%, transparent)',
+                              textUnderlineOffset: 2,
+                            }}>
+                              {change.summary}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

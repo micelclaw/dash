@@ -25,6 +25,7 @@ interface CalendarGridProps {
   onSlotClick?: (date: Date) => void;
   onEventUpdate?: (id: string, input: EventUpdateInput) => void;
   onEventDelete?: (id: string) => void;
+  calendarColorMap?: Record<string, string>;
 }
 
 /** Total pixel height for the 24-hour time grid (48 half-hour rows x 30px each) */
@@ -76,6 +77,7 @@ export function CalendarGrid({
   onSlotClick,
   onEventUpdate,
   onEventDelete,
+  calendarColorMap,
 }: CalendarGridProps) {
   const visibleEvents = useMemo(
     () => events.filter((ev) => !hiddenCalendars.has(ev.calendar_name)),
@@ -92,6 +94,7 @@ export function CalendarGrid({
           onSlotClick={onSlotClick}
           onEventUpdate={onEventUpdate}
           onEventDelete={onEventDelete}
+          calendarColorMap={calendarColorMap}
         />
       );
     case 'week':
@@ -103,6 +106,7 @@ export function CalendarGrid({
           onSlotClick={onSlotClick}
           onEventUpdate={onEventUpdate}
           onEventDelete={onEventDelete}
+          calendarColorMap={calendarColorMap}
         />
       );
     case 'month':
@@ -113,6 +117,7 @@ export function CalendarGrid({
           onEventClick={onEventClick}
           onSlotClick={onSlotClick}
           onEventDelete={onEventDelete}
+          calendarColorMap={calendarColorMap}
         />
       );
     case 'agenda':
@@ -122,6 +127,7 @@ export function CalendarGrid({
           events={visibleEvents}
           onEventClick={onEventClick}
           onEventDelete={onEventDelete}
+          calendarColorMap={calendarColorMap}
         />
       );
   }
@@ -138,9 +144,10 @@ interface TimeGridProps {
   onSlotClick?: (date: Date) => void;
   onEventUpdate?: (id: string, input: EventUpdateInput) => void;
   onEventDelete?: (id: string) => void;
+  calendarColorMap?: Record<string, string>;
 }
 
-function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEventDelete }: TimeGridProps) {
+function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEventDelete, calendarColorMap }: TimeGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const columnCount = days.length;
 
@@ -479,7 +486,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
                 }}
               >
                 {dayAllDay.map((ev) => (
-                  <EventBlock key={ev.id} event={ev} onClick={onEventClick} onDelete={() => onEventDelete?.(ev.id)} />
+                  <EventBlock key={ev.id} event={ev} onClick={onEventClick} onDelete={() => onEventDelete?.(ev.id)} calendarColorMap={calendarColorMap} />
                 ))}
               </div>
             );
@@ -652,6 +659,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
                       onDragStart={handleEventDragStart}
                       resizable={!!onEventUpdate}
                       onResizeStart={handleResizeStart}
+                      calendarColorMap={calendarColorMap}
                       style={{
                         position: 'absolute',
                         top,
@@ -684,9 +692,10 @@ interface MonthGridProps {
   onEventClick: (event: CalendarEvent) => void;
   onSlotClick?: (date: Date) => void;
   onEventDelete?: (id: string) => void;
+  calendarColorMap?: Record<string, string>;
 }
 
-function MonthGrid({ currentDate, events, onEventClick, onSlotClick, onEventDelete }: MonthGridProps) {
+function MonthGrid({ currentDate, events, onEventClick, onSlotClick, onEventDelete, calendarColorMap }: MonthGridProps) {
   const gridDays = useMemo(() => getMonthGridDays(currentDate), [currentDate]);
 
   // Group events by day string
@@ -803,7 +812,7 @@ function MonthGrid({ currentDate, events, onEventClick, onSlotClick, onEventDele
 
               {/* Event pills */}
               {visible.map((ev) => {
-                const color = getCalendarColor(ev.calendar_name);
+                const color = getCalendarColor(ev.calendar_name, calendarColorMap);
                 return (
                   <div
                     key={ev.id}
@@ -875,9 +884,10 @@ interface AgendaViewProps {
   events: CalendarEvent[];
   onEventClick: (event: CalendarEvent) => void;
   onEventDelete?: (id: string) => void;
+  calendarColorMap?: Record<string, string>;
 }
 
-function AgendaView({ events, onEventClick, onEventDelete }: AgendaViewProps) {
+function AgendaView({ events, onEventClick, onEventDelete, calendarColorMap }: AgendaViewProps) {
   // Group events by date
   const grouped = useMemo(() => {
     const map = new Map<string, { date: Date; events: CalendarEvent[] }>();
@@ -952,7 +962,7 @@ function AgendaView({ events, onEventClick, onEventDelete }: AgendaViewProps) {
             {dayEvents.map((ev) => {
               const start = new Date(ev.start_at);
               const end = ev.end_at ? new Date(ev.end_at) : null;
-              const color = getCalendarColor(ev.calendar_name);
+              const color = getCalendarColor(ev.calendar_name, calendarColorMap);
 
               return (
                 <div
@@ -1025,7 +1035,9 @@ function AgendaView({ events, onEventClick, onEventDelete }: AgendaViewProps) {
                       flexShrink: 0,
                     }}
                   >
-                    {ev.calendar_name}
+                    {ev.source === 'kanban'
+                      ? (ev.custom_fields?.board_title as string) ?? ev.calendar_name
+                      : ev.calendar_name}
                   </span>
                 </div>
               );
