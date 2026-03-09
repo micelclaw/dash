@@ -4,12 +4,13 @@ import { Users } from 'lucide-react';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { api } from '@/services/api';
 import { useContacts } from './hooks/use-contacts';
 import { useContactLinks } from './hooks/use-contact-links';
 import { ContactsList } from './ContactsList';
 import { ContactDetail } from './ContactDetail';
 import { ContactForm } from './ContactForm';
-import type { ContactCreateInput, ContactUpdateInput } from './types';
+import type { Contact, ContactCreateInput, ContactUpdateInput } from './types';
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -32,7 +33,20 @@ export function Component() {
 
   const { linkedRecords, loading: linkedRecordsLoading } = useContactLinks(selectedId);
 
-  const selectedContact = contacts.find(c => c.id === selectedId) ?? null;
+  // Contact from list, or fetched directly if not in the paginated list
+  const [directContact, setDirectContact] = useState<Contact | null>(null);
+  const selectedContact = contacts.find(c => c.id === selectedId) ?? directContact;
+
+  // Fetch contact directly when not in the paginated list (e.g. deep-link from search)
+  useEffect(() => {
+    if (selectedId && !contacts.find(c => c.id === selectedId) && !loading) {
+      api.get<{ data: Contact }>(`/contacts/${selectedId}`)
+        .then(res => setDirectContact(res.data))
+        .catch(() => setDirectContact(null));
+    } else {
+      setDirectContact(null);
+    }
+  }, [selectedId, contacts, loading]);
 
   // Sync URL params
   useEffect(() => {

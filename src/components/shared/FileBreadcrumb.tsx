@@ -5,16 +5,35 @@ interface FileBreadcrumbProps {
   path: string;
   rootLabel?: string;
   rootIcon?: LucideIcon;
+  rootBasePath?: string;
   onNavigate: (path: string) => void;
 }
 
-export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, onNavigate }: FileBreadcrumbProps) {
+export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, rootBasePath, onNavigate }: FileBreadcrumbProps) {
   // Split path into segments: "/drive/Documents/Projects/" → ["drive", "Documents", "Projects"]
-  const segments = path.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean);
-  const isLast = (i: number) => i === segments.length - 1;
+  const allSegments = path.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean);
 
-  // Build path for each segment
-  const getPath = (idx: number) => '/' + segments.slice(0, idx + 1).join('/') + '/';
+  // Determine how many leading segments belong to the root (basePath)
+  // e.g. basePath="/vfs/gdrive/" → rootSegCount=2 → skip "vfs","gdrive", show rootLabel instead
+  const rootSegCount = rootBasePath
+    ? rootBasePath.replace(/^\//, '').replace(/\/$/, '').split('/').filter(Boolean).length
+    : 1;
+
+  // Segments to display: rootLabel + remaining path segments after root
+  const segments = allSegments.slice(rootSegCount);
+  // Prepend a synthetic root entry
+  const displaySegments = [rootLabel, ...segments];
+
+  const isLast = (i: number) => i === displaySegments.length - 1;
+
+  // Build path for each segment (root = basePath, then append sub-segments)
+  const rootPath = rootBasePath
+    ? (rootBasePath.endsWith('/') ? rootBasePath : rootBasePath + '/')
+    : '/' + allSegments.slice(0, rootSegCount).join('/') + '/';
+  const getPath = (idx: number) => {
+    if (idx === 0) return rootPath;
+    return rootPath + segments.slice(0, idx).join('/') + '/';
+  };
 
   return (
     <nav
@@ -28,8 +47,7 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, o
         overflow: 'hidden',
       }}
     >
-      {segments.map((seg, i) => {
-        const label = i === 0 ? rootLabel : seg;
+      {displaySegments.map((seg, i) => {
         const last = isLast(i);
         return (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
@@ -45,7 +63,7 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, o
                 }}
               >
                 {i === 0 && RootIcon && <RootIcon size={14} style={{ marginRight: 4, verticalAlign: -2, color: 'var(--text-dim)' }} />}
-                {label}
+                {seg}
               </span>
             ) : (
               <button
@@ -64,7 +82,7 @@ export function FileBreadcrumb({ path, rootLabel = 'Root', rootIcon: RootIcon, o
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-dim)')}
               >
                 {i === 0 && RootIcon && <RootIcon size={14} style={{ marginRight: 4, verticalAlign: -2 }} />}
-                {label}
+                {seg}
               </button>
             )}
           </span>

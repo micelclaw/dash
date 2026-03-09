@@ -106,6 +106,47 @@ class ApiClient {
     return (useMockMode ? json : transformKeys(json)) as T;
   }
 
+  /**
+   * Raw POST that skips camelCase→snake_case key transformation.
+   * Needed for ONLYOFFICE config which requires exact camelCase keys.
+   */
+  async rawPost<T>(path: string, body?: unknown): Promise<T> {
+    const url = `${BASE_URL}${API_PREFIX}${path}`;
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+
+    const fetchOpts: RequestInit = { method: 'POST', headers };
+    if (body !== undefined) fetchOpts.body = JSON.stringify(body);
+
+    const res = await fetch(url, fetchOpts);
+
+    if (res.status === 401) {
+      try {
+        await useAuthStore.getState().refresh();
+        const retryToken = this.getToken();
+        if (retryToken) headers['Authorization'] = `Bearer ${retryToken}`;
+        const retry = await fetch(url, { ...fetchOpts, headers });
+        if (!retry.ok) {
+          const errJson = await retry.json().catch(() => ({}));
+          throw new ApiError(errJson.error?.code || 'UNKNOWN', errJson.error?.message || `Request failed: ${retry.status}`, undefined, retry.status);
+        }
+        return (await retry.json()) as T;
+      } catch (e) {
+        if (e instanceof ApiError) throw e;
+        useAuthStore.getState().logout();
+        throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);
+      }
+    }
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new ApiError(json.error?.code || 'UNKNOWN', json.error?.message || `Request failed: ${res.status}`, undefined, res.status);
+    }
+    return json as T;
+  }
+
   get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
     return this.request<T>('GET', path, { params });
   }

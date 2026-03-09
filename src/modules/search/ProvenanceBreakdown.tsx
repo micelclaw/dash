@@ -64,7 +64,7 @@ export function ProvenanceBreakdown({ result }: ProvenanceBreakdownProps) {
               textAlign: 'right',
               flexShrink: 0,
             }}>
-              {value != null ? (value * 100).toFixed(0) : '—'}
+              {value != null ? (value * 100).toFixed(0) : '0'}
             </span>
           </div>
         );

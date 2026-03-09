@@ -16,14 +16,19 @@ export function Component() {
 
   const { entries, loading, error, fetchEntries, updateEntry, openToday } = useDiary({ search: search || undefined });
 
-  // Handle ?id=diaryId from URL (e.g. navigating from Related Items panel)
+  // Handle ?id=diaryId or ?date=YYYY-MM-DD from URL (e.g. from search deep-links)
   useEffect(() => {
     const targetId = searchParams.get('id');
+    const targetDate = searchParams.get('date');
     if (targetId) {
       setSelectedId(targetId);
       setSearchParams({}, { replace: true });
+    } else if (targetDate) {
+      const entry = entries.find(e => e.entry_date === targetDate);
+      if (entry) setSelectedId(entry.id);
+      setSearchParams({}, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, entries]);
 
   const selectedEntry = entries.find(e => e.id === selectedId) ?? null;
 

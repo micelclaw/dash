@@ -1,13 +1,16 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { Image, Folder } from 'lucide-react';
 import {
-  Pencil, FolderInput, Download, Share2, Link2, Trash2, Info,
+  Pencil, FolderInput, Download, Share2, Link2, Trash2, Info, FileText, Play, ListPlus,
 } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { isImageMime, simpleHash } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
+import { usePlayerStore } from '@/stores/player.store';
+import { api } from '@/services/api';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 
@@ -106,12 +109,51 @@ function GridItem({
   onDelete: () => void;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
+  const navigate = useNavigate();
   const [hovered, setHovered] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const isImage = isImageMime(file.mime_type);
   const isDir = file.is_directory;
 
+  const isOfficeMime = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv)$/i.test(file.filename)
+    || file.mime_type?.startsWith('application/vnd.openxmlformats-officedocument')
+    || file.mime_type?.startsWith('application/vnd.ms-')
+    || file.mime_type?.startsWith('application/vnd.oasis.opendocument');
+  const isPdf = file.mime_type === 'application/pdf';
+  const isAudio = file.mime_type?.startsWith('audio/');
+  const isVideo = file.mime_type?.startsWith('video/');
+
+  const playFromDrive = async () => {
+    let title = file.filename;
+    let artist: string | undefined;
+    let coverBase64: string | undefined;
+    try {
+      const info = await api.get<{ data: { title: string; artist: string | null; coverBase64: string | null } }>(`/files/${file.id}/media-info`);
+      title = info.data.title || file.filename;
+      artist = info.data.artist || undefined;
+      coverBase64 = info.data.coverBase64 || undefined;
+    } catch { /* use filename */ }
+    const item = { fileId: file.id, title, artist, coverBase64, streamUrl: `/files/${file.id}/stream`, mediaType: (isVideo ? 'video' : 'audio') as 'audio' | 'video' };
+    if (isVideo) usePlayerStore.getState().playVideo(item);
+    else usePlayerStore.getState().playAudio(item);
+  };
+
   const contextItems: ContextMenuItem[] = [
+    ...(isAudio ? [
+      { label: 'Play', icon: Play, onClick: () => { void playFromDrive(); } },
+      { label: 'Add to queue', icon: ListPlus, onClick: () => {
+        usePlayerStore.getState().addToQueue({ fileId: file.id, title: file.filename, streamUrl: `/files/${file.id}/stream`, mediaType: 'audio' as const });
+      }},
+    ] : []),
+    ...(isVideo ? [
+      { label: 'Play video', icon: Play, onClick: () => { void playFromDrive(); } },
+    ] : []),
+    ...(isOfficeMime ? [
+      { label: 'Open in Office', icon: FileText, onClick: () => navigate(`/office/edit/${file.id}`) },
+    ] : []),
+    ...(isPdf ? [
+      { label: 'Open in PDF Viewer', icon: FileText, onClick: () => navigate(`/office/pdf/${file.id}`) },
+    ] : []),
     { label: 'Rename', icon: Pencil, onClick: onRename },
     { label: 'Move to...', icon: FolderInput, onClick: onMove },
     { label: 'Download', icon: Download, onClick: () => { void downloadFile(file.id, isDir ? `${file.filename}.zip` : file.filename); } },

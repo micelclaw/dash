@@ -40,20 +40,23 @@ export function useFiles(params: {
         limit: params.limit ?? 100,
       });
       setFiles(res.data.sort(fileSorter));
-    } catch {
+    } catch (err) {
+      console.error('[useFiles] FETCH ERROR:', err);
       setError('Failed to load files');
     } finally {
       setLoading(false);
     }
   }, [params.parent_folder, params.mime_type, params.search, params.tag, params.is_directory, params.sort, params.order, params.limit]);
 
-  useEffect(() => { fetchFiles(); }, [fetchFiles]);
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
   useRealtimeList('file', files, setFiles);
 
   const uploadFile = async (file: File, parentFolder: string) => {
     const formData = new FormData();
-    formData.append('file', file);
     formData.append('parent_folder', parentFolder);
+    formData.append('file', file);
     const res = await api.upload<ApiResponse<FileRecord>>('/files/upload', formData);
     setFiles(prev => [...prev, res.data].sort(fileSorter));
     return res.data;

@@ -5,13 +5,15 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
-  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Terminal, Container, FileText,
+  Play, SkipForward, Download as DownloadIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { MODULES } from '@/config/modules';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { api } from '@/services/api';
+import { usePlayerStore } from '@/stores/player.store';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { SearchResult } from '@/types/search';
 
@@ -49,6 +51,8 @@ const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   conversation: { icon: MessageSquare, color: 'var(--mod-chat)' },
   bookmarks: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
   bookmark: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
+  messages: { icon: MessageSquare, color: 'var(--mod-chat)' },
+  message: { icon: MessageSquare, color: 'var(--mod-chat)' },
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -67,6 +71,8 @@ const DOMAIN_LABELS: Record<string, string> = {
   conversation: 'Conversations',
   bookmarks: 'Bookmarks',
   bookmark: 'Bookmarks',
+  messages: 'Messages',
+  message: 'Messages',
 };
 
 interface CommandItem {
@@ -80,7 +86,7 @@ interface CommandItem {
 const ROUTE_MAP: Record<string, string> = {
   note: '/notes', event: '/calendar', contact: '/contacts',
   email: '/mail', file: '/drive', diary: '/diary', conversation: '/chat',
-  bookmark: '/bookmarks',
+  message: '/chat', bookmark: '/bookmarks',
 };
 
 function getResultTitle(result: SearchResult): string {
@@ -148,7 +154,23 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'goto-tools', label: 'Go to Tools', icon: Wrench, group: 'Navigation', action: () => navigate('/tools') },
     { id: 'create-diagram', label: 'Create new diagram', icon: Waypoints, group: 'Actions', action: () => navigate('/diagrams/new') },
     { id: 'goto-projects', label: 'Go to Projects', icon: Kanban, group: 'Navigation', action: () => navigate('/projects') },
+    { id: 'goto-termix', label: 'Open Terminal', icon: Terminal, group: 'Navigation', action: () => navigate('/termix') },
+    { id: 'goto-portainer', label: 'Open Portainer', icon: Container, group: 'Navigation', action: () => navigate('/portainer') },
+    { id: 'goto-office', label: 'Go to Office', icon: FileText, group: 'Navigation', action: () => navigate('/office') },
+    { id: 'create-document', label: 'New document', icon: FileText, group: 'Actions', action: () => navigate('/office?action=new&type=docx') },
+    { id: 'create-spreadsheet', label: 'New spreadsheet', icon: FileText, group: 'Actions', action: () => navigate('/office?action=new&type=xlsx') },
+    { id: 'create-presentation', label: 'New presentation', icon: FileText, group: 'Actions', action: () => navigate('/office?action=new&type=pptx') },
+    { id: 'open-pdf-tools', label: 'Open PDF Tools', icon: Wrench, group: 'Actions', action: () => navigate('/office/pdf/tools') },
     { id: 'create-board', label: 'Create new board', icon: Kanban, group: 'Actions', action: () => navigate('/projects?action=new') },
+    { id: 'media-play-pause', label: 'Play/Pause Media', icon: Play, group: 'Actions', action: () => {
+      const ps = usePlayerStore.getState();
+      ps.isPlaying ? ps.pause() : ps.resume();
+    }},
+    { id: 'media-next', label: 'Next Track', icon: SkipForward, group: 'Actions', action: () => usePlayerStore.getState().playNext() },
+    { id: 'media-download', label: 'Download Media from URL', icon: DownloadIcon, group: 'Actions', action: () => {
+      // Will be handled by opening DownloadDialog via event
+      window.dispatchEvent(new CustomEvent('claw:open-download-dialog'));
+    }},
     { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
     { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
   ], [navigate, sidebarToggle, openPanel]);
@@ -366,11 +388,21 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                     </div>
                     {MODULES.filter((m) => m.path).map((mod) => {
                       const Icon = mod.icon;
+                      const domainKey = Object.keys(DOMAIN_MAP).find(k => k === mod.id);
                       return (
                         <Command.Item
                           key={mod.id}
                           value={mod.label}
-                          onSelect={() => handleSelect(mod.path!)}
+                          onSelect={() => {
+                            if (domainKey) {
+                              setSelectedDomain(domainKey);
+                              setInputValue(`@${domainKey} `);
+                              setMode('domain');
+                              inputRef.current?.focus();
+                            } else {
+                              handleSelect(mod.path!);
+                            }
+                          }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -385,6 +417,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         >
                           <Icon size={18} style={{ color: mod.color }} />
                           <span>{mod.label}</span>
+                          {domainKey && (
+                            <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                              @{domainKey}
+                            </span>
+                          )}
                         </Command.Item>
                       );
                     })}

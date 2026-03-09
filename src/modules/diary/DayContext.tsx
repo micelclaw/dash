@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router';
-import { Calendar, StickyNote, Mail } from 'lucide-react';
+import { Calendar, StickyNote, Mail, Camera } from 'lucide-react';
 import { useDayContext } from './hooks/use-day-context';
 import { formatTime } from '@/lib/date-helpers';
 
@@ -17,7 +17,7 @@ export function DayContext({ entryDate }: DayContextProps) {
   const navigate = useNavigate();
 
   if (!context) return null;
-  if (context.events.length === 0 && context.notes.length === 0 && context.emailCount === 0) return null;
+  if (context.events.length === 0 && context.notes.length === 0 && context.emailCount === 0 && context.photoCount === 0) return null;
 
   return (
     <div
@@ -94,6 +94,20 @@ export function DayContext({ entryDate }: DayContextProps) {
           <Mail size={14} style={{ color: 'var(--mod-mail)', flexShrink: 0 }} />
           <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
             {context.emailCount} email{context.emailCount !== 1 ? 's' : ''} received
+          </span>
+        </div>
+      )}
+
+      {context.photoCount > 0 && (
+        <div
+          onClick={() => navigate(`/photos?date=${entryDate}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, cursor: 'pointer', transition: 'color var(--transition-fast)' }}
+          onMouseEnter={ev => { ev.currentTarget.style.color = 'var(--mod-photos)'; }}
+          onMouseLeave={ev => { ev.currentTarget.style.color = 'inherit'; }}
+        >
+          <Camera size={14} style={{ color: 'var(--mod-photos)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
+            {context.photoCount} photo{context.photoCount !== 1 ? 's' : ''} taken
           </span>
         </div>
       )}

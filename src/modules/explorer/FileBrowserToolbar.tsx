@@ -105,6 +105,7 @@ export function FileBrowserToolbar({
           path={currentPath}
           rootLabel={currentSource.label}
           rootIcon={currentSource.icon}
+          rootBasePath={currentSource.basePath}
           onNavigate={onNavigate}
         />
         {!isWritable && (

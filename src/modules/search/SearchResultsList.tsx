@@ -1,11 +1,13 @@
+import { useMemo, useState } from 'react';
 import {
   StickyNote, Calendar, Mail, Users, BookOpen,
-  FolderOpen, MessageSquare,
+  FolderOpen, ImageIcon, MessageSquare, MessagesSquare,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { useSearchStore } from '@/stores/search.store';
 import { ProvenanceBreakdown } from './ProvenanceBreakdown';
+import { getPreviewUrl } from '@/lib/file-utils';
 import type { SearchResult } from '@/types/search';
 import type { LucideIcon } from 'lucide-react';
 
@@ -16,25 +18,150 @@ const DOMAIN_META: Record<string, { icon: LucideIcon; color: string; route: stri
   contact:      { icon: Users,         color: 'var(--mod-contacts)', route: '/contacts', label: 'Contact' },
   diary:        { icon: BookOpen,      color: 'var(--mod-diary)',    route: '/diary',    label: 'Diary' },
   file:         { icon: FolderOpen,    color: 'var(--mod-drive)',    route: '/drive',    label: 'File' },
+  photo:        { icon: ImageIcon,    color: 'var(--mod-photos)',   route: '/photos',   label: 'Photo' },
   conversation: { icon: MessageSquare, color: 'var(--mod-chat)',     route: '/chat',     label: 'Chat' },
+  message:      { icon: MessagesSquare, color: 'var(--mod-observers)', route: '/settings/observers', label: 'Message' },
 };
+
+/** Build the deep-link URL for a search result */
+function buildDeepLink(r: SearchResult, meta: typeof DOMAIN_META[string] | undefined): string | null {
+  const rec = r.record as Record<string, unknown> | null;
+
+  // VFS files → file explorer at parent folder
+  if (rec?.source === 'vfs' && rec?.filepath) {
+    const fp = rec.filepath as string;
+    const parentPath = fp.substring(0, fp.lastIndexOf('/') + 1) || '/';
+    return `/explorer?path=${encodeURIComponent(parentPath)}`;
+  }
+
+  // Photos → photos page
+  if (r.domain === 'photo') {
+    return `/photos?id=${r.record_id}`;
+  }
+
+  // Regular files → drive at parent folder
+  if (r.domain === 'file' && rec) {
+    const folder = (rec.parent_folder as string) || '/';
+    return `/drive?path=${encodeURIComponent(folder)}`;
+  }
+
+  // Events → calendar at event date + open detail
+  if (r.domain === 'event' && rec) {
+    const dateStr = (rec.start_at as string) || (rec.start_date as string) || (rec.starts_at as string) || (rec.created_at as string);
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const iso = d.toISOString().split('T')[0]; // YYYY-MM-DD
+        return `/calendar?id=${r.record_id}&date=${iso}&view=day`;
+      }
+    }
+    return `/calendar?id=${r.record_id}`;
+  }
+
+  // Diary → diary at entry date
+  if (r.domain === 'diary' && rec) {
+    const dateStr = (rec.entry_date as string) || (rec.date as string) || (rec.created_at as string);
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const iso = d.toISOString().split('T')[0];
+        return `/diary?date=${iso}`;
+      }
+    }
+  }
+
+  // Default: module?id=record_id
+  if (meta?.route) return `${meta.route}?id=${r.record_id}`;
+  return null;
+}
 
 function getTitle(r: SearchResult): string {
   const rec = r.record as Record<string, unknown> | null;
   if (!rec) return r.snippet.slice(0, 60);
-  return (
+
+  // Photo results: prefer AI description over filename
+  if (r.domain === 'photo') {
+    const meta = rec.metadata as Record<string, unknown> | undefined;
+    const desc = meta?.ai_description as string;
+    return desc ? desc.slice(0, 80) : (rec.filename as string) || r.snippet.slice(0, 60);
+  }
+
+  // Message results: "Platform #channel: content_preview"
+  if (r.domain === 'message') {
+    const platform = (rec.platform as string) ?? '';
+    const channel = (rec.channel_name as string) ?? '';
+    const content = (rec.content as string) ?? r.snippet;
+    const prefix = [platform, channel ? `#${channel}` : ''].filter(Boolean).join(' ');
+    const preview = content.slice(0, 60);
+    return prefix ? `${prefix}: ${preview}` : preview;
+  }
+
+  const title = (
     (rec.title as string) ||
     (rec.subject as string) ||
     (rec.display_name as string) ||
     (rec.filename as string) ||
     r.snippet.slice(0, 60)
   );
+
+  // For VFS files, show parent folder path for context
+  if (rec.source === 'vfs' && rec.parent_folder) {
+    const folder = (rec.parent_folder as string).replace(/^\/vfs/, '');
+    return `${title}  ·  ${folder}`;
+  }
+
+  return title;
+}
+
+function PhotoThumb({ recordId }: { recordId: string }) {
+  const [err, setErr] = useState(false);
+  if (err) return <ImageIcon size={16} style={{ color: 'var(--mod-photos)', flexShrink: 0 }} />;
+  return (
+    <img
+      src={getPreviewUrl(recordId, 64)}
+      alt=""
+      onError={() => setErr(true)}
+      style={{
+        width: 32, height: 32, objectFit: 'cover',
+        borderRadius: 'var(--radius-sm)', flexShrink: 0,
+      }}
+    />
+  );
 }
 
 export function SearchResultsList() {
   const navigate = useNavigate();
-  const results = useSearchStore(s => s.results);
+  const rawResults = useSearchStore(s => s.results);
+  const sortBy = useSearchStore(s => s.sortBy);
   const selectedResult = useSearchStore(s => s.selectedResult);
+
+  const results = useMemo(() => {
+    if (sortBy === 'relevance' || !rawResults.length) return rawResults;
+
+    // Sort by last modified date
+    if (sortBy === 'recent') {
+      return [...rawResults].sort((a, b) => {
+        const recA = a.record as Record<string, unknown> | null;
+        const recB = b.record as Record<string, unknown> | null;
+        const dateA = (recA?.updated_at as string) || (recA?.created_at as string) || '';
+        const dateB = (recB?.updated_at as string) || (recB?.created_at as string) || '';
+        return dateB.localeCompare(dateA);
+      });
+    }
+
+    // Sort by signal score
+    const keyMap: Record<string, string> = {
+      fulltext: 'fulltext_score',
+      heat: 'heat_score',
+      semantic: 'vector_score',
+      graph: 'graph_score',
+    };
+    const scoreKey = keyMap[sortBy];
+    if (!scoreKey) return rawResults;
+    return [...rawResults].sort((a, b) =>
+      ((b.provenance as any)?.[scoreKey] ?? 0) - ((a.provenance as any)?.[scoreKey] ?? 0)
+    );
+  }, [rawResults, sortBy]);
   const setSelectedResult = useSearchStore(s => s.setSelectedResult);
   const loading = useSearchStore(s => s.loading);
   const total = useSearchStore(s => s.total);
@@ -82,7 +209,8 @@ export function SearchResultsList() {
               <button
                 onClick={() => setSelectedResult(isSelected ? null : r)}
                 onDoubleClick={() => {
-                  if (meta?.route) navigate(`${meta.route}?id=${r.record_id}`);
+                  const link = buildDeepLink(r, meta);
+                  if (link) navigate(link);
                 }}
                 style={{
                   display: 'flex',
@@ -101,7 +229,10 @@ export function SearchResultsList() {
                 onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--surface)'; }}
                 onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
               >
-                <Icon size={16} style={{ color: meta?.color ?? 'var(--text-muted)', flexShrink: 0 }} />
+                {r.domain === 'photo'
+                  ? <PhotoThumb recordId={r.record_id} />
+                  : <Icon size={16} style={{ color: meta?.color ?? 'var(--text-muted)', flexShrink: 0 }} />
+                }
                 <span style={{
                   flex: 1, fontSize: '0.8125rem', color: 'var(--text)',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -123,15 +254,32 @@ export function SearchResultsList() {
                   padding: '8px 10px 12px 34px',
                   borderBottom: '1px solid var(--border)',
                 }}>
-                  <div style={{
-                    fontSize: '0.75rem', color: 'var(--text-dim)',
-                    marginBottom: 6, lineHeight: 1.4,
-                  }}>
-                    {r.snippet}
+                  {/* Photo preview + snippet side by side */}
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
+                    {r.domain === 'photo' && (
+                      <img
+                        src={getPreviewUrl(r.record_id, 160)}
+                        alt=""
+                        style={{
+                          width: 80, height: 80, objectFit: 'cover',
+                          borderRadius: 'var(--radius-sm)', flexShrink: 0,
+                        }}
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                    <div style={{
+                      fontSize: '0.75rem', color: 'var(--text-dim)',
+                      lineHeight: 1.4, flex: 1,
+                    }}>
+                      {r.snippet}
+                    </div>
                   </div>
                   <ProvenanceBreakdown result={r} />
                   <button
-                    onClick={() => { if (meta?.route) navigate(`${meta.route}?id=${r.record_id}`); }}
+                    onClick={() => {
+                      const link = buildDeepLink(r, meta);
+                      if (link) navigate(link);
+                    }}
                     style={{
                       marginTop: 8,
                       padding: '3px 10px',

@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useFiles } from '@/hooks/use-files';
 import type { FileRecord } from '@/types/files';
 import type { DriveView } from '../types';
@@ -9,9 +9,37 @@ const OPENABLE_MIMES: Record<string, string> = {
   'application/vnd.claw.diagram+json': '/diagrams/',
 };
 
+const SESSION_KEY = 'drive-current-path';
+
+/** Ensure path is always under /drive/ */
+function normalizeDrivePath(path: string | null | undefined): string {
+  if (!path || !path.startsWith('/drive/')) return '/drive/';
+  return path;
+}
+
 export function useDrive() {
   const navigate = useNavigate();
-  const [currentPath, setCurrentPath] = useState('/drive/');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialPath = normalizeDrivePath(
+    searchParams.get('path') || sessionStorage.getItem(SESSION_KEY),
+  );
+
+  const [currentPath, setCurrentPath] = useState(initialPath);
+
+  // Persist path on every change
+  useEffect(() => {
+    sessionStorage.setItem(SESSION_KEY, currentPath);
+  }, [currentPath]);
+
+  // Handle ?path= param changes (e.g. from search deep-links)
+  useEffect(() => {
+    const p = searchParams.get('path');
+    if (p && p !== currentPath) {
+      setCurrentPath(normalizeDrivePath(p));
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState<DriveView>(
@@ -29,7 +57,7 @@ export function useDrive() {
   });
 
   const navigateTo = useCallback((path: string) => {
-    setCurrentPath(path);
+    setCurrentPath(normalizeDrivePath(path));
     setSelectedFile(null);
     setSelectedIds(new Set());
     setSearch('');

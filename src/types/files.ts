@@ -10,7 +10,7 @@ export interface FileRecord {
   parent_folder: string;
   is_directory: boolean;
   metadata: Record<string, unknown> | null;
-  tags: string[];
+  tags: string[] | null;
   custom_fields: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;

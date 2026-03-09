@@ -1,5 +1,5 @@
 export interface SearchResult {
-  domain: 'note' | 'event' | 'contact' | 'email' | 'file' | 'diary' | 'conversation';
+  domain: 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary' | 'conversation' | 'message';
   record_id: string;
   score: number;
   snippet: string;
@@ -18,15 +18,15 @@ export interface SearchResult {
 }
 
 export interface SearchWeights {
-  heat: number;
   semantic: number;
   fulltext: number;
+  heat: number;
   graph: number;
 }
 
 export const DEFAULT_SEARCH_WEIGHTS: SearchWeights = {
-  heat: 0.25,
   semantic: 0.25,
   fulltext: 0.25,
+  heat: 0.25,
   graph: 0.25,
 };

@@ -43,7 +43,12 @@
   --mod-tools: #8b5cf6;
   --mod-diagrams: #06b6d4;
   --mod-projects: #f97316;
+  --mod-termix: #22d3ee;
+  --mod-portainer: #13bef9;
   --mod-clawhub: #d4a017;
+  --mod-feeds: #f97316;
+  --mod-observers: #8b5cf6;
+  --mod-office: #e11d48;
 
   /* Typography */
   --font-sans: 'Inter', system-ui, sans-serif;
@@ -73,6 +78,7 @@
   --z-modal: 400;
   --z-toast: 500;
   --z-tooltip: 600;
+  --z-video-overlay: 350;
   --z-command-palette: 700;
 
   /* Shadcn/ui mapping (oklch values for Tailwind v4 compatibility) */

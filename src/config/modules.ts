@@ -2,7 +2,7 @@ import {
   MessageSquare, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
   Settings, Puzzle, Bookmark, ShieldCheck, Activity, Wrench,
-  Waypoints, Kanban,
+  Waypoints, Kanban, Terminal, Rss, Container, FileText,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -19,6 +19,9 @@ export const MODULES: ModuleConfig[] = [
   { id: 'tools',    label: 'Tools',         icon: Wrench,        color: 'var(--mod-tools)',    path: '/tools',    group: 'Productivity' },
   { id: 'diagrams', label: 'Diagrams',      icon: Waypoints,     color: 'var(--mod-diagrams)', path: '/diagrams', group: 'Productivity' },
   { id: 'projects', label: 'Projects',     icon: Kanban,        color: 'var(--mod-projects)', path: '/projects', group: 'Productivity' },
+  { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
+  // Social
+  { id: 'feeds',    label: 'Feeds',         icon: Rss,           color: 'var(--mod-feeds)',    path: '/feeds',    group: 'Social' },
   // Files
   { id: 'drive',    label: 'Drive',         icon: FolderOpen,    color: 'var(--mod-drive)',    path: '/drive',    group: 'Files' },
   { id: 'photos',   label: 'Photos',        icon: Image,         color: 'var(--mod-photos)',   path: '/photos',   group: 'Files' },
@@ -27,6 +30,8 @@ export const MODULES: ModuleConfig[] = [
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
   { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },
+  { id: 'termix',   label: 'Terminal',      icon: Terminal,      color: 'var(--mod-termix)',   path: '/termix',   group: 'System' },
+  { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'System' },
   // { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },
   { id: 'settings', label: 'Settings',      icon: Settings,      color: 'var(--mod-settings)', path: '/settings', group: 'System' },
   { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: 'System' },

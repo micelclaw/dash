@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
-  Bell, Calendar, Keyboard,
+  Bell, Calendar, Keyboard, Rss, MessageSquare, Server,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -27,6 +27,9 @@ import { EnergySection } from '@/components/settings/sections/EnergySection';
 import { NotificationsSection } from '@/components/settings/sections/NotificationsSection';
 import { CalendarSection } from '@/components/settings/sections/CalendarSection';
 import { ShortcutsSection } from '@/components/settings/sections/ShortcutsSection';
+import { FeedsSection } from '@/components/settings/sections/FeedsSection';
+import { ChannelObserversSection } from '@/components/settings/sections/ChannelObserversSection';
+import { ServicesSection } from '@/components/settings/sections/ServicesSection';
 
 interface SidebarItem {
   id: string;
@@ -47,11 +50,14 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'network', label: 'Red', icon: Network },
     { id: 'energy', label: 'Energia', icon: Zap },
+    { id: 'services', label: 'Services', icon: Server },
     { id: 'dash', label: 'Dash', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'notifications', label: 'Notifications', icon: Bell, dividerBefore: true },
     { id: 'search', label: 'Search', icon: SearchIcon },
     { id: 'digest', label: 'Digest', icon: Newspaper },
+    { id: 'feeds', label: 'Feeds', icon: Rss },
+    { id: 'observers', label: 'Channel Observers', icon: MessageSquare },
   ];
   if (isAdmin) {
     sections.push({ id: 'users', label: 'Users', icon: Users, dividerBefore: true });
@@ -80,6 +86,9 @@ function renderSection(section: string) {
     case 'shortcuts': return <ShortcutsSection />;
     case 'search': return <SearchSection />;
     case 'digest': return <DigestSection />;
+    case 'feeds': return <FeedsSection />;
+    case 'observers': return <ChannelObserversSection />;
+    case 'services': return <ServicesSection />;
     default: return <GeneralSection />;
   }
 }

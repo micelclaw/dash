@@ -20,7 +20,7 @@ export function Component() {
   const addNotification = useNotificationStore(s => s.addNotification);
   const {
     currentPath, navigateTo,
-    files, loading,
+    files, loading, error,
     selectedFile, handleItemClick,
     setSelectedFile,
     view, changeView,
@@ -141,7 +141,9 @@ export function Component() {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
         fontFamily: 'var(--font-sans)',
       }}
     >
@@ -205,7 +207,16 @@ export function Component() {
 
       {/* Content area */}
       <DropZone onFilesDropped={handleFilesDropped}>
-        <div style={{ height: '100%', overflow: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          {error && (
+            <div style={{
+              padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
+              color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
+              borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
+            }}>
+              {error}
+            </div>
+          )}
           {view === 'grid' ? (
             <DriveGrid
               files={files}

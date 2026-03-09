@@ -8,6 +8,7 @@ import { ChatPanel } from '@/components/shell/ChatPanel';
 import { ChatInput } from '@/components/shell/ChatInput';
 import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
+import { ContextCard } from '@/components/shell/ContextCard';
 
 export function Component() {
   const isMobile = useIsMobile();
@@ -168,6 +169,7 @@ export function Component() {
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Chat column */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <ContextCard />
             <ChatPanel />
           </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { useSidebarStore } from '@/stores/sidebar.store';
@@ -15,6 +15,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { useClipboardStore } from '@/stores/clipboard.store';
 import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { useTheme } from '@/hooks/use-theme';
+import { useHeartbeat } from '@/hooks/use-heartbeat';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
@@ -24,6 +25,12 @@ import { CommandPalette } from './CommandPalette';
 import { UrgentAlertModal } from '@/components/UrgentAlertModal';
 import { FloatingPanelsLayer } from '@/components/floating-panel/FloatingPanelsLayer';
 import { MinimizedPanelsTray } from '@/components/floating-panel/MinimizedPanelsTray';
+import { ServiceDrainListener } from '@/components/ui/ServiceDrainNotification';
+import { useServiceEvents } from '@/hooks/use-service-status';
+import { useServicesStore } from '@/stores/services.store';
+import { VideoOverlay } from '@/components/player/VideoOverlay';
+import { DownloadDialog } from '@/components/player/DownloadDialog';
+import { usePlayerStore } from '@/stores/player.store';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -42,8 +49,22 @@ export function Shell() {
   const logout = useAuthStore((s) => s.logout);
   const isChatPage = location.pathname === '/chat';
 
+  const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+
   // Apply user theme + accent from settings
   useTheme();
+
+  // Context heartbeat — sends module/idle state to backend every 30s
+  useHeartbeat();
+
+  // Service lifecycle WS events
+  useServiceEvents();
+
+  // Fetch services on mount
+  const fetchServices = useServicesStore((s) => s.fetchServices);
+  useEffect(() => {
+    fetchServices();
+  }, [fetchServices]);
 
   // Auto-collapse on compact screens, auto-expand when viewport goes wide
   const prevCompactRef = useRef(isCompact);
@@ -92,6 +113,28 @@ export function Shell() {
       });
   }, [wsStatus, refresh, connect, logout]);
 
+  // ─── Context heartbeat (every 30s) ──────────────────────
+  const send = useWebSocketStore((s) => s.send);
+  useEffect(() => {
+    let lastActivity = Date.now();
+    const onActivity = () => { lastActivity = Date.now(); };
+    window.addEventListener('mousemove', onActivity, { passive: true });
+    window.addEventListener('keydown', onActivity, { passive: true });
+
+    const interval = setInterval(() => {
+      const idle = Date.now() - lastActivity > 5 * 60_000; // 5min idle
+      const pathParts = location.pathname.split('/').filter(Boolean);
+      const currentModule = pathParts[0] || 'dashboard';
+      send('context.heartbeat', { module: currentModule, idle });
+    }, 30_000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', onActivity);
+      window.removeEventListener('keydown', onActivity);
+    };
+  }, [send, location.pathname]);
+
   // Keyboard shortcuts
   const toggleClipboard = useClipboardStore((s) => s.togglePanel);
   const togglePanel = useFloatingPanelsStore((s) => s.togglePanel);
@@ -115,6 +158,7 @@ export function Shell() {
   const processEvent = useWebSocket('process.*');
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const changeEvent = useWebSocket('change.*');
+  const mediaEvent = useWebSocket('media.download.*');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -340,6 +384,25 @@ export function Shell() {
     }
   }, [photoWorkerEvent]);
 
+  // Media download events
+  useEffect(() => {
+    if (!mediaEvent) return;
+    if (mediaEvent.event === 'media.download.complete') {
+      toast.success(`Download complete: ${mediaEvent.data.title}`);
+      usePlayerStore.getState().fetchDownloads();
+    } else if (mediaEvent.event === 'media.download.error') {
+      toast.error(`Download failed: ${mediaEvent.data.error}`, { duration: 5000 });
+      usePlayerStore.getState().fetchDownloads();
+    }
+  }, [mediaEvent]);
+
+  // Listen for CommandPalette "Download Media" action
+  useEffect(() => {
+    const handler = () => setDownloadDialogOpen(true);
+    window.addEventListener('claw:open-download-dialog', handler);
+    return () => window.removeEventListener('claw:open-download-dialog', handler);
+  }, []);
+
   // Individual change notifications (agent/background sources)
   useEffect(() => {
     if (!changeEvent) return;
@@ -386,7 +449,7 @@ export function Shell() {
 
           {/* Content + BottomBar */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ flex: 1, overflow: 'auto' }}>
+            <div style={{ flex: 1, overflow: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <Outlet />
             </div>
             {!isChatPage && <BottomBar />}
@@ -402,6 +465,15 @@ export function Shell() {
         {/* Floating tool panels */}
         <FloatingPanelsLayer />
         <MinimizedPanelsTray />
+
+        {/* Service lifecycle drain notifications */}
+        <ServiceDrainListener />
+
+        {/* Video overlay (media player) */}
+        <VideoOverlay />
+
+        {/* Media download dialog */}
+        {downloadDialogOpen && <DownloadDialog onClose={() => setDownloadDialogOpen(false)} />}
       </div>
     </TooltipProvider>
   );

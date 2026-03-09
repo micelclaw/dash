@@ -94,9 +94,9 @@ export function FilePreviewPanel({
             <span>Modified {formatRelative(new Date(file.updated_at))}</span>
           </div>
 
-          {file.tags?.length > 0 && (
+          {(file.tags?.length ?? 0) > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
-              {file.tags.map(tag => (
+              {(file.tags ?? []).map(tag => (
                 <span
                   key={tag}
                   style={{

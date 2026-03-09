@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { SearchResultsList } from './SearchResultsList';
 import { RankingPanel } from './RankingPanel';
 
-const ALL_DOMAINS = ['note', 'event', 'email', 'contact', 'diary', 'file', 'conversation'] as const;
+const ALL_DOMAINS = ['note', 'event', 'email', 'contact', 'diary', 'file', 'photo', 'conversation', 'message'] as const;
 
 const DOMAIN_LABELS: Record<string, string> = {
   note: 'Notes',
@@ -15,7 +15,9 @@ const DOMAIN_LABELS: Record<string, string> = {
   contact: 'Contacts',
   diary: 'Diary',
   file: 'Files',
+  photo: 'Photos',
   conversation: 'Chats',
+  message: 'Messages',
 };
 
 export function Component() {
@@ -26,7 +28,7 @@ export function Component() {
   const setQuery = useSearchStore(s => s.setQuery);
   const domains = useSearchStore(s => s.domains);
   const setDomains = useSearchStore(s => s.setDomains);
-  const search = useSearchStore(s => s.search);
+  const searchAdvanced = useSearchStore(s => s.searchAdvanced);
   const loading = useSearchStore(s => s.loading);
   const results = useSearchStore(s => s.results);
   const error = useSearchStore(s => s.error);
@@ -37,9 +39,8 @@ export function Component() {
     const q = searchParams.get('q');
     if (q && q !== query) {
       setQuery(q);
-      // Trigger search after a tick so store is updated
       setTimeout(() => {
-        useSearchStore.getState().search();
+        useSearchStore.getState().searchAdvanced();
       }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,14 +54,17 @@ export function Component() {
   const handleSearch = useCallback(() => {
     if (!query.trim()) return;
     setSearchParams({ q: query }, { replace: true });
-    search();
-  }, [query, search, setSearchParams]);
+    searchAdvanced();
+  }, [query, searchAdvanced, setSearchParams]);
 
   const toggleDomain = useCallback((d: string) => {
-    setDomains(
-      domains.includes(d) ? domains.filter(x => x !== d) : [...domains, d],
-    );
-  }, [domains, setDomains]);
+    const next = domains.includes(d) ? domains.filter(x => x !== d) : [...domains, d];
+    setDomains(next);
+    // Auto-trigger search when filters change and there's an active query
+    if (query.trim()) {
+      setTimeout(() => useSearchStore.getState().searchAdvanced(), 0);
+    }
+  }, [domains, setDomains, query]);
 
   return (
     <div style={{

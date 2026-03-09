@@ -125,6 +125,19 @@ export function Component() {
     const action = searchParams.get('action');
     const targetId = searchParams.get('id');
 
+    // Navigate to specific date if provided
+    const targetDate = searchParams.get('date');
+    if (targetDate) {
+      const d = new Date(targetDate + 'T00:00:00');
+      if (!isNaN(d.getTime())) setCurrentDate(d);
+    }
+
+    // Switch to day view if requested
+    const targetView = searchParams.get('view') as CalendarView | null;
+    if (targetView && ['day', 'week', 'month', 'agenda'].includes(targetView)) {
+      setView(targetView);
+    }
+
     if (action === 'new') {
       setSelectedEvent(null);
       setModalOpen(true);

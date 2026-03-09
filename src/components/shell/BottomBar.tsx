@@ -4,11 +4,16 @@ import { X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { usePlayerStore } from '@/stores/player.store';
+import { useMediaKeys } from '@/hooks/use-media-keys';
 import { ChatInput } from './ChatInput';
 import { ChatPanel } from './ChatPanel';
+import { MiniPlayer } from '../player/MiniPlayer';
 
 export function BottomBar() {
   const isMobile = useIsMobile();
+  const miniPlayerVisible = usePlayerStore((s) => s.miniPlayerVisible);
+  useMediaKeys();
   const chatState = useChatStore((s) => s.chatState);
   const setChatState = useChatStore((s) => s.setChatState);
   const bubbleMessage = useChatStore((s) => s.bubbleMessage);
@@ -120,6 +125,9 @@ export function BottomBar() {
           <ChatPanel />
         </div>
       )}
+
+      {/* MiniPlayer (when audio is active) */}
+      {miniPlayerVisible && <MiniPlayer />}
 
       {/* Input bar */}
       <ChatInput

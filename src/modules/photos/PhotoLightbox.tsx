@@ -418,7 +418,7 @@ export function PhotoLightbox({
             {camera && <InfoChip label={camera} />}
             <InfoChip label={`${formatDateShort(dateObj)} ${formatTime(dateObj)}`} />
             {gps && <InfoChip label={`${gps.latitude.toFixed(4)}, ${gps.longitude.toFixed(4)}`} />}
-            {photo.tags?.length > 0 && <InfoChip label={photo.tags.join(', ')} />}
+            {(photo.tags?.length ?? 0) > 0 && <InfoChip label={(photo.tags ?? []).join(', ')} />}
             {faceDetections && faceDetections.length > 0 && (
               <InfoChip label={`${faceDetections.length} face${faceDetections.length !== 1 ? 's' : ''}`} />
             )}

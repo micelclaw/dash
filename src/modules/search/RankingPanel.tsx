@@ -3,13 +3,15 @@ import { useAuthStore } from '@/stores/auth.store';
 import { RankingSlider } from './RankingSlider';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
 
-type SortBy = 'relevance' | 'heat' | 'semantic' | 'graph';
+type SortBy = 'relevance' | 'fulltext' | 'heat' | 'semantic' | 'graph' | 'recent';
 
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'relevance', label: 'Relevance' },
+  { value: 'fulltext', label: 'Full-text' },
   { value: 'heat', label: 'Heat' },
   { value: 'semantic', label: 'Semantic' },
   { value: 'graph', label: 'Graph' },
+  { value: 'recent', label: 'Last modified' },
 ];
 
 const radioStyle: React.CSSProperties = {
@@ -29,8 +31,6 @@ export function RankingPanel() {
   const setSortBy = useSearchStore(s => s.setSortBy);
   const setWeights = useSearchStore(s => s.setWeights);
   const resetWeights = useSearchStore(s => s.resetWeights);
-  const searchAdvanced = useSearchStore(s => s.searchAdvanced);
-  const query = useSearchStore(s => s.query);
 
   return (
     <div style={{
@@ -98,22 +98,6 @@ export function RankingPanel() {
             <RankingSlider label="Graph" value={weights.graph} onChange={v => setWeights({ graph: v })} color="#34d399" />
 
             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              <button
-                onClick={() => { if (query.trim()) searchAdvanced(); }}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--amber)',
-                  background: 'var(--amber-dim)',
-                  color: 'var(--amber)',
-                  fontSize: '0.75rem',
-                  fontFamily: 'var(--font-sans)',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
-              >
-                Apply
-              </button>
               <button
                 onClick={resetWeights}
                 style={{

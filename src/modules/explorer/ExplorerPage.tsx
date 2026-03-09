@@ -12,6 +12,7 @@ import { SourceTree } from './SourceTree';
 import { FileBrowserToolbar } from './FileBrowserToolbar';
 import { FileBrowser } from './FileBrowser';
 import { FileExplorerPreview } from './FileExplorerPreview';
+import { MountWizard } from './MountWizard';
 import { useFileExplorer } from './hooks/use-file-explorer';
 import { api } from '@/services/api';
 
@@ -52,6 +53,8 @@ export function Component() {
   const isMobile = useIsMobile();
   const [showTree, setShowTree] = useState(false);
   const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
+  const [mountWizardOpen, setMountWizardOpen] = useState(false);
+  const [mountRefreshKey, setMountRefreshKey] = useState(0);
   const clipboard = useFileClipboard();
 
   // Read ?path= from URL on mount
@@ -347,6 +350,13 @@ export function Component() {
         }}
         onClose={() => setConfirmBatchDelete(false)}
       />
+
+      {/* Mount wizard */}
+      <MountWizard
+        open={mountWizardOpen}
+        onClose={() => setMountWizardOpen(false)}
+        onCreated={() => { setMountWizardOpen(false); setMountRefreshKey(k => k + 1); }}
+      />
     </div>
   );
 
@@ -408,7 +418,7 @@ export function Component() {
                 overflow: 'auto',
               }}
             >
-              <SourceTree currentPath={currentPath} onNavigate={handleMobileNavigate} />
+              <SourceTree currentPath={currentPath} onNavigate={handleMobileNavigate} onAddSource={() => setMountWizardOpen(true)} refreshKey={mountRefreshKey} />
             </div>
           </>
         )}
@@ -426,7 +436,7 @@ export function Component() {
       minSizes={[180, 400]}
       id="explorer-split"
     >
-      <SourceTree currentPath={currentPath} onNavigate={navigateTo} />
+      <SourceTree currentPath={currentPath} onNavigate={navigateTo} onAddSource={() => setMountWizardOpen(true)} refreshKey={mountRefreshKey} />
       {contentArea}
     </SplitPane>
   );

@@ -173,6 +173,14 @@ export function PhotosToolbar({
         >
           Déjà Vu
         </button>
+        <button
+          style={viewBtnStyle('dna')}
+          onClick={() => onViewChange('dna')}
+          onMouseEnter={() => setHoveredBtn('dna')}
+          onMouseLeave={() => setHoveredBtn(null)}
+        >
+          DNA
+        </button>
       </div>
 
       {/* Star filter pills */}

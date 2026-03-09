@@ -3,7 +3,9 @@ import { api } from '@/services/api';
 import type { SearchResult, SearchWeights } from '@/types/search';
 import { DEFAULT_SEARCH_WEIGHTS } from '@/types/search';
 
-type SortBy = 'relevance' | 'heat' | 'semantic' | 'graph';
+type SortBy = 'relevance' | 'fulltext' | 'heat' | 'semantic' | 'graph' | 'recent';
+
+let _weightsDebounce: ReturnType<typeof setTimeout> | null = null;
 
 interface SearchState {
   query: string;
@@ -23,7 +25,9 @@ interface SearchState {
   // Actions
   setQuery: (q: string) => void;
   setDomains: (domains: string[]) => void;
+  /** Quick search — RRF only, used by Ctrl+K */
   search: () => Promise<void>;
+  /** Advanced search — weighted fusion, used by Search module */
   searchAdvanced: () => Promise<void>;
   setWeights: (w: Partial<SearchWeights>) => void;
   resetWeights: () => void;
@@ -95,15 +99,16 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
         loading: false,
       });
     } catch {
-      set({ error: 'Advanced search failed', loading: false });
+      set({ error: 'Search failed', loading: false });
     }
   },
 
-  setWeights: (w) => set(s => {
+  setWeights: (w) => {
+    const s = get();
     const changedKey = Object.keys(w)[0] as keyof SearchWeights;
     const clamped = Math.max(0, Math.min(1, w[changedKey]!));
     const remaining = 1 - clamped;
-    const otherKeys = (['heat', 'semantic', 'fulltext', 'graph'] as const).filter(k => k !== changedKey);
+    const otherKeys = (['semantic', 'fulltext', 'heat', 'graph'] as const).filter(k => k !== changedKey);
     const otherSum = otherKeys.reduce((acc, k) => acc + s.weights[k], 0);
     const updated = { ...s.weights, [changedKey]: clamped };
     if (otherSum > 0) {
@@ -111,9 +116,21 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
     } else {
       for (const k of otherKeys) updated[k] = remaining / otherKeys.length;
     }
-    return { weights: updated };
-  }),
-  resetWeights: () => set({ weights: { ...DEFAULT_SEARCH_WEIGHTS } }),
+    set({ weights: updated });
+    // Auto-trigger advanced search when weights change (debounced)
+    if (s.query.trim()) {
+      if (_weightsDebounce) clearTimeout(_weightsDebounce);
+      _weightsDebounce = setTimeout(() => get().searchAdvanced(), 400);
+    }
+  },
+  resetWeights: () => {
+    set({ weights: { ...DEFAULT_SEARCH_WEIGHTS } });
+    // Auto-trigger search after reset
+    const { query } = get();
+    if (query.trim()) {
+      setTimeout(() => get().searchAdvanced(), 0);
+    }
+  },
   setSortBy: (sortBy) => set({ sortBy }),
   setSelectedResult: (r) => set({ selectedResult: r }),
   clear: () => set({

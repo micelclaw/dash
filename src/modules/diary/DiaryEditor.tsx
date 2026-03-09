@@ -8,7 +8,10 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { ChevronLeft, Sparkles, X } from 'lucide-react';
+import { ChevronLeft, Sparkles, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
+import { useAuthStore } from '@/stores/auth.store';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { NoteEditorToolbar } from '@/modules/notes/NoteEditorToolbar';
 import { MoodSelector } from './MoodSelector';
@@ -16,6 +19,8 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useDiaryLinks } from './hooks/use-diary-links';
+import { useDayContext } from './hooks/use-day-context';
+import { DayContext } from './DayContext';
 import { formatDateLong } from '@/lib/date-helpers';
 import type { DiaryEntry, MoodLevel } from './types';
 
@@ -38,7 +43,10 @@ interface DiaryEditorProps {
 export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   useCoNavigation('diary', entry.id);
   const { links, loading: linksLoading } = useDiaryLinks(entry.id);
+  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const dayCtx = useDayContext(entry.entry_date);
   const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const isDirtyRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -108,6 +116,49 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   const handleRemoveTag = (tag: string) => {
     onUpdate(entry.id, { tags: entry.tags.filter(t => t !== tag) });
   };
+
+  const photoCount = dayCtx?.photoCount ?? 0;
+  const canGenerate = isPro && photoCount >= 3 && !generating;
+  const isNarrativeDraft = (entry.custom_fields as any)?.source === 'auto_narrative' && entry.is_draft;
+
+  const handleGenerateNarrative = useCallback(async () => {
+    setGenerating(true);
+    try {
+      await api.post(`/diary/${entry.entry_date}/narrative`);
+      toast.success('Narrative generated');
+      onBack?.();
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === 'TIER_RESTRICTED') toast.error('Photo Narrative is a Pro feature');
+      else if (code === 'INSUFFICIENT_PHOTOS') toast.error('Need at least 3 processed photos');
+      else if (code === 'NARRATIVE_EXISTS') toast.error('A narrative already exists for this day');
+      else toast.error(err?.message || 'Failed to generate narrative');
+    } finally {
+      setGenerating(false);
+    }
+  }, [entry.entry_date, onBack]);
+
+  const handleSaveNarrative = useCallback(async () => {
+    await onUpdate(entry.id, { is_draft: false });
+    toast.success('Narrative saved');
+  }, [entry.id, onUpdate]);
+
+  const handleDiscardNarrative = useCallback(async () => {
+    try {
+      await api.delete(`/diary/${entry.id}`);
+      toast.success('Narrative discarded');
+      onBack?.();
+    } catch {
+      toast.error('Failed to discard');
+    }
+  }, [entry.id, onBack]);
+
+  const handleRegenerateNarrative = useCallback(async () => {
+    try {
+      await api.delete(`/diary/${entry.id}`);
+    } catch { /* ignore */ }
+    await handleGenerateNarrative();
+  }, [entry.id, handleGenerateNarrative]);
 
   const dateFormatted = formatDateLong(new Date(entry.entry_date + 'T12:00:00'));
 
@@ -185,10 +236,11 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
             }}
           />
 
-          {/* Auto-generate placeholder */}
+          {/* Auto-generate narrative */}
           <button
-            disabled
-            title="Pro feature — AI-generated diary entry"
+            disabled={!canGenerate}
+            onClick={handleGenerateNarrative}
+            title={!isPro ? 'Pro feature' : photoCount < 3 ? 'Need at least 3 photos' : 'Generate photo narrative'}
             style={{
               marginLeft: 'auto',
               display: 'flex',
@@ -198,21 +250,66 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
               background: 'transparent',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
-              color: 'var(--text-muted)',
+              color: canGenerate ? 'var(--amber)' : 'var(--text-muted)',
               fontSize: '0.75rem',
               fontFamily: 'var(--font-sans)',
-              cursor: 'not-allowed',
-              opacity: 0.5,
+              cursor: canGenerate ? 'pointer' : 'not-allowed',
+              opacity: canGenerate ? 1 : 0.5,
+              transition: 'color var(--transition-fast), opacity var(--transition-fast)',
             }}
           >
-            <Sparkles size={12} />
-            Auto-generate
-            <span style={{ fontSize: '0.625rem', padding: '0 4px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-              Pro
-            </span>
+            {generating ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Sparkles size={12} />}
+            {generating ? 'Generating...' : 'Auto-generate'}
+            {!isPro && (
+              <span style={{ fontSize: '0.625rem', padding: '0 4px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
+                Pro
+              </span>
+            )}
           </button>
         </div>
       </div>
+
+      {/* Narrative draft banner */}
+      {isNarrativeDraft && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '8px 16px',
+          background: 'rgba(245,158,11,0.08)',
+          borderBottom: '1px solid rgba(245,158,11,0.2)',
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-sans)',
+          flexShrink: 0,
+        }}>
+          <Sparkles size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+          <span style={{ color: 'var(--text-dim)', flex: 1 }}>AI-generated draft — review and edit before saving</span>
+          <button
+            onClick={handleSaveNarrative}
+            style={{
+              padding: '3px 10px', background: 'var(--amber)', color: '#000',
+              border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
+              fontFamily: 'var(--font-sans)', cursor: 'pointer', fontWeight: 500,
+            }}
+          >Save</button>
+          <button
+            onClick={handleDiscardNarrative}
+            style={{
+              padding: '3px 10px', background: 'transparent', color: 'var(--text-dim)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
+              fontFamily: 'var(--font-sans)', cursor: 'pointer',
+            }}
+          >Discard</button>
+          <button
+            onClick={handleRegenerateNarrative}
+            style={{
+              padding: '3px 10px', background: 'transparent', color: 'var(--text-dim)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
+              fontFamily: 'var(--font-sans)', cursor: 'pointer',
+            }}
+          >Regenerate</button>
+        </div>
+      )}
 
       {/* Toolbar */}
       {editor && <NoteEditorToolbar editor={editor} />}
@@ -222,8 +319,9 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
         {editor && <EditorContent editor={editor} />}
       </div>
 
-      {/* Intelligence panels */}
+      {/* Day context + Intelligence panels */}
       <div style={{ borderTop: '1px solid var(--border)' }}>
+        <DayContext entryDate={entry.entry_date} />
         <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
         <SimilarContentPanel sourceType="diary_entry" sourceId={entry.id} />
         <GraphProximityPanel sourceType="diary_entry" sourceId={entry.id} />

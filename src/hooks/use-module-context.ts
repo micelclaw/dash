@@ -3,6 +3,7 @@ import { useLocation } from 'react-router';
 import { MODULES } from '@/config/modules';
 import { useDiagramsStore } from '@/stores/diagrams.store';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useOfficeStore } from '@/stores/office.store';
 
 interface ModuleContext {
   moduleId: string | null;
@@ -67,6 +68,8 @@ export function useModuleContext(): ModuleContext {
   const projectsActiveBoardId = useProjectsStore((s) => s.activeBoardId);
   const projectsActiveBoardTitle = useProjectsStore((s) => s.activeBoardTitle);
   const projectsSelectedCardId = useProjectsStore((s) => s.selectedCardId);
+  const officeSession = useOfficeStore((s) => s.currentSession);
+  const officeFullscreen = useOfficeStore((s) => s.fullscreen);
 
   return useMemo(() => {
     const path = location.pathname;
@@ -127,11 +130,41 @@ export function useModuleContext(): ModuleContext {
       };
     }
 
+    // Inject termix context when on terminal route
+    if (mod?.id === 'termix') {
+      editorContext = {
+        service: 'termix',
+        note: 'User has Termix open. For SSH/remote, use the terminal. For local system commands, use hal/exec.',
+      };
+    }
+
+    // Inject office context when editing a document
+    if (mod?.id === 'office') {
+      const fileIdMatch = location.pathname.match(/\/office\/edit\/(.+)/);
+      const isEditing = !!fileIdMatch?.[1];
+      const docTypeMap: Record<string, string> = { word: 'document', cell: 'spreadsheet', slide: 'presentation' };
+
+      editorContext = {
+        service: 'office',
+        fileId: fileIdMatch?.[1] ?? null,
+        documentType: officeSession?.documentType ? docTypeMap[officeSession.documentType] ?? officeSession.documentType : null,
+        isEditing,
+        fullscreen: officeFullscreen,
+        note: isEditing
+          ? `User is editing a ${docTypeMap[officeSession?.documentType ?? ''] ?? 'document'} in ONLYOFFICE. Use office:insertText, office:insertTable, office:replaceText to manipulate the document. Use POST /office/execute for raw Office JS API code.`
+          : 'User has the Office module open. Can create/edit documents, manipulate PDFs, and generate documents.',
+      };
+
+      if (isEditing && fileIdMatch?.[1]) {
+        activeItem = { id: fileIdMatch[1], type: 'office-document', title: officeSession?.documentType ?? 'document' };
+      }
+    }
+
     return {
       moduleId: mod?.id ?? null,
       modulePath: mod?.path ?? null,
       activeItem,
       editorContext,
     };
-  }, [location.pathname, diagramNodes, diagramEdges, selectedElement, diagramTitle, projectsColumns, projectsCards, projectsColumnCardIds, projectsBoardColumnIds, projectsActiveBoardId, projectsActiveBoardTitle, projectsSelectedCardId]);
+  }, [location.pathname, diagramNodes, diagramEdges, selectedElement, diagramTitle, projectsColumns, projectsCards, projectsColumnCardIds, projectsBoardColumnIds, projectsActiveBoardId, projectsActiveBoardTitle, projectsSelectedCardId, officeSession, officeFullscreen]);
 }

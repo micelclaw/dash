@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router';
 import { Image, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -15,6 +16,7 @@ import { PhotosTimeline } from './PhotosTimeline';
 import { PhotosAlbums } from './PhotosAlbums';
 import { PhotosPeople } from './PhotosPeople';
 import { PhotosDejaVu } from './PhotosDejaVu';
+import { PhotosDNA } from './PhotosDNA';
 import { AlbumDetail } from './AlbumDetail';
 import { PhotoLightbox } from './PhotoLightbox';
 import { ExifPanel } from './ExifPanel';
@@ -174,11 +176,13 @@ function SearchResultThumbnail({
 }
 
 export function Component() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<PhotosView>('timeline');
   const [search, setSearch] = useState('');
   const [selectedStars, setSelectedStars] = useState<Set<number>>(new Set());
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const deepLinkHandled = useRef(false);
 
   // Best Of state
   const [bestOfCount, setBestOfCount] = useState(0);
@@ -255,6 +259,35 @@ export function Component() {
       setExifPhoto(photos[0]);
     }
   }, [photos, photosLoading]);
+
+  // Deep-link: ?id=<photoId> → open lightbox + exif panel
+  useEffect(() => {
+    const targetId = searchParams.get('id');
+    if (!targetId || deepLinkHandled.current || photosLoading) return;
+
+    const idx = photos.findIndex(p => p.id === targetId);
+    if (idx >= 0) {
+      setLightboxIndex(idx);
+      setExifPhoto(photos[idx]);
+      setDetailsCollapsed(false);
+      deepLinkHandled.current = true;
+      setSearchParams({}, { replace: true });
+    } else if (photos.length > 0) {
+      // Photo not in loaded list — fetch it directly
+      api.get<{ data: Photo }>(`/files/${targetId}`)
+        .then(res => {
+          if (res.data) {
+            setExifPhoto(res.data);
+            setDetailsCollapsed(false);
+            // Open lightbox with index -1 (standalone), will show via exifPhoto
+            setLightboxIndex(0);
+          }
+        })
+        .catch(() => {});
+      deepLinkHandled.current = true;
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, photos, photosLoading]);
 
   // Fetch Best Of count
   useEffect(() => {
@@ -652,7 +685,13 @@ export function Component() {
           )}
 
           {view === 'dejavu' && (
-            <PhotosDejaVu />
+            <PhotosDejaVu onViewPhoto={(id) => {
+              api.get<{ data: Photo }>(`/files/${id}`).then(res => setExifPhoto(res.data)).catch(() => {});
+            }} />
+          )}
+
+          {view === 'dna' && (
+            <PhotosDNA />
           )}
         </div>
 
