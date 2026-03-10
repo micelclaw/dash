@@ -44,11 +44,15 @@
   --mod-diagrams: #06b6d4;
   --mod-projects: #f97316;
   --mod-termix: #22d3ee;
+  --mod-vpn: #7c3aed;
   --mod-portainer: #13bef9;
   --mod-clawhub: #d4a017;
   --mod-feeds: #f97316;
+  --mod-finance: #22c55e;
   --mod-observers: #8b5cf6;
   --mod-office: #e11d48;
+  --mod-multimedia: #a855f7;
+  --mod-proxy: #3b82f6;
 
   /* Typography */
   --font-sans: 'Inter', system-ui, sans-serif;

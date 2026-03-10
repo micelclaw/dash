@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
@@ -113,8 +114,26 @@ function ProxySubSection() {
     );
   }
 
+  const navigate = useNavigate();
+
   return (
     <SettingSection title="Reverse Proxy" description="Caddy reverse proxy routes.">
+      {/* Full management link */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Full proxy management, DNS records, and subdomain requests</span>
+        <button
+          onClick={() => navigate('/proxy')}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: '0.75rem', fontWeight: 500,
+            color: '#3b82f6',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          Open Reverse Proxy &rarr;
+        </button>
+      </div>
+
       {/* Status */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Status</span>
@@ -213,156 +232,55 @@ function ProxySubSection() {
   );
 }
 
-// ─── VPN Sub-section ────────────────────────────────────
+// ─── VPN Sub-section (compact — links to /vpn module) ───
 
 function VpnSubSection() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<VpnStatus | null>(null);
-  const [peers, setPeers] = useState<VpnPeer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState(false);
-  const [newPeerName, setNewPeerName] = useState('');
-  const [showAddPeer, setShowAddPeer] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [statusRes, peersRes] = await Promise.all([
-        api.get<{ data: VpnStatus }>('/hal/network/vpn/status'),
-        api.get<{ data: VpnPeer[] }>('/hal/network/vpn/peers'),
-      ]);
-      setStatus(statusRes.data);
-      setPeers(peersRes.data);
-    } catch {
-      // Silent
-    }
+      const res = await api.get<{ data: VpnStatus }>('/hal/network/vpn/status');
+      setStatus(res.data);
+    } catch { /* silent */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const toggleVpn = async (enable: boolean) => {
-    setActing(true);
-    try {
-      await api.post(`/hal/network/vpn/${enable ? 'enable' : 'disable'}`);
-      toast.success(enable ? 'VPN enabled' : 'VPN disabled');
-      fetchData();
-    } catch {
-      toast.error(`Failed to ${enable ? 'enable' : 'disable'} VPN`);
-    }
-    setActing(false);
-  };
-
-  const addPeer = async () => {
-    if (!newPeerName.trim()) return;
-    try {
-      await api.post('/hal/network/vpn/peers', { name: newPeerName.trim() });
-      toast.success('VPN peer added');
-      setNewPeerName('');
-      setShowAddPeer(false);
-      fetchData();
-    } catch {
-      toast.error('Failed to add VPN peer');
-    }
-  };
-
-  const removePeer = async (id: string) => {
-    try {
-      await api.delete(`/hal/network/vpn/peers/${id}`);
-      toast.success('Peer removed');
-      fetchData();
-    } catch {
-      toast.error('Failed to remove peer');
-    }
-  };
-
-  if (loading) {
-    return (
-      <SettingSection title="VPN (WireGuard)" description="Manage VPN connections and peers.">
-        <div style={{ padding: '16px 0', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
-      </SettingSection>
-    );
-  }
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <SettingSection title="VPN (WireGuard)" description="Manage VPN connections and peers.">
-      {/* Status */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Status</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: status?.enabled ? '#22c55e' : '#6b7280' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: status?.enabled ? '#22c55e' : '#6b7280' }} />
-            {status?.enabled ? 'Enabled' : 'Disabled'}
-          </span>
-          <button
-            onClick={() => toggleVpn(!status?.enabled)}
-            disabled={acting}
-            style={{
-              height: 26, padding: '0 10px',
-              background: status?.enabled ? 'transparent' : 'var(--amber)',
-              color: status?.enabled ? 'var(--text-dim)' : '#06060a',
-              border: status?.enabled ? '1px solid var(--border)' : 'none',
-              borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600,
-              cursor: acting ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-sans)',
-            }}
-          >
-            {status?.enabled ? 'Disable' : 'Enable'}
-          </button>
+    <SettingSection title="VPN" description="WireGuard & Tailscale VPN management.">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
+          {loading ? (
+            <span style={{ color: 'var(--text-muted)' }}>Loading...</span>
+          ) : (
+            <>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: status?.enabled ? '#22c55e' : '#6b7280',
+              }} />
+              <span style={{ color: 'var(--text)' }}>
+                {status?.enabled ? 'Active' : 'Inactive'}
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                — {status?.peers_count ?? 0} peers
+              </span>
+            </>
+          )}
         </div>
-      </div>
-
-      {/* Peers */}
-      <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-            Peers ({peers.length})
-          </span>
-          <button
-            onClick={() => setShowAddPeer(!showAddPeer)}
-            style={{ height: 26, padding: '0 8px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <Plus size={12} /> Add Peer
-          </button>
-        </div>
-
-        {showAddPeer && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            <input
-              placeholder="Peer name"
-              value={newPeerName}
-              onChange={(e) => setNewPeerName(e.target.value)}
-              style={{ flex: 1, height: 30, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
-              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-              onKeyDown={(e) => e.key === 'Enter' && addPeer()}
-            />
-            <button onClick={addPeer} disabled={!newPeerName.trim()} style={{ height: 30, padding: '0 12px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', opacity: !newPeerName.trim() ? 0.5 : 1 }}>Save</button>
-            <button onClick={() => setShowAddPeer(false)} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer' }}>Cancel</button>
-          </div>
-        )}
-
-        {peers.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No peers configured</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {peers.map((p) => (
-              <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem' }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <span style={{ fontWeight: 500, color: 'var(--text)' }}>{p.name}</span>
-                  <span style={{ marginLeft: 8, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{p.allowed_ips}</span>
-                </div>
-                <button
-                  onClick={() => removePeer(p.id)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0 }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <button
+          onClick={() => navigate('/vpn')}
+          style={{
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            fontSize: '0.75rem', fontWeight: 500,
+            color: 'var(--amber)',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          Manage VPN →
+        </button>
       </div>
     </SettingSection>
   );
