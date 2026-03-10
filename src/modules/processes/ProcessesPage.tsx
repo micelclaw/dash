@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Search, RefreshCw, Play, Square, RotateCcw, FileText, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProcessesStore } from '@/stores/processes.store';
-import type { ClawProcess, OllamaLoadedModel } from '@/stores/processes.store';
+import type { ClawProcess, OllamaLoadedModel, MetricHistory } from '@/stores/processes.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { LogsPanel } from './LogsPanel';
 
@@ -25,6 +25,18 @@ function formatMemBytes(bytes: number): string {
   const gb = bytes / (1024 * 1024 * 1024);
   if (gb >= 0.1) return `${gb.toFixed(2)} GB`;
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+}
+
+function Sparkline({ data, color, width = 64, height = 20 }: { data: number[]; color: string; width?: number; height?: number }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data, 1);
+  const step = width / (data.length - 1);
+  const points = data.map((v, i) => `${i * step},${height - (v / max) * (height - 2) - 1}`).join(' ');
+  return (
+    <svg width={width} height={height} style={{ display: 'block', opacity: 0.8 }}>
+      <polyline fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" points={points} />
+    </svg>
+  );
 }
 
 function StatusBadge({ status }: { status: ClawProcess['status'] }) {
@@ -164,6 +176,7 @@ export function Component() {
   const stopProcess = useProcessesStore((s) => s.stopProcess);
   const startProcess = useProcessesStore((s) => s.startProcess);
   const ollamaStatus = useProcessesStore((s) => s.ollamaStatus);
+  const history = useProcessesStore((s) => s.history);
   const expandedProcessId = useProcessesStore((s) => s.expandedProcessId);
   const toggleExpandProcess = useProcessesStore((s) => s.toggleExpandProcess);
   const userRole = useAuthStore((s) => s.user?.role ?? 'user');
@@ -223,17 +236,18 @@ export function Component() {
         {stats && (
           <div style={{ display: 'flex', gap: 16, padding: '12px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0, background: 'var(--surface)', flexWrap: 'wrap' }}>
             {[
-              { label: 'Processes', value: `${stats.running}/${stats.total}` },
-              { label: 'CPU', value: `${(stats.cpu_total ?? 0).toFixed(1)}%` },
-              { label: 'Memory', value: `${(stats.memory_total_mb ?? 0).toFixed(0)} MB` },
+              { label: 'Processes', value: `${stats.running}/${stats.total}`, spark: null as number[] | null, color: '' },
+              { label: 'CPU', value: `${(stats.cpu_total ?? 0).toFixed(1)}%`, spark: history.cpu, color: 'var(--text-dim)' },
+              { label: 'Memory', value: `${(stats.memory_total_mb ?? 0).toFixed(0)} MB`, spark: history.memory, color: 'var(--text-dim)' },
               ...(ollamaStatus.gpu ? [
-                { label: 'GPU', value: `${ollamaStatus.gpu.gpu_percent}%` },
-                { label: 'VRAM', value: `${ollamaStatus.gpu.vram_used_mb} / ${ollamaStatus.gpu.vram_total_mb} MB` },
+                { label: 'GPU', value: `${ollamaStatus.gpu.gpu_percent}%`, spark: history.gpu, color: 'var(--amber)' },
+                { label: 'VRAM', value: `${ollamaStatus.gpu.vram_used_mb} / ${ollamaStatus.gpu.vram_total_mb} MB`, spark: history.vram, color: 'var(--amber)' },
               ] : []),
             ].map((item) => (
-              <div key={item.label} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+              <div key={item.label} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</span>
                 <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: item.label === 'GPU' || item.label === 'VRAM' ? 'var(--amber)' : 'var(--text)' }}>{item.value}</span>
+                {item.spark && item.spark.length >= 2 && <Sparkline data={item.spark} color={item.color} />}
               </div>
             ))}
           </div>

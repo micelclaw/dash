@@ -69,6 +69,22 @@ interface RawStats {
   memory_total: number | null;
 }
 
+// ─── History ────────────────────────────────────────────
+
+const HISTORY_MAX = 30; // 30 × 10s = 5 minutes
+
+export interface MetricHistory {
+  cpu: number[];
+  memory: number[];
+  gpu: number[];
+  vram: number[];
+}
+
+function pushMetric(arr: number[], val: number): number[] {
+  const next = [...arr, val];
+  return next.length > HISTORY_MAX ? next.slice(next.length - HISTORY_MAX) : next;
+}
+
 // ─── Store ──────────────────────────────────────────────
 
 type SortKey = 'cpu' | 'mem' | 'name' | 'pid' | 'status';
@@ -86,6 +102,7 @@ interface ProcessesState {
   logsLoading: boolean;
   ollamaStatus: OllamaStatus;
   expandedProcessId: string | null;
+  history: MetricHistory;
 
   fetchProcesses: () => Promise<void>;
   restartProcess: (id: string) => Promise<void>;
@@ -113,6 +130,7 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
   logsLoading: false,
   ollamaStatus: { models: [], gpu: null },
   expandedProcessId: null,
+  history: { cpu: [], memory: [], gpu: [], vram: [] },
 
   fetchProcesses: async () => {
     set({ loading: true, error: null });
@@ -141,7 +159,15 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
         cpu_total: raw.cpu_total ?? 0,
         memory_total_mb: (raw.memory_total ?? 0) / (1024 * 1024),
       };
-      set({ processes, stats, loading: false });
+      const h = get().history;
+      set({
+        processes, stats, loading: false,
+        history: {
+          ...h,
+          cpu: pushMetric(h.cpu, stats.cpu_total),
+          memory: pushMetric(h.memory, stats.memory_total_mb),
+        },
+      });
       // Always refresh ollama status (GPU + loaded models) in background
       get().fetchOllamaStatus();
     } catch {
@@ -152,7 +178,15 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
   fetchOllamaStatus: async () => {
     try {
       const res = await api.get<{ data: OllamaStatus }>('/hal/processes/ollama/status');
-      set({ ollamaStatus: res.data });
+      const h = get().history;
+      set({
+        ollamaStatus: res.data,
+        history: {
+          ...h,
+          gpu: pushMetric(h.gpu, res.data.gpu?.gpu_percent ?? 0),
+          vram: pushMetric(h.vram, res.data.gpu?.vram_used_mb ?? 0),
+        },
+      });
     } catch {
       // Non-fatal — Ollama may not be running
     }

@@ -2,6 +2,7 @@
 // Modal for sending a document for digital signature via DocuSeal.
 
 import { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Plus, Trash2, Send, Loader2 } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
 
@@ -62,7 +63,7 @@ export function SignatureDialog({ fileId, filename, open, onClose }: SignatureDi
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <>
       <div onClick={onClose} style={backdropStyle} />
       <div style={dialogStyle}>
@@ -148,7 +149,8 @@ export function SignatureDialog({ fileId, filename, open, onClose }: SignatureDi
 
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
 

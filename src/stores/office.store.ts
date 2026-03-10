@@ -166,7 +166,7 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   sendForSignature: async (fileId, signers, message) => {
     set({ signatureLoading: true });
     try {
-      const res = await api.post<{ data: SignatureSubmission }>('/office/sign/send', { file_id: fileId, signers, message });
+      const res = await api.post<{ data: SignatureSubmission }>('/office/sign/send', { fileId, signers, message });
       const submission = res.data;
       // Refresh list
       await get().fetchSubmissions();

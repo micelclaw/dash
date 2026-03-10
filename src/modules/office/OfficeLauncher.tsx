@@ -11,6 +11,7 @@ import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { api } from '@/services/api';
 import { SignaturesList } from './SignaturesList';
+import { SignatureDialog } from './SignatureDialog';
 
 // ─── MIME groups per app tab ─────────────────────────────────────────
 
@@ -73,6 +74,7 @@ function FileContextMenu({ state, onClose, onAction }: {
   }, [onClose]);
 
   const items = [
+    { id: 'sign', label: 'Firmar con DocuSeal', icon: PenTool },
     { id: 'rename',    label: 'Rename',       icon: Pencil },
     { id: 'copy',      label: 'Create copy',  icon: Files },
     { id: 'duplicate', label: 'Copy',         icon: Copy },
@@ -207,6 +209,7 @@ export function Component() {
   const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading } = useOfficeStore();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [renaming, setRenaming] = useState<RecentDoc | null>(null);
+  const [signingDoc, setSigningDoc] = useState<{ id: string; filename: string } | null>(null);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -247,6 +250,9 @@ export function Component() {
 
   const handleCtxAction = useCallback(async (action: string, doc: RecentDoc) => {
     switch (action) {
+      case 'sign':
+        setSigningDoc({ id: doc.id, filename: doc.filename });
+        break;
       case 'rename':
         setRenaming(doc);
         break;
@@ -421,6 +427,16 @@ export function Component() {
           doc={renaming}
           onClose={() => setRenaming(null)}
           onConfirm={handleRename}
+        />
+      )}
+
+      {/* ─── Signature Dialog ──────────────────────────────── */}
+      {signingDoc && (
+        <SignatureDialog
+          fileId={signingDoc.id}
+          filename={signingDoc.filename}
+          open
+          onClose={() => setSigningDoc(null)}
         />
       )}
 

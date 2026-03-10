@@ -3,11 +3,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download, PenTool } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
 import { api } from '@/services/api';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
+import { SignatureDialog } from './SignatureDialog';
 
 const ONLYOFFICE_API_URL = import.meta.env.VITE_ONLYOFFICE_URL ?? 'http://127.0.0.1:8080';
 const HEALTH_POLL_MS = 3_000;
@@ -28,7 +29,42 @@ export function Component() {
   const editorRef = useRef<unknown>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState<string | null>(null);
-  const { createSession, clearSession, fullscreen, toggleFullscreen } = useOfficeStore();
+  const [startupLogs, setStartupLogs] = useState<string[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+  const { createSession, clearSession, fullscreen, toggleFullscreen, currentSession } = useOfficeStore();
+  const [signOpen, setSignOpen] = useState(false);
+  const filename = (currentSession?.config as any)?.document?.title ?? 'document';
+
+  // ─── Poll container logs during startup ──────────────────────────
+  const seenLogsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (phase !== 'starting' && phase !== 'waiting') return;
+    seenLogsRef.current.clear();
+    setStartupLogs([]);
+
+    const poll = async () => {
+      try {
+        const res = await api.get<{ data: { lines: string[] } }>(
+          '/hal/processes/docker:claw-onlyoffice/logs?tail=15&since=5s',
+        );
+        const lines = res.data?.lines ?? [];
+        const fresh = lines.filter((l) => !seenLogsRef.current.has(l));
+        if (fresh.length) {
+          for (const l of fresh) seenLogsRef.current.add(l);
+          setStartupLogs((prev) => [...prev, ...fresh].slice(-100));
+        }
+      } catch { /* container may not exist yet */ }
+    };
+
+    poll();
+    const id = setInterval(poll, 3_000);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [startupLogs]);
 
   // ─── AI Bridge ────────────────────────────────────────────────────
   const bridge = useOfficeBridge();
@@ -196,6 +232,21 @@ export function Component() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               This may take up to 90 seconds on first launch
             </span>
+            {startupLogs.length > 0 && (
+              <div style={{
+                marginTop: 12, width: '100%', maxWidth: 600,
+                maxHeight: 180, overflow: 'auto',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)', padding: '8px 12px',
+                fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+                lineHeight: 1.6, color: 'var(--text-muted)',
+              }}>
+                {startupLogs.map((line, i) => (
+                  <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
+                ))}
+                <div ref={logsEndRef} />
+              </div>
+            )}
           </>
         )}
 
@@ -281,6 +332,10 @@ export function Component() {
           </button>
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
           <div style={{ flex: 1 }} />
+          <button onClick={() => setSignOpen(true)} style={signBtn} title="Firmar con DocuSeal">
+            <PenTool size={14} />
+            <span>Firmar con DocuSeal</span>
+          </button>
           <button
             onClick={toggleFullscreen}
             style={iconBtn}
@@ -307,6 +362,9 @@ export function Component() {
         </button>
       )}
 
+      {/* ─── Signature dialog ────────────────────────── */}
+      <SignatureDialog fileId={fileId!} filename={filename} open={signOpen} onClose={() => setSignOpen(false)} />
+
       {/* ─── Editor container ─────────────────────────── */}
       <div ref={containerRef} id="onlyoffice-editor" style={{ flex: 1 }} />
     </div>
@@ -328,4 +386,13 @@ const primaryBtn: React.CSSProperties = {
   padding: '6px 16px', background: 'var(--mod-office)',
   border: 'none', borderRadius: 'var(--radius-md)',
   color: '#fff', cursor: 'pointer', fontSize: 13,
+};
+
+const signBtn: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '4px 12px',
+  background: '#7c3aed',
+  border: 'none', borderRadius: 'var(--radius-md)',
+  color: '#fff', cursor: 'pointer', fontSize: 12,
+  fontWeight: 500, whiteSpace: 'nowrap',
 };
