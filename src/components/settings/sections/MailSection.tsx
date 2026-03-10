@@ -7,6 +7,7 @@ import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
 import { SaveBar } from '../SaveBar';
+import { MailServerSection } from './MailServerSection';
 
 const SIGNATURE_OPTIONS = [
   { value: 'below_reply', label: 'Below reply' },
@@ -184,6 +185,8 @@ export function MailSection() {
       </SettingSection>
 
       <SaveBar visible={!!dirty.mail} saving={saving} onSave={handleSave} onDiscard={() => resetSection('mail')} />
+
+      <MailServerSection />
     </>
   );
 }

@@ -61,7 +61,77 @@ export function Component() {
     offset: page * PAGE_SIZE,
   });
 
-  const { accounts } = useEmailAccounts();
+  const { accounts, refetch: refetchAccounts } = useEmailAccounts();
+
+  // Account context menu actions
+  const handleUnsyncAccount = useCallback(async (id: string) => {
+    const acc = accounts.find(a => a.id === id);
+    if (!acc) return;
+    if (!window.confirm(`Unsync "${acc.name}"? The account will be removed from Mail.`)) return;
+    try {
+      await api.delete(`/email-accounts/${id}`);
+      toast.success(`"${acc.name}" removed`);
+      if (activeAccount === id) setActiveAccount(null);
+      refetchAccounts();
+    } catch {
+      toast.error('Failed to unsync account');
+    }
+  }, [accounts, activeAccount, setActiveAccount, refetchAccounts]);
+
+  const handleChangeAccountColor = useCallback(async (id: string, color: string) => {
+    try {
+      await api.patch(`/email-accounts/${id}`, { color });
+      refetchAccounts();
+    } catch (err: any) {
+      toast.error(`Failed to change color: ${err?.message || 'unknown error'}`);
+    }
+  }, [refetchAccounts]);
+
+  // Export
+  const handleExport = useCallback(async (accountId: string | null, folders: string[]) => {
+    const isWindows = navigator.userAgent.includes('Windows');
+
+    try {
+      if (isWindows) {
+        // Download CSV to browser
+        const { useAuthStore } = await import('@/stores/auth.store');
+        const token = useAuthStore.getState().tokens?.accessToken;
+        const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+        const res = await fetch(`${baseUrl}/api/v1/emails/export/csv`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ account_id: accountId, folders }),
+        });
+        if (!res.ok) throw new Error('Export failed');
+
+        const blob = await res.blob();
+        const disposition = res.headers.get('Content-Disposition') || '';
+        const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+        const filename = filenameMatch?.[1] || 'export-mails.csv';
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`Downloaded ${filename}`);
+      } else {
+        // Save to Drive on server
+        const res = await api.post<{ data: { saved_to: string; email_count: number } }>('/emails/export/csv', {
+          account_id: accountId,
+          folders,
+          save_to_drive: true,
+        });
+        toast.success(`Saved ${res.data.saved_to} (${res.data.email_count} emails)`);
+      }
+    } catch {
+      toast.error('Export failed');
+    }
+  }, []);
 
   // Sync
   const [syncing, setSyncing] = useState(false);
@@ -259,6 +329,9 @@ export function Component() {
           syncing={syncing}
           accounts={accounts}
           emails={emails}
+          onUnsyncAccount={handleUnsyncAccount}
+          onChangeAccountColor={handleChangeAccountColor}
+          onExport={handleExport}
         />
       </div>
 
