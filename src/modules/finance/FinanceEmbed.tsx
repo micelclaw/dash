@@ -163,7 +163,7 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
   }, [phase, checkStatus]);
 
   // ─── Log panel (shared between installing/starting) ────────────
-  const logPanel = startupLogs.length > 0 && (
+  const logPanel = (phase === 'installing' || phase === 'starting') && (
     <div style={{
       marginTop: 12, width: '100%', maxWidth: 600,
       maxHeight: 180, overflow: 'auto',
@@ -172,6 +172,9 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
       fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
       lineHeight: 1.6, color: 'var(--text-muted)',
     }}>
+      {startupLogs.length === 0 && (
+        <div style={{ opacity: 0.5 }}>Waiting for container logs...</div>
+      )}
       {startupLogs.map((line, i) => (
         <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
       ))}
