@@ -181,7 +181,12 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
 
   // Ready — iframe view
   if (phase === 'ready' && appStatus) {
-    const proxyUrl = `/api/v1/finance/${serviceName}/ui/`;
+    // Absolute URL to Core's reverse proxy — NOT relative (which goes through Vite).
+    // Firefly/IN set cookies for the proxy host; the iframe must stay on the same
+    // origin so cookies (session + CSRF) are sent on form POSTs.
+    // Same pattern as Portainer (portainer.service.ts → PORTAINER_URL).
+    const corePort = window.location.port === '5173' ? '7200' : window.location.port;
+    const proxyUrl = `http://${window.location.hostname}:${corePort}/api/v1/finance/${serviceName}/ui/`;
     const directUrl = `http://localhost:${port}`;
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
