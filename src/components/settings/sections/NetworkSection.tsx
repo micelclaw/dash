@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, Terminal, X, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
@@ -60,10 +60,19 @@ interface FirewallRule {
 
 // ─── Proxy Sub-section ─────────────────────────────────
 
+interface ProcessLogData {
+  logs: string[];
+  success: boolean;
+  action: 'start' | 'stop';
+}
+
 function ProxySubSection() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<ProxyStatus | null>(null);
   const [routes, setRoutes] = useState<ProxyRoute[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<'start' | 'stop' | null>(null);
+  const [processLog, setProcessLog] = useState<ProcessLogData | null>(null);
   const [newRoute, setNewRoute] = useState({ path: '', upstream: '', description: '' });
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -82,6 +91,24 @@ function ProxySubSection() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggleProxy = async (start: boolean) => {
+    const action = start ? 'start' : 'stop';
+    setActing(action);
+    setProcessLog(null);
+    try {
+      const res = await api.post<{ data: { action: string; logs: string[]; success: boolean } }>(`/hal/network/proxy/${action}`);
+      const { logs, success } = res.data;
+      setProcessLog({ logs, success, action });
+      if (success) toast.success(start ? 'Caddy started' : 'Caddy stopped');
+      else toast.error(`Caddy failed to ${action}`);
+      fetchData();
+    } catch {
+      setProcessLog({ logs: ['Failed to connect to server'], success: false, action });
+      toast.error(`Failed to ${action} Caddy`);
+    }
+    setActing(null);
+  };
 
   const addRoute = async () => {
     if (!newRoute.path || !newRoute.upstream) return;
@@ -114,8 +141,6 @@ function ProxySubSection() {
     );
   }
 
-  const navigate = useNavigate();
-
   return (
     <SettingSection title="Reverse Proxy" description="Caddy reverse proxy routes.">
       {/* Full management link */}
@@ -137,11 +162,34 @@ function ProxySubSection() {
       {/* Status */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Status</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: status?.running ? '#22c55e' : '#6b7280' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: status?.running ? '#22c55e' : '#6b7280' }} />
-          {status?.running ? 'Running' : 'Stopped'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: status?.running ? '#22c55e' : '#6b7280' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: status?.running ? '#22c55e' : '#6b7280' }} />
+            {status?.running ? 'Running' : 'Stopped'}
+          </span>
+          <button
+            onClick={() => toggleProxy(!status?.running)}
+            disabled={!!acting}
+            style={{
+              height: 26, padding: '0 10px',
+              background: acting ? 'var(--surface-hover)' : status?.running ? 'transparent' : 'var(--amber)',
+              color: acting ? 'var(--text-muted)' : status?.running ? 'var(--text-dim)' : '#06060a',
+              border: status?.running ? '1px solid var(--border)' : 'none',
+              borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600,
+              cursor: acting ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            {acting && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+            {acting ? (acting === 'start' ? 'Starting...' : 'Stopping...') : status?.running ? 'Stop' : 'Start'}
+          </button>
+        </div>
       </div>
+
+      {/* Process Log */}
+      {(acting || processLog) && (
+        <SettingsLogPanel acting={acting} processLog={processLog} onClose={() => setProcessLog(null)} />
+      )}
 
       {status?.domain && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
@@ -229,6 +277,82 @@ function ProxySubSection() {
         )}
       </div>
     </SettingSection>
+  );
+}
+
+function SettingsLogPanel({
+  acting,
+  processLog,
+  onClose,
+}: {
+  acting: 'start' | 'stop' | null;
+  processLog: ProcessLogData | null;
+  onClose: () => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [processLog, acting]);
+
+  const borderColor = acting
+    ? 'rgba(59, 130, 246, 0.3)'
+    : processLog?.success
+      ? 'rgba(34, 197, 94, 0.3)'
+      : 'rgba(239, 68, 68, 0.3)';
+
+  return (
+    <div style={{
+      borderRadius: 'var(--radius-sm)',
+      border: `1px solid ${borderColor}`,
+      background: 'rgba(0, 0, 0, 0.25)',
+      margin: '8px 0',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '6px 10px',
+        background: 'rgba(0, 0, 0, 0.15)',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Terminal size={12} style={{ color: 'var(--text-muted)' }} />
+          <span style={{
+            fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono, monospace)', textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            {acting ? `${acting === 'start' ? 'Starting' : 'Stopping'}...` : processLog?.success ? 'Done' : 'Failed'}
+          </span>
+        </div>
+        {!acting && (
+          <button onClick={onClose} style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: 'var(--text-muted)', display: 'flex' }}>
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      <div ref={scrollRef} style={{
+        padding: '8px 10px', maxHeight: 120, overflowY: 'auto',
+        fontFamily: 'var(--font-mono, monospace)', fontSize: '0.6875rem', lineHeight: 1.7,
+      }}>
+        {acting && !processLog && (
+          <div style={{ color: 'var(--text-muted)' }}>
+            <span style={{ color: '#6b7280' }}>$</span> caddy {acting}...
+          </div>
+        )}
+        {processLog?.logs.map((line, i) => (
+          <div key={i} style={{
+            color: line.startsWith('ERROR') ? '#ef4444'
+              : line.startsWith('[WARN]') ? '#f59e0b'
+              : line.startsWith('$') ? '#6b7280'
+              : line.includes('successfully') ? '#22c55e'
+              : 'var(--text-muted)',
+            whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+          }}>
+            {line}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

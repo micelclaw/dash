@@ -33,6 +33,19 @@ const DEFAULTS: LightningConfig = {
   network: 'bitcoin',
 };
 
+async function waitForService(service: string, timeoutMs: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res = await api.get<{ data: { services: Array<{ name: string; running: boolean }> } }>('/crypto/status');
+      const svc = res.data.services.find((s: any) => s.name === service);
+      if (svc?.running) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
 export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Props) {
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<LightningConfig>({ ...DEFAULTS });
@@ -59,6 +72,7 @@ export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Prop
     setError(null);
     try {
       await api.post('/crypto/lightning/start', { config });
+      await waitForService('lightning', 60_000);
       setStep('done');
     } catch (err: any) {
       setError(err?.message || 'Failed to install Core Lightning');

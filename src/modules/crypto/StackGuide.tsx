@@ -16,11 +16,10 @@ interface Props {
 const ALL_IDS = ['bitcoind', 'lightning', 'electrs', 'toshi-moto', 'btcpay', 'monerod'];
 
 function getDotColor(svc: ServiceInfo | undefined): string {
-  if (!svc) return '#6b7280';
-  if (!svc.installed) return '#6b7280';
-  if (!svc.running) return '#6b7280';
-  if (svc.phase === 'syncing') return '#f59e0b';
-  return '#22c55e';
+  if (!svc || !svc.installed) return '#ef4444'; // red — not installed
+  if (!svc.running) return '#f59e0b';            // amber — stopped
+  if (svc.phase === 'syncing') return '#f59e0b'; // amber — syncing
+  return '#22c55e';                               // green — running
 }
 
 function getStatusLabel(svc: ServiceInfo | undefined): string {

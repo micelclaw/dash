@@ -5,7 +5,7 @@ import { api } from '@/services/api';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useAuthStore } from '@/stores/auth.store';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
 interface MultimodalModelStatus {
   id: string;

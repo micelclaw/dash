@@ -3,12 +3,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download, PenTool } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
 import { api } from '@/services/api';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
-import { SignatureDialog } from './SignatureDialog';
 
 const ONLYOFFICE_API_URL = import.meta.env.VITE_ONLYOFFICE_URL ?? 'http://127.0.0.1:8080';
 const HEALTH_POLL_MS = 3_000;
@@ -22,6 +21,10 @@ interface OfficeStatusResponse {
   };
 }
 
+function ts(): string {
+  return new Date().toLocaleTimeString('es-ES', { hour12: false });
+}
+
 export function Component() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
@@ -31,22 +34,35 @@ export function Component() {
   const [error, setError] = useState<string | null>(null);
   const [startupLogs, setStartupLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [pendingSession, setPendingSession] = useState<{ config: any; token: string } | null>(null);
   const { createSession, clearSession, fullscreen, toggleFullscreen, currentSession } = useOfficeStore();
-  const [signOpen, setSignOpen] = useState(false);
   const filename = (currentSession?.config as any)?.document?.title ?? 'document';
+
+  // Track whether we've been through a startup phase (to keep logs visible during brief loading transitions)
+  const wasWaitingRef = useRef(false);
+  // Track if first poll (to use broader log window)
+  const isFirstPollRef = useRef(true);
+
+  // Helper to add a client-side progress message
+  const addLog = useCallback((msg: string) => {
+    setStartupLogs((prev) => [...prev, `[${ts()}] ${msg}`].slice(-100));
+  }, []);
 
   // ─── Poll container logs during startup ──────────────────────────
   const seenLogsRef = useRef(new Set<string>());
   useEffect(() => {
     if (phase !== 'starting' && phase !== 'waiting') return;
-    seenLogsRef.current.clear();
-    setStartupLogs([]);
+    wasWaitingRef.current = true;
 
     const poll = async () => {
       try {
-        const res = await api.get<{ data: { lines: string[] } }>(
-          '/hal/processes/docker:claw-onlyoffice/logs?tail=15&since=5s',
-        );
+        // First poll: get last 30 lines regardless of age. Subsequent: last 15 from last 5s.
+        const query = isFirstPollRef.current
+          ? '/hal/processes/docker:claw-onlyoffice/logs?tail=30'
+          : '/hal/processes/docker:claw-onlyoffice/logs?tail=15&since=5s';
+        isFirstPollRef.current = false;
+
+        const res = await api.get<{ data: { lines: string[] } }>(query);
         const lines = res.data?.lines ?? [];
         const fresh = lines.filter((l) => !seenLogsRef.current.has(l));
         if (fresh.length) {
@@ -84,11 +100,15 @@ export function Component() {
   }, []);
 
   // ─── Load the ONLYOFFICE JS API script (with retries) ───────────────
-  const loadApiScript = useCallback(async (): Promise<boolean> => {
+  const loadApiScript = useCallback(async (log: (msg: string) => void): Promise<boolean> => {
     if ((window as any).DocsAPI) return true;
 
-    const maxAttempts = 20; // Up to ~60s of retries (3s between each)
+    const maxAttempts = 40; // Up to ~120s of retries (3s between each)
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0 && attempt % 5 === 0) {
+        log(`Loading ONLYOFFICE editor script (attempt ${attempt}/${maxAttempts})...`);
+      }
+
       // Remove any previous failed script tags
       const existing = document.querySelector('script[data-onlyoffice-api]');
       if (existing) existing.remove();
@@ -117,73 +137,106 @@ export function Component() {
   const initEditor = useCallback(async () => {
     if (!fileId) return;
 
+    // Reset state at the beginning of a full init
+    seenLogsRef.current.clear();
+    isFirstPollRef.current = true;
+    wasWaitingRef.current = false;
+    setStartupLogs([]);
+    setPendingSession(null);
+    if (editorRef.current && (editorRef.current as any).destroyEditor) {
+      (editorRef.current as any).destroyEditor();
+    }
+    editorRef.current = null;
     setPhase('loading');
     setError(null);
 
     try {
       // 1. Check ONLYOFFICE status
+      addLog('Checking ONLYOFFICE status...');
       let ooRunning = false;
       try {
         const statusRes = await api.get<OfficeStatusResponse>('/office/status');
         const oo = statusRes.data.onlyoffice;
 
         if (!oo.installed) {
+          addLog('ONLYOFFICE is not installed.');
           setPhase('not-installed');
           return;
         }
 
         ooRunning = oo.running;
+        addLog(ooRunning ? 'ONLYOFFICE container is running.' : 'ONLYOFFICE container is not running.');
       } catch {
-        // Status endpoint might fail if core is down — proceed anyway
+        addLog('Could not reach status endpoint — proceeding anyway.');
       }
 
       // 2. Start ONLYOFFICE if not running
       if (!ooRunning) {
         setPhase('starting');
+        addLog('Sending start command...');
         try {
           await api.post('/office/start/onlyoffice');
+          addLog('Start command sent. Waiting for container to report running...');
         } catch {
-          // Start might fail (RAM budget, etc.) — we'll still poll
+          addLog('Start command failed (RAM budget?) — polling anyway...');
         }
 
         setPhase('waiting');
         const started = await waitForOnlyOffice();
         if (!started) {
+          addLog('ERROR: ONLYOFFICE did not start within the timeout.');
           setError('ONLYOFFICE did not start within the timeout. Check available RAM.');
           setPhase('error');
           return;
         }
+        addLog('Container is running.');
       }
 
       // 3. Create editor session (JWT + config)
-      setPhase('loading');
+      setPhase('waiting');
+      addLog('Creating editor session...');
       const session = await createSession(fileId);
+      addLog('Session created. Loading ONLYOFFICE editor script...');
 
       // 4. Load ONLYOFFICE JS API (retries until ONLYOFFICE internal services are ready)
-      setPhase('waiting');
-      const apiLoaded = await loadApiScript();
+      const apiLoaded = await loadApiScript(addLog);
       if (!apiLoaded) {
+        addLog('ERROR: Could not load ONLYOFFICE editor script after 40 attempts.');
         setError('Could not connect to ONLYOFFICE Document Server after multiple attempts. Check that port 8080 is accessible.');
         setPhase('error');
         return;
       }
 
-      // 5. Initialize the editor
+      // 5. Store session and switch to ready (editor created in useEffect after DOM renders)
+      addLog('Initializing editor...');
+      setPendingSession(session);
+      setPhase('ready');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open editor';
+      addLog(`ERROR: ${msg}`);
+      setError(msg);
+      setPhase('error');
+    }
+  }, [fileId, createSession, waitForOnlyOffice, loadApiScript, addLog]);
+
+  // ─── Create editor once phase=ready and container div is in the DOM ──
+  useEffect(() => {
+    if (phase !== 'ready' || !pendingSession || editorRef.current) return;
+
+    // Small delay to ensure React has flushed the DOM
+    const raf = requestAnimationFrame(() => {
       if (containerRef.current && (window as any).DocsAPI) {
         editorRef.current = new (window as any).DocsAPI.DocEditor('onlyoffice-editor', {
-          ...session.config,
-          token: session.token,
+          ...pendingSession.config,
+          token: pendingSession.token,
           height: '100%',
           width: '100%',
         });
       }
-
-      setPhase('ready');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to open editor');
-      setPhase('error');
-    }
-  }, [fileId, createSession, waitForOnlyOffice, loadApiScript]);
+      setPendingSession(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [phase, pendingSession]);
 
   useEffect(() => {
     initEditor();
@@ -208,6 +261,9 @@ export function Component() {
     return () => window.removeEventListener('keydown', handler);
   }, [fullscreen, toggleFullscreen]);
 
+  // Should the log panel be visible?
+  const showLogs = phase === 'starting' || phase === 'waiting' || (phase === 'loading' && wasWaitingRef.current);
+
   // ─── Non-ready states ──────────────────────────────────────────────
   if (phase !== 'ready') {
     return (
@@ -216,10 +272,12 @@ export function Component() {
         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 16, color: 'var(--text-dim)', background: 'var(--bg)',
       }}>
-        {phase === 'loading' && (
+        {(phase === 'loading') && (
           <>
             <Loader2 size={32} style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: 14 }}>Opening document...</span>
+            <span style={{ fontSize: 14 }}>
+              {wasWaitingRef.current ? 'Preparing editor...' : 'Opening document...'}
+            </span>
           </>
         )}
 
@@ -232,21 +290,6 @@ export function Component() {
             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               This may take up to 90 seconds on first launch
             </span>
-            {startupLogs.length > 0 && (
-              <div style={{
-                marginTop: 12, width: '100%', maxWidth: 600,
-                maxHeight: 180, overflow: 'auto',
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)', padding: '8px 12px',
-                fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
-                lineHeight: 1.6, color: 'var(--text-muted)',
-              }}>
-                {startupLogs.map((line, i) => (
-                  <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
-                ))}
-                <div ref={logsEndRef} />
-              </div>
-            )}
           </>
         )}
 
@@ -308,6 +351,43 @@ export function Component() {
           </>
         )}
 
+        {/* ─── Log panel — always visible during startup/waiting ──── */}
+        {showLogs && (
+          <div style={{
+            marginTop: 12, width: '100%', maxWidth: 600,
+            maxHeight: 200, minHeight: 60, overflow: 'auto',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px',
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+            lineHeight: 1.6, color: 'var(--text-muted)',
+          }}>
+            {startupLogs.length === 0 && (
+              <div style={{ color: 'var(--text-muted)', opacity: 0.5 }}>Fetching logs...</div>
+            )}
+            {startupLogs.map((line, i) => (
+              <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
+            ))}
+            <div ref={logsEndRef} />
+          </div>
+        )}
+
+        {/* ─── Log panel in error state — show last logs ──── */}
+        {phase === 'error' && startupLogs.length > 0 && (
+          <div style={{
+            marginTop: 8, width: '100%', maxWidth: 600,
+            maxHeight: 150, overflow: 'auto',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: '8px 12px',
+            fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+            lineHeight: 1.6, color: 'var(--text-muted)',
+          }}>
+            {startupLogs.map((line, i) => (
+              <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
+            ))}
+            <div ref={logsEndRef} />
+          </div>
+        )}
+
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -332,10 +412,6 @@ export function Component() {
           </button>
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
           <div style={{ flex: 1 }} />
-          <button onClick={() => setSignOpen(true)} style={signBtn} title="Firmar con DocuSeal">
-            <PenTool size={14} />
-            <span>Firmar con DocuSeal</span>
-          </button>
           <button
             onClick={toggleFullscreen}
             style={iconBtn}
@@ -362,9 +438,6 @@ export function Component() {
         </button>
       )}
 
-      {/* ─── Signature dialog ────────────────────────── */}
-      <SignatureDialog fileId={fileId!} filename={filename} open={signOpen} onClose={() => setSignOpen(false)} />
-
       {/* ─── Editor container ─────────────────────────── */}
       <div ref={containerRef} id="onlyoffice-editor" style={{ flex: 1 }} />
     </div>
@@ -386,13 +459,4 @@ const primaryBtn: React.CSSProperties = {
   padding: '6px 16px', background: 'var(--mod-office)',
   border: 'none', borderRadius: 'var(--radius-md)',
   color: '#fff', cursor: 'pointer', fontSize: 13,
-};
-
-const signBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6,
-  padding: '4px 12px',
-  background: '#7c3aed',
-  border: 'none', borderRadius: 'var(--radius-md)',
-  color: '#fff', cursor: 'pointer', fontSize: 12,
-  fontWeight: 500, whiteSpace: 'nowrap',
 };

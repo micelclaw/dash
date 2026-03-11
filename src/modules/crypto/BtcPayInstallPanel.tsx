@@ -13,6 +13,19 @@ interface Props {
   onDone: () => void;
 }
 
+async function waitForService(service: string, timeoutMs: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res = await api.get<{ data: { services: Array<{ name: string; running: boolean }> } }>('/crypto/status');
+      const svc = res.data.services.find((s: any) => s.name === service);
+      if (svc?.running) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
 export function BtcPayInstallPanel({ btcRunning, lightningRunning, onClose, onDone }: Props) {
   const [step, setStep] = useState<Step>('info');
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +37,7 @@ export function BtcPayInstallPanel({ btcRunning, lightningRunning, onClose, onDo
     setError(null);
     try {
       await api.post('/crypto/btcpay/start');
+      await waitForService('btcpay', 120_000);
       setStep('done');
     } catch (err: any) {
       setError(err?.message || 'Failed to install BTCPay Server');

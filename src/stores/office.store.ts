@@ -6,7 +6,7 @@ import { api } from '@/services/api';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf-viewer' | 'pdf-tools' | 'signatures';
+export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf-viewer' | 'pdf-tools';
 
 interface ServiceSubStatus {
   installed: boolean;
@@ -19,7 +19,7 @@ interface ServiceSubStatus {
 interface OfficeStatus {
   onlyoffice: ServiceSubStatus;
   stirling_pdf: ServiceSubStatus;
-  docuseal: ServiceSubStatus;
+  documenso: ServiceSubStatus;
 }
 
 interface EditorSession {
@@ -39,23 +39,6 @@ export interface RecentDoc {
   parent_folder: string;
 }
 
-export interface SignatureSubmitter {
-  id: number;
-  name: string;
-  email: string;
-  status: 'pending' | 'opened' | 'sent' | 'completed' | 'declined';
-  completed_at: string | null;
-}
-
-export interface SignatureSubmission {
-  id: number;
-  source: string;
-  status: 'pending' | 'completed' | 'expired';
-  created_at: string;
-  updated_at: string;
-  submitters: SignatureSubmitter[];
-}
-
 // ─── Store ───────────────────────────────────────────────────────────
 
 interface OfficeState {
@@ -65,8 +48,6 @@ interface OfficeState {
   recentDocs: RecentDoc[];
   fullscreen: boolean;
   loading: boolean;
-  submissions: SignatureSubmission[];
-  signatureLoading: boolean;
 
   setActiveApp: (app: OfficeApp) => void;
   toggleFullscreen: () => void;
@@ -76,9 +57,6 @@ interface OfficeState {
   createNewDocument: (type: 'docx' | 'xlsx' | 'pptx', filename?: string) => Promise<EditorSession>;
   startService: (service: string) => Promise<void>;
   clearSession: () => void;
-  fetchSubmissions: () => Promise<void>;
-  sendForSignature: (fileId: string, signers: { name: string; email: string }[], message?: string) => Promise<SignatureSubmission>;
-  downloadSignedPdf: (submissionId: number) => Promise<{ fileId: string; filename: string }>;
 }
 
 export const useOfficeStore = create<OfficeState>((set, get) => ({
@@ -88,8 +66,6 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   recentDocs: [],
   fullscreen: false,
   loading: false,
-  submissions: [],
-  signatureLoading: false,
 
   setActiveApp: (app) => set({ activeApp: app }),
 
@@ -152,40 +128,4 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   },
 
   clearSession: () => set({ currentSession: null }),
-
-  fetchSubmissions: async () => {
-    set({ signatureLoading: true });
-    try {
-      const res = await api.get<{ data: SignatureSubmission[] }>('/office/sign/submissions');
-      set({ submissions: res.data ?? [], signatureLoading: false });
-    } catch {
-      set({ submissions: [], signatureLoading: false });
-    }
-  },
-
-  sendForSignature: async (fileId, signers, message) => {
-    set({ signatureLoading: true });
-    try {
-      const res = await api.post<{ data: SignatureSubmission }>('/office/sign/send', { fileId, signers, message });
-      const submission = res.data;
-      // Refresh list
-      await get().fetchSubmissions();
-      return submission;
-    } catch (err) {
-      set({ signatureLoading: false });
-      throw err;
-    }
-  },
-
-  downloadSignedPdf: async (submissionId) => {
-    set({ signatureLoading: true });
-    try {
-      const res = await api.post<{ data: { file_id: string; filename: string } }>(`/office/sign/${submissionId}/download`);
-      set({ signatureLoading: false });
-      return { fileId: res.data.file_id, filename: res.data.filename };
-    } catch (err) {
-      set({ signatureLoading: false });
-      throw err;
-    }
-  },
 }));

@@ -28,11 +28,11 @@ type Phase = 'loading' | 'not-installed' | 'installing' | 'starting' | 'ready' |
 
 const CONTAINER_MAP: Record<string, string> = {
   firefly: 'docker:claw-firefly',
-  invoiceninja: 'docker:claw-invoiceninja',
+  solidinvoice: 'docker:claw-solidinvoice',
 };
 
 interface FinanceEmbedProps {
-  serviceName: 'firefly' | 'invoiceninja';
+  serviceName: 'firefly' | 'solidinvoice';
   displayName: string;
   port: number;
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
@@ -182,53 +182,41 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
     </div>
   );
 
-  // Ready — iframe view
+  // Ready — open in new tab (no iframe embedding)
+  const openInNewTab = useCallback(() => {
+    window.open(`http://localhost:${port}`, '_blank');
+  }, [port]);
+
+  // Auto-open on first ready
+  const hasAutoOpened = useRef(false);
+  useEffect(() => {
+    if (phase === 'ready' && !hasAutoOpened.current) {
+      hasAutoOpened.current = true;
+      openInNewTab();
+    }
+  }, [phase, openInNewTab]);
+
   if (phase === 'ready' && appStatus) {
-    // Absolute URL to Core's reverse proxy — NOT relative (which goes through Vite).
-    // Firefly/IN set cookies for the proxy host; the iframe must stay on the same
-    // origin so cookies (session + CSRF) are sent on form POSTs.
-    // Same pattern as Portainer (portainer.service.ts → PORTAINER_URL).
-    const corePort = window.location.port === '5173' ? '7200' : window.location.port;
-    const proxyUrl = `http://${window.location.hostname}:${corePort}/api/v1/finance/${serviceName}/ui/`;
     const directUrl = `http://localhost:${port}`;
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* ─── Header bar ─────────────────────────────────── */}
-        <div style={{
-          height: 36,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 12px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--surface)',
-          gap: 8,
-          fontSize: 12,
-          color: 'var(--text-dim)',
-          flexShrink: 0,
-        }}>
-          <Icon size={14} style={{ color }} />
-          <span style={{ fontWeight: 500, color: 'var(--text)' }}>{displayName}</span>
-          <span style={{ color: 'var(--text-muted)' }}>
-            {serviceName === 'firefly' ? 'Personal Finance' : 'Invoicing & CRM'}
-          </span>
-          <div style={{ flex: 1 }} />
-          {appStatus.ram_mb != null && (
-            <span style={{ color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
-          )}
-          <a
-            href={directUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
-        </div>
-
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        color: 'var(--text-dim)',
+        background: 'var(--bg)',
+      }}>
         {/* ─── Credentials banner (shown once after install) ── */}
         {credentials && (
           <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
             padding: '8px 12px',
             background: 'var(--surface-elevated)',
             borderBottom: '1px solid var(--border)',
@@ -262,13 +250,34 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
           </div>
         )}
 
-        {/* ─── Iframe ─────────────────────────────────────── */}
-        <iframe
-          src={proxyUrl}
-          title={displayName}
-          style={{ flex: 1, border: 'none', background: '#fff' }}
-          allow="clipboard-read; clipboard-write"
-        />
+        <Icon size={40} style={{ color, opacity: 0.8 }} />
+        <span style={{ fontSize: 16, fontWeight: 500, color: 'var(--text)' }}>{displayName}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          Running on {directUrl}
+        </span>
+        {appStatus.ram_mb != null && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
+        )}
+        <button
+          onClick={openInNewTab}
+          style={{
+            marginTop: 8,
+            padding: '10px 24px',
+            background: color,
+            border: 'none',
+            borderRadius: 'var(--radius-md)',
+            color: '#fff',
+            cursor: 'pointer',
+            fontSize: 14,
+            fontWeight: 500,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <ExternalLink size={16} />
+          Open {displayName}
+        </button>
       </div>
     );
   }
@@ -300,7 +309,7 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
           <span style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 360, textAlign: 'center' }}>
             {serviceName === 'firefly'
               ? 'Personal finance manager — budgets, expenses, and bank accounts.'
-              : 'Professional invoicing, quotes, and client management.'}
+              : 'Open-source invoicing — clients, quotes, recurring billing, and payments.'}
           </span>
           <button
             onClick={installApp}

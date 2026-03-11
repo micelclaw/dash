@@ -1,4 +1,4 @@
-import { Play, Square, AlertTriangle, Cpu, Loader2, Wrench } from 'lucide-react';
+import { Play, Square, AlertTriangle, Cpu, Loader2, Wrench, Download } from 'lucide-react';
 import { CryptoLogs } from './CryptoLogs';
 
 interface ServiceStatus {
@@ -15,34 +15,29 @@ interface Props {
   svc: ServiceStatus | null;
   btcPruned: boolean;
   loading?: boolean;
+  onInstall: () => void;
   onStart: () => void;
   onStop: () => void;
   onConfigure: () => void;
 }
 
-export function ElectrsStatusCard({ svc, btcPruned, loading, onStart, onStop, onConfigure }: Props) {
+export function ElectrsStatusCard({ svc, btcPruned, loading, onInstall, onStart, onStop, onConfigure }: Props) {
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
 
   return (
     <div className="crypto-card">
       <div className="crypto-card-header">
-        <div className="crypto-card-dot" style={{ background: loading && !svc ? 'var(--text-muted)' : running ? '#22c55e' : '#6b7280' }} />
+        <div className="crypto-card-dot" style={{ background: loading && !svc ? 'var(--text-muted)' : running ? '#22c55e' : installed ? '#f59e0b' : '#ef4444' }} />
         <span className="crypto-card-title">Electrum Server</span>
         <div style={{ flex: 1 }} />
         {!loading && installed && (
           <button className="crypto-btn-sm" onClick={onConfigure} title="Settings"><Wrench size={12} /></button>
         )}
-        {!loading && (running ? (
+        {!loading && installed && (running ? (
           <button className="crypto-btn-sm" onClick={onStop} title="Stop"><Square size={12} /></button>
         ) : (
-          <button
-            className="crypto-btn-sm"
-            onClick={onStart}
-            title={btcPruned ? 'Requires full node' : installed ? 'Start' : 'Install & Start'}
-            disabled={btcPruned}
-            style={btcPruned ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
-          >
+          <button className="crypto-btn-sm" onClick={onStart} title="Start">
             <Play size={12} />
           </button>
         ))}
@@ -77,8 +72,14 @@ export function ElectrsStatusCard({ svc, btcPruned, loading, onStart, onStop, on
           </>
         )}
 
-        {!loading && !running && !btcPruned && (
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{installed ? 'Stopped' : 'Not installed'}</span>
+        {!loading && !running && !btcPruned && installed && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Stopped</span>
+        )}
+
+        {!loading && !installed && !btcPruned && (
+          <button className="crypto-install-btn" onClick={onInstall}>
+            <Download size={14} /> Install Electrum Server
+          </button>
         )}
       </div>
     </div>

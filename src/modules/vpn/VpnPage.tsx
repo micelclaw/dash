@@ -18,9 +18,8 @@ export function Component() {
   const wgClients = useWgClients();
   const [section, setSection] = useState<VpnSection>('overview');
 
-  const handleOpenPanel = useCallback(() => {
-    setSection('wg-easy');
-  }, []);
+  const handleOpenPanel = useCallback(() => setSection('wg-easy'), []);
+  const handleGoTailscale = useCallback(() => setSection('tailscale'), []);
 
   return (
     <div style={{
@@ -46,16 +45,30 @@ export function Component() {
       }}>
         {section === 'overview' && (
           <OverviewSection
-            status={vpn.status}
-            loading={vpn.loading}
+            vpnStatus={vpn.status}
+            tailscaleStatus={tailscale.status}
+            loading={vpn.loading || tailscale.loading}
             wgEasyStatus={wgEasy.status}
+            wgEasyStarting={wgEasy.starting}
             onOpenPanel={handleOpenPanel}
+            onGoTailscale={handleGoTailscale}
+            onWgStart={wgEasy.start}
+            onWgStop={wgEasy.stop}
+            onTailscaleInstall={tailscale.install}
+            onTailscaleLogin={tailscale.login}
+            onTailscaleLogout={tailscale.logout}
+            tailscaleActing={tailscale.acting}
+            onRefreshVpn={vpn.refresh}
           />
         )}
         {section === 'peers' && (
           <WgPeersSection
             clients={wgClients.clients}
             loading={wgClients.loading}
+            endpointChanged={wgEasy.status?.endpoint_changed ?? false}
+            endpointReachable={wgEasy.status?.endpoint_reachable ?? true}
+            endpointMethod={wgEasy.status?.endpoint_method ?? 'none'}
+            onDismissIpChange={wgEasy.dismissIpChange}
             onCreate={wgClients.create}
             onRemove={wgClients.remove}
             onToggle={wgClients.toggle}
@@ -86,9 +99,15 @@ export function Component() {
             status={tailscale.status}
             loading={tailscale.loading}
             acting={tailscale.acting}
+            currentAction={tailscale.currentAction}
+            installLogs={tailscale.installLogs}
+            uninstallLogs={tailscale.uninstallLogs}
+            authUrl={tailscale.authUrl}
             onInstall={tailscale.install}
             onLogin={tailscale.login}
             onLogout={tailscale.logout}
+            onUninstall={tailscale.uninstall}
+            onRefresh={tailscale.refresh}
           />
         )}
       </div>

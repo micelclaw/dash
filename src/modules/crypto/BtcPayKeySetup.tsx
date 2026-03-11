@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Loader2, CheckCircle, AlertTriangle, Key } from 'lucide-react';
+import { X, Loader2, CheckCircle, AlertTriangle, Key, ExternalLink } from 'lucide-react';
 import { api } from '@/services/api';
 import { WIZARD_STYLES } from './wizard-styles';
 
@@ -115,6 +115,18 @@ export function BtcPayKeySetup({ onClose, onDone }: Props) {
                   <li>Enable <strong style={{ color: 'var(--text)' }}>View store info</strong> and <strong style={{ color: 'var(--text)' }}>View invoices</strong> permissions</li>
                   <li>Copy the key and paste it below</li>
                 </ol>
+                <a
+                  href="http://localhost:3003"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    marginTop: 8, fontSize: '0.75rem', color: '#51b13e',
+                    textDecoration: 'none',
+                  }}
+                >
+                  <ExternalLink size={11} /> Open BTCPay Server
+                </a>
               </div>
 
               <div>

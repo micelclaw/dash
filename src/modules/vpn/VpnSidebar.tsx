@@ -19,7 +19,6 @@ interface VpnSidebarProps {
 }
 
 const WG_ITEMS: { id: VpnSection; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'peers', label: 'Peers', icon: Users },
   { id: 'wg-easy', label: 'WireGuard Panel', icon: ExternalLink },
   { id: 'backup', label: 'Backup', icon: Download },
@@ -52,6 +51,16 @@ export function VpnSidebar({
         }} />
         VPN
       </div>
+
+      {/* Overview — shared */}
+      <NavItem
+        icon={LayoutDashboard}
+        label="Overview"
+        active={active === 'overview'}
+        onClick={() => onChange('overview')}
+      />
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
 
       {/* WireGuard section */}
       <SectionHeader label="WireGuard" />

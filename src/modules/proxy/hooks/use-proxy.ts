@@ -34,11 +34,19 @@ export interface DomainInfo {
   public_ip: string;
 }
 
+export interface ProcessLog {
+  logs: string[];
+  success: boolean;
+  action: 'start' | 'stop';
+}
+
 export function useProxy() {
   const [status, setStatus] = useState<ProxyStatus | null>(null);
   const [routes, setRoutes] = useState<ProxyRoute[]>([]);
   const [domain, setDomain] = useState<DomainInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionInProgress, setActionInProgress] = useState<'start' | 'stop' | null>(null);
+  const [processLog, setProcessLog] = useState<ProcessLog | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -83,6 +91,44 @@ export function useProxy() {
     }
   }, [fetchAll]);
 
+  const startProxy = useCallback(async () => {
+    setActionInProgress('start');
+    setProcessLog(null);
+    try {
+      const res = await api.post<{ data: { action: string; logs: string[]; success: boolean } }>('/hal/network/proxy/start');
+      const { logs, success } = res.data;
+      setProcessLog({ logs, success, action: 'start' });
+      if (success) toast.success('Caddy started');
+      else toast.error('Caddy failed to start');
+      await fetchAll();
+    } catch {
+      setProcessLog({ logs: ['Failed to connect to server'], success: false, action: 'start' });
+      toast.error('Failed to start Caddy');
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [fetchAll]);
+
+  const stopProxy = useCallback(async () => {
+    setActionInProgress('stop');
+    setProcessLog(null);
+    try {
+      const res = await api.post<{ data: { action: string; logs: string[]; success: boolean } }>('/hal/network/proxy/stop');
+      const { logs, success } = res.data;
+      setProcessLog({ logs, success, action: 'stop' });
+      if (success) toast.success('Caddy stopped');
+      else toast.error('Caddy failed to stop');
+      await fetchAll();
+    } catch {
+      setProcessLog({ logs: ['Failed to connect to server'], success: false, action: 'stop' });
+      toast.error('Failed to stop Caddy');
+    } finally {
+      setActionInProgress(null);
+    }
+  }, [fetchAll]);
+
+  const clearProcessLog = useCallback(() => setProcessLog(null), []);
+
   const configureDomain = useCallback(async (domainName: string) => {
     try {
       const res = await api.post<{ data: DomainInfo }>('/hal/network/proxy/domain', { domain: domainName });
@@ -96,7 +142,9 @@ export function useProxy() {
 
   return {
     status, routes, domain, loading,
+    actionInProgress, processLog, clearProcessLog,
     refresh: fetchAll,
+    startProxy, stopProxy,
     addRoute, removeRoute, configureDomain,
   };
 }

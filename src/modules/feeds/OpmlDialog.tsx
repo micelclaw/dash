@@ -37,7 +37,7 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
       formData.append('file', file);
 
       const token = (await import('@/stores/auth.store')).useAuthStore.getState().tokens?.accessToken;
-      const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+      const baseUrl = import.meta.env.VITE_API_URL ?? '';
       const res = await fetch(`${baseUrl}/api/v1/feeds/import/opml`, {
         method: 'POST',
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -61,7 +61,7 @@ export function OpmlDialog({ onClose }: { onClose: () => void }) {
   const handleExport = async () => {
     try {
       const token = (await import('@/stores/auth.store')).useAuthStore.getState().tokens?.accessToken;
-      const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+      const baseUrl = import.meta.env.VITE_API_URL ?? '';
       const res = await fetch(`${baseUrl}/api/v1/feeds/export/opml`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });

@@ -47,13 +47,42 @@ const DEFAULTS: BtcConfig = {
   threads: 2, txindex: false, zmq_enabled: true, assumevalid: true,
 };
 
+async function waitForService(service: string, timeoutMs: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res = await api.get<{ data: { services: Array<{ name: string; running: boolean }> } }>('/crypto/status');
+      const svc = res.data.services.find((s: any) => s.name === service);
+      if (svc?.running) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
 export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) {
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<BtcConfig>({ ...DEFAULTS, ...initialConfig });
+  const [configLoaded, setConfigLoaded] = useState(mode === 'install');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSyncAccel, setShowSyncAccel] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch persisted config when opening in configure mode
+  useEffect(() => {
+    if (mode !== 'configure') return;
+    let cancelled = false;
+    api.get<{ data: BtcConfig }>('/crypto/btc/config')
+      .then(res => {
+        if (cancelled) return;
+        const persisted = (res as any).data ?? res;
+        setConfig(prev => ({ ...prev, ...persisted }));
+        setConfigLoaded(true);
+      })
+      .catch(() => { if (!cancelled) setConfigLoaded(true); });
+    return () => { cancelled = true; };
+  }, [mode]);
 
   // Sync acceleration state
   const [syncTask, setSyncTask] = useState<SyncTask | null>(null);
@@ -120,6 +149,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
     setError(null);
     try {
       await api.post('/crypto/bitcoind/start', { config });
+      await waitForService('bitcoind', 60_000);
       setStep('done');
     } catch (err: any) {
       setError(err?.message || 'Failed to install Bitcoin Core');
@@ -200,8 +230,16 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
         {/* Content */}
         <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
 
+          {/* ─── Loading config ─── */}
+          {step === 'configure' && !configLoaded && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 8 }}>
+              <Loader2 size={16} className="spin" style={{ color: 'var(--text-muted)' }} />
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading configuration...</span>
+            </div>
+          )}
+
           {/* ─── Configure step ─── */}
-          {step === 'configure' && (
+          {step === 'configure' && configLoaded && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
               {/* Storage Mode */}
@@ -303,13 +341,13 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
                       <label className="wizard-checkbox" style={{ marginTop: 6 }}>
                         <input
                           type="checkbox"
-                          checked={!config.assumevalid}
-                          onChange={e => update({ assumevalid: !e.target.checked })}
+                          checked={config.assumevalid}
+                          onChange={e => update({ assumevalid: e.target.checked })}
                           style={{ accentColor: 'var(--amber)' }}
                         />
                         <div>
-                          <span>Disable (full validation from genesis)</span>
-                          <span className="wizard-checkbox-note">Significantly slower. Only for maximum security paranoia.</span>
+                          <span>Enable Assume Valid (skip old script validation)</span>
+                          <span className="wizard-checkbox-note">Recommended. ~30-40% faster IBD. Uncheck only for maximum security paranoia.</span>
                         </div>
                       </label>
                     </div>

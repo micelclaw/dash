@@ -12,6 +12,7 @@ import { ElectrsStatusCard } from './ElectrsStatusCard';
 import { ElectrsSetupWizard } from './ElectrsSetupWizard';
 import { ToshiMotoInstallPanel } from './ToshiMotoInstallPanel';
 import { BtcPayInstallPanel } from './BtcPayInstallPanel';
+import { BtcPayStatusCard } from './BtcPayStatusCard';
 import { StackGuide } from './StackGuide';
 import { WalletBalanceCard } from './WalletBalanceCard';
 import { BtcPayKeySetup } from './BtcPayKeySetup';
@@ -52,6 +53,22 @@ interface MoneroSync {
   uptime_seconds: number | null;
 }
 
+interface MoneroExtendedStats {
+  version: string;
+  difficulty: number;
+  tx_count: number;
+  tx_pool_size: number;
+  white_peerlist_size: number;
+  grey_peerlist_size: number;
+  free_space: number;
+  last_block_hash: string;
+  last_block_time: number;
+  last_block_size: number;
+  last_block_txs: number;
+  last_block_reward: number;
+  fee_per_byte: number | null;
+}
+
 interface LightningInfo {
   id: string;
   alias: string;
@@ -62,11 +79,45 @@ interface LightningInfo {
   synced_to_chain: boolean;
 }
 
+interface BtcExtendedStats {
+  mempool_tx_count: number;
+  mempool_size_bytes: number;
+  mempool_min_fee: number;
+  difficulty: number;
+  network_hashps: number;
+  total_bytes_recv: number;
+  total_bytes_sent: number;
+  fee_rate_sat_vb: number | null;
+  latest_block_hash: string;
+  latest_block_time: number;
+  latest_block_tx_count: number;
+  latest_block_size: number;
+  indexes: Record<string, { synced: boolean; best_block_height: number }>;
+  connections_in: number;
+  connections_out: number;
+  version: number;
+  subversion: string;
+}
+
+interface LightningExtendedStats {
+  total_forwards: number;
+  successful_forwards: number;
+  total_fees_earned_msat: number;
+  feerate_perkw_opening: number | null;
+  feerate_perkw_mutual_close: number | null;
+  feerate_perkw_unilateral_close: number | null;
+  known_nodes: number;
+  known_channels: number;
+}
+
 interface StackStatus {
   services: CryptoServiceStatus[];
   btc: BtcSync | null;
+  btc_extended: BtcExtendedStats | null;
   monero: MoneroSync | null;
+  monero_extended: MoneroExtendedStats | null;
   lightning: LightningInfo | null;
+  lightning_extended: LightningExtendedStats | null;
 }
 
 type WizardTarget = 'bitcoind' | 'lightning' | 'monerod' | 'electrs' | 'toshi-moto' | 'btcpay' | null;
@@ -79,27 +130,61 @@ export function Component() {
   const [wizardTarget, setWizardTarget] = useState<WizardTarget>(null);
   const [wizardMode, setWizardMode] = useState<'install' | 'configure'>('install');
   const [keySetupOpen, setKeySetupOpen] = useState(false);
+  const [startingServices, setStartingServices] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
-      const res = await api.get<{ data: StackStatus }>('/crypto/status');
-      setStack(res.data);
+      // Fast fetch — renders cards with basic data immediately
+      const basic = await api.get<{ data: StackStatus }>('/crypto/status');
+      setStack(basic.data);
+      setLoading(false);
+
+      // Clear starting flag for services that are now running
+      setStartingServices(prev => {
+        if (prev.size === 0) return prev;
+        const next = new Set(prev);
+        for (const svc of basic.data.services) {
+          if (svc.running) next.delete(svc.name);
+        }
+        return next.size === prev.size ? prev : next;
+      });
       setError(null);
+
+      // Extended fetch — merges heavier stats when ready
+      try {
+        const ext = await api.get<{ data: {
+          btc_extended: BtcExtendedStats | null;
+          monero_extended: MoneroExtendedStats | null;
+          lightning_extended: LightningExtendedStats | null;
+        } }>('/crypto/status/extended');
+        setStack(prev => prev ? {
+          ...prev,
+          btc_extended: ext.data.btc_extended,
+          monero_extended: ext.data.monero_extended,
+          lightning_extended: ext.data.lightning_extended,
+        } : prev);
+      } catch {
+        // Extended stats failed — basic data is still shown
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch crypto stack status');
-    } finally {
       setLoading(false);
     }
   }, []);
 
+  // Poll faster (5s) while any service is starting, otherwise 30s
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 30_000);
+    const interval = startingServices.size > 0 ? 5_000 : 30_000;
+    const id = setInterval(refresh, interval);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, startingServices.size]);
 
   const handleAction = async (service: string, action: 'start' | 'stop') => {
     try {
+      if (action === 'start') {
+        setStartingServices(prev => new Set(prev).add(service));
+      }
       await api.post(`/crypto/${service}/${action}`);
       await refresh();
     } catch (err) {
@@ -173,14 +258,11 @@ export function Component() {
         <BtcStatusCard
           svc={btcSvc ?? null}
           sync={stack?.btc ?? null}
+          extended={stack?.btc_extended ?? null}
           loading={!stack}
-          onStart={() => {
-            if (!btcSvc?.installed) {
-              openWizard('bitcoind', 'install');
-            } else {
-              handleAction('bitcoind', 'start');
-            }
-          }}
+          starting={startingServices.has('bitcoind')}
+          onInstall={() => openWizard('bitcoind', 'install')}
+          onStart={() => handleAction('bitcoind', 'start')}
           onStop={() => handleAction('bitcoind', 'stop')}
           onConfigure={() => openWizard('bitcoind', 'configure')}
         />
@@ -188,14 +270,11 @@ export function Component() {
         <LightningStatusCard
           svc={lightningSvc ?? null}
           info={stack?.lightning ?? null}
+          extended={stack?.lightning_extended ?? null}
           loading={!stack}
-          onStart={() => {
-            if (!lightningSvc?.installed) {
-              openWizard('lightning', 'install');
-            } else {
-              handleAction('lightning', 'start');
-            }
-          }}
+          starting={startingServices.has('lightning')}
+          onInstall={() => openWizard('lightning', 'install')}
+          onStart={() => handleAction('lightning', 'start')}
           onStop={() => handleAction('lightning', 'stop')}
           onConfigure={() => openWizard('lightning', 'configure')}
         />
@@ -203,14 +282,11 @@ export function Component() {
         <MoneroStatusCard
           svc={moneroSvc ?? null}
           sync={stack?.monero ?? null}
+          extended={stack?.monero_extended ?? null}
           loading={!stack}
-          onStart={() => {
-            if (!moneroSvc?.installed) {
-              openWizard('monerod', 'install');
-            } else {
-              handleAction('monerod', 'start');
-            }
-          }}
+          starting={startingServices.has('monerod')}
+          onInstall={() => openWizard('monerod', 'install')}
+          onStart={() => handleAction('monerod', 'start')}
           onStop={() => handleAction('monerod', 'stop')}
           onConfigure={() => openWizard('monerod', 'configure')}
         />
@@ -219,15 +295,21 @@ export function Component() {
           svc={electrsSvc ?? null}
           btcPruned={stack?.btc?.pruned ?? false}
           loading={!stack}
-          onStart={() => {
-            if (!electrsSvc?.installed) {
-              openWizard('electrs', 'install');
-            } else {
-              handleAction('electrs', 'start');
-            }
-          }}
+          onInstall={() => openWizard('electrs', 'install')}
+          onStart={() => handleAction('electrs', 'start')}
           onStop={() => handleAction('electrs', 'stop')}
           onConfigure={() => openWizard('electrs', 'configure')}
+        />
+
+        <BtcPayStatusCard
+          svc={btcpaySvc ?? null}
+          loading={!stack}
+          starting={startingServices.has('btcpay')}
+          onInstall={() => openWizard('btcpay', 'install')}
+          onStart={() => handleAction('btcpay', 'start')}
+          onStop={() => handleAction('btcpay', 'stop')}
+          onConfigure={() => setKeySetupOpen(true)}
+          onOpenWebUI={() => window.open('http://localhost:3003', '_blank', 'noopener,noreferrer')}
         />
       </div>
 
@@ -255,7 +337,7 @@ export function Component() {
           if (!btcpaySvc?.installed) {
             openWizard('btcpay', 'install');
           } else {
-            navigate('/crypto/btcpay');
+            window.open('http://localhost:3003', '_blank', 'noopener,noreferrer');
           }
         }}>
           <CreditCard size={20} style={{ color: '#51b13e' }} />

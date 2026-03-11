@@ -75,7 +75,7 @@ export async function scanApp(name: string): Promise<ScanResult> {
 }
 
 export async function exportApp(name: string): Promise<Blob> {
-  const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+  const baseUrl = import.meta.env.VITE_API_URL ?? '';
   const token = (await import('@/stores/auth.store')).useAuthStore.getState().tokens?.accessToken;
 
   const res = await fetch(`${baseUrl}/api/v1/apps/${name}/export`, {

@@ -3,12 +3,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Download, Loader2, AlertTriangle, Wrench, PenTool } from 'lucide-react';
-import { SignatureDialog } from './SignatureDialog';
+import { ArrowLeft, Download, Loader2, AlertTriangle, Wrench } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/services/api';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
 const API_PREFIX = '/api/v1';
 
 async function fetchWithAuth(path: string): Promise<Response> {
@@ -48,7 +47,6 @@ export function Component() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [signOpen, setSignOpen] = useState(false);
   const blobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -131,17 +129,10 @@ export function Component() {
         <button onClick={handleDownload} style={iconBtnStyle} title="Download">
           <Download size={14} />
         </button>
-        <button onClick={() => setSignOpen(true)} style={signBtn} title="Firmar con DocuSeal">
-          <PenTool size={14} />
-          <span>Firmar con DocuSeal</span>
-        </button>
         <button onClick={() => navigate('/office/pdf/tools')} style={iconBtnStyle} title="Open in PDF Tools">
           <Wrench size={14} />
         </button>
       </div>
-
-      {/* ─── Signature dialog ────────────────────────── */}
-      <SignatureDialog fileId={fileId!} filename={file.filename} open={signOpen} onClose={() => setSignOpen(false)} />
 
       {/* ─── PDF embed ────────────────────────────────── */}
       <object
@@ -175,13 +166,4 @@ const btnStyle: React.CSSProperties = {
 const iconBtnStyle: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
-};
-
-const signBtn: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6,
-  padding: '4px 12px',
-  background: '#7c3aed',
-  border: 'none', borderRadius: 'var(--radius-md)',
-  color: '#fff', cursor: 'pointer', fontSize: 12,
-  fontWeight: 500, whiteSpace: 'nowrap',
 };

@@ -9,7 +9,9 @@ import type { ModuleConfig } from '@/types/modules';
 
 export const MODULES: ModuleConfig[] = [
   { id: 'chat',     label: 'AI Chat',       icon: MessageSquare, color: 'var(--mod-chat)',     path: '/chat',     group: null },
-  { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-chat)',     path: '/search',   group: null },
+  { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-search)',   path: '/search',   group: null },
+  { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: null },
+  { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },
@@ -23,8 +25,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
   // Finance
   { id: 'firefly',      label: 'Firefly III',    icon: Wallet,   color: 'var(--mod-finance)', path: '/finance/firefly',      group: 'Finance' },
-  { id: 'invoiceninja', label: 'Invoice Ninja',  icon: Receipt,  color: 'var(--mod-finance)', path: '/finance/invoiceninja', group: 'Finance' },
-  // Crypto
+  { id: 'solidinvoice', label: 'SolidInvoice',    icon: Receipt,  color: 'var(--mod-finance)', path: '/finance/solidinvoice', group: 'Finance' },
   { id: 'crypto',       label: 'Crypto Stack',    icon: Bitcoin,      color: '#f7931a',              path: '/crypto',              group: 'Finance' },
   // Multimedia
   { id: 'multimedia', label: 'Multimedia',  icon: Clapperboard,  color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia' },
@@ -34,15 +35,14 @@ export const MODULES: ModuleConfig[] = [
   { id: 'drive',    label: 'Drive',         icon: FolderOpen,    color: 'var(--mod-drive)',    path: '/drive',    group: 'Files' },
   { id: 'photos',   label: 'Photos',        icon: Image,         color: 'var(--mod-photos)',   path: '/photos',   group: 'Files' },
   { id: 'explorer', label: 'File Explorer', icon: HardDrive,     color: 'var(--mod-explorer)', path: '/explorer', group: 'Files' },
+  // Network
+  { id: 'termix',   label: 'Terminal',      icon: Terminal,      color: 'var(--mod-termix)',   path: '/termix',   group: 'Network' },
+  { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'Network' },
+  { id: 'proxy',     label: 'Reverse Proxy', icon: Globe,        color: 'var(--mod-proxy)',     path: '/proxy',     group: 'Network' },
+  { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'Network' },
   // System
-  { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
   { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },
-  { id: 'termix',   label: 'Terminal',      icon: Terminal,      color: 'var(--mod-termix)',   path: '/termix',   group: 'System' },
-  { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'System' },
-  { id: 'proxy',     label: 'Reverse Proxy', icon: Globe,        color: 'var(--mod-proxy)',     path: '/proxy',     group: 'System' },
-  { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'System' },
   // { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },
   { id: 'settings', label: 'Settings',      icon: Settings,      color: 'var(--mod-settings)', path: '/settings', group: 'System' },
-  { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: 'System' },
 ];

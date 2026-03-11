@@ -14,7 +14,7 @@
   /* Text */
   --text: #e0e0e8;
   --text-dim: #7a7a8a;
-  --text-muted: #4a4a5a;
+  --text-muted: #6a6a7a;
 
   /* Accent */
   --amber: #d4a017;
@@ -28,7 +28,8 @@
   --info: #38bdf8;
 
   /* Module identity colors */
-  --mod-chat: #d4a017;
+  --mod-chat: #f59e0b;
+  --mod-search: #38bdf8;
   --mod-notes: #eab308;
   --mod-calendar: #3b82f6;
   --mod-mail: #22c55e;
@@ -36,7 +37,7 @@
   --mod-drive: #94a3b8;
   --mod-photos: #ec4899;
   --mod-diary: #14b8a6;
-  --mod-agents: #f97316;
+  --mod-agents: #06b6d4;
   --mod-explorer: #64748b;
   --mod-storage: #6b7280;
   --mod-settings: #9ca3af;
@@ -46,7 +47,7 @@
   --mod-termix: #22d3ee;
   --mod-vpn: #7c3aed;
   --mod-portainer: #13bef9;
-  --mod-clawhub: #d4a017;
+  --mod-clawhub: #a78bfa;
   --mod-feeds: #f97316;
   --mod-finance: #22c55e;
   --mod-observers: #8b5cf6;
@@ -107,6 +108,11 @@
   --radius: var(--radius-md);
 }
 
+html {
+  background-color: var(--bg);
+  min-height: 100dvh;
+}
+
 body {
   background-color: var(--bg);
   color: var(--text);
@@ -115,6 +121,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   margin: 0;
+  min-height: 100dvh;
 }
 
 /* Typography utilities */
@@ -246,6 +253,10 @@ div:has(> .kanban-card-checkbox):hover > .kanban-card-checkbox {
 }
 
 /* Kanban animations */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes kanban-card-enter {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

@@ -8,6 +8,13 @@ export interface WgEasyStatus {
   url: string | null;
   ram_mb: number | null;
   uptime_seconds: number | null;
+  endpoint_changed: boolean;
+  network_ready: boolean;
+  upnp_mapped: boolean;
+  upnp_error: string | null;
+  wsl2_restart_needed: boolean;
+  endpoint_reachable: boolean;
+  endpoint_method: 'upnp' | 'domain' | 'direct' | 'none';
 }
 
 export function useWgEasy() {
@@ -54,14 +61,36 @@ export function useWgEasy() {
   }, [fetchStatus]);
 
   const stop = useCallback(async () => {
+    setStarting(true);
     try {
       const res = await api.post<{ data: WgEasyStatus }>('/wg-easy/stop');
       setStatus(res.data);
-      toast.success('WireGuard panel stopped');
+      if (!res.data.running) {
+        setStarting(false);
+        return;
+      }
+      // Poll until stopped
+      const poll = setInterval(async () => {
+        const s = await fetchStatus();
+        if (s && !s.running) {
+          clearInterval(poll);
+          setStarting(false);
+        }
+      }, 2000);
+      setTimeout(() => { clearInterval(poll); setStarting(false); }, 120_000);
     } catch {
       toast.error('Failed to stop WireGuard panel');
+      setStarting(false);
     }
-  }, []);
+  }, [fetchStatus]);
 
-  return { status, loading, starting, start, stop, refresh: fetchStatus };
+  const dismissIpChange = useCallback(async () => {
+    try {
+      await api.post('/wg-easy/dismiss-ip-change');
+      // Refresh status to clear the flag
+      await fetchStatus();
+    } catch { /* silent */ }
+  }, [fetchStatus]);
+
+  return { status, loading, starting, start, stop, refresh: fetchStatus, dismissIpChange };
 }

@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/stores/auth.store';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const API_PREFIX = '/api/v1';
 
 /**
@@ -62,11 +62,16 @@ class ApiClient {
       return getMockResponse(method, mockPath, options?.body) as T;
     }
 
-    const url = new URL(`${BASE_URL}${API_PREFIX}${path}`);
+    // Build URL as relative path — absolute URLs to .ts.net domains are blocked
+    // by Brave Shields on mobile, while relative URLs work fine.
+    let url = `${BASE_URL}${API_PREFIX}${path}`;
     if (options?.params) {
+      const qs = new URLSearchParams();
       for (const [key, val] of Object.entries(options.params)) {
-        if (val !== undefined) url.searchParams.set(key, String(val));
+        if (val !== undefined) qs.set(key, String(val));
       }
+      const str = qs.toString();
+      if (str) url += `?${str}`;
     }
 
     const headers: Record<string, string> = {};
@@ -74,7 +79,7 @@ class ApiClient {
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (options?.body) headers['Content-Type'] = 'application/json';
 
-    const res = await fetch(url.toString(), {
+    const res = await fetch(url, {
       method,
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
@@ -90,13 +95,19 @@ class ApiClient {
       }
     }
 
-    const json = await res.json();
+    let json: unknown;
+    try {
+      json = await res.json();
+    } catch (parseErr) {
+      console.error('[api] json parse threw:', parseErr, 'status:', res.status);
+      throw parseErr;
+    }
 
     if (!res.ok) {
       throw new ApiError(
-        json.error?.code || 'UNKNOWN',
-        json.error?.message || 'Request failed',
-        json.error?.details,
+        (json as any).error?.code || 'UNKNOWN',
+        (json as any).error?.message || 'Request failed',
+        (json as any).error?.details,
         res.status,
       );
     }

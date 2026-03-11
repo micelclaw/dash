@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 
+export interface TailscaleCert {
+  domain: string;
+  cert_path: string;
+  key_path: string;
+}
+
 export interface TailscaleStatus {
   installed: boolean;
   running: boolean;
@@ -11,6 +17,7 @@ export interface TailscaleStatus {
   ip: string | null;
   version: string | null;
   peers: TailscalePeer[];
+  https_cert: TailscaleCert | null;
 }
 
 export interface TailscalePeer {
@@ -22,10 +29,15 @@ export interface TailscalePeer {
   is_exit_node: boolean;
 }
 
+export type TailscaleAction = 'install' | 'login' | 'logout' | 'uninstall' | null;
+
 export function useTailscale() {
   const [status, setStatus] = useState<TailscaleStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState(false);
+  const [currentAction, setCurrentAction] = useState<TailscaleAction>(null);
+  const [installLogs, setInstallLogs] = useState<string[]>([]);
+  const [uninstallLogs, setUninstallLogs] = useState<string[]>([]);
+  const [authUrl, setAuthUrl] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -41,35 +53,44 @@ export function useTailscale() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  // Clear authUrl once logged in
+  useEffect(() => {
+    if (status?.logged_in && authUrl) {
+      setAuthUrl(null);
+    }
+  }, [status?.logged_in, authUrl]);
+
   const install = useCallback(async () => {
-    setActing(true);
+    setCurrentAction('install');
+    setInstallLogs([]);
     try {
-      await api.post('/hal/network/tailscale/install');
+      const res = await api.post<{ data: { status: string; logs?: string[] } }>(
+        '/hal/network/tailscale/install',
+      );
+      const logs = res.data.logs ?? [];
+      setInstallLogs(logs);
       toast.success('Tailscale installed');
       await fetchStatus();
     } catch {
       toast.error('Failed to install Tailscale');
     }
-    setActing(false);
+    setCurrentAction(null);
   }, [fetchStatus]);
 
   const login = useCallback(async () => {
-    setActing(true);
+    setCurrentAction('login');
+    setAuthUrl(null);
     try {
       const res = await api.post<{ data: { auth_url: string } }>('/hal/network/tailscale/login');
-      const url = res.data.auth_url;
-      window.open(url, '_blank');
-      toast.success('Tailscale login started — check the opened tab');
-      // Poll for status update
-      setTimeout(fetchStatus, 5000);
+      setAuthUrl(res.data.auth_url);
     } catch {
       toast.error('Failed to start Tailscale login');
     }
-    setActing(false);
-  }, [fetchStatus]);
+    setCurrentAction(null);
+  }, []);
 
   const logout = useCallback(async () => {
-    setActing(true);
+    setCurrentAction('logout');
     try {
       await api.post('/hal/network/tailscale/logout');
       toast.success('Logged out of Tailscale');
@@ -77,8 +98,27 @@ export function useTailscale() {
     } catch {
       toast.error('Failed to logout');
     }
-    setActing(false);
+    setCurrentAction(null);
   }, [fetchStatus]);
 
-  return { status, loading, acting, install, login, logout, refresh: fetchStatus };
+  const uninstall = useCallback(async () => {
+    setCurrentAction('uninstall');
+    setUninstallLogs([]);
+    try {
+      const res = await api.post<{ data: { status: string; logs?: string[] } }>(
+        '/hal/network/tailscale/uninstall',
+      );
+      setUninstallLogs(res.data.logs ?? []);
+      toast.success('Tailscale uninstalled');
+      await fetchStatus();
+    } catch {
+      toast.error('Failed to uninstall Tailscale');
+    }
+    setCurrentAction(null);
+  }, [fetchStatus]);
+
+  // Backwards-compat: `acting` is true when any action is in progress
+  const acting = currentAction !== null;
+
+  return { status, loading, acting, currentAction, install, login, logout, uninstall, refresh: fetchStatus, installLogs, uninstallLogs, authUrl };
 }

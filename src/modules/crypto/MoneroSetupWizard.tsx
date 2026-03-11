@@ -34,6 +34,19 @@ const DEFAULTS: MoneroConfig = {
   in_peers: 32,
 };
 
+async function waitForService(service: string, timeoutMs: number): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const res = await api.get<{ data: { services: Array<{ name: string; running: boolean }> } }>('/crypto/status');
+      const svc = res.data.services.find((s: any) => s.name === service);
+      if (svc?.running) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
 export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
   const [step, setStep] = useState<Step>('configure');
   const [config, setConfig] = useState<MoneroConfig>({ ...DEFAULTS });
@@ -56,6 +69,7 @@ export function MoneroSetupWizard({ mode, onClose, onDone }: Props) {
     setError(null);
     try {
       await api.post('/crypto/monerod/start', { config });
+      await waitForService('monerod', 60_000);
       setStep('done');
     } catch (err: any) {
       setError(err?.message || 'Failed to install Monero Node');

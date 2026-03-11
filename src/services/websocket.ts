@@ -32,7 +32,7 @@ export class ClawWebSocket {
       return;
     }
 
-    const wsUrl = import.meta.env.VITE_WS_URL ?? 'ws://127.0.0.1:7200/ws';
+    const wsUrl = import.meta.env.VITE_WS_URL || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
     this.ws = new WebSocket(`${wsUrl}?token=${token}`);
 
     this.ws.onopen = () => {

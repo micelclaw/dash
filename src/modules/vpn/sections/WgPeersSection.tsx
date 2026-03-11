@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Plus, Trash2, QrCode, Download, Power, Copy, Check, X } from 'lucide-react';
+import { Plus, Trash2, QrCode, Download, Power, Copy, Check, X, AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { WgClient } from '../hooks/use-wg-clients';
 
 interface WgPeersSectionProps {
   clients: WgClient[];
   loading: boolean;
+  endpointChanged: boolean;
+  endpointReachable: boolean;
+  endpointMethod: string;
+  onDismissIpChange: () => Promise<void>;
   onCreate: (name: string) => Promise<WgClient | null>;
   onRemove: (id: string) => Promise<void>;
   onToggle: (id: string, enabled: boolean) => Promise<void>;
@@ -40,7 +44,7 @@ function peerStatus(client: WgClient): { label: string; color: string } {
 }
 
 export function WgPeersSection({
-  clients, loading, onCreate, onRemove, onToggle, onRename, onGetConfig, onGetQrCode,
+  clients, loading, endpointChanged, endpointReachable, endpointMethod, onDismissIpChange, onCreate, onRemove, onToggle, onRename, onGetConfig, onGetQrCode,
 }: WgPeersSectionProps) {
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -115,6 +119,60 @@ export function WgPeersSection({
           <Plus size={14} /> New Peer
         </button>
       </div>
+
+      {/* IP changed warning */}
+      {endpointChanged && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '12px 16px', marginBottom: 16,
+          background: 'rgba(245, 158, 11, 0.1)',
+          border: '1px solid var(--amber, #f59e0b)',
+          borderRadius: 'var(--radius-md)',
+          color: '#f59e0b',
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-sans)',
+        }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>
+            Your public IP has changed. Re-scan the QR code on your devices to update the VPN connection.
+          </span>
+          <button
+            onClick={onDismissIpChange}
+            title="Dismiss"
+            style={{
+              padding: '4px', background: 'transparent', border: 'none',
+              color: '#f59e0b', cursor: 'pointer', display: 'flex', flexShrink: 0,
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Endpoint unreachable warning */}
+      {!endpointReachable && endpointMethod === 'none' && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10,
+          padding: '12px 16px', marginBottom: 16,
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-sans)',
+          lineHeight: 1.5,
+        }}>
+          <AlertTriangle size={18} style={{ flexShrink: 0, color: '#ef4444', marginTop: 1 }} />
+          <div style={{ color: 'var(--text-dim)' }}>
+            <strong style={{ color: '#ef4444' }}>WireGuard is not reachable from the internet.</strong>
+            <br />
+            Your router does not support UPnP or port 51820/UDP is blocked.
+            <br />
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              Use <strong>Tailscale</strong> for zero-config remote access, or open port 51820/UDP on your router manually.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Add peer inline form */}
       {showAdd && (

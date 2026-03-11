@@ -4,14 +4,12 @@
 import { useEffect, useState, useRef, useCallback, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  FileText, Table2, Presentation, FileImage, Wrench, PenTool,
+  FileText, Table2, Presentation, FileImage, Wrench,
   Plus, Loader2, Pencil, Copy, Trash2, Files,
 } from 'lucide-react';
 import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { api } from '@/services/api';
-import { SignaturesList } from './SignaturesList';
-import { SignatureDialog } from './SignatureDialog';
 
 // ─── MIME groups per app tab ─────────────────────────────────────────
 
@@ -21,7 +19,6 @@ const APP_MIME_FILTER: Record<OfficeApp, string | undefined> = {
   presentations: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'pdf-viewer': 'application/pdf',
   'pdf-tools': undefined,
-  signatures: undefined,
 };
 
 const APP_NEW_TYPE: Record<string, 'docx' | 'xlsx' | 'pptx' | null> = {
@@ -38,7 +35,6 @@ const APP_CARD_STYLE: Record<OfficeApp, { icon: typeof FileText; color: string }
   presentations: { icon: Presentation, color: '#eab308' },   // yellow
   'pdf-viewer':  { icon: FileImage,    color: '#ef4444' },   // red
   'pdf-tools':   { icon: Wrench,       color: '#7f1d1d' },   // maroon
-  signatures:    { icon: PenTool,      color: '#8b5cf6' },   // purple
 };
 
 const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string }[] = [
@@ -47,7 +43,6 @@ const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string
   { id: 'presentations', label: 'Presentations',  icon: Presentation, color: '#eab308' },
   { id: 'pdf-viewer',    label: 'PDF Viewer',     icon: FileImage,    color: '#ef4444' },
   { id: 'pdf-tools',     label: 'PDF Tools',      icon: Wrench,       color: '#7f1d1d' },
-  { id: 'signatures',    label: 'Signatures',     icon: PenTool,      color: '#8b5cf6' },
 ];
 
 // ─── Context Menu ────────────────────────────────────────────────────
@@ -74,7 +69,6 @@ function FileContextMenu({ state, onClose, onAction }: {
   }, [onClose]);
 
   const items = [
-    { id: 'sign', label: 'Firmar con DocuSeal', icon: PenTool },
     { id: 'rename',    label: 'Rename',       icon: Pencil },
     { id: 'copy',      label: 'Create copy',  icon: Files },
     { id: 'duplicate', label: 'Copy',         icon: Copy },
@@ -209,7 +203,6 @@ export function Component() {
   const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading } = useOfficeStore();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [renaming, setRenaming] = useState<RecentDoc | null>(null);
-  const [signingDoc, setSigningDoc] = useState<{ id: string; filename: string } | null>(null);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -250,9 +243,6 @@ export function Component() {
 
   const handleCtxAction = useCallback(async (action: string, doc: RecentDoc) => {
     switch (action) {
-      case 'sign':
-        setSigningDoc({ id: doc.id, filename: doc.filename });
-        break;
       case 'rename':
         setRenaming(doc);
         break;
@@ -323,79 +313,73 @@ export function Component() {
 
       {/* ─── Content area ────────────────────────────────── */}
       <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-        {activeApp === 'signatures' ? (
-          <SignaturesList />
-        ) : (
-          <>
-            {/* New button */}
-            {newType && (
-              <button
-                onClick={handleNew}
-                disabled={loading}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  padding: '8px 20px', marginBottom: 20,
-                  background: cardColor, color: '#fff',
-                  border: 'none', borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                }}
-              >
-                {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
-                New {activeApp === 'documents' ? 'Document' : activeApp === 'spreadsheets' ? 'Spreadsheet' : 'Presentation'}
-              </button>
-            )}
+        {/* New button */}
+        {newType && (
+          <button
+            onClick={handleNew}
+            disabled={loading}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 20px', marginBottom: 20,
+              background: cardColor, color: '#fff',
+              border: 'none', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+            }}
+          >
+            {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={14} />}
+            New {activeApp === 'documents' ? 'Document' : activeApp === 'spreadsheets' ? 'Spreadsheet' : 'Presentation'}
+          </button>
+        )}
 
-            {/* Recent documents grid */}
-            {recentDocs.length > 0 ? (
-              <>
-                <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>Recent</h3>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                  gap: 12,
-                }}>
-                  {recentDocs.map((doc) => (
-                    <button
-                      key={doc.id}
-                      onClick={() => handleOpenFile(doc.id, doc.mime_type)}
-                      onContextMenu={(e) => handleContextMenu(e, doc)}
-                      style={{
-                        display: 'flex', flexDirection: 'column', gap: 4,
-                        padding: 16, background: 'var(--surface)',
-                        border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer', textAlign: 'left',
-                      }}
-                    >
-                      <CardIcon size={24} style={{ color: cardColor, marginBottom: 2 }} />
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                        {doc.filename}
-                      </span>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {new Date(doc.updated_at).toLocaleDateString()}
-                        {doc.size_bytes > 0 && ` · ${Math.round(doc.size_bytes / 1024)} KB`}
-                      </span>
-                      {doc.filepath && (
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                          {doc.filepath}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', gap: 12, padding: '60px 0',
-                color: 'var(--text-dim)',
-              }}>
-                <CardIcon size={40} strokeWidth={1} style={{ color: cardColor }} />
-                <span style={{ fontSize: 14 }}>
-                  {newType ? 'Create your first document' : 'No recent files'}
-                </span>
-              </div>
-            )}
+        {/* Recent documents grid */}
+        {recentDocs.length > 0 ? (
+          <>
+            <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>Recent</h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+              gap: 12,
+            }}>
+              {recentDocs.map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => handleOpenFile(doc.id, doc.mime_type)}
+                  onContextMenu={(e) => handleContextMenu(e, doc)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    padding: 16, background: 'var(--surface)',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <CardIcon size={24} style={{ color: cardColor, marginBottom: 2 }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    {doc.filename}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {new Date(doc.updated_at).toLocaleDateString()}
+                    {doc.size_bytes > 0 && ` · ${Math.round(doc.size_bytes / 1024)} KB`}
+                  </span>
+                  {doc.filepath && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                      {doc.filepath}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </>
+        ) : (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 12, padding: '60px 0',
+            color: 'var(--text-dim)',
+          }}>
+            <CardIcon size={40} strokeWidth={1} style={{ color: cardColor }} />
+            <span style={{ fontSize: 14 }}>
+              {newType ? 'Create your first document' : 'No recent files'}
+            </span>
+          </div>
         )}
       </div>
 
@@ -408,7 +392,7 @@ export function Component() {
         }}>
           <StatusDot label="ONLYOFFICE" ok={status.onlyoffice.running} />
           <StatusDot label="Stirling PDF" ok={status.stirling_pdf.running} />
-          <StatusDot label="DocuSeal" ok={status.docuseal.running} />
+          <StatusDot label="Documenso" ok={status.documenso.running} />
         </div>
       )}
 
@@ -427,16 +411,6 @@ export function Component() {
           doc={renaming}
           onClose={() => setRenaming(null)}
           onConfirm={handleRename}
-        />
-      )}
-
-      {/* ─── Signature Dialog ──────────────────────────────── */}
-      {signingDoc && (
-        <SignatureDialog
-          fileId={signingDoc.id}
-          filename={signingDoc.filename}
-          open
-          onClose={() => setSigningDoc(null)}
         />
       )}
 

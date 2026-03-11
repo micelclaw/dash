@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
-  Bell, Calendar, Keyboard, Rss, MessageSquare, Server,
+  Bell, Calendar, Keyboard, Rss, MessageSquare, Server, Database,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -30,6 +30,7 @@ import { ShortcutsSection } from '@/components/settings/sections/ShortcutsSectio
 import { FeedsSection } from '@/components/settings/sections/FeedsSection';
 import { ChannelObserversSection } from '@/components/settings/sections/ChannelObserversSection';
 import { ServicesSection } from '@/components/settings/sections/ServicesSection';
+import { DatabaseSection } from '@/components/settings/sections/DatabaseSection';
 
 interface SidebarItem {
   id: string;
@@ -62,7 +63,8 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
   if (isAdmin) {
     sections.push({ id: 'users', label: 'Users', icon: Users, dividerBefore: true });
   }
-  sections.push({ id: 'security', label: 'Security', icon: Shield, dividerBefore: !isAdmin });
+  sections.push({ id: 'database', label: 'Database', icon: Database, dividerBefore: !isAdmin });
+  sections.push({ id: 'security', label: 'Security', icon: Shield });
   sections.push({ id: 'license', label: 'License', icon: CreditCard });
   return sections;
 }
@@ -79,6 +81,7 @@ function renderSection(section: string) {
     case 'energy': return <EnergySection />;
     case 'dash': return <DashSection />;
     case 'users': return <UsersSection />;
+    case 'database': return <DatabaseSection />;
     case 'security': return <SecuritySection />;
     case 'license': return <LicenseSection />;
     case 'notifications': return <NotificationsSection />;

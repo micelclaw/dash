@@ -96,7 +96,7 @@ export function Component() {
         // Download CSV to browser
         const { useAuthStore } = await import('@/stores/auth.store');
         const token = useAuthStore.getState().tokens?.accessToken;
-        const baseUrl = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:7200';
+        const baseUrl = import.meta.env.VITE_API_URL ?? '';
         const res = await fetch(`${baseUrl}/api/v1/emails/export/csv`, {
           method: 'POST',
           headers: {

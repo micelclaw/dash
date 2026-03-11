@@ -428,7 +428,7 @@ export function Shell() {
 
   return (
     <TooltipProvider>
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)' }}>
         {/* Desktop sidebar */}
         {!isMobile && (
           <Sidebar onOpenCommandPalette={openPalette} />
