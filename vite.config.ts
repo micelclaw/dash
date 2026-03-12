@@ -10,13 +10,14 @@ import fs from 'fs';
 // 1. Internal cert signed by Caddy CA (works for VPN IPs + localhost)
 // 2. Tailscale cert (works for *.ts.net domain)
 // 3. basicSsl fallback (self-signed, browser warning)
-const internalCertDir = path.resolve(__dirname, '../data/certs/internal');
+const certBase = process.env.CLAW_CERT_PATH || '/var/lib/micelclaw/certs';
+const internalCertDir = path.join(certBase, 'internal');
 const internalCert = path.join(internalCertDir, 'server.crt');
 const internalKey = path.join(internalCertDir, 'server.key');
 const hasInternalCerts = fs.existsSync(internalCert) && fs.existsSync(internalKey);
 
 const tsDomain = 'micelclaw-os.monster-betelgeuse.ts.net';
-const certDir = path.resolve(__dirname, '../data/certs');
+const certDir = certBase;
 const tsCert = path.join(certDir, `${tsDomain}.crt`);
 const tsKey = path.join(certDir, `${tsDomain}.key`);
 const hasTailscaleCerts = fs.existsSync(tsCert) && fs.existsSync(tsKey);
