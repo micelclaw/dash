@@ -16,12 +16,15 @@ import { AuditLogSection } from './sections/AuditLogSection';
 import { ProxySettingsSection } from './sections/ProxySettingsSection';
 import { DnsSection } from './sections/DnsSection';
 import { SubdomainSection } from './sections/SubdomainSection';
+import { DdnsSection } from './sections/DdnsSection';
+import { useDdns } from './hooks/use-ddns';
 
 export function Component() {
   const proxyStatus = useProxyStatus();
   const allHosts = useProxyHosts();
   const cloudflare = useCloudflare();
   const subdomain = useSubdomain();
+  const ddns = useDdns();
   const [section, setSection] = useState<ProxySection>('overview');
 
   const hostCounts = useMemo(() => ({
@@ -123,6 +126,21 @@ export function Component() {
             onUpdateRecord={cloudflare.updateRecord}
             onDeleteRecord={cloudflare.deleteRecord}
             onRefresh={cloudflare.refresh}
+          />
+        )}
+        {section === 'ddns' && (
+          <DdnsSection
+            status={ddns.status}
+            config={ddns.config}
+            history={ddns.history}
+            loading={ddns.loading}
+            updating={ddns.updating}
+            onUpdateConfig={ddns.updateConfig}
+            onAddProvider={ddns.addProvider}
+            onUpdateProvider={ddns.updateProvider}
+            onRemoveProvider={ddns.removeProvider}
+            onForceUpdate={ddns.forceUpdate}
+            hasCfConfig={!!cloudflare.config?.has_token}
           />
         )}
         {section === 'subdomain' && (

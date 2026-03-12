@@ -99,7 +99,7 @@ function ConnectCloudflare({ onSave }: { onSave: (token: string, zoneId: string)
             Connect Cloudflare
           </h2>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', margin: 0, lineHeight: 1.5 }}>
-            Connect your Cloudflare account to manage DNS records directly from Claw OS.
+            Connect your Cloudflare account to manage DNS records directly from Micelclaw OS.
           </p>
         </div>
 

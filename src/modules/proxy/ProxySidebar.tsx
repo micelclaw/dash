@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   LayoutDashboard, Server, ArrowLeftRight, Ban,
   ShieldCheck, Lock, FileText, Settings,
-  Globe, Crown, Radio,
+  Globe, Crown, Radio, RefreshCw,
 } from 'lucide-react';
 import type { ProxyStatus } from './hooks/use-proxy-status';
 
@@ -10,7 +10,7 @@ export type ProxySection =
   | 'overview' | 'hosts' | 'redirects' | 'streams' | '404_hosts'
   | 'certificates' | 'access_lists'
   | 'audit_log' | 'settings'
-  | 'dns' | 'subdomain';
+  | 'dns' | 'ddns' | 'subdomain';
 
 interface ProxySidebarProps {
   active: ProxySection;
@@ -77,6 +77,7 @@ export function ProxySidebar({
       {/* ─── DNS ─── */}
       <SectionHeader label="DNS" />
       <NavItem icon={Globe} label="DNS Records" active={active === 'dns'} onClick={() => onChange('dns')} dot={hasCfConfig ? '#22c55e' : undefined} />
+      <NavItem icon={RefreshCw} label="Dynamic DNS" active={active === 'ddns'} onClick={() => onChange('ddns')} />
       <NavItem icon={Crown} label="Subdomain" active={active === 'subdomain'} onClick={() => onChange('subdomain')} badge="PRO" />
 
       <div style={{ flex: 1 }} />
