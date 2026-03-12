@@ -1,0 +1,116 @@
+NOTICE
+======
+
+Micelclaw Dash
+Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+
+This product includes software developed by third parties under their
+respective open-source licenses. The copyright holders and licenses for
+these dependencies are listed below.
+
+
+CORE FRAMEWORK
+--------------
+
+React
+  Copyright (c) Meta Platforms, Inc. and affiliates
+  License: MIT
+  https://github.com/facebook/react
+
+Vite
+  Copyright (c) 2019-present Evan You and Vite contributors
+  License: MIT
+  https://github.com/vitejs/vite
+
+TypeScript
+  Copyright (c) Microsoft Corporation
+  License: Apache 2.0
+  https://github.com/microsoft/TypeScript
+
+
+STYLING
+-------
+
+Tailwind CSS
+  Copyright (c) Tailwind Labs, Inc.
+  License: MIT
+  https://github.com/tailwindlabs/tailwindcss
+
+Shadcn/ui
+  Copyright (c) shadcn
+  License: MIT
+  https://github.com/shadcn-ui/ui
+
+Lucide Icons
+  Copyright (c) 2020-present Lucide contributors
+  License: ISC
+  https://github.com/lucide-icons/lucide
+
+
+STATE MANAGEMENT
+----------------
+
+Zustand
+  Copyright (c) 2019-present Paul Henschel and contributors
+  License: MIT
+  https://github.com/pmndrs/zustand
+
+
+EDITOR & RICH CONTENT
+---------------------
+
+Tiptap
+  Copyright (c) 2023-present Tiptap GmbH
+  License: MIT
+  https://github.com/ueberdosis/tiptap
+
+react-markdown
+  Copyright (c) Espen Hovlandsdal and contributors
+  License: MIT
+  https://github.com/remarkjs/react-markdown
+
+
+DATA VISUALIZATION
+------------------
+
+Recharts
+  Copyright (c) 2015-present recharts contributors
+  License: MIT
+  https://github.com/recharts/recharts
+
+react-force-graph-2d
+  Copyright (c) 2018-present Vasco Asturiano
+  License: MIT
+  https://github.com/vasturiano/react-force-graph
+
+
+INTERACTION
+-----------
+
+@dnd-kit
+  Copyright (c) 2021-present Claudéric Demers
+  License: MIT
+  https://github.com/clauderic/dnd-kit
+
+@tanstack/react-virtual
+  Copyright (c) 2021-present Tanner Linsley
+  License: MIT
+  https://github.com/TanStack/virtual
+
+
+TERMINAL
+--------
+
+xterm.js
+  Copyright (c) 2017-present The xterm.js authors
+  License: MIT
+  https://github.com/xtermjs/xterm.js
+
+
+---
+
+This NOTICE file may not be exhaustive. For the complete list of
+dependencies and their licenses, refer to the package.json and
+package-lock.json files in the source distribution.
+
+Last updated: March 2026
