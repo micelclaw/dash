@@ -161,7 +161,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
                   onChange={() => setSource('local')}
                   style={{ accentColor: 'var(--amber)' }}
                 />
-                Local (Claw OS only)
+                Local (Micelclaw OS only)
               </label>
 
               {caldavConnectors.map(conn => (

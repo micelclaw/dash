@@ -297,7 +297,7 @@ let mockDiary: DiaryEntry[] = [
   {
     id: 'diary-1', entry_date: daysAgoDate(0),
     content: '<p>Today was a productive day. Made great progress on the design system for Claw Dash.</p><p>The Notes module looks clean and the Tiptap integration works perfectly.</p><ul><li>Finished shared components</li><li>Command palette is responsive</li><li>Calendar implementation started</li></ul>',
-    mood: 'great', tags: ['claw-os', 'productivity'],
+    mood: 'great', tags: ['micelclaw-os', 'productivity'],
     weather: { temp: 14, condition: 'sunny', location: 'Madrid' },
     custom_fields: null, is_encrypted: false, is_draft: false, source: 'local',
     created_at: hoursAgo(6), updated_at: hoursAgo(1), synced_at: null, deleted_at: null,

@@ -224,7 +224,7 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos } = usePhotos({ search, selectedStars });
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos } = usePhotos({ search, selectedStars });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -237,6 +237,7 @@ export function Component() {
     photos: albumPhotos,
     loading: albumPhotosLoading,
     fetchPhotos: fetchAlbumPhotos,
+    removePhotos: removeAlbumPhotos,
   } = useAlbumPhotos(selectedAlbumId);
 
   // Multi-select
@@ -435,15 +436,18 @@ export function Component() {
   const handleDeletePhoto = useCallback(async () => {
     if (!deletePhotoId) return;
     try {
+      const idSet = new Set([deletePhotoId]);
+      removePhotos(idSet);
+      if (selectedAlbumId) removeAlbumPhotos(idSet);
+      setDeletePhotoId(null);
       await api.delete(`/files/${deletePhotoId}`);
       toast.success('Photo deleted');
-      setDeletePhotoId(null);
-      fetchPhotos(true);
-      if (selectedAlbumId) fetchAlbumPhotos(true);
     } catch {
       toast.error('Failed to delete photo');
+      fetchPhotos(true);
+      if (selectedAlbumId) fetchAlbumPhotos(true);
     }
-  }, [deletePhotoId, fetchPhotos, selectedAlbumId, fetchAlbumPhotos]);
+  }, [deletePhotoId, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
 
   const handleRemoveFromAlbum = useCallback(async (fileId: string) => {
     if (!selectedAlbumId) return;
@@ -483,19 +487,23 @@ export function Component() {
 
   const handleBatchDelete = useCallback(async () => {
     const ids = [...activeSelection.selectedIds];
+    const idSet = new Set(ids);
     setBatchDeleteOpen(false);
+
+    // Optimistic: remove from UI immediately
+    removePhotos(idSet);
+    if (selectedAlbumId) removeAlbumPhotos(idSet);
+    activeSelection.clearSelection();
+    toast.success(`${ids.length} photo${ids.length !== 1 ? 's' : ''} deleted`);
+
     try {
-      for (const id of ids) {
-        await api.delete(`/files/${id}`);
-      }
-      toast.success(`${ids.length} photo${ids.length !== 1 ? 's' : ''} deleted`);
-      activeSelection.clearSelection();
+      await Promise.all(ids.map(id => api.delete(`/files/${id}`)));
+    } catch {
+      toast.error('Some photos failed to delete');
       fetchPhotos(true);
       if (selectedAlbumId) fetchAlbumPhotos(true);
-    } catch {
-      toast.error('Failed to delete photos');
     }
-  }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos]);
+  }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
 
   const handleBatchProcess = useCallback(async () => {
     const ids = [...activeSelection.selectedIds];

@@ -14,6 +14,7 @@ export function ArticleReader() {
 
   const [fetchingFull, setFetchingFull] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [summarizeError, setSummarizeError] = useState<string | null>(null);
 
   const article = articles.find(a => a.id === activeArticleId);
   if (!article) {
@@ -33,7 +34,14 @@ export function ArticleReader() {
 
   const handleSummarize = async () => {
     setSummarizing(true);
-    try { await summarizeArticle(article.id); } finally { setSummarizing(false); }
+    setSummarizeError(null);
+    try {
+      await summarizeArticle(article.id);
+    } catch (err: any) {
+      setSummarizeError(err?.message || 'Failed to generate summary');
+    } finally {
+      setSummarizing(false);
+    }
   };
 
   const isYoutube = article.media_type === 'video/youtube';
@@ -85,24 +93,41 @@ export function ArticleReader() {
               disabled={fetchingFull}
             />
           )}
-          {!article.ai_summary && (
+          {!article.ai_summary ? (
             <ActionButton
               icon={summarizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              label="Summarize"
+              label={summarizing ? 'Summarizing...' : 'Summarize'}
               onClick={handleSummarize}
               disabled={summarizing}
             />
-          )}
+          ) : !summarizing ? (
+            <ActionButton
+              icon={<Sparkles size={14} />}
+              label="Re-summarize"
+              onClick={handleSummarize}
+              disabled={summarizing}
+            />
+          ) : null}
         </div>
       </div>
 
-      {/* AI Summary */}
-      {article.ai_summary && (
+      {/* AI Summary / Error */}
+      {summarizeError && (
+        <div className="mx-4 mt-3 p-3 rounded border border-red-500/30 bg-red-500/10">
+          <p className="text-xs font-medium text-red-400 mb-1">AI Summary Error</p>
+          <p className="text-sm text-red-300">{summarizeError}</p>
+        </div>
+      )}
+      {(article.ai_summary || summarizing) && (
         <div className="mx-4 mt-3 p-3 rounded border border-[var(--amber-dim)] bg-[var(--amber-dim)]">
           <p className="text-xs font-medium text-[var(--amber)] mb-1 flex items-center gap-1">
-            <Sparkles size={12} /> AI Summary
+            {summarizing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {summarizing ? 'Generating summary...' : 'AI Summary'}
           </p>
-          <p className="text-sm text-[var(--text)] whitespace-pre-wrap">{article.ai_summary}</p>
+          <p className="text-sm text-[var(--text)] whitespace-pre-wrap">
+            {article.ai_summary || ''}
+            {summarizing && <span className="inline-block w-1.5 h-4 bg-[var(--amber)] ml-0.5 animate-pulse align-text-bottom" />}
+          </p>
         </div>
       )}
 

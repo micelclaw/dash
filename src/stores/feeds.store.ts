@@ -268,10 +268,46 @@ export const useFeedsStore = create<FeedsState>()((set, get) => ({
   },
 
   summarizeArticle: async (articleId) => {
-    const res = await api.post<{ data: { summary: string } }>(`/feeds/articles/${articleId}/summarize`);
-    set((s) => ({
-      articles: s.articles.map(a => a.id === articleId ? { ...a, ai_summary: res.data.summary } : a),
-    }));
-    return res.data.summary;
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const token = (await import('@/stores/auth.store')).useAuthStore.getState().tokens?.accessToken;
+    const res = await fetch(`${baseUrl}/api/v1/feeds/articles/${articleId}/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: '{}',
+    });
+
+    // Non-streamed response (cached summary or error)
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream')) {
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || 'Summarization failed');
+      const summary = json.data?.summary || json.summary;
+      set((s) => ({ articles: s.articles.map(a => a.id === articleId ? { ...a, ai_summary: summary } : a) }));
+      return summary;
+    }
+
+    // SSE streaming response
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const lines = decoder.decode(value, { stream: true }).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const json = JSON.parse(line.slice(6));
+          if (json.chunk) {
+            fullText += json.chunk;
+            set((s) => ({ articles: s.articles.map(a => a.id === articleId ? { ...a, ai_summary: fullText } : a) }));
+          }
+          if (json.done) break;
+        } catch { /* ignore partial */ }
+      }
+    }
+
+    return fullText;
   },
 }));

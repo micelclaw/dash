@@ -6,12 +6,23 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 import fs from 'fs';
 
-// Tailscale HTTPS certs (generated via `sudo tailscale cert <domain>`)
-const tsDomain = 'claw-os.monster-betelgeuse.ts.net';
+// HTTPS cert priority:
+// 1. Internal cert signed by Caddy CA (works for VPN IPs + localhost)
+// 2. Tailscale cert (works for *.ts.net domain)
+// 3. basicSsl fallback (self-signed, browser warning)
+const internalCertDir = path.resolve(__dirname, '../data/certs/internal');
+const internalCert = path.join(internalCertDir, 'server.crt');
+const internalKey = path.join(internalCertDir, 'server.key');
+const hasInternalCerts = fs.existsSync(internalCert) && fs.existsSync(internalKey);
+
+const tsDomain = 'micelclaw-os.monster-betelgeuse.ts.net';
 const certDir = path.resolve(__dirname, '../data/certs');
 const tsCert = path.join(certDir, `${tsDomain}.crt`);
 const tsKey = path.join(certDir, `${tsDomain}.key`);
 const hasTailscaleCerts = fs.existsSync(tsCert) && fs.existsSync(tsKey);
+
+const useInternalCerts = hasInternalCerts;
+const useTailscaleCerts = !useInternalCerts && hasTailscaleCerts;
 
 /**
  * Vite plugin that adds Private Network Access (PNA) headers to all responses.
@@ -41,8 +52,8 @@ export default defineConfig({
     privateNetworkAccess(),
     react(),
     tailwindcss(),
-    // Self-signed fallback only when Tailscale certs aren't available
-    ...(!hasTailscaleCerts ? [basicSsl()] : []),
+    // basicSsl fallback only when no proper certs are available
+    ...(!useInternalCerts && !useTailscaleCerts ? [basicSsl()] : []),
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: true },
@@ -68,9 +79,11 @@ export default defineConfig({
   server: {
     host: true,
     port: 7100,
-    https: hasTailscaleCerts
-      ? { cert: tsCert, key: tsKey }
-      : undefined, // basic-ssl plugin handles self-signed
+    https: useInternalCerts
+      ? { cert: internalCert, key: internalKey }
+      : useTailscaleCerts
+        ? { cert: tsCert, key: tsKey }
+        : undefined, // basic-ssl plugin handles self-signed
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:7200',

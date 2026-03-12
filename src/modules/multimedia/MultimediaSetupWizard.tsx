@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Loader2, CheckCircle, AlertTriangle, Square, Clapperboard, Download, Film, Tv, Music, BookOpen, Search, ListPlus, Music2, Library, Headphones } from 'lucide-react';
 import { api } from '@/services/api';
-import { WIZARD_STYLES } from '../crypto/wizard-styles';
+import { WIZARD_STYLES } from '../crypto/shared/wizard-styles';
 
 type Step = 'select' | 'review' | 'installing' | 'cancelling' | 'done' | 'error';
 

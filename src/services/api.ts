@@ -2,6 +2,7 @@ import { useAuthStore } from '@/stores/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const API_PREFIX = '/api/v1';
+const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
  * Convert camelCase keys to snake_case recursively.
@@ -83,6 +84,7 @@ class ApiClient {
       method,
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
     if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {
@@ -128,7 +130,7 @@ class ApiClient {
     if (token) headers['Authorization'] = `Bearer ${token}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
-    const fetchOpts: RequestInit = { method: 'POST', headers };
+    const fetchOpts: RequestInit = { method: 'POST', headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
     if (body !== undefined) fetchOpts.body = JSON.stringify(body);
 
     const res = await fetch(url, fetchOpts);
@@ -138,7 +140,7 @@ class ApiClient {
         await useAuthStore.getState().refresh();
         const retryToken = this.getToken();
         if (retryToken) headers['Authorization'] = `Bearer ${retryToken}`;
-        const retry = await fetch(url, { ...fetchOpts, headers });
+        const retry = await fetch(url, { ...fetchOpts, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
         if (!retry.ok) {
           const errJson = await retry.json().catch(() => ({}));
           throw new ApiError(errJson.error?.code || 'UNKNOWN', errJson.error?.message || `Request failed: ${retry.status}`, undefined, retry.status);
@@ -189,7 +191,7 @@ class ApiClient {
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
     // No Content-Type — browser sets multipart boundary
-    const res = await fetch(url, { method, headers, body: formData });
+    const res = await fetch(url, { method, headers, body: formData, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     if (!res.ok) {
       const text = await res.text();
       throw new ApiError('UPLOAD_FAILED', text, undefined, res.status);

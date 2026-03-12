@@ -57,5 +57,9 @@ export function useAlbumPhotos(albumId: string | null) {
     }
   }, [albumId, fetchPhotos]);
 
-  return { photos, loading, hasMore, loadMore, fetchPhotos };
+  const removePhotos = useCallback((ids: Set<string>) => {
+    setPhotos(prev => prev.filter(p => !ids.has(p.id)));
+  }, []);
+
+  return { photos, loading, hasMore, loadMore, fetchPhotos, removePhotos };
 }

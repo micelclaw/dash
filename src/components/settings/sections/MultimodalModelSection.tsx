@@ -106,7 +106,9 @@ export function MultimodalModelSection() {
         next.delete(id);
         return next;
       });
-      fetchModels();
+      // Give Ollama a moment to index, then refresh
+      await new Promise(r => setTimeout(r, 2000));
+      await fetchModels();
     }
 
     if (success) toast.success(`${id} downloaded`);

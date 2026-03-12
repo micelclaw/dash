@@ -483,6 +483,8 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
                   flexDirection: 'column',
                   gap: 2,
                   minHeight: 28,
+                  minWidth: 0,
+                  overflow: 'hidden',
                 }}
               >
                 {dayAllDay.map((ev) => (
