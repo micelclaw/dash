@@ -1,3 +1,15 @@
+/**
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * All rights reserved.
+ *
+ * This file is part of Micelclaw OS and is proprietary software.
+ * Unauthorized copying, modification, distribution, or use of this
+ * file, via any medium, is strictly prohibited.
+ *
+ * See LICENSE in the root of this repository for full terms.
+ * https://micelclaw.com
+ */
+
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Eye, EyeOff, Trash2, CheckCircle, XCircle, AlertCircle, Loader2, RotateCw } from 'lucide-react';
 import { toast } from 'sonner';

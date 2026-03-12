@@ -1,3 +1,15 @@
+/**
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * All rights reserved.
+ *
+ * This file is part of Micelclaw OS and is proprietary software.
+ * Unauthorized copying, modification, distribution, or use of this
+ * file, via any medium, is strictly prohibited.
+ *
+ * See LICENSE in the root of this repository for full terms.
+ * https://micelclaw.com
+ */
+
 /** Heat color interpolation: 6 stops from cold blue → hot red */
 const HEAT_STOPS = [
   { t: 0.0, r: 56, g: 189, b: 248 },  // #38bdf8 — cold

@@ -1,3 +1,15 @@
+/**
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * All rights reserved.
+ *
+ * This file is part of Micelclaw OS and is proprietary software.
+ * Unauthorized copying, modification, distribution, or use of this
+ * file, via any medium, is strictly prohibited.
+ *
+ * See LICENSE in the root of this repository for full terms.
+ * https://micelclaw.com
+ */
+
 // ─── Office WebSocket Hook ──────────────────────────────────────────
 // Listens for office:* events from the backend (AI agent commands)
 // and executes them via the bridge plugin in ONLYOFFICE.
