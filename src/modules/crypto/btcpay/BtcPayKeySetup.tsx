@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Loader2, CheckCircle, AlertTriangle, Key, ExternalLink } from 'lucide-react';
 import { api } from '@/services/api';
-import { WIZARD_STYLES } from './wizard-styles';
+import { WIZARD_STYLES } from '../shared/wizard-styles';
 
 type Step = 'input' | 'validating' | 'done' | 'error';
 

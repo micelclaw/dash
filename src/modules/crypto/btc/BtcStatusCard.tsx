@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Play, Square, Cpu, Loader2, Wrench, Download, RefreshCw, ChevronDown, ChevronRight, Plus, Ban, Network, Activity, BarChart3 } from 'lucide-react';
 import { api } from '@/services/api';
-import { CryptoLogs } from './CryptoLogs';
-import { formatBytes, formatEta, formatUptime, formatHashRate, formatDifficulty, formatSatVB, formatRelativeTime, formatTraffic } from './crypto-formatters';
-import { UpdateCheck } from './UpdateCheck';
+import { CryptoLogs } from '../shared/CryptoLogs';
+import { formatBytes, formatEta, formatUptime, formatHashRate, formatDifficulty, formatSatVB, formatRelativeTime, formatTraffic } from '../shared/crypto-formatters';
+import { UpdateCheck } from '../shared/UpdateCheck';
 
 interface BtcSync {
   chain: string;

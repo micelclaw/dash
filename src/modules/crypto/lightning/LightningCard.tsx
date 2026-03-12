@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Play, Square, Zap, Cpu, Loader2, Wrench, Download, ChevronDown, ChevronRight, Network, Users, Layers, Plus, X, Copy, RefreshCw } from 'lucide-react';
 import { api } from '@/services/api';
-import { CryptoLogs } from './CryptoLogs';
-import { truncateId, formatMsat, formatUptime } from './crypto-formatters';
-import { UpdateCheck } from './UpdateCheck';
+import { CryptoLogs } from '../shared/CryptoLogs';
+import { truncateId, formatMsat, formatUptime } from '../shared/crypto-formatters';
+import { UpdateCheck } from '../shared/UpdateCheck';
 
 interface LightningInfo {
   id: string;
@@ -77,7 +77,7 @@ const STATE_COLORS: Record<string, string> = {
   ONCHAIN: '#6b7280',
 };
 
-export function LightningStatusCard({ svc, info, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
+export function LightningCard({ svc, info, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
 

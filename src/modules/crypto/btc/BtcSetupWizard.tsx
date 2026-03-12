@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, Loader2, CheckCircle, AlertTriangle, Shield, Zap, Download, HardDrive } from 'lucide-react';
 import { api } from '@/services/api';
-import { CryptoLogs } from './CryptoLogs';
-import { WIZARD_STYLES } from './wizard-styles';
+import { CryptoLogs } from '../shared/CryptoLogs';
+import { WIZARD_STYLES } from '../shared/wizard-styles';
 
 type Step = 'configure' | 'installing' | 'done' | 'error';
 type WizardMode = 'install' | 'configure';

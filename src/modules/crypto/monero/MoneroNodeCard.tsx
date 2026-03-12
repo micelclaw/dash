@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Play, Square, Cpu, Loader2, Wrench, Download, ChevronDown, ChevronRight, Network, BarChart3, RefreshCw } from 'lucide-react';
 import { api } from '@/services/api';
-import { CryptoLogs } from './CryptoLogs';
-import { formatBytes, formatDifficulty, formatRelativeTime, formatUptime, formatXmr, formatMoneroVersion, truncateId } from './crypto-formatters';
-import { UpdateCheck } from './UpdateCheck';
+import { CryptoLogs } from '../shared/CryptoLogs';
+import { formatBytes, formatDifficulty, formatRelativeTime, formatUptime, formatXmr, formatMoneroVersion, truncateId } from '../shared/crypto-formatters';
+import { UpdateCheck } from '../shared/UpdateCheck';
 
 interface MoneroSync {
   height: number;
@@ -83,7 +83,7 @@ function formatPeerTime(seconds: number): string {
   return `${Math.floor(seconds / 86400)}d`;
 }
 
-export function MoneroStatusCard({ svc, sync, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
+export function MoneroNodeCard({ svc, sync, extended, loading, starting, onInstall, onStart, onStop, onConfigure }: Props) {
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
   const phase = svc?.phase ?? 'stopped';
