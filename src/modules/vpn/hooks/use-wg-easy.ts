@@ -15,6 +15,8 @@ export interface WgEasyStatus {
   wsl2_restart_needed: boolean;
   endpoint_reachable: boolean;
   endpoint_method: 'upnp' | 'domain' | 'direct' | 'none';
+  local_ip: string | null;
+  server_vpn_ip: string | null;
 }
 
 export function useWgEasy() {
@@ -34,6 +36,9 @@ export function useWgEasy() {
 
   useEffect(() => {
     fetchStatus().then(() => setLoading(false));
+    // Poll every 15s so reachability / peer stats stay current
+    const iv = setInterval(fetchStatus, 15_000);
+    return () => clearInterval(iv);
   }, [fetchStatus]);
 
   const start = useCallback(async () => {

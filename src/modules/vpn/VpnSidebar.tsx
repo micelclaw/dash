@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Users, Download,
-  Globe, ExternalLink, Lightbulb,
+  Globe, ExternalLink, Lightbulb, Menu, X,
 } from 'lucide-react';
 import type { VpnStatus } from './hooks/use-vpn';
 import type { TailscaleStatus } from './hooks/use-tailscale';
@@ -25,9 +25,130 @@ const WG_ITEMS: { id: VpnSection; label: string; icon: React.ComponentType<{ siz
   { id: 'ideas', label: 'Ideas', icon: Lightbulb },
 ];
 
+const MOBILE_BREAKPOINT = 768;
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return mobile;
+}
+
+const SECTION_LABELS: Record<VpnSection, string> = {
+  overview: 'Overview',
+  peers: 'Peers',
+  'wg-easy': 'WireGuard Panel',
+  backup: 'Backup',
+  tailscale: 'Tailscale',
+  ideas: 'Ideas',
+};
+
 export function VpnSidebar({
   active, onChange, vpnStatus, peerCount, wgEasyStatus, tailscaleStatus,
 }: VpnSidebarProps) {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+
+  const handleNav = (section: VpnSection) => {
+    onChange(section);
+    setOpen(false);
+  };
+
+  const navContent = (
+    <>
+      {/* Overview — shared */}
+      <NavItem
+        icon={LayoutDashboard}
+        label="Overview"
+        active={active === 'overview'}
+        onClick={() => handleNav('overview')}
+      />
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
+
+      {/* WireGuard section */}
+      <SectionHeader label="WireGuard" />
+      {WG_ITEMS.map(item => (
+        <NavItem
+          key={item.id}
+          icon={item.icon}
+          label={item.id === 'peers' ? `Peers (${peerCount})` : item.label}
+          active={active === item.id}
+          onClick={() => handleNav(item.id)}
+          dot={item.id === 'wg-easy'
+            ? (wgEasyStatus?.running ? '#22c55e' : '#6b7280')
+            : undefined
+          }
+        />
+      ))}
+
+      {/* Separator */}
+      <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
+
+      {/* Tailscale section */}
+      <SectionHeader label="Tailscale" />
+      <NavItem
+        icon={Globe}
+        label="Status"
+        active={active === 'tailscale'}
+        onClick={() => handleNav('tailscale')}
+        dot={
+          tailscaleStatus?.logged_in ? '#22c55e'
+          : tailscaleStatus?.installed ? '#f59e0b'
+          : '#6b7280'
+        }
+      />
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <div style={{ flexShrink: 0, fontFamily: 'var(--font-sans)' }}>
+        {/* Collapsed bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px',
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--bg)',
+        }}>
+          <button
+            onClick={() => setOpen(!open)}
+            style={{
+              background: 'none', border: 'none', padding: 0,
+              color: 'var(--text)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            {open ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: wgEasyStatus?.running ? '#22c55e' : vpnStatus?.enabled ? '#22c55e' : '#6b7280',
+            flexShrink: 0,
+          }} />
+          <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
+            VPN — {SECTION_LABELS[active]}
+          </span>
+        </div>
+
+        {/* Expandable nav */}
+        {open && (
+          <div style={{
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--bg)',
+            paddingBottom: 8,
+          }}>
+            {navContent}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{
       width: 200, flexShrink: 0,
@@ -52,48 +173,7 @@ export function VpnSidebar({
         VPN
       </div>
 
-      {/* Overview — shared */}
-      <NavItem
-        icon={LayoutDashboard}
-        label="Overview"
-        active={active === 'overview'}
-        onClick={() => onChange('overview')}
-      />
-
-      <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
-
-      {/* WireGuard section */}
-      <SectionHeader label="WireGuard" />
-      {WG_ITEMS.map(item => (
-        <NavItem
-          key={item.id}
-          icon={item.icon}
-          label={item.id === 'peers' ? `Peers (${peerCount})` : item.label}
-          active={active === item.id}
-          onClick={() => onChange(item.id)}
-          dot={item.id === 'wg-easy'
-            ? (wgEasyStatus?.running ? '#22c55e' : '#6b7280')
-            : undefined
-          }
-        />
-      ))}
-
-      {/* Separator */}
-      <div style={{ height: 1, background: 'var(--border)', margin: '8px 12px' }} />
-
-      {/* Tailscale section */}
-      <SectionHeader label="Tailscale" />
-      <NavItem
-        icon={Globe}
-        label="Status"
-        active={active === 'tailscale'}
-        onClick={() => onChange('tailscale')}
-        dot={
-          tailscaleStatus?.logged_in ? '#22c55e'
-          : tailscaleStatus?.installed ? '#f59e0b'
-          : '#6b7280'
-        }
-      />
+      {navContent}
 
       <div style={{ flex: 1 }} />
     </div>

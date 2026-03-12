@@ -35,7 +35,7 @@ const USE_CASES: UseCase[] = [
     id: 'remote-access',
     icon: MonitorSmartphone,
     title: 'Remote Access to Your Server',
-    tagline: 'Access Claw OS and all services from anywhere',
+    tagline: 'Access Micelclaw OS and all services from anywhere',
     overview:
       'Connect your phone, laptop, or tablet to your server from any network. Once connected, you can access Drive, Photos, Diary, Mail, and every other Claw service as if you were on the local network.',
     clientFields: [

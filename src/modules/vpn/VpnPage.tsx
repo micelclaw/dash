@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useVpn } from './hooks/use-vpn';
 import { useTailscale } from './hooks/use-tailscale';
 import { useWgEasy } from './hooks/use-wg-easy';
@@ -11,11 +11,23 @@ import { TailscaleSection } from './sections/TailscaleSection';
 import { WgEasyIframe } from './sections/WgEasyIframe';
 import { IdeasSection } from './sections/IdeasSection';
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return mobile;
+}
+
 export function Component() {
   const vpn = useVpn();
   const tailscale = useTailscale();
   const wgEasy = useWgEasy();
   const wgClients = useWgClients();
+  const isMobile = useIsMobile();
   const [section, setSection] = useState<VpnSection>('overview');
 
   const handleOpenPanel = useCallback(() => setSection('wg-easy'), []);
@@ -24,6 +36,7 @@ export function Component() {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       flex: 1,
       minHeight: 0,
       overflow: 'hidden',

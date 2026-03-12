@@ -165,10 +165,10 @@ export function WgPeersSection({
           <div style={{ color: 'var(--text-dim)' }}>
             <strong style={{ color: '#ef4444' }}>WireGuard is not reachable from the internet.</strong>
             <br />
-            Your router does not support UPnP or port 51820/UDP is blocked.
+            Your router does not support UPnP or the WireGuard UDP port is blocked.
             <br />
             <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-              Use <strong>Tailscale</strong> for zero-config remote access, or open port 51820/UDP on your router manually.
+              Use <strong>Tailscale</strong> for zero-config remote access, or open the WireGuard UDP port on your router manually.
             </span>
           </div>
         </div>
