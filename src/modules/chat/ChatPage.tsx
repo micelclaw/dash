@@ -16,6 +16,8 @@ import { ChevronDown, PanelRight, MessageSquare, X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useCanvasEvents } from '@/hooks/use-canvas-events';
+import { useBrowserSession } from '@/hooks/use-browser-session';
 import { ChatPanel } from '@/components/shell/ChatPanel';
 import { ChatInput } from '@/components/shell/ChatInput';
 import { ConversationsSidebar } from './ConversationsSidebar';
@@ -26,6 +28,7 @@ export function Component() {
   const isMobile = useIsMobile();
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const setChatState = useChatStore((s) => s.setChatState);
   const appendStreamToken = useChatStore((s) => s.appendStreamToken);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
@@ -60,6 +63,10 @@ export function Component() {
           data.model as string | undefined,
           data.tokens_used as number | undefined,
         );
+        // Dispatch event for TTS auto-play (ChatInput listens)
+        window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
+          detail: { text: data.full_text as string },
+        }));
         break;
     }
   }, [streamEvent, appendStreamToken, finalizeStream, setStreamingMessage]);
@@ -75,6 +82,16 @@ export function Component() {
     setChatState(2);
     navigate(route + query);
   }, [navEvent, navigate, setChatState]);
+
+  // Canvas & browser session hooks — auto-open panel on content
+  const { hasContent } = useCanvasEvents();
+  const { isActive: browserActive } = useBrowserSession();
+
+  useEffect(() => {
+    if (!isMobile && (hasContent || browserActive)) {
+      setCanvasOpen(true);
+    }
+  }, [hasContent, browserActive, isMobile]);
 
   const handleCollapse = useCallback(() => {
     setChatState(2);
@@ -114,7 +131,10 @@ export function Component() {
           </>
         )
       ) : (
-        <ConversationsSidebar />
+        <ConversationsSidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
       )}
 
       {/* Main chat area */}
@@ -169,10 +189,22 @@ export function Component() {
                 fontSize: '0.75rem',
                 fontFamily: 'var(--font-sans)',
                 transition: 'background var(--transition-fast)',
+                position: 'relative',
               }}
             >
               <PanelRight size={14} />
               Canvas
+              {!canvasOpen && (hasContent || browserActive) && (
+                <span style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: 'var(--amber)',
+                }} />
+              )}
             </button>
           )}
         </div>

@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { getMockConversations, getMockMessages } from '@/services/mock';
 import { Input } from '@/components/ui/input';
@@ -58,7 +58,12 @@ function groupByDate<T extends { id: string; created_at: string }>(conversations
   return groups;
 }
 
-export function ConversationsSidebar() {
+interface ConversationsSidebarProps {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}
+
+export function ConversationsSidebar({ collapsed, onToggleCollapse }: ConversationsSidebarProps) {
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const selectConversation = useChatStore((s) => s.selectConversation);
@@ -67,19 +72,35 @@ export function ConversationsSidebar() {
   const renameConversation = useChatStore((s) => s.renameConversation);
   const setConversations = useChatStore((s) => s.setConversations);
   const addMessage = useChatStore((s) => s.addMessage);
+  const agents = useChatStore((s) => s.agents);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // Load mock conversations on mount
+  // Build agent color/name lookup
+  const agentLookup = useMemo(() => {
+    const map: Record<string, { color: string; avatar: string; display_name: string }> = {};
+    for (const a of agents) {
+      map[a.name] = {
+        color: a.color ?? 'var(--text-muted)',
+        avatar: a.avatar ?? '🤖',
+        display_name: a.display_name,
+      };
+    }
+    return map;
+  }, [agents]);
+
+  const loadConversations = useChatStore((s) => s.loadConversations);
+  const loadMessages = useChatStore((s) => s.loadMessages);
+
+  // Load conversations on mount
   useEffect(() => {
-    if (conversations.length === 0) {
-      const isMock = import.meta.env.VITE_MOCK_API === 'true';
-      if (isMock) {
+    const isMock = import.meta.env.VITE_MOCK_API === 'true';
+    if (isMock) {
+      if (conversations.length === 0) {
         const mockConvs = getMockConversations();
         setConversations(mockConvs);
-        // Pre-load messages for mock conversations
         for (const conv of mockConvs) {
           const msgs = getMockMessages(conv.id);
           for (const msg of msgs) {
@@ -87,8 +108,10 @@ export function ConversationsSidebar() {
           }
         }
       }
+    } else {
+      void loadConversations();
     }
-  }, [conversations.length, setConversations, addMessage]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return conversations;
@@ -98,17 +121,52 @@ export function ConversationsSidebar() {
 
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
-  const agentColors: Record<string, string> = {
-    francis: 'var(--mod-chat)',
-    elon: 'var(--mod-agents)',
-    ana: 'var(--mod-contacts)',
-  };
+  // Collapsed state — show only toggle button
+  if (collapsed) {
+    return (
+      <div
+        style={{
+          width: 40,
+          minWidth: 40,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          paddingTop: 8,
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+        }}
+      >
+        <button
+          onClick={onToggleCollapse}
+          title="Expand sidebar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            color: 'var(--text-dim)',
+            transition: 'background var(--transition-fast)',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <PanelLeftOpen size={16} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
-        width: 260,
-        minWidth: 260,
+        width: 280,
+        minWidth: 280,
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -116,9 +174,9 @@ export function ConversationsSidebar() {
         borderRight: '1px solid var(--border)',
       }}
     >
-      {/* Search */}
-      <div style={{ padding: '12px 12px 8px' }}>
-        <div style={{ position: 'relative' }}>
+      {/* Header with collapse toggle */}
+      <div style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ position: 'relative', flex: 1 }}>
           <Search
             size={14}
             style={{
@@ -137,6 +195,30 @@ export function ConversationsSidebar() {
             style={{ paddingLeft: 28, height: 28, fontSize: '0.75rem' }}
           />
         </div>
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            title="Collapse sidebar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              color: 'var(--text-dim)',
+              flexShrink: 0,
+              transition: 'background var(--transition-fast)',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <PanelLeftClose size={16} />
+          </button>
+        )}
       </div>
 
       {/* Conversation list */}
@@ -157,6 +239,11 @@ export function ConversationsSidebar() {
                 {group.label}
               </div>
               {group.items.map((conv) => {
+                const agentInfo = agentLookup[conv.agent];
+                const agentColor = agentInfo?.color ?? 'var(--text-muted)';
+                const agentName = agentInfo?.display_name ?? conv.agent;
+                const isActive = conv.id === activeConversationId;
+
                 const contextItems: ContextMenuItem[] = [
                   {
                     label: 'Rename',
@@ -180,16 +267,20 @@ export function ConversationsSidebar() {
                   <ContextMenu key={conv.id} trigger={
                     <button
                       onClick={() => {
-                        if (editingId !== conv.id) selectConversation(conv.id);
+                        if (editingId !== conv.id) {
+                          selectConversation(conv.id);
+                          void loadMessages(conv.id);
+                        }
                       }}
                       style={{
                         display: 'flex',
-                        alignItems: 'center',
+                        alignItems: 'flex-start',
                         gap: 8,
                         width: '100%',
-                        padding: '8px',
-                        background: conv.id === activeConversationId ? 'var(--surface-hover)' : 'transparent',
-                        border: conv.id === activeConversationId ? '1px solid var(--amber-dim)' : '1px solid transparent',
+                        padding: '8px 8px',
+                        background: isActive ? 'var(--surface-hover)' : 'transparent',
+                        border: isActive ? `1px solid ${agentColor}33` : '1px solid transparent',
+                        borderLeft: `3px solid ${isActive ? agentColor : 'transparent'}`,
                         cursor: 'pointer',
                         borderRadius: 'var(--radius-md)',
                         transition: 'background var(--transition-fast)',
@@ -198,22 +289,24 @@ export function ConversationsSidebar() {
                         fontFamily: 'var(--font-sans)',
                       }}
                       onMouseEnter={(e) => {
-                        if (conv.id !== activeConversationId) e.currentTarget.style.background = 'var(--surface-hover)';
+                        if (!isActive) e.currentTarget.style.background = 'var(--surface-hover)';
                       }}
                       onMouseLeave={(e) => {
-                        if (conv.id !== activeConversationId) e.currentTarget.style.background = 'transparent';
+                        if (!isActive) e.currentTarget.style.background = 'transparent';
                       }}
                     >
-                      <div
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 'var(--radius-full)',
-                          background: agentColors[conv.agent] ?? 'var(--text-muted)',
-                          flexShrink: 0,
-                        }}
-                      />
                       <div style={{ minWidth: 0, flex: 1 }}>
+                        {/* Agent name */}
+                        <div style={{
+                          fontSize: '0.625rem',
+                          fontWeight: 500,
+                          color: agentColor,
+                          marginBottom: 2,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.03em',
+                        }}>
+                          {agentName}
+                        </div>
                         {editingId === conv.id ? (
                           <input
                             ref={editInputRef}
@@ -249,13 +342,16 @@ export function ConversationsSidebar() {
                               fontSize: '0.8125rem',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              lineHeight: '1.3',
                             }}
                           >
                             {conv.first_message}
                           </div>
                         )}
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
                           {formatRelativeDate(conv.created_at)}
                         </div>
                       </div>

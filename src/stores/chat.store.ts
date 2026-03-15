@@ -13,6 +13,7 @@
 import { create } from 'zustand';
 import type { Message, Conversation, Agent, ChatState, StreamingState } from '@/types/chat';
 import { useWebSocketStore } from './websocket.store';
+import { api } from '@/services/api';
 
 interface ChatStore {
   conversations: Conversation[];
@@ -39,6 +40,8 @@ interface ChatStore {
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
   updateApprovalStatus: (approvalId: string, status: 'approved' | 'rejected' | 'expired') => void;
+  loadConversations: () => Promise<void>;
+  loadMessages: (conversationId: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
@@ -52,8 +55,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   agents: [],
 
   sendMessage: (text: string, context?: Record<string, unknown>) => {
-    const { activeConversationId, selectedAgent, messages } = get();
+    const { activeConversationId, selectedAgent, messages, chatState } = get();
     const convId = activeConversationId ?? crypto.randomUUID();
+
+    // Auto-expand chat panel when sending from collapsed state (any module)
+    if (chatState === 1) {
+      set({ chatState: 2 });
+    }
 
     if (!activeConversationId) {
       set({ activeConversationId: convId });
@@ -141,6 +149,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
       };
     });
+    // Persist deletion to backend
+    const isMock = import.meta.env.VITE_MOCK_API === 'true';
+    if (!isMock) {
+      void api.delete(`/conversations/threads/${id}`).catch((err: unknown) => {
+        console.error('[chat] Failed to delete conversation:', err);
+      });
+    }
   },
 
   renameConversation: (id: string, title: string) => {
@@ -164,6 +179,71 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       }
       return { messages: updated };
     });
+  },
+
+  loadConversations: async () => {
+    try {
+      const res = await api.get<{ data: Array<{
+        conversation_id: string;
+        first_message: string;
+        agent: string;
+        type: string;
+        message_count: number;
+        last_message_at: string;
+        created_at: string;
+      }> }>('/conversations/threads', { limit: 50 });
+
+      const conversations: Conversation[] = (res.data ?? []).map((t) => ({
+        id: t.conversation_id,
+        agent: t.agent ?? 'francis',
+        first_message: t.first_message ?? '',
+        message_count: t.message_count,
+        created_at: t.created_at,
+        updated_at: t.last_message_at ?? t.created_at,
+      }));
+
+      set({ conversations });
+    } catch (err) {
+      console.error('[chat] Failed to load conversations:', err);
+    }
+  },
+
+  loadMessages: async (conversationId: string) => {
+    // Skip if we already have messages for this conversation
+    const existing = get().messages.get(conversationId);
+    if (existing && existing.length > 0) return;
+
+    try {
+      const res = await api.get<{ data: Array<{
+        id: string;
+        role: string;
+        message: string;
+        from_agent: string;
+        model_used: string | null;
+        tokens_used: number | null;
+        created_at: string;
+        conversation_id: string;
+      }> }>(`/conversations/threads/${conversationId}`);
+
+      const msgs: Message[] = (res.data ?? []).map((m) => ({
+        id: m.id,
+        conversation_id: conversationId,
+        role: m.role as 'user' | 'assistant',
+        content: m.message,
+        agent: m.role === 'assistant' ? m.from_agent : undefined,
+        model: m.model_used ?? undefined,
+        tokens_used: m.tokens_used ?? undefined,
+        timestamp: m.created_at,
+      }));
+
+      set((state) => {
+        const updated = new Map(state.messages);
+        updated.set(conversationId, msgs);
+        return { messages: updated };
+      });
+    } catch (err) {
+      console.error('[chat] Failed to load messages:', err);
+    }
   },
 
   finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number) => {

@@ -46,6 +46,8 @@ export interface Agent {
   role: string;
   model: string;
   skills_count: number;
+  avatar?: string;
+  color?: string;
 }
 
 export type ChatState = 1 | 2 | 3;

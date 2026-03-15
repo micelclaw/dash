@@ -15,10 +15,12 @@ import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { Layout } from 'lucide-react';
 import type { Message, MessageApproval } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
+import { useCanvasStore } from '@/stores/canvas.store';
 
 interface ChatMessageProps {
   message: Message;
@@ -44,6 +46,14 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
     },
     [navigate],
   );
+
+  // Parse [canvas_ready:description] from assistant messages
+  const canvasReadyMatch = !isUser ? message.content.match(/\[canvas_ready:([^\]]+)\]/) : null;
+  const canvasReadyDesc = canvasReadyMatch?.[1] ?? null;
+  const displayContent = canvasReadyMatch
+    ? message.content.replace(/\[canvas_ready:[^\]]+\]\s*/, '').trim()
+    : message.content;
+  const setActiveMode = useCanvasStore((s) => s.setActiveMode);
 
   const timeStr = new Date(message.timestamp).toLocaleTimeString('en-GB', {
     hour: '2-digit',
@@ -208,8 +218,36 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
                     ),
                   }}
                 >
-                  {message.content}
+                  {displayContent}
                 </ReactMarkdown>
+                {canvasReadyDesc && (
+                  <button
+                    onClick={() => setActiveMode('canvas')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      width: '100%',
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      cursor: 'pointer',
+                      color: 'var(--text)',
+                      fontSize: '0.8125rem',
+                      fontFamily: 'var(--font-sans)',
+                      textAlign: 'left',
+                      transition: 'background var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+                  >
+                    <Layout size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+                    <span style={{ flex: 1 }}>{canvasReadyDesc}</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Open Canvas</span>
+                  </button>
+                )}
               </div>
             )}
             {isStreaming && !message.content && (
