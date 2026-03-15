@@ -24,3 +24,7 @@ Thumbs.db
 
 # npm lockfile (project uses pnpm)
 package-lock.json
+
+# Claude Code
+CLAUDE.md
+.claude/

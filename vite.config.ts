@@ -14,14 +14,13 @@ import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
 import fs from 'fs';
 
 // HTTPS cert priority:
 // 1. Internal cert signed by Caddy CA (works for VPN IPs + localhost)
 // 2. Tailscale cert (works for *.ts.net domain)
-// 3. basicSsl fallback (self-signed, browser warning)
+// 3. No certs → plain HTTP (localhost is exempt from HTTPS for PWA/service workers)
 const certBase = process.env.CLAW_CERT_PATH || '/var/lib/micelclaw/certs';
 const internalCertDir = path.join(certBase, 'internal');
 const internalCert = path.join(internalCertDir, 'server.crt');
@@ -36,6 +35,7 @@ const hasTailscaleCerts = fs.existsSync(tsCert) && fs.existsSync(tsKey);
 
 const useInternalCerts = hasInternalCerts;
 const useTailscaleCerts = !useInternalCerts && hasTailscaleCerts;
+const useHttps = useInternalCerts || useTailscaleCerts;
 
 /**
  * Vite plugin that adds Private Network Access (PNA) headers to all responses.
@@ -65,8 +65,6 @@ export default defineConfig({
     privateNetworkAccess(),
     react(),
     tailwindcss(),
-    // basicSsl fallback only when no proper certs are available
-    ...(!useInternalCerts && !useTailscaleCerts ? [basicSsl()] : []),
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: true },
@@ -96,7 +94,7 @@ export default defineConfig({
       ? { cert: internalCert, key: internalKey }
       : useTailscaleCerts
         ? { cert: tsCert, key: tsKey }
-        : undefined, // basic-ssl plugin handles self-signed
+        : undefined,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:7200',

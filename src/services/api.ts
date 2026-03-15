@@ -57,7 +57,7 @@ class ApiClient {
   private async request<T>(
     method: string,
     path: string,
-    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined>; _isRetry?: boolean },
+    options?: { body?: unknown; params?: Record<string, string | number | boolean | undefined>; timeout?: number; _isRetry?: boolean },
   ): Promise<T> {
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
@@ -96,7 +96,7 @@ class ApiClient {
       method,
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(options?.timeout ?? REQUEST_TIMEOUT_MS),
     });
 
     if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {
@@ -107,6 +107,11 @@ class ApiClient {
         useAuthStore.getState().logout();
         throw new ApiError('UNAUTHORIZED', 'Session expired', undefined, 401);
       }
+    }
+
+    // 204 No Content — nothing to parse
+    if (res.status === 204) {
+      return undefined as T;
     }
 
     let json: unknown;
@@ -172,12 +177,12 @@ class ApiClient {
     return json as T;
   }
 
-  get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
-    return this.request<T>('GET', path, { params });
+  get<T>(path: string, params?: Record<string, string | number | boolean | undefined>, opts?: { timeout?: number }): Promise<T> {
+    return this.request<T>('GET', path, { params, ...opts });
   }
 
-  post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, { body });
+  post<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+    return this.request<T>('POST', path, { body, ...opts });
   }
 
   patch<T>(path: string, body?: unknown): Promise<T> {

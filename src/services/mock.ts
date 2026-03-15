@@ -718,6 +718,9 @@ const MOCK_MANAGED_AGENTS: ManagedAgent[] = [
     workspace_path: '/gateway/workspace/agents/elon/',
     status: 'active', last_active_at: new Date(Date.now() - 1800000).toISOString(),
     sessions_today: 5, tokens_today: 22100, created_at: daysAgo(45),
+    semantic_scopes: [
+      { domain: 'notes', filter_type: 'include', filter: { type: 'tags', tags: ['code', 'dev'] } },
+    ],
   },
   // Ana — Data Analyst (chief, child of Francis)
   {
@@ -1732,6 +1735,100 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
     }
     const record = MOCK_LINKED_RECORDS[id!];
     return { data: record || { id } };
+  }
+
+  // ── Voice ──
+
+  if (method === 'GET' && route === '/voice/status') {
+    return { data: { stt: { available: true, host: '127.0.0.1', port: 10300 }, tts: { available: true, host: '127.0.0.1', port: 10200 } } };
+  }
+  if (method === 'GET' && route === '/voice/voices') {
+    return {
+      data: [
+        { name: 'es_ES-mls-medium', language: 'es_ES', description: 'Spanish MLS medium', installed: true },
+        { name: 'en_US-lessac-medium', language: 'en_US', description: 'English Lessac medium', installed: true },
+        { name: 'de_DE-thorsten-high', language: 'de_DE', description: 'German Thorsten high', installed: true },
+      ],
+    };
+  }
+  if (method === 'POST' && route === '/voice/stt') {
+    return { data: { text: 'Hola, esto es una prueba de voz.' } };
+  }
+  if (method === 'POST' && route === '/voice/tts') {
+    return new Blob([new Uint8Array(100)], { type: 'audio/ogg' });
+  }
+
+  // ── Sensor Fusion ──
+
+  if (method === 'GET' && route === '/sensor-fusion/status') {
+    return { data: { haConnected: true, rulesActive: 3, lastEvent: new Date().toISOString() } };
+  }
+  if (method === 'GET' && route === '/sensor-fusion/rules') {
+    return {
+      data: [
+        { id: 'rule-1', name: 'Meeting Mode', description: 'Dim lights and mute speakers when a meeting starts', enabled: true, conditions: [{ type: 'context_temporal', field: 'current_event', operator: 'exists' }], actions: [{ type: 'ha_service', domain: 'light', service: 'turn_on', entity_id: 'light.office', data: { brightness: 80 } }], cooldownMinutes: 15, lastTriggered: new Date(Date.now() - 3600_000).toISOString(), source: 'built-in', createdAt: daysAgo(7), updatedAt: daysAgo(1) },
+        { id: 'rule-2', name: 'Rain Alert', description: 'Notify when rain is detected and windows might be open', enabled: false, conditions: [{ type: 'weather', field: 'condition', operator: 'contains', value: 'rain' }], actions: [{ type: 'notify', message: 'Rain detected! Check windows.' }], cooldownMinutes: 60, lastTriggered: null, source: 'built-in', createdAt: daysAgo(7), updatedAt: daysAgo(3) },
+        { id: 'rule-3', name: 'Morning Briefing', description: 'Play a morning briefing on the kitchen speaker at 7:30', enabled: true, conditions: [{ type: 'time_window', start: '07:30', end: '07:35', days: ['mon', 'tue', 'wed', 'thu', 'fri'] }], actions: [{ type: 'voice_tts', message: 'Good morning! Here is your briefing.', voice: 'es_ES-mls-medium' }], cooldownMinutes: 1440, lastTriggered: new Date(Date.now() - 14400_000).toISOString(), source: 'user', createdAt: daysAgo(14), updatedAt: daysAgo(2) },
+      ],
+    };
+  }
+  if (method === 'POST' && route === '/sensor-fusion/rules') {
+    return { data: { id: `rule-new-${Date.now()}`, ...(body as Record<string, unknown>), created_at: new Date().toISOString() } };
+  }
+  if (route.match(/^\/sensor-fusion\/rules\/[\w-]+$/) && method === 'PUT') {
+    return { data: body };
+  }
+  if (route.match(/^\/sensor-fusion\/rules\/[\w-]+$/) && method === 'DELETE') {
+    return undefined;
+  }
+  if (method === 'GET' && route === '/sensor-fusion/zones') {
+    return {
+      data: [
+        { name: 'Office', entities: ['binary_sensor.office_motion', 'light.office'] },
+        { name: 'Kitchen', entities: ['binary_sensor.kitchen_motion', 'light.kitchen'] },
+        { name: 'Bedroom', entities: ['binary_sensor.bedroom_motion', 'light.bedroom'] },
+      ],
+    };
+  }
+  if (method === 'PUT' && route === '/sensor-fusion/zones') {
+    return { data: body };
+  }
+  if (method === 'POST' && route === '/sensor-fusion/rules/import-built-in') {
+    return { data: { imported: 6 } };
+  }
+
+  // ── Apps ──
+
+  if (method === 'GET' && route === '/apps') {
+    return {
+      data: [
+        { id: 'app-1', app_name: 'claw-finance', version: '1.2.0', app_level: 2, status: 'active', source: 'clawhub', semantic_scopes: [] },
+      ],
+      meta: { total: 1, by_level: { L1: 0, L2: 1, L3: 0 } },
+    };
+  }
+
+  // ── Scope Preview ──
+
+  if (method === 'POST' && route === '/admin/scope-preview') {
+    return { data: { notes: 45, emails: 230, contacts: 12, events: 67, files: 89, diary: 15 } };
+  }
+
+  // ── Context Insights ──
+
+  if (method === 'GET' && route.startsWith('/context/insights')) {
+    return {
+      data: {
+        userId: MOCK_USER.id,
+        insights: [
+          { id: 'meeting-prep-evt-1', category: 'reminder', priority: 'high', title: '"Design Review" starts in 10 min', body: 'You have an upcoming event. Consider wrapping up your current work.', signals: ['temporal'], action: { type: 'navigate', payload: { route: '/calendar', eventId: 'evt-1' } }, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() },
+          { id: 'unread-pileup', category: 'suggestion', priority: 'medium', title: '14 unread emails', body: 'Your inbox has accumulated unread messages. Consider reviewing them.', signals: ['communication'], action: { type: 'navigate', payload: { route: '/mail' } }, createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() },
+          { id: 'long-session', category: 'optimization', priority: 'low', title: 'Consider a break', body: "You've been active for 95 minutes. A short break can improve focus.", signals: ['activity'], createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 300_000).toISOString() },
+        ],
+        computedAt: new Date().toISOString(),
+        llmUsed: false,
+      },
+    };
   }
 
   return { data: null };
