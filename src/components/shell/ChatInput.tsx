@@ -10,11 +10,15 @@
  * https://micelclaw.com
  */
 
-import { useState, useRef, useCallback, type KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react';
 import { ArrowUp, ChevronUp, ChevronDown, Paperclip } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
+import { useSettingsStore } from '@/stores/settings.store';
 import { useModuleContext } from '@/hooks/use-module-context';
+import { useVoice } from '@/hooks/use-voice';
 import { AgentSelector } from './AgentSelector';
+import { VoiceButton } from '@/components/voice/VoiceButton';
+import { SpeakingIndicator } from '@/components/voice/SpeakingIndicator';
 
 interface ChatInputProps {
   onExpand?: () => void;
@@ -27,12 +31,15 @@ interface ChatInputProps {
 export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, compactAgent }: ChatInputProps) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastInputWasVoiceRef = useRef(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const moduleContext = useModuleContext();
+  const voice = useVoice();
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
+    lastInputWasVoiceRef.current = false;
     sendMessage(trimmed, {
       module: moduleContext.moduleId,
       active_item: moduleContext.activeItem,
@@ -43,6 +50,18 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       textareaRef.current.style.height = 'auto';
     }
   }, [text, sendMessage, moduleContext]);
+
+  const handleVoiceStop = useCallback(async () => {
+    const transcript = await voice.stopRecording();
+    if (transcript) {
+      lastInputWasVoiceRef.current = true;
+      sendMessage(transcript, {
+        module: moduleContext.moduleId,
+        active_item: moduleContext.activeItem,
+        editor_context: moduleContext.editorContext,
+      });
+    }
+  }, [voice, sendMessage, moduleContext]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -63,6 +82,55 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 72) + 'px';
   }, []);
+
+  // Space push-to-talk: only when textarea is not focused and no text is being typed
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      // Don't interfere with typing in inputs/textareas
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if ((e.target as HTMLElement)?.isContentEditable) return;
+      if (voice.state !== 'idle' && voice.state !== 'recording') return;
+
+      e.preventDefault();
+      if (voice.state === 'idle') {
+        voice.startRecording();
+      }
+    };
+
+    const handleKeyUp = (e: globalThis.KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      if (voice.state === 'recording') {
+        handleVoiceStop();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [voice, handleVoiceStop]);
+
+  // TTS auto-play: when the last input was voice AND autoplay_responses is enabled
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const responseText = (e as CustomEvent).detail?.text as string;
+      if (!responseText || voice.state !== 'idle') return;
+      if (!lastInputWasVoiceRef.current) return;
+      const autoplay = useSettingsStore.getState().settings?.voice?.autoplay_responses ?? false;
+      if (!autoplay) {
+        lastInputWasVoiceRef.current = false;
+        return;
+      }
+      lastInputWasVoiceRef.current = false;
+      voice.playTts(responseText);
+    };
+    window.addEventListener('claw:tts-autoplay', handler);
+    return () => window.removeEventListener('claw:tts-autoplay', handler);
+  }, [voice]);
 
   return (
     <div
@@ -115,6 +183,18 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           }}
         />
       </div>
+
+      {/* Voice — recording/processing indicator or speaking indicator */}
+      {voice.state === 'speaking' ? (
+        <SpeakingIndicator onStop={voice.stopTts} />
+      ) : (
+        <VoiceButton
+          state={voice.state}
+          duration={voice.duration}
+          onStart={voice.startRecording}
+          onStop={handleVoiceStop}
+        />
+      )}
 
       {/* Attachment */}
       <button

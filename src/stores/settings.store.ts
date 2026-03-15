@@ -115,6 +115,11 @@ const DEFAULT_SETTINGS: Settings = {
     working_hours_end: '18:00',
     default_reminder_minutes: null,
   },
+  voice: {
+    input_mode: 'hold',
+    autoplay_responses: false,
+    shortcut_key: 'Space',
+  },
 };
 
 interface SettingsState {

@@ -90,6 +90,11 @@ export interface Settings {
     working_hours_end: string;
     default_reminder_minutes: number | null;
   };
+  voice: {
+    input_mode: 'hold' | 'toggle';
+    autoplay_responses: boolean;
+    shortcut_key: string;
+  };
 }
 
 export interface SecurityConfig {
