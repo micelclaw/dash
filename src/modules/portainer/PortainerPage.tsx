@@ -40,7 +40,7 @@ export function Component() {
 
   const checkStatus = useCallback(async () => {
     try {
-      const envelope = await api.get<{ data: PortainerStatus }>('/portainer/status');
+      const envelope = await api.get<{ data: PortainerStatus }>('/portainer/status', undefined, { timeout: 45_000 });
       const res = envelope.data;
       setStatus(res);
       return res;
@@ -54,7 +54,7 @@ export function Component() {
   const startPortainer = useCallback(async () => {
     setPhase('installing');
     try {
-      const envelope = await api.post<{ data: PortainerStatus }>('/portainer/start');
+      const envelope = await api.post<{ data: PortainerStatus }>('/portainer/start', undefined, { timeout: 45_000 });
       const res = envelope.data;
       setStatus(res);
       if (res.running) {

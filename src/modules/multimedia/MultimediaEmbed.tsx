@@ -193,7 +193,10 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
 
   // Ready — iframe view
   if (phase === 'ready' && appStatus) {
-    const url = `http://localhost:${port}`;
+    // Use the same hostname as the browser to avoid cross-origin issues
+    // (e.g., if accessed via 127.0.0.1, iframe must also use 127.0.0.1)
+    const hostname = window.location.hostname;
+    const directUrl = `${window.location.protocol}//${hostname}:${port}`;
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Header bar */}
@@ -217,7 +220,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
             <span style={{ color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
           )}
           <a
-            href={url}
+            href={directUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
@@ -227,9 +230,9 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
           </a>
         </div>
 
-        {/* Iframe */}
+        {/* Iframe — apps are configured to allow embedding */}
         <iframe
-          src={url}
+          src={directUrl}
           title={displayName}
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"

@@ -16,6 +16,7 @@ import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, MessageSquare, Server, Database,
+  Mic, Radio,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -43,6 +44,9 @@ import { FeedsSection } from '@/components/settings/sections/FeedsSection';
 import { ChannelObserversSection } from '@/components/settings/sections/ChannelObserversSection';
 import { ServicesSection } from '@/components/settings/sections/ServicesSection';
 import { DatabaseSection } from '@/components/settings/sections/DatabaseSection';
+import { VoiceSection } from '@/components/settings/sections/VoiceSection';
+import { SensorFusionSection } from '@/components/settings/sections/SensorFusionSection';
+import { PermissionsSection } from '@/components/settings/sections/PermissionsSection';
 
 interface SidebarItem {
   id: string;
@@ -56,6 +60,7 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
   const sections: SidebarItem[] = [
     { id: 'general', label: 'General', icon: Globe },
     { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
+    { id: 'voice', label: 'Voice', icon: Mic },
     { id: 'sync', label: 'Sync', icon: RefreshCw },
     { id: 'mail', label: 'Mail', icon: Mail },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -63,6 +68,7 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'network', label: 'Red', icon: Network },
     { id: 'energy', label: 'Energia', icon: Zap },
+    { id: 'sensor-fusion', label: 'Sensor Fusion', icon: Radio },
     { id: 'services', label: 'Services', icon: Server },
     { id: 'dash', label: 'Dash', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
@@ -77,6 +83,7 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
   }
   sections.push({ id: 'database', label: 'Database', icon: Database, dividerBefore: !isAdmin });
   sections.push({ id: 'security', label: 'Security', icon: Shield });
+  sections.push({ id: 'permissions', label: 'Permissions', icon: Shield });
   sections.push({ id: 'license', label: 'License', icon: CreditCard });
   return sections;
 }
@@ -85,6 +92,7 @@ function renderSection(section: string) {
   switch (section) {
     case 'general': return <GeneralSection />;
     case 'ai': return <AISection />;
+    case 'voice': return <VoiceSection />;
     case 'sync': return <SyncSection />;
     case 'mail': return <MailSection />;
     case 'photos': return <PhotosSection />;
@@ -104,6 +112,8 @@ function renderSection(section: string) {
     case 'feeds': return <FeedsSection />;
     case 'observers': return <ChannelObserversSection />;
     case 'services': return <ServicesSection />;
+    case 'sensor-fusion': return <SensorFusionSection />;
+    case 'permissions': return <PermissionsSection />;
     default: return <GeneralSection />;
   }
 }

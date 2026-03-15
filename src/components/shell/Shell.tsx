@@ -171,6 +171,7 @@ export function Shell() {
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const changeEvent = useWebSocket('change.*');
   const mediaEvent = useWebSocket('media.download.*');
+  const sensorEvent = useWebSocket('sensor.*');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -437,6 +438,28 @@ export function Shell() {
       action: route ? { label: 'View', route } : undefined,
     });
   }, [changeEvent, addNotification]);
+
+  // Sensor fusion events
+  useEffect(() => {
+    if (!sensorEvent) return;
+    if (sensorEvent.event === 'sensor.rule_triggered') {
+      const ruleName = sensorEvent.data.ruleName as string;
+      const actions = sensorEvent.data.actionsExecuted as number;
+      toast(`${ruleName} activated`, {
+        description: `${actions} action${actions === 1 ? '' : 's'} executed`,
+        duration: 5000,
+      });
+      addNotification({
+        type: 'system',
+        title: `Rule triggered: ${ruleName}`,
+        action: { label: 'View', route: '/settings/sensor-fusion' },
+      });
+    } else if (sensorEvent.event === 'sensor.ha_connected') {
+      toast.success('Home Assistant connected');
+    } else if (sensorEvent.event === 'sensor.ha_disconnected') {
+      toast.error('Home Assistant disconnected');
+    }
+  }, [sensorEvent, addNotification]);
 
   return (
     <TooltipProvider>

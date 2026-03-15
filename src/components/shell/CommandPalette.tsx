@@ -17,7 +17,7 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
-  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Terminal, Container, FileText,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Container, FileText, Terminal,
   Play, SkipForward, Download as DownloadIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -166,8 +166,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'goto-tools', label: 'Go to Tools', icon: Wrench, group: 'Navigation', action: () => navigate('/tools') },
     { id: 'create-diagram', label: 'Create new diagram', icon: Waypoints, group: 'Actions', action: () => navigate('/diagrams/new') },
     { id: 'goto-projects', label: 'Go to Projects', icon: Kanban, group: 'Navigation', action: () => navigate('/projects') },
-    { id: 'goto-termix', label: 'Open Terminal', icon: Terminal, group: 'Navigation', action: () => navigate('/termix') },
     { id: 'goto-portainer', label: 'Open Portainer', icon: Container, group: 'Navigation', action: () => navigate('/portainer') },
+    { id: 'goto-terminal', label: 'Go to Terminal', icon: Terminal, group: 'Navigation', action: () => navigate('/terminal') },
     { id: 'goto-office', label: 'Go to Office', icon: FileText, group: 'Navigation', action: () => navigate('/office') },
     { id: 'create-document', label: 'New document', icon: FileText, group: 'Actions', action: () => navigate('/office?action=new&type=docx') },
     { id: 'create-spreadsheet', label: 'New spreadsheet', icon: FileText, group: 'Actions', action: () => navigate('/office?action=new&type=xlsx') },

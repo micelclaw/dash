@@ -14,8 +14,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { useProxyStatus } from './hooks/use-proxy-status';
 import { useProxyHosts } from './hooks/use-proxy-hosts';
 import { api } from '@/services/api';
-import { useCloudflare } from './hooks/use-cloudflare-dns';
-import { useSubdomain } from './hooks/use-subdomain';
 import { ProxySidebar, type ProxySection } from './ProxySidebar';
 import { DashboardSection } from './sections/DashboardSection';
 import { ProxyHostsSection } from './sections/ProxyHostsSection';
@@ -26,17 +24,10 @@ import { CertificatesSection } from './sections/CertificatesSection';
 import { AccessListsSection } from './sections/AccessListsSection';
 import { AuditLogSection } from './sections/AuditLogSection';
 import { ProxySettingsSection } from './sections/ProxySettingsSection';
-import { DnsSection } from './sections/DnsSection';
-import { SubdomainSection } from './sections/SubdomainSection';
-import { DdnsSection } from './sections/DdnsSection';
-import { useDdns } from './hooks/use-ddns';
 
 export function Component() {
   const proxyStatus = useProxyStatus();
   const allHosts = useProxyHosts();
-  const cloudflare = useCloudflare();
-  const subdomain = useSubdomain();
-  const ddns = useDdns();
   const [section, setSection] = useState<ProxySection>('overview');
 
   const hostCounts = useMemo(() => ({
@@ -67,7 +58,6 @@ export function Component() {
         hostCounts={hostCounts}
         certCount={certCount}
         aclCount={aclCount}
-        hasCfConfig={!!cloudflare.config?.has_token}
       />
 
       <div style={{
@@ -127,43 +117,6 @@ export function Component() {
         {section === 'access_lists' && <AccessListsSection />}
         {section === 'audit_log' && <AuditLogSection />}
         {section === 'settings' && <ProxySettingsSection />}
-        {section === 'dns' && (
-          <DnsSection
-            config={cloudflare.config}
-            records={cloudflare.records}
-            loading={cloudflare.loading}
-            onSaveConfig={cloudflare.saveConfig}
-            onRemoveConfig={cloudflare.removeConfig}
-            onCreateRecord={cloudflare.createRecord}
-            onUpdateRecord={cloudflare.updateRecord}
-            onDeleteRecord={cloudflare.deleteRecord}
-            onRefresh={cloudflare.refresh}
-          />
-        )}
-        {section === 'ddns' && (
-          <DdnsSection
-            status={ddns.status}
-            config={ddns.config}
-            history={ddns.history}
-            loading={ddns.loading}
-            updating={ddns.updating}
-            onUpdateConfig={ddns.updateConfig}
-            onAddProvider={ddns.addProvider}
-            onUpdateProvider={ddns.updateProvider}
-            onRemoveProvider={ddns.removeProvider}
-            onForceUpdate={ddns.forceUpdate}
-            hasCfConfig={!!cloudflare.config?.has_token}
-          />
-        )}
-        {section === 'subdomain' && (
-          <SubdomainSection
-            request={subdomain.request}
-            loading={subdomain.loading}
-            onRequest={subdomain.requestSubdomain}
-            onRelease={subdomain.release}
-            onCheck={subdomain.checkStatus}
-          />
-        )}
       </div>
     </div>
   );

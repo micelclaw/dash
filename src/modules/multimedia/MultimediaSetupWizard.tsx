@@ -124,7 +124,7 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
     for (let i = 0; i < apps.length; i++) {
       if (cancelledRef.current) break;
 
-      const appName = apps[i];
+      const appName = apps[i]!;
       const appInfo = ALL_APPS.find(a => a.name === appName);
       const label = appInfo?.display_name ?? appName;
       setCurrentApp(appName);
@@ -140,6 +140,8 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
       try {
         const res = await api.post<{ data: { success: boolean; error: string | null; logs?: string[] } }>(
           `/multimedia/${appName}/install`,
+          undefined,
+          { timeout: 300_000 },
         );
         if (cancelledRef.current) break;
 
@@ -150,7 +152,7 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
         }
 
         if (res.data.success) {
-          completedApps.push(appName);
+          completedApps.push(appName!);
           setLogs(prev => [...prev, `✓ ${label} installed successfully`]);
           setProgress(prev => prev.map((p, idx) =>
             idx === i ? { ...p, status: 'done' } : p
@@ -208,7 +210,7 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
   }, [selected, autoWire, hasServarr]);
 
   // ─── Cancel + revert ─────────────────────────────────────
-  const revertApps = async (completedApps: string[], allApps: string[]) => {
+  const revertApps = async (completedApps: string[], _allApps: string[]) => {
     setStep('cancelling');
     setLogs(['Cancelling installation...']);
 
@@ -221,7 +223,7 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
 
     // Uninstall completed apps in reverse order
     for (let i = completedApps.length - 1; i >= 0; i--) {
-      const appName = completedApps[i];
+      const appName = completedApps[i]!;
       setCurrentApp(appName);
       setLogs(prev => [...prev, `Removing ${appName}...`]);
       try {
@@ -420,6 +422,21 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
                 {autoWire && hasServarr && ' · Auto-wire enabled'}
               </div>
 
+              {hasServarr && (
+                <div className="wizard-info" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div>Servarr apps will be configured with default credentials:</div>
+                  <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, padding: '4px 8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 4, color: '#ef4444' }}>
+                    User: <strong>servarr</strong> &nbsp;·&nbsp; Pass: <strong>12345</strong>
+                  </div>
+                </div>
+              )}
+
+              {selected.has('jellyfin') && (
+                <div className="wizard-info" style={{ borderColor: 'rgba(168, 85, 247, 0.3)', background: 'rgba(168, 85, 247, 0.06)' }}>
+                  <strong>Jellyfin</strong> requires a one-time initial setup through its own wizard (create admin user, add media libraries). This is normal — it will appear automatically when you first open Jellyfin.
+                </div>
+              )}
+
               <div className="wizard-info">
                 Services will be installed sequentially. Media directories will be created automatically at /data/media/.
               </div>
@@ -494,17 +511,61 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
 
           {/* ─── Done step ─── */}
           {step === 'done' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '40px 0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 0' }}>
               <CheckCircle size={32} style={{ color: '#22c55e' }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>
                 All services installed successfully
               </div>
               {autoWire && hasServarr && (
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
                   Cross-service connections configured automatically
                 </div>
               )}
-              <button className="wizard-btn-primary" onClick={onDone}>Done</button>
+
+              {/* Credentials info */}
+              {hasServarr && (
+                <div style={{
+                  width: '100%', marginTop: 8, padding: '12px 14px',
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 12, lineHeight: 1.6,
+                }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+                    Servarr Credentials
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-mono, monospace)', fontSize: 11,
+                    padding: '6px 10px', background: 'rgba(0,0,0,0.2)', borderRadius: 4,
+                    color: 'var(--text-dim)',
+                  }}>
+                    User: <strong style={{ color: 'var(--text)' }}>servarr</strong>
+                    <br />
+                    Pass: <strong style={{ color: 'var(--text)' }}>12345</strong>
+                  </div>
+                  <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 11 }}>
+                    Radarr, Sonarr, Lidarr, Readarr — same credentials for all.
+                  </div>
+                </div>
+              )}
+
+              {/* Media directories info */}
+              <div style={{
+                width: '100%', marginTop: 4, padding: '10px 14px',
+                background: 'rgba(0,0,0,0.15)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 11, lineHeight: 1.6, color: 'var(--text-dim)',
+                fontFamily: 'var(--font-mono, monospace)',
+              }}>
+                <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4, fontFamily: 'inherit' }}>
+                  /data/media/
+                </div>
+                <div>peliculas/ &nbsp;series/ &nbsp;musica/</div>
+                <div>libros/ &nbsp;audiolibros/ &nbsp;descargas/</div>
+              </div>
+
+              <button className="wizard-btn-primary" onClick={onDone} style={{ marginTop: 8 }}>Done</button>
             </div>
           )}
 

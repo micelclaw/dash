@@ -13,16 +13,14 @@
 import { useState } from 'react';
 import {
   LayoutDashboard, Server, ArrowLeftRight, Ban,
-  ShieldCheck, Lock, FileText, Settings,
-  Globe, Crown, Radio, RefreshCw,
+  ShieldCheck, Lock, FileText, Settings, Radio,
 } from 'lucide-react';
 import type { ProxyStatus } from './hooks/use-proxy-status';
 
 export type ProxySection =
   | 'overview' | 'hosts' | 'redirects' | 'streams' | '404_hosts'
   | 'certificates' | 'access_lists'
-  | 'audit_log' | 'settings'
-  | 'dns' | 'ddns' | 'subdomain';
+  | 'audit_log' | 'settings';
 
 interface ProxySidebarProps {
   active: ProxySection;
@@ -31,11 +29,10 @@ interface ProxySidebarProps {
   hostCounts: { proxy: number; redirect: number; notfound: number };
   certCount: number;
   aclCount: number;
-  hasCfConfig: boolean;
 }
 
 export function ProxySidebar({
-  active, onChange, status, hostCounts, certCount, aclCount, hasCfConfig,
+  active, onChange, status, hostCounts, certCount, aclCount,
 }: ProxySidebarProps) {
   return (
     <div style={{
@@ -83,14 +80,6 @@ export function ProxySidebar({
       <SectionHeader label="System" />
       <NavItem icon={FileText} label="Audit Log" active={active === 'audit_log'} onClick={() => onChange('audit_log')} />
       <NavItem icon={Settings} label="Settings" active={active === 'settings'} onClick={() => onChange('settings')} />
-
-      <Divider />
-
-      {/* ─── DNS ─── */}
-      <SectionHeader label="DNS" />
-      <NavItem icon={Globe} label="DNS Records" active={active === 'dns'} onClick={() => onChange('dns')} dot={hasCfConfig ? '#22c55e' : undefined} />
-      <NavItem icon={RefreshCw} label="Dynamic DNS" active={active === 'ddns'} onClick={() => onChange('ddns')} />
-      <NavItem icon={Crown} label="Subdomain" active={active === 'subdomain'} onClick={() => onChange('subdomain')} badge="PRO" />
 
       <div style={{ flex: 1 }} />
     </div>

@@ -85,15 +85,17 @@ const router = createBrowserRouter([
           { path: '/explorer', lazy: () => import('@/modules/explorer/ExplorerPage') },
           { path: '/storage', lazy: () => import('@/modules/storage/StoragePage') },
           { path: '/processes', lazy: () => import('@/modules/processes/ProcessesPage') },
-          { path: '/termix', lazy: () => import('@/modules/termix/TermixPage') },
           { path: '/vpn', lazy: () => import('@/modules/vpn/VpnPage') },
           { path: '/proxy', lazy: () => import('@/modules/proxy/ProxyPage') },
+          { path: '/dns', lazy: () => import('@/modules/dns/DnsModule') },
           { path: '/portainer', lazy: () => import('@/modules/portainer/PortainerPage') },
+          { path: '/terminal', lazy: () => import('@/modules/terminal/TerminalPage') },
           { path: '/approvals', lazy: () => import('@/modules/approvals/ApprovalsPage') },
           { path: '/digest/history', lazy: () => import('@/modules/digest/DigestHistoryPage') },
           { path: '/settings', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/clawhub', lazy: () => import('@/modules/clawhub/ClawHubPage') },
+          { path: '/gateway', lazy: () => import('@/modules/gateway/GatewayPage') },
           // Dev-only routes
           ...(import.meta.env.DEV
             ? [{ path: '/dev/components', lazy: () => import('@/modules/dev/ComponentsDemo') }]

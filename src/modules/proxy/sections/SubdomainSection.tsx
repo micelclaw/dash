@@ -89,7 +89,7 @@ function SubdomainRequestForm({ onRequest }: { onRequest: (subdomain: string, re
           Request a Subdomain
         </h2>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', margin: 0, lineHeight: 1.5 }}>
-          Each Pro account gets one free subdomain under <strong style={{ color: 'var(--text-dim)' }}>micelcloud.com</strong>.
+          Each Pro account gets one free subdomain under <strong style={{ color: 'var(--text-dim)' }}>micelclaw.com</strong>.
           DNS records are automatically created and managed on Cloudflare.
         </p>
       </div>
@@ -142,7 +142,7 @@ function SubdomainRequestForm({ onRequest }: { onRequest: (subdomain: string, re
               borderLeft: '1px solid var(--border)',
               flexShrink: 0,
             }}>
-              .micelcloud.com
+              .micelclaw.com
             </span>
           </div>
           {subdomain && !isValid && (

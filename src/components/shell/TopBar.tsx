@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
-import { Menu, Search, Newspaper, Network } from 'lucide-react';
+import { Menu, Search, Newspaper, Network, Power, RotateCcw } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { ClipboardButton } from './ClipboardButton';
 import { BriefingPanel } from '@/components/BriefingPanel';
@@ -22,8 +22,94 @@ import { useSidebarStore } from '@/stores/sidebar.store';
 import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { MODULES } from '@/config/modules';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/auth.store';
+import { api } from '@/services/api';
+
+function PowerMenu() {
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState<'shutdown' | 'restart' | null>(null);
+
+  const handleAction = async (action: 'shutdown' | 'restart') => {
+    if (confirming !== action) {
+      setConfirming(action);
+      return;
+    }
+    try {
+      const endpoint = action === 'shutdown' ? '/hal/core/shutdown' : '/hal/core/restart';
+      await api.post(endpoint);
+    } catch {
+      // Server may drop before responding
+    }
+    setOpen(false);
+    setConfirming(null);
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => { setOpen(!open); setConfirming(null); }}
+        title="Server Power"
+        style={{
+          background: 'none', border: 'none',
+          cursor: 'pointer', color: open ? 'var(--amber)' : 'var(--text-dim)',
+          padding: 4, display: 'flex',
+        }}
+      >
+        <Power size={18} />
+      </button>
+      {open && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 199 }}
+            onClick={() => { setOpen(false); setConfirming(null); }}
+          />
+          <div style={{
+            position: 'absolute', top: '100%', right: 0, marginTop: 8,
+            background: '#1a1a24', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: 4,
+            zIndex: 200, minWidth: 160,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          }}>
+            <button
+              onClick={() => handleAction('restart')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '8px 12px',
+                background: confirming === 'restart' ? 'rgba(245,158,11,0.15)' : 'transparent',
+                border: 'none', borderRadius: 'var(--radius-sm)',
+                color: confirming === 'restart' ? 'var(--amber)' : 'var(--text)',
+                fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { if (confirming !== 'restart') e.currentTarget.style.background = 'var(--surface)'; }}
+              onMouseLeave={(e) => { if (confirming !== 'restart') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <RotateCcw size={14} />
+              {confirming === 'restart' ? 'Click to confirm' : 'Restart Server'}
+            </button>
+            <button
+              onClick={() => handleAction('shutdown')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '8px 12px',
+                background: confirming === 'shutdown' ? 'rgba(239,68,68,0.15)' : 'transparent',
+                border: 'none', borderRadius: 'var(--radius-sm)',
+                color: confirming === 'shutdown' ? 'var(--error)' : 'var(--text)',
+                fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { if (confirming !== 'shutdown') e.currentTarget.style.background = 'var(--surface)'; }}
+              onMouseLeave={(e) => { if (confirming !== 'shutdown') e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Power size={14} />
+              {confirming === 'shutdown' ? 'Click to confirm' : 'Shutdown Server'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function BriefingButton() {
   const unreadCount = useDigestStore((s) => s.unreadCount);
@@ -69,8 +155,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
-  const user = useAuthStore((s) => s.user);
-  const isPro = user?.tier === 'pro';
+  const isPro = useAuthStore((s) => s.user)?.tier === 'pro';
   const [graphOpen, setGraphOpen] = useState(false);
   const [centerEntityId, setCenterEntityId] = useState<string | undefined>();
   const [upsellOpen, setUpsellOpen] = useState(false);
@@ -89,12 +174,6 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
 
   const currentModule = MODULES.find((m) => m.path && location.pathname.startsWith(m.path));
   const ModIcon = currentModule?.icon;
-  const initials = user?.display_name
-    ?.split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) ?? '?';
 
   return (
     <div
@@ -204,11 +283,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         <ClipboardButton />
         <BriefingButton />
         <NotificationBell />
-        {!isMobile && (
-          <Avatar className="h-7 w-7">
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-        )}
+        <PowerMenu />
       </div>
 
       {/* Graph View Modal (Pro) */}

@@ -14,8 +14,9 @@ import {
   MessageSquare, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
   Settings, Puzzle, Bookmark, ShieldCheck, Activity, Wrench,
-  Waypoints, Kanban, Terminal, Rss, Container, FileText, Cable,
-  Wallet, Receipt, Bitcoin, Zap, CreditCard, Clapperboard, Globe,
+  Waypoints, Kanban, Rss, Container, FileText, Cable,
+  Wallet, Receipt, Bitcoin, Zap, CreditCard, Clapperboard, Globe, Orbit,
+  Terminal, Radio,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -24,6 +25,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-search)',   path: '/search',   group: null },
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: null },
   { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: null },
+  { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },
@@ -48,11 +50,12 @@ export const MODULES: ModuleConfig[] = [
   { id: 'photos',   label: 'Photos',        icon: Image,         color: 'var(--mod-photos)',   path: '/photos',   group: 'Files' },
   { id: 'explorer', label: 'File Explorer', icon: HardDrive,     color: 'var(--mod-explorer)', path: '/explorer', group: 'Files' },
   // Network
-  { id: 'termix',   label: 'Terminal',      icon: Terminal,      color: 'var(--mod-termix)',   path: '/termix',   group: 'Network' },
   { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'Network' },
   { id: 'proxy',     label: 'Reverse Proxy', icon: Globe,        color: 'var(--mod-proxy)',     path: '/proxy',     group: 'Network' },
+  { id: 'dns',       label: 'DNS',          icon: Orbit,         color: '#3b82f6',              path: '/dns',       group: 'Network' },
   { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'Network' },
   // System
+  { id: 'terminal', label: 'Terminal',      icon: Terminal,      color: 'var(--mod-terminal)', path: '/terminal', group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
   { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },
   // { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },

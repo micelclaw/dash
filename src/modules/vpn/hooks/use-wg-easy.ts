@@ -38,7 +38,7 @@ export function useWgEasy() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await api.get<{ data: WgEasyStatus }>('/wg-easy/status');
+      const res = await api.get<{ data: WgEasyStatus }>('/wg-easy/status', undefined, { timeout: 45_000 });
       setStatus(res.data);
       return res.data;
     } catch { /* silent */ }
@@ -56,7 +56,7 @@ export function useWgEasy() {
   const start = useCallback(async () => {
     setStarting(true);
     try {
-      const res = await api.post<{ data: WgEasyStatus }>('/wg-easy/start');
+      const res = await api.post<{ data: WgEasyStatus }>('/wg-easy/start', undefined, { timeout: 45_000 });
       setStatus(res.data);
       if (res.data.running) {
         setStarting(false);
@@ -80,7 +80,7 @@ export function useWgEasy() {
   const stop = useCallback(async () => {
     setStarting(true);
     try {
-      const res = await api.post<{ data: WgEasyStatus }>('/wg-easy/stop');
+      const res = await api.post<{ data: WgEasyStatus }>('/wg-easy/stop', undefined, { timeout: 45_000 });
       setStatus(res.data);
       if (!res.data.running) {
         setStarting(false);

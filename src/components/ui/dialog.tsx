@@ -25,10 +25,11 @@ const DialogOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn('fixed inset-0 animate-in fade-in-0', className)}
+    className={cn('fixed inset-0', className)}
     style={{
-      zIndex: 'var(--z-modal-backdrop)',
+      zIndex: 300,
       background: 'rgba(0, 0, 0, 0.6)',
+      pointerEvents: 'none',
     }}
     {...props}
   />
@@ -44,15 +45,16 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-6 animate-in fade-in-0 zoom-in-95',
+        'fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-6',
         className,
       )}
       style={{
-        zIndex: 'var(--z-modal)',
-        background: 'var(--card)',
+        zIndex: 400,
+        background: '#1a1a24',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-lg)',
+        boxShadow: '0 0 0 1px rgba(255,255,255,0.05), 0 25px 50px -12px rgba(0,0,0,0.7)',
+        opacity: 1,
       }}
       {...props}
     >

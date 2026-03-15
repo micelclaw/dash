@@ -44,7 +44,6 @@
   --mod-tools: #8b5cf6;
   --mod-diagrams: #06b6d4;
   --mod-projects: #f97316;
-  --mod-termix: #22d3ee;
   --mod-vpn: #7c3aed;
   --mod-portainer: #13bef9;
   --mod-clawhub: #a78bfa;
@@ -54,6 +53,8 @@
   --mod-office: #e11d48;
   --mod-multimedia: #a855f7;
   --mod-proxy: #3b82f6;
+  --mod-terminal: #22c55e;
+  --mod-gateway: #0ea5e9;
 
   /* Typography */
   --font-sans: 'Inter', system-ui, sans-serif;

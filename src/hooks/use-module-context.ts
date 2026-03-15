@@ -16,6 +16,7 @@ import { MODULES } from '@/config/modules';
 import { useDiagramsStore } from '@/stores/diagrams.store';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useOfficeStore } from '@/stores/office.store';
+import { useTerminalStore } from '@/stores/terminal.store';
 
 interface ModuleContext {
   moduleId: string | null;
@@ -82,6 +83,8 @@ export function useModuleContext(): ModuleContext {
   const projectsSelectedCardId = useProjectsStore((s) => s.selectedCardId);
   const officeSession = useOfficeStore((s) => s.currentSession);
   const officeFullscreen = useOfficeStore((s) => s.fullscreen);
+  const terminalTabs = useTerminalStore((s) => s.tabs);
+  const terminalActiveTabId = useTerminalStore((s) => s.activeTabId);
 
   return useMemo(() => {
     const path = location.pathname;
@@ -142,14 +145,6 @@ export function useModuleContext(): ModuleContext {
       };
     }
 
-    // Inject termix context when on terminal route
-    if (mod?.id === 'termix') {
-      editorContext = {
-        service: 'termix',
-        note: 'User has Termix open. For SSH/remote, use the terminal. For local system commands, use hal/exec.',
-      };
-    }
-
     // Inject office context when editing a document
     if (mod?.id === 'office') {
       const fileIdMatch = location.pathname.match(/\/office\/edit\/(.+)/);
@@ -172,11 +167,22 @@ export function useModuleContext(): ModuleContext {
       }
     }
 
+    // Inject terminal context
+    if (mod?.id === 'terminal') {
+      const activeTab = terminalTabs.find((t) => t.id === terminalActiveTabId);
+      editorContext = {
+        service: 'terminal',
+        session_count: terminalTabs.length,
+        active_session: activeTab ? { type: activeTab.type, label: activeTab.label } : null,
+        note: 'User has the terminal open with an active shell session. Commands can be sent via the terminal WebSocket. SSH connections and saved snippets are available.',
+      };
+    }
+
     return {
       moduleId: mod?.id ?? null,
       modulePath: mod?.path ?? null,
       activeItem,
       editorContext,
     };
-  }, [location.pathname, diagramNodes, diagramEdges, selectedElement, diagramTitle, projectsColumns, projectsCards, projectsColumnCardIds, projectsBoardColumnIds, projectsActiveBoardId, projectsActiveBoardTitle, projectsSelectedCardId, officeSession, officeFullscreen]);
+  }, [location.pathname, diagramNodes, diagramEdges, selectedElement, diagramTitle, projectsColumns, projectsCards, projectsColumnCardIds, projectsBoardColumnIds, projectsActiveBoardId, projectsActiveBoardTitle, projectsSelectedCardId, officeSession, officeFullscreen, terminalTabs, terminalActiveTabId]);
 }
