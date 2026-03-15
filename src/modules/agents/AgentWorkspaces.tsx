@@ -24,6 +24,7 @@ import type { ManagedAgent } from './types';
 interface AgentWorkspacesProps {
   agents: ManagedAgent[];
   isMobile?: boolean;
+  initialAgentId?: string | null;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -38,8 +39,8 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export function AgentWorkspaces({ agents, isMobile }: AgentWorkspacesProps) {
-  const [selectedId, setSelectedId] = useState<string>(agents[0]?.id ?? '');
+export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorkspacesProps) {
+  const [selectedId, setSelectedId] = useState<string>(initialAgentId ?? agents[0]?.id ?? '');
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null);
   const [files, setFiles] = useState<FileRecord[]>([]);
@@ -263,7 +264,7 @@ export function AgentWorkspaces({ agents, isMobile }: AgentWorkspacesProps) {
                       ? 'var(--surface)'
                       : 'transparent',
                   borderLeft: isSelected
-                    ? '3px solid var(--amber)'
+                    ? `3px solid ${agent.color || 'var(--amber)'}`
                     : '3px solid transparent',
                   transition: 'var(--transition-fast)',
                 }}

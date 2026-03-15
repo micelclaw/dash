@@ -19,6 +19,7 @@ import { CouncilTab } from './council/CouncilTab';
 import { AgentConversations } from './AgentConversations';
 import { AgentWorkspaces } from './AgentWorkspaces';
 import { CreateAgentWizard } from './CreateAgentWizard';
+import { useChatStore } from '@/stores/chat.store';
 import type { AgentTab } from './types';
 
 const TABS: { key: AgentTab; label: string }[] = [
@@ -203,11 +204,15 @@ export function Component() {
             onSelect={setSelectedAgentId}
             isMobile={isMobile}
             onAgentChanged={refetch}
+            onBrowseFiles={(agentId) => {
+              setSelectedAgentId(agentId);
+              setActiveTab('workspaces');
+            }}
           />
         )}
         {activeTab === 'council' && <CouncilTab agents={agents} />}
         {activeTab === 'conversations' && <AgentConversations agents={agents} />}
-        {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} />}
+        {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} initialAgentId={selectedAgentId} />}
       </div>
 
       {/* Create wizard modal */}
@@ -215,7 +220,24 @@ export function Component() {
         <CreateAgentWizard
           onClose={() => setShowCreateWizard(false)}
           agents={agents}
-          onCreated={addAgent}
+          onCreated={(agent) => {
+            addAgent(agent);
+            // Update the chat store so the new agent appears in the bottom bar selector
+            const { agents: chatAgents, setAgents, selectAgent, startNewConversation } = useChatStore.getState();
+            const newChatAgent = {
+              name: agent.name,
+              display_name: agent.display_name,
+              role: agent.role,
+              model: agent.model,
+              skills_count: Array.isArray(agent.skills) ? agent.skills.length : 0,
+              avatar: agent.avatar ?? undefined,
+              color: agent.color,
+            };
+            setAgents([...chatAgents, newChatAgent]);
+            // Start a new chat with the newly created agent
+            startNewConversation();
+            selectAgent(agent.name);
+          }}
         />
       )}
     </div>

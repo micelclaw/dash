@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-const AGENT_PALETTE = [
+export const AGENT_PALETTE = [
   '#d4a017', // amber
   '#3b82f6', // blue
   '#22c55e', // green

@@ -11,14 +11,13 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { ArrowRight, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { AgentActivity } from './AgentActivity';
-import { getAgentColor } from './agent-colors';
+import { getAgentColor, AGENT_PALETTE } from './agent-colors';
 import type { ManagedAgent } from './types';
 
 interface AgentDetailProps {
@@ -26,6 +25,7 @@ interface AgentDetailProps {
   agents: ManagedAgent[];
   onSelect: (id: string) => void;
   onAgentChanged?: () => void;
+  onBrowseFiles?: (agentId: string) => void;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -58,11 +58,60 @@ function ModelLabel({ model }: { model: string }) {
   return <>{raw.replace(/^claude-/, 'Claude ').replace(/-(\d+)-(\d+)/, ' $1.$2').replace(/-/g, ' ')}</>;
 }
 
-export function AgentDetail({ agentId, agents, onSelect, onAgentChanged }: AgentDetailProps) {
+export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrowseFiles }: AgentDetailProps) {
   const { agent, loading, refetch } = useAgentDetail(agentId);
-  const navigate = useNavigate();
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
+
+  // Inline editing
+  const [editingField, setEditingField] = useState<'display_name' | 'role' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const avatarPickerRef = useRef<HTMLDivElement>(null);
+
+  const handleInlineEdit = useCallback(async (field: 'display_name' | 'role' | 'color' | 'avatar', value: string) => {
+    if (!agent) return;
+    try {
+      await api.patch(`/managed-agents/${agent.id}`, { [field]: value });
+      refetch();
+      onAgentChanged?.();
+    } catch { /* ignore */ }
+  }, [agent, refetch, onAgentChanged]);
+
+  const commitEdit = useCallback(() => {
+    if (!editingField || !agent) return;
+    const currentValue = editingField === 'display_name' ? agent.display_name : agent.role;
+    if (editValue.trim() && editValue.trim() !== currentValue) {
+      handleInlineEdit(editingField, editValue.trim());
+    }
+    setEditingField(null);
+  }, [editingField, editValue, agent, handleInlineEdit]);
+
+  // Close color picker on outside click
+  useEffect(() => {
+    if (!colorPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setColorPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [colorPickerOpen]);
+
+  // Close avatar picker on outside click
+  useEffect(() => {
+    if (!avatarPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (avatarPickerRef.current && !avatarPickerRef.current.contains(e.target as Node)) {
+        setAvatarPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [avatarPickerOpen]);
 
   // Model dropdown
   const [modelOpen, setModelOpen] = useState(false);
@@ -137,28 +186,198 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged }: Agent
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 10,
         }}>
-          <span style={{ fontSize: '1.25rem' }}>{agent.avatar || '🤖'}</span>
-          <div>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: 'var(--text)',
-            }}>
-              <span style={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: getAgentColor(agent.name),
-                flexShrink: 0,
-              }} />
-              {agent.display_name} — {agent.role}
+          <div ref={avatarPickerRef} style={{ position: 'relative' }}>
+            <span
+              onClick={() => setAvatarPickerOpen(!avatarPickerOpen)}
+              style={{ fontSize: '1.5rem', marginTop: 2, cursor: 'pointer', display: 'inline-block' }}
+              title="Change avatar"
+            >
+              {agent.avatar || '🤖'}
+            </span>
+            {avatarPickerOpen && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: 6,
+                background: 'rgba(24, 24, 27, 0.95)',
+                backdropFilter: 'blur(16px)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                boxShadow: 'var(--shadow-lg)',
+                padding: 10,
+                zIndex: 50,
+                display: 'grid',
+                gridTemplateColumns: 'repeat(6, 1fr)',
+                gap: 4,
+                minWidth: 200,
+              }}>
+                {['🤖', '🧪', '📊', '📧', '📅', '🎯', '💼', '🛡️', '🎨', '💰', '🧬', '🏠', '📂', '🐙', '🔍', '⚡', '🌐', '🧠', '🔬', '📡', '🎭', '🦊', '🐺', '🦉', '🐋', '🦅', '🔮', '💎', '🚀', '⭐'].map(emoji => (
+                  <span
+                    key={emoji}
+                    onClick={() => {
+                      handleInlineEdit('avatar', emoji);
+                      setAvatarPickerOpen(false);
+                    }}
+                    style={{
+                      width: 30,
+                      height: 30,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.125rem',
+                      cursor: 'pointer',
+                      borderRadius: 'var(--radius-sm)',
+                      border: emoji === agent.avatar ? '1px solid var(--amber)' : '1px solid transparent',
+                      background: emoji === agent.avatar ? 'var(--surface-hover)' : 'transparent',
+                      transition: 'var(--transition-fast)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                    onMouseLeave={e => { if (emoji !== agent.avatar) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {emoji}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Display Name — click to edit */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              <div ref={colorPickerRef} style={{ position: 'relative' }}>
+                <span
+                  onClick={() => setColorPickerOpen(!colorPickerOpen)}
+                  style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    background: getAgentColor(agent.name, agent.color),
+                    flexShrink: 0,
+                    display: 'inline-block',
+                    cursor: 'pointer',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                  }}
+                  title="Change color"
+                />
+                {colorPickerOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    marginTop: 6,
+                    background: 'rgba(24, 24, 27, 0.95)',
+                    backdropFilter: 'blur(16px)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-lg)',
+                    padding: 8,
+                    zIndex: 50,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 6,
+                    minWidth: 120,
+                  }}>
+                    {AGENT_PALETTE.map(c => (
+                      <span
+                        key={c}
+                        onClick={() => {
+                          handleInlineEdit('color', c);
+                          setColorPickerOpen(false);
+                        }}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: '50%',
+                          background: c,
+                          cursor: 'pointer',
+                          border: c === agent.color ? '2px solid var(--text)' : '1px solid rgba(255,255,255,0.1)',
+                          transition: 'var(--transition-fast)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              {editingField === 'display_name' ? (
+                <input
+                  autoFocus
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingField(null); }}
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--amber)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text)',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    padding: '2px 6px',
+                    fontFamily: 'var(--font-sans)',
+                    outline: 'none',
+                    width: '100%',
+                  }}
+                />
+              ) : (
+                <span
+                  onClick={() => { setEditingField('display_name'); setEditValue(agent.display_name); }}
+                  style={{
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    color: 'var(--text)',
+                    cursor: 'text',
+                    borderBottom: '1px dashed transparent',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderBottomColor = 'var(--text-muted)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                  title="Click to edit"
+                >
+                  {agent.display_name}
+                </span>
+              )}
             </div>
+            {/* Role — click to edit */}
+            {editingField === 'role' ? (
+              <input
+                autoFocus
+                value={editValue}
+                onChange={e => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingField(null); }}
+                style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--amber)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-dim)',
+                  fontSize: '0.8125rem',
+                  padding: '2px 6px',
+                  fontFamily: 'var(--font-sans)',
+                  outline: 'none',
+                  width: '100%',
+                  marginBottom: 4,
+                }}
+              />
+            ) : (
+              <div
+                onClick={() => { setEditingField('role'); setEditValue(agent.role); }}
+                style={{
+                  fontSize: '0.8125rem',
+                  color: 'var(--text-dim)',
+                  cursor: 'text',
+                  borderBottom: '1px dashed transparent',
+                  display: 'inline-block',
+                  marginBottom: 4,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderBottomColor = 'var(--text-muted)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+                title="Click to edit"
+              >
+                {agent.role || 'No role defined'}
+              </div>
+            )}
             <div ref={dropdownRef} style={{ position: 'relative', marginTop: 4 }}>
               <button
                 onClick={() => setModelOpen(!modelOpen)}
@@ -353,7 +572,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged }: Agent
 
       {/* Footer */}
       <button
-        onClick={() => navigate(`/explorer?path=${encodeURIComponent(agent.workspace_path)}`)}
+        onClick={() => onBrowseFiles?.(agent.id)}
         onMouseEnter={() => setBrowseHover(true)}
         onMouseLeave={() => setBrowseHover(false)}
         style={{

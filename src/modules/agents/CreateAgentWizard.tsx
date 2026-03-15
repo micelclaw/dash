@@ -177,8 +177,10 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
 
   // Step 1: Identity
   const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [avatar, setAvatar] = useState('🤖');
   const [role, setRole] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   // Step 2: Model
   const [model, setModel] = useState('claude-opus-4-6');
@@ -211,17 +213,20 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
     try {
       const body = {
         name,
+        display_name: displayName || name.charAt(0).toUpperCase() + name.slice(1),
         avatar,
         role,
         model,
         skills: selectedSkills,
         parent_agent_id: parentMode === 'sub' ? parentAgentId : null,
       };
-      const res = await api.post<{ data: ManagedAgent }>('/managed-agents', body);
+      const res = await api.post<{ data: ManagedAgent }>('/managed-agents', body, { timeout: 60_000 });
       onCreated(res.data);
       onClose();
-    } catch {
+    } catch (err: unknown) {
       setCreating(false);
+      const msg = err instanceof Error ? err.message : 'Failed to create agent';
+      setError(msg);
     }
   };
 
@@ -244,10 +249,26 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
         <input
           type="text"
           value={name}
-          onChange={e => setName(e.target.value)}
+          onChange={e => {
+            const v = e.target.value;
+            setName(v);
+            if (!displayName || displayName === (name.charAt(0).toUpperCase() + name.slice(1))) {
+              setDisplayName(v.charAt(0).toUpperCase() + v.slice(1));
+            }
+          }}
           placeholder="e.g. francis"
           style={inputStyle}
           autoFocus
+        />
+      </div>
+      <div>
+        <label style={labelStyle}>Display Name</label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          placeholder="e.g. Francis"
+          style={inputStyle}
         />
       </div>
       <div>
@@ -578,6 +599,21 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
         }}>
           {renderStep()}
         </div>
+
+        {/* Error */}
+        {error && (
+          <div style={{
+            margin: '0 24px',
+            padding: '8px 12px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: 'var(--radius-sm)',
+            color: '#ef4444',
+            fontSize: '0.8125rem',
+          }}>
+            {error}
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{

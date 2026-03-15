@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { AgentTreeNode } from './AgentTreeNode';
 import { AgentDetail } from './AgentDetail';
@@ -22,6 +22,7 @@ interface AgentTreeProps {
   onSelect: (id: string) => void;
   isMobile?: boolean;
   onAgentChanged?: () => void;
+  onBrowseFiles?: (agentId: string) => void;
 }
 
 interface TreeNode {
@@ -40,26 +41,30 @@ interface BracketEdge {
   parentId: string;
 }
 
-const NODE_WIDTH = 260;
-const LEVEL_HEIGHT = 220;
-const H_GAP = 30;
-const BRACKET_OFFSET = 30;
-const CORNER_RADIUS = 8;
+const NODE_WIDTH = 360;
+const LEVEL_HEIGHT = 320;
+const H_GAP = 56;
+const BRACKET_OFFSET = 36;
+const CORNER_RADIUS = 10;
+
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 1.6;
+const ZOOM_STEP = 0.08;
 
 function computeCardHeight(agent: ManagedAgent, childCount: number, isOwner: boolean): number {
-  if (isOwner) return 70;
-  let h = 20;  // padding (10 + 10)
-  h += 24;     // header row
-  h += 6;      // gap
-  h += 16;     // role description
-  h += 6;      // gap
+  if (isOwner) return 90;
+  let h = 40;   // padding (20 + 20)
+  h += 32;      // header row
+  h += 14;      // gap
+  h += 22;      // role description
+  h += 14;      // gap
   const skillRows = Math.max(1, Math.ceil(Math.min(agent.skills.length, 6) / 3));
-  h += skillRows * 22; // skill tag rows
-  h += 6;      // gap
-  h += 22;     // footer (status + model badges)
+  h += skillRows * 32; // skill tag rows
+  h += 14;      // gap
+  h += 30;      // footer (status + model badges)
   if (childCount > 0) {
-    h += 8;    // gap + marginTop
-    h += 26;   // toggle (paddingTop + borderTop + content)
+    h += 14;    // gap + marginTop
+    h += 34;    // toggle (paddingTop + borderTop + content)
   }
   return h;
 }
@@ -238,9 +243,10 @@ function buildChildCountMap(agents: ManagedAgent[]): Map<string, number> {
 
 // ─── Main component ───────────────────────────────────────────────
 
-export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChanged }: AgentTreeProps) {
-  // Default: all expanded (empty collapsed set)
+export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChanged, onBrowseFiles }: AgentTreeProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [zoom, setZoom] = useState(0.85);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const toggleExpand = useCallback((agentId: string) => {
     setCollapsed(prev => {
@@ -251,6 +257,33 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
         next.add(agentId);
       }
       return next;
+    });
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) return; // Don't interfere with browser zoom
+    e.preventDefault();
+
+    const container = containerRef.current;
+    if (!container) return;
+
+    const rect = container.getBoundingClientRect();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+
+    setZoom(prev => {
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
+
+      // Cursor position in content coordinates (unscaled)
+      const cursorX = (e.clientX - rect.left + container.scrollLeft) / prev;
+      const cursorY = (e.clientY - rect.top + container.scrollTop) / prev;
+
+      // Adjust scroll so cursor stays in the same viewport position
+      requestAnimationFrame(() => {
+        container.scrollLeft = cursorX * newZoom - (e.clientX - rect.left);
+        container.scrollTop = cursorY * newZoom - (e.clientY - rect.top);
+      });
+
+      return newZoom;
     });
   }, []);
 
@@ -270,8 +303,8 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
     return {
       nodes: allNodes,
       edges: allEdges,
-      svgWidth: Math.max(totalWidth, maxX) + 60,
-      svgHeight: maxY + 40,
+      svgWidth: Math.max(totalWidth, maxX) + 80,
+      svgHeight: maxY + 60,
     };
   }, [agents, collapsed]);
 
@@ -286,7 +319,6 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
         height: '100%',
         overflow: 'hidden',
       }}>
-        {/* Back button bar */}
         <button
           onClick={() => onSelect('')}
           style={{
@@ -298,7 +330,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             border: 'none',
             borderBottom: '1px solid var(--border)',
             color: 'var(--text-dim)',
-            fontSize: '0.8125rem',
+            fontSize: '0.875rem',
             fontWeight: 500,
             cursor: 'pointer',
             fontFamily: 'var(--font-sans)',
@@ -308,13 +340,13 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
           <ChevronLeft size={16} />
           Back to tree
         </button>
-        {/* Fullscreen detail */}
         <div style={{ flex: 1, overflow: 'hidden' }}>
           <AgentDetail
             agentId={selectedId}
             agents={agents}
             onSelect={onSelect}
             onAgentChanged={onAgentChanged}
+            onBrowseFiles={onBrowseFiles}
           />
         </div>
       </div>
@@ -328,75 +360,110 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
       overflow: 'hidden',
     }}>
       {/* Tree area */}
-      <div style={{
-        flex: 1,
-        overflow: 'auto',
-        padding: isMobile ? 12 : 20,
-        WebkitOverflowScrolling: 'touch' as any,
-      }}>
-        <svg
-          width={svgWidth}
-          height={svgHeight}
-          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          style={{ display: 'block', margin: '0 auto' }}
-        >
-          {/* Connection edges (bracket-style with rounded corners) */}
-          {edges.map(edge => {
-            const paths = renderBracketPaths(edge);
-            return (
-              <g key={`bracket-${edge.parentId}`}>
-                {paths.map((d, i) => (
-                  <path
-                    key={`${edge.parentId}-${edge.children[i]?.id ?? i}`}
-                    d={d}
-                    fill="none"
-                    stroke={edge.color || 'var(--border)'}
-                    strokeWidth={1.5}
-                    strokeOpacity={0.4}
-                  />
-                ))}
-              </g>
-            );
-          })}
+      <div
+        ref={containerRef}
+        onWheel={handleWheel}
+        style={{
+          flex: 1,
+          overflow: 'auto',
+          padding: isMobile ? 16 : 32,
+          position: 'relative',
+        }}
+      >
+        {/* Zoom indicator */}
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          left: 0,
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 16,
+          pointerEvents: 'none',
+        }}>
+          <span style={{
+            fontSize: '0.75rem',
+            color: 'var(--text-muted)',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '3px 8px',
+            pointerEvents: 'auto',
+            userSelect: 'none',
+          }}>
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
 
-          {/* Agent nodes */}
-          {nodes.map(node => (
-            <foreignObject
-              key={node.agent.id}
-              x={node.x}
-              y={node.y}
-              width={NODE_WIDTH}
-              height={node.height + 8}
-            >
-              <div
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: 'center',
-                  paddingTop: 4,
-                }}
+        <div style={{
+          transform: `scale(${zoom})`,
+          transformOrigin: '0 0',
+        }}>
+          <svg
+            width={svgWidth}
+            height={svgHeight}
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            style={{ display: 'block', margin: '0 auto' }}
+          >
+            {/* Connection edges */}
+            {edges.map(edge => {
+              const paths = renderBracketPaths(edge);
+              return (
+                <g key={`bracket-${edge.parentId}`}>
+                  {paths.map((d, i) => (
+                    <path
+                      key={`${edge.parentId}-${edge.children[i]?.id ?? i}`}
+                      d={d}
+                      fill="none"
+                      stroke={edge.color || 'var(--border)'}
+                      strokeWidth={2}
+                      strokeOpacity={0.35}
+                    />
+                  ))}
+                </g>
+              );
+            })}
+
+            {/* Agent nodes */}
+            {nodes.map(node => (
+              <foreignObject
+                key={node.agent.id}
+                x={node.x}
+                y={node.y}
+                width={NODE_WIDTH}
+                height={node.height + 12}
               >
-                <AgentTreeNode
-                  agent={node.agent}
-                  selected={selectedId === node.agent.id}
-                  onClick={() => onSelect(node.agent.id)}
-                  isOwner={node.agent.id === 'owner'}
-                  childCount={childCountMap.get(node.agent.id) || 0}
-                  expanded={!collapsed.has(node.agent.id)}
-                  onToggleExpand={() => toggleExpand(node.agent.id)}
-                />
-              </div>
-            </foreignObject>
-          ))}
-        </svg>
+                <div
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: 'center',
+                    paddingTop: 4,
+                  }}
+                >
+                  <AgentTreeNode
+                    agent={node.agent}
+                    selected={selectedId === node.agent.id}
+                    onClick={() => onSelect(node.agent.id)}
+                    isOwner={node.agent.id === 'owner'}
+                    childCount={childCountMap.get(node.agent.id) || 0}
+                    expanded={!collapsed.has(node.agent.id)}
+                    onToggleExpand={() => toggleExpand(node.agent.id)}
+                  />
+                </div>
+              </foreignObject>
+            ))}
+          </svg>
+        </div>
       </div>
 
       {/* Detail panel (desktop only) */}
       {!isMobile && showDetail && (
         <div style={{
-          width: 400,
-          minWidth: 400,
+          width: 420,
+          minWidth: 420,
           borderLeft: '1px solid var(--border)',
           overflow: 'hidden',
         }}>
@@ -405,6 +472,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             agents={agents}
             onSelect={onSelect}
             onAgentChanged={onAgentChanged}
+            onBrowseFiles={onBrowseFiles}
           />
         </div>
       )}

@@ -235,14 +235,17 @@ function FileRow({ filename, agentId }: FileRowProps) {
   );
 }
 
+const IDENTITY_FILES = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'AGENTS.md'];
+
 export function AgentIdentity({ agentId }: AgentIdentityProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0, marginBottom: 4 }}>
         Identity
       </h4>
-      <FileRow filename="SOUL.md" agentId={agentId} />
-      <FileRow filename="AGENTS.md" agentId={agentId} />
+      {IDENTITY_FILES.map(f => (
+        <FileRow key={f} filename={f} agentId={agentId} />
+      ))}
     </div>
   );
 }

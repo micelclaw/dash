@@ -64,13 +64,10 @@ export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeeting
   const [cancelHover, setCancelHover] = useState(false);
   const [startHover, setStartHover] = useState(false);
 
-  // Get chief agents for participant selection
-  const chiefAgents = useMemo(() => agents.filter(a => a.is_chief), [agents]);
-
   // Find the "Francis" agent (always checked + disabled)
   const francisAgent = useMemo(
-    () => chiefAgents.find(a => a.name.toLowerCase() === 'francis'),
-    [chiefAgents]
+    () => agents.find(a => a.name.toLowerCase() === 'francis'),
+    [agents]
   );
 
   const toggleParticipant = (agentId: string) => {
@@ -216,7 +213,7 @@ export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeeting
             flexDirection: 'column',
             gap: 6,
           }}>
-            {chiefAgents.map(agent => {
+            {agents.map(agent => {
               const isFrancis = francisAgent && agent.id === francisAgent.id;
               const isChecked = selectedParticipants.has(agent.id);
               return (

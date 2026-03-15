@@ -54,10 +54,13 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
   const [toggleHovered, setToggleHovered] = useState(false);
 
   const accentColor = agent.color || 'var(--amber)';
-  const bgColor = hovered ? 'var(--surface-hover)' : 'var(--card)';
-  const borderColor = selected ? 'var(--amber)' : 'var(--border)';
+  const hasHexColor = agent.color && agent.color.startsWith('#');
+  const bgColor = hasHexColor
+    ? (hovered ? `color-mix(in srgb, ${accentColor} 8%, var(--surface-hover))` : `color-mix(in srgb, ${accentColor} 4%, var(--card))`)
+    : (hovered ? 'var(--surface-hover)' : 'var(--card)');
+  const borderColor = selected ? 'var(--amber)' : hovered ? 'var(--border-hover, var(--border))' : 'var(--border)';
 
-  // Owner card — simple, compact
+  // Owner card — clean, compact
   if (isOwner) {
     return (
       <div
@@ -65,31 +68,32 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
-          width: 240,
+          width: 340,
           background: bgColor,
           border: `1px solid ${borderColor}`,
           borderLeft: `3px solid #d4a017`,
           borderRadius: 'var(--radius-md)',
-          padding: '12px 14px',
+          padding: '18px 20px',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: 14,
           transition: 'var(--transition-fast)',
           boxSizing: 'border-box',
+          boxShadow: hovered ? '0 4px 12px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.08)',
         }}
       >
-        <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>👤</span>
+        <span style={{ fontSize: '1.75rem', lineHeight: 1 }}>👤</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{
-            fontSize: '0.8125rem',
+            fontSize: '1.0625rem',
             fontWeight: 600,
             color: 'var(--text)',
           }}>
             Paco
           </span>
           <span style={{
-            fontSize: '0.6875rem',
+            fontSize: '0.875rem',
             color: 'var(--text-dim)',
           }}>
             Owner
@@ -111,32 +115,37 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: 240,
+        width: 340,
         background: bgColor,
         border: `1px solid ${borderColor}`,
         borderLeft: `3px solid ${accentColor}`,
         borderRadius: 'var(--radius-md)',
-        padding: '10px 12px',
+        padding: '18px 20px',
         cursor: 'pointer',
         display: 'flex',
         flexDirection: 'column',
-        gap: 6,
+        gap: 14,
         transition: 'var(--transition-fast)',
         boxSizing: 'border-box',
+        boxShadow: selected
+          ? `0 0 0 1px var(--amber), 0 4px 16px rgba(0,0,0,0.2)`
+          : hovered
+            ? '0 4px 12px rgba(0,0,0,0.15)'
+            : '0 1px 3px rgba(0,0,0,0.08)',
       }}
     >
-      {/* Header row: avatar + name + role badge */}
+      {/* Header row: avatar + name */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
-        minHeight: 24,
+        gap: 12,
+        minHeight: 32,
       }}>
-        <span style={{ fontSize: '1.1rem', lineHeight: 1, flexShrink: 0 }}>
+        <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>
           {agent.avatar || '🤖'}
         </span>
         <span style={{
-          fontSize: '0.8125rem',
+          fontSize: '1.0625rem',
           fontWeight: 600,
           color: 'var(--text)',
           overflow: 'hidden',
@@ -147,24 +156,31 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         }}>
           {agent.display_name}
         </span>
-        <span style={{
-          fontSize: '0.625rem',
-          color: 'var(--text-muted)',
-          flexShrink: 0,
-          whiteSpace: 'nowrap',
-        }}>
-          {agent.is_chief ? agent.role : agent.role}
-        </span>
+        {agent.is_chief && (
+          <span style={{
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            color: accentColor,
+            background: `${accentColor}18`,
+            padding: '3px 8px',
+            borderRadius: 'var(--radius-sm)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.03em',
+            flexShrink: 0,
+          }}>
+            Main Router
+          </span>
+        )}
       </div>
 
-      {/* Role description line */}
+      {/* Role description */}
       <div style={{
-        fontSize: '0.6875rem',
+        fontSize: '0.9375rem',
         color: 'var(--text-dim)',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         whiteSpace: 'nowrap',
-        lineHeight: 1.3,
+        lineHeight: 1.4,
       }}>
         {agent.role}
       </div>
@@ -173,8 +189,8 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
-        gap: 4,
-        minHeight: 20,
+        gap: 6,
+        minHeight: 28,
         alignItems: 'center',
       }}>
         {visibleSkills.map(skill => (
@@ -183,26 +199,27 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 3,
+              gap: 5,
               background: 'var(--surface)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-sm)',
-              padding: '1px 5px',
-              fontSize: '0.625rem',
+              padding: '3px 9px',
+              fontSize: '0.8125rem',
               color: 'var(--text-dim)',
-              lineHeight: 1.4,
+              lineHeight: 1.5,
               whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ fontSize: '0.625rem' }}>{skill.icon}</span>
+            <span style={{ fontSize: '0.75rem' }}>{skill.icon}</span>
             {skill.name}
           </span>
         ))}
         {extraSkillCount > 0 && (
           <span style={{
-            fontSize: '0.625rem',
+            fontSize: '0.8125rem',
             color: 'var(--text-muted)',
-            lineHeight: 1.4,
+            lineHeight: 1.5,
+            fontWeight: 500,
           }}>
             +{extraSkillCount}
           </span>
@@ -216,23 +233,22 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         justifyContent: 'space-between',
         marginTop: 2,
       }}>
-        {/* Status badge */}
         <span style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 4,
+          gap: 5,
           background: statusStyle.bg,
           color: statusStyle.text,
-          fontSize: '0.625rem',
+          fontSize: '0.8125rem',
           fontWeight: 500,
-          padding: '2px 7px',
+          padding: '4px 10px',
           borderRadius: 'var(--radius-sm)',
           lineHeight: 1.4,
           textTransform: 'capitalize',
         }}>
           <span style={{
-            width: 6,
-            height: 6,
+            width: 7,
+            height: 7,
             borderRadius: 'var(--radius-full)',
             background: statusStyle.text,
             flexShrink: 0,
@@ -240,16 +256,15 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
           {agent.status}
         </span>
 
-        {/* Model badge */}
         {modelLabel && (
           <span style={{
             display: 'inline-flex',
             alignItems: 'center',
             background: 'var(--amber-dim)',
             color: 'var(--amber)',
-            fontSize: '0.625rem',
+            fontSize: '0.8125rem',
             fontWeight: 500,
-            padding: '2px 7px',
+            padding: '4px 10px',
             borderRadius: 'var(--radius-sm)',
             lineHeight: 1.4,
           }}>
@@ -267,18 +282,18 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
+            gap: 6,
             marginTop: 2,
-            paddingTop: 6,
+            paddingTop: 10,
             borderTop: '1px solid var(--border)',
             cursor: 'pointer',
-            fontSize: '0.6875rem',
+            fontSize: '0.875rem',
             color: toggleHovered ? 'var(--text)' : 'var(--text-dim)',
             transition: 'var(--transition-fast)',
           }}
         >
           <ChevronDown
-            size={12}
+            size={15}
             style={{
               transition: 'transform 0.2s',
               transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
