@@ -72,7 +72,7 @@ export function Component() {
     const selected = files.filter(f => selectedIds.has(f.id));
     if (selected.length === 0) return;
     if (selected.length === 1) {
-      const f = selected[0];
+      const f = selected[0]!;
       void downloadFile(f.id, f.is_directory ? `${f.filename}.zip` : f.filename);
     } else {
       void downloadBatch([...selectedIds]);

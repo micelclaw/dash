@@ -14,7 +14,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { Search, X } from 'lucide-react';
 import { useSearchStore } from '@/stores/search.store';
-import { useAuthStore } from '@/stores/auth.store';
 import { SearchResultsList } from './SearchResultsList';
 import { RankingPanel } from './RankingPanel';
 
@@ -44,8 +43,6 @@ export function Component() {
   const loading = useSearchStore(s => s.loading);
   const results = useSearchStore(s => s.results);
   const error = useSearchStore(s => s.error);
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
-
   // Sync query param → store on mount
   useEffect(() => {
     const q = searchParams.get('q');

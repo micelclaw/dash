@@ -31,7 +31,6 @@ import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { SourceBadge } from '@/components/shared/SourceBadge';
-import { Tag } from '@/components/shared/Tag';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SourcePickerModal } from './SourcePickerModal';
 import type { Note } from '@/types/notes';

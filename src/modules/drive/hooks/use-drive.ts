@@ -163,7 +163,7 @@ export function useDrive() {
     const oldRecord = files.find(f => f.id === id);
     const updated = await renameFile(id, filename);
     // If a directory was renamed and it's part of the current path, update the path
-    if (updated && oldRecord?.isDirectory) {
+    if (updated && oldRecord?.is_directory) {
       const oldPath = oldRecord.filepath.endsWith('/') ? oldRecord.filepath : oldRecord.filepath + '/';
       if (currentPath.startsWith(oldPath) || currentPath === oldPath) {
         const newPath = updated.filepath.endsWith('/') ? updated.filepath : updated.filepath + '/';

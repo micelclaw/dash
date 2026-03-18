@@ -13,7 +13,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Bookmark as BookmarkIcon, Plus, RefreshCw, Search, ExternalLink,
-  MoreHorizontal, Trash2, Copy, Pencil, RotateCcw, X, Globe,
+  MoreHorizontal, Trash2, Copy, Pencil, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookmarksStore } from '@/stores/bookmarks.store';
@@ -172,13 +172,12 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
 function BookmarkCard({
   bookmark,
   selected,
-  onToggleSelect,
   onEdit,
   onDelete,
 }: {
   bookmark: Bookmark;
   selected: boolean;
-  onToggleSelect: () => void;
+  onToggleSelect?: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {

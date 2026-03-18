@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ChevronRight, ChevronDown, X,
-  HardDrive, Cloud, Folder, FolderOpen, Lock,
+  HardDrive, Cloud, FolderOpen, Lock,
 } from 'lucide-react';
 import { api } from '@/services/api';
 import type { VFSMount, VFSNode } from './hooks/use-vfs';

@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { FolderTree, X, Trash2, Download, Move } from 'lucide-react';
+import { FolderTree, X, Trash2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { DropZone } from '@/components/shared/DropZone';
@@ -59,7 +59,7 @@ export function Component() {
     toggleAll,
     clearSelection,
     batchDelete,
-    batchMove,
+    batchMove: _batchMove,
   } = useFileExplorer();
 
   const isMobile = useIsMobile();
@@ -172,7 +172,7 @@ export function Component() {
     const selected = files.filter(f => selectedIds.has(f.id));
     if (selected.length === 0) return;
     if (selected.length === 1) {
-      const f = selected[0];
+      const f = selected[0]!;
       void downloadFile(f.id, f.is_directory ? `${f.filename}.zip` : f.filename);
     } else {
       void downloadBatch([...selectedIds]);
