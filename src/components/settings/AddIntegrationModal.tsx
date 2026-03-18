@@ -324,7 +324,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
                       textTransform: 'uppercase', letterSpacing: '0.05em',
                       marginBottom: 8,
                     }}>
-                      <CatIcon size={14} />
+                      {CatIcon && <CatIcon size={14} />}
                       {cat}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
@@ -645,7 +645,7 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
           // Check if already linked
           const accs = await api.get<{ data: string[] }>('/signal-cli/accounts');
           if (accs.data?.length > 0) {
-            setPhoneNumber(accs.data[0]);
+            setPhoneNumber(accs.data[0] ?? '');
             setStep('ready');
           } else {
             setStep('phone');

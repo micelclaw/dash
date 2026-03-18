@@ -123,7 +123,7 @@ export function PhotoPipelineProgress() {
 
     const unsub1 = client.on('photo.worker.progress', (e) => {
       const { phase, current, total, eta_seconds, phase_index, total_phases,
-              batch_number, pending_total, pending_remaining } = e.data as {
+              batch_number, pending_total } = e.data as {
         file_id: string; phase: Phase; current: number; total: number; eta_seconds: number;
         phase_index: number; total_phases: number;
         batch_number: number; pending_total: number; pending_remaining: number;
@@ -194,12 +194,15 @@ export function PhotoPipelineProgress() {
     const unsub8 = client.on('photo.worker.photo_done', () => {
       // Per-photo granular counter update
       setPendingRemaining(prev => Math.max(0, prev - 1));
-      setStats(prev => ({
-        ...prev,
-        processed: prev.processed + 1,
-        pending: Math.max(0, prev.pending - 1),
-        queued: Math.max(0, prev.queued - 1),
-      }));
+      setStats(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          processed: prev.processed + 1,
+          pending: Math.max(0, prev.pending - 1),
+          queued: Math.max(0, prev.queued - 1),
+        };
+      });
     });
 
     const unsub7 = client.on('photo.worker.queued', (e) => {
@@ -250,7 +253,7 @@ export function PhotoPipelineProgress() {
           setPaused(false);
           addLog('Pipeline resumed', 'info');
           toast.success('Pipeline resumed');
-        } else if (stats.pending > 0) {
+        } else if (stats && stats.pending > 0) {
           // Queue is empty but there are unprocessed photos (skipped by abort)
           if (!confirm(`No hay fotos en cola. ¿Quieres procesar las ${stats.pending} fotos pendientes?`)) return;
           const res = await api.post('/photos/ai/resume-all') as any;
@@ -279,8 +282,7 @@ export function PhotoPipelineProgress() {
   const handleAbort = async () => {
     if (!confirm('Abort processing and clear the pending queue?')) return;
     try {
-      const res = await api.post('/photos/ai/abort') as any;
-      const pending = res.data?.pending ?? 0;
+      await api.post('/photos/ai/abort') as any;
       setPaused(true);
       setRunning(false);
       setCurrentPhase(null);

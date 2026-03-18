@@ -328,8 +328,8 @@ export function DigestSection() {
                           // Initialize email_digest config when enabling
                           if (!emailEnabled && !emailCfg && emailAccounts.length > 0) {
                             patch.email_digest = {
-                              account_id: emailAccounts[0].id,
-                              recipient: emailAccounts[0].email_address,
+                              account_id: emailAccounts[0]?.id ?? '',
+                              recipient: emailAccounts[0]?.email_address ?? '',
                               interval_minutes: 360,
                             };
                           }

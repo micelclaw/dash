@@ -34,8 +34,9 @@ interface ChannelInfo {
 
 const GROUP_ORDER: Record<string, { label: string; order: number }> = {
   channel: { label: 'Channels', order: 0 },
-  dm: { label: 'Direct Messages', order: 1 },
-  group: { label: 'Group DMs', order: 2 },
+  contact: { label: 'Contacts', order: 1 },
+  dm: { label: 'Direct Messages', order: 2 },
+  group: { label: 'Groups', order: 3 },
 };
 
 export function ChannelConfigModal({ connectorId, connectorType, onClose, onSaved }: ChannelConfigModalProps) {
@@ -54,8 +55,12 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
   async function loadChannels() {
     setLoading(true);
     try {
+      // Signal needs a longer timeout — the CLI container may need to start first
+      const timeout = connectorType === 'signal-observer' ? 120_000 : undefined;
       const res = await api.get<{ data: { channels: ChannelInfo[]; selected: string[] } }>(
         `/sync/connectors/${connectorId}/channels`,
+        undefined,
+        timeout ? { timeout } : undefined,
       );
       setChannels(res.data.channels ?? []);
       setSelected(new Set(res.data.selected ?? []));
@@ -97,7 +102,14 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
     });
   }
 
-  const label = connectorType === 'slack-observer' ? 'Slack' : 'Discord';
+  const PLATFORM_LABELS: Record<string, string> = {
+    'slack-observer': 'Slack',
+    'discord-observer': 'Discord',
+    'telegram-observer': 'Telegram',
+    'signal-observer': 'Signal',
+    'teams-observer': 'Teams',
+  };
+  const label = PLATFORM_LABELS[connectorType] ?? 'Platform';
 
   // Filter and group channels
   const filteredChannels = useMemo(() => {

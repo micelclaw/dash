@@ -46,8 +46,8 @@ const SEARCH_MODES = [
 
 function getTimezoneOptions(): Array<{ value: string; label: string }> {
   try {
-    const zones = Intl.supportedValuesOf('timeZone');
-    return zones.map((tz) => ({ value: tz, label: tz.replace(/_/g, ' ') }));
+    const zones = (Intl as any).supportedValuesOf('timeZone') as string[];
+    return zones.map((tz: string) => ({ value: tz, label: tz.replace(/_/g, ' ') }));
   } catch {
     return [
       { value: 'UTC', label: 'UTC' },

@@ -10,106 +10,78 @@
  * https://micelclaw.com
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Brain, RefreshCw, Terminal } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Brain, Pause, Play, RefreshCw, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth.store';
-import { useWebSocketStore } from '@/stores/websocket.store';
-
-interface LogEntry {
-  time: string;
-  text: string;
-  type: 'info' | 'entity' | 'error' | 'done';
-}
+import { useExtractionStore, type ExtractionLogEntry } from '@/stores/extraction.store';
 
 export function EntityExtractionConfig() {
   const isPro = useAuthStore(s => s.user?.tier === 'pro');
-  const client = useWebSocketStore(s => s.client);
 
-  const [running, setRunning] = useState(false);
-  const [processed, setProcessed] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const running = useExtractionStore(s => s.running);
+  const paused = useExtractionStore(s => s.paused);
+  const processed = useExtractionStore(s => s.processed);
+  const total = useExtractionStore(s => s.total);
+  const logs = useExtractionStore(s => s.logs);
+  const fetchStatus = useExtractionStore(s => s.fetchStatus);
 
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  const addLog = useCallback((text: string, type: LogEntry['type'] = 'info') => {
-    setLogs(prev => [...prev, {
-      time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      text,
-      type,
-    }]);
-  }, []);
+  // Fetch current extraction status on mount (recovers state after navigation)
+  useEffect(() => {
+    fetchStatus();
+  }, [fetchStatus]);
 
   // Auto-scroll logs to bottom
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  // WebSocket event listeners
-  useEffect(() => {
-    if (!client) return;
-
-    const unsub1 = client.on('extraction.started', (e) => {
-      const totalJobs = (e.data.total_jobs as number) ?? 0;
-      setSessionId(e.data.session_id as string);
-      setTotal(totalJobs);
-      setProcessed(0);
-      setRunning(true);
-      setLogs([]);
-      addLog(`Re-indexing started: ${totalJobs} jobs queued`, 'info');
-    });
-
-    const unsub2 = client.on('extraction.progress', (e) => {
-      setProcessed(e.data.processed as number);
-
-      const domain = e.data.domain as string;
-      const type = e.data.type as string;
-      const entities = (e.data.entities as Array<{ name: string; type: string }>) ?? [];
-      const error = e.data.error as string | undefined;
-
-      if (error) {
-        addLog(`${domain} ${type}: error — ${error}`, 'error');
-      } else if (entities.length > 0) {
-        const names = entities.map(en => en.name).join(', ');
-        addLog(`${domain}: found ${names}`, 'entity');
-      }
-    });
-
-    const unsub3 = client.on('extraction.complete', () => {
-      setRunning(false);
-      addLog('Re-indexing complete', 'done');
-    });
-
-    return () => { unsub1(); unsub2(); unsub3(); };
-  }, [client, addLog]);
-
   if (!isPro) return null;
 
   const handleReExtract = async () => {
-    setRunning(true);
-    setLogs([]);
-    setProcessed(0);
-    setTotal(0);
+    useExtractionStore.setState({ running: true, logs: [], processed: 0, total: 0 });
     try {
       const res = await api.post('/graph/re-extract', {}) as any;
       const data = res.data ?? res;
-      if (data.total_jobs === 0) {
-        setRunning(false);
+      if (data.total_jobs === 0 || data.totalJobs === 0) {
+        useExtractionStore.setState({ running: false });
         toast.info('No records to re-index');
-        addLog('No records found to re-index', 'info');
+        useExtractionStore.getState().addLog('No records found to re-index');
       }
-    } catch {
-      setRunning(false);
-      toast.error('Failed to queue re-extraction');
+    } catch (err: any) {
+      useExtractionStore.setState({ running: false });
+      if (err?.status === 409 || err?.response?.status === 409) {
+        toast.error('Extraction already running');
+      } else {
+        toast.error('Failed to queue re-extraction');
+      }
     }
+  };
+
+  const handlePause = async () => {
+    try {
+      await api.post('/graph/extraction/pause', {});
+    } catch { toast.error('Failed to pause'); }
+  };
+
+  const handleResume = async () => {
+    try {
+      await api.post('/graph/extraction/resume', {});
+    } catch { toast.error('Failed to resume'); }
+  };
+
+  const handleStop = async () => {
+    try {
+      await api.post('/graph/extraction/stop', {});
+    } catch { toast.error('Failed to stop'); }
   };
 
   const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
 
-  const logColor: Record<LogEntry['type'], string> = {
+  const logColor: Record<ExtractionLogEntry['type'], string> = {
     info: 'var(--text-muted)',
     entity: 'var(--amber)',
     error: 'var(--red, #e55)',
@@ -135,25 +107,61 @@ export function EntityExtractionConfig() {
             AI extracts entities (people, projects, locations, topics) from your records and builds the knowledge graph.
           </div>
         </div>
-        <button
-          onClick={handleReExtract}
-          disabled={running}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '6px 12px',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)',
-            background: 'transparent',
-            color: 'var(--text-dim)',
-            fontSize: '0.75rem',
-            fontFamily: 'var(--font-sans)',
-            cursor: running ? 'not-allowed' : 'pointer',
-            opacity: running ? 0.5 : 1,
-          }}
-        >
-          <RefreshCw size={12} style={{ animation: running ? 'spin 1s linear infinite' : undefined }} />
-          {running ? 'Running...' : 'Re-index all'}
-        </button>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {running && (
+            <>
+              <button
+                onClick={paused ? handleResume : handlePause}
+                title={paused ? 'Resume' : 'Pause'}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 28, height: 28,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: paused ? '#22c55e' : 'var(--amber)',
+                  cursor: 'pointer', padding: 0,
+                }}
+              >
+                {paused ? <Play size={12} /> : <Pause size={12} />}
+              </button>
+              <button
+                onClick={handleStop}
+                title="Stop extraction"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 28, height: 28,
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--error)',
+                  cursor: 'pointer', padding: 0,
+                }}
+              >
+                <Square size={12} />
+              </button>
+            </>
+          )}
+          <button
+            onClick={handleReExtract}
+            disabled={running}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text-dim)',
+              fontSize: '0.75rem',
+              fontFamily: 'var(--font-sans)',
+              cursor: running ? 'not-allowed' : 'pointer',
+              opacity: running ? 0.5 : 1,
+            }}
+          >
+            <RefreshCw size={12} style={{ animation: running ? 'spin 1s linear infinite' : undefined }} />
+            {running ? 'Running...' : 'Re-index all'}
+          </button>
+        </div>
       </div>
 
       {/* Progress bar — visible when running or just finished */}
@@ -168,7 +176,7 @@ export function EntityExtractionConfig() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: 6, fontSize: '0.6875rem', color: 'var(--text-muted)',
           }}>
-            <span>{running ? 'Processing...' : 'Complete'}</span>
+            <span>{running ? (paused ? 'Paused' : 'Processing...') : 'Complete'}</span>
             <span>{processed}/{total} ({pct}%)</span>
           </div>
           <div style={{

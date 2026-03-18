@@ -45,7 +45,6 @@ export function SecuritySection() {
   const [showRemovePin, setShowRemovePin] = useState(false);
   const [removePassword, setRemovePassword] = useState('');
   const [showShellConfirm, setShowShellConfirm] = useState(false);
-  const [shellPassword, setShellPassword] = useState('');
 
   useEffect(() => {
     fetchConfig();
@@ -127,7 +126,6 @@ export function SecuritySection() {
       await updateConfig({ unrestricted_shell: true });
       toast.success('Unrestricted shell enabled');
       setShowShellConfirm(false);
-      setShellPassword('');
     } catch {
       toast.error('Failed to update');
     }
@@ -174,7 +172,7 @@ export function SecuritySection() {
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button
-                  onClick={() => { setShowShellConfirm(false); setShellPassword(''); }}
+                  onClick={() => { setShowShellConfirm(false); }}
                   style={{ height: 32, padding: '0 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
                 >
                   Cancel

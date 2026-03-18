@@ -10,8 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { RefreshCw, ExternalLink } from 'lucide-react';
+import { api } from '@/services/api';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
@@ -24,6 +27,74 @@ const ROTATION_OPTIONS = [
   { value: 'fifo', label: 'FIFO (First In, First Out)' },
   { value: 'none', label: 'None (keep all)' },
 ];
+
+function StorageProviderSection() {
+  const navigate = useNavigate();
+  const [provider, setProvider] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+
+  const fetchProvider = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: { provider: string } }>('/hal/storage/capabilities');
+      setProvider(res.data.provider);
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => { fetchProvider(); }, [fetchProvider]);
+
+  const handleDetect = async () => {
+    setDetecting(true);
+    try {
+      await api.post('/hal/storage/detect-provider');
+      await fetchProvider();
+      toast.success('Provider re-detected');
+    } catch {
+      toast.error('Failed to detect provider');
+    }
+    setDetecting(false);
+  };
+
+  return (
+    <SettingSection title="Storage Provider" description="HAL storage provider detection and monitoring.">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Provider</span>
+        <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
+          {provider ?? '...'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '12px 0' }}>
+        <button
+          onClick={handleDetect}
+          disabled={detecting}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem',
+            fontFamily: 'var(--font-sans)', cursor: detecting ? 'default' : 'pointer',
+            opacity: detecting ? 0.6 : 1,
+          }}
+        >
+          <RefreshCw size={12} style={detecting ? { animation: 'spin 1s linear infinite' } : undefined} />
+          Re-detect provider
+        </button>
+        <button
+          onClick={() => navigate('/storage')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem',
+            fontFamily: 'var(--font-sans)', cursor: 'pointer',
+          }}
+        >
+          <ExternalLink size={12} />
+          Open Storage
+        </button>
+      </div>
+    </SettingSection>
+  );
+}
 
 export function StorageSection() {
   const settings = useSettingsStore((s) => s.settings);
@@ -91,6 +162,8 @@ export function StorageSection() {
           </span>
         </div>
       </SettingSection>
+
+      <StorageProviderSection />
 
       <SettingSection title="File Snapshots (Pro)" description="Version history for your files.">
         <SettingToggle

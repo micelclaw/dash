@@ -549,14 +549,14 @@ export function SensorFusionSection() {
   // undefined = closed, null = new, object = editing
 
   const settings = useSettingsStore((s) => s.settings);
-  const patchSettings = useSettingsStore((s) => s.patchSettings) as ((patch: Record<string, unknown>) => Promise<void>) | undefined;
+  const patchSettings = useSettingsStore((s) => (s as any).patchSettings) as ((patch: Record<string, unknown>) => Promise<void>) | undefined;
 
   const [haUrl, setHaUrl] = useState('');
   const [haToken, setHaToken] = useState('');
 
   useEffect(() => {
     if (settings) {
-      const sf = (settings as Record<string, unknown>).sensorFusion as Record<string, string> | undefined;
+      const sf = (settings as unknown as Record<string, unknown>).sensorFusion as Record<string, string> | undefined;
       if (sf) {
         setHaUrl(sf.haUrl || '');
         setHaToken(sf.haToken || '');

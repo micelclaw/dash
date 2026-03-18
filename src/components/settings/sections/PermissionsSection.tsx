@@ -60,11 +60,6 @@ const FILTER_TYPE_OPTIONS = [
   { value: 'exclude', label: 'Exclude' },
 ];
 
-const FILTER_KIND_OPTIONS = [
-  { value: 'tags', label: 'By tags' },
-  { value: 'category', label: 'By category' },
-];
-
 // ─── Scope Badge ────────────────────────────────────────
 
 function ScopeBadge({ scopes }: { scopes: SemanticScope[] }) {
@@ -444,7 +439,7 @@ export function PermissionsSection() {
       api.get<{ data: Array<Record<string, unknown>> }>('/apps').catch(() => ({ data: [] as Array<Record<string, unknown>> })),
     ])
       .then(([agentsRes, appsRes]) => {
-        const tokens: AgentToken[] = (agentsRes.data as Array<Record<string, unknown>>).map((a) => ({
+        const tokens: AgentToken[] = (agentsRes.data as unknown as Array<Record<string, unknown>>).map((a) => ({
           id: a.id as string,
           agentId: a.id as string,
           agentName: (a.name || a.display_name || a.displayName || 'Agent') as string,

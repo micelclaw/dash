@@ -12,14 +12,14 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Search, Globe, Shield, Plus, X, Wifi, WifiOff, Lock,
+  Search, Globe, Shield, Plus, X, Lock,
   Eye, EyeOff, CheckCircle, XCircle, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useApiKeyStore } from '@/stores/apikey.store';
 import { useAuthStore } from '@/stores/auth.store';
-import { useSettingsStore } from '@/stores/settings.store';
+
 
 // ─── Types ───────────────────────────────────────────────
 
@@ -179,7 +179,6 @@ function WebSearchConfig() {
   const configureKey = useApiKeyStore((s) => s.configureKey);
   const deleteKey = useApiKeyStore((s) => s.deleteKey);
   const testConnection = useApiKeyStore((s) => s.testConnection);
-  const settings = useSettingsStore((s) => s.settings);
   const tier = useAuthStore((s) => s.user?.tier ?? 'free');
 
   const [tavilyKey, setTavilyKey] = useState('');
@@ -396,7 +395,7 @@ function BrowserSecurityConfig() {
           onAdd={(item) => patchConfig({ domain_denylist: [...config.domain_denylist, item] })}
           onRemove={(i) => patchConfig({ domain_denylist: config.domain_denylist.filter((_, idx) => idx !== i) })}
           placeholder="example.com"
-          validate={(item) => /^[\w.-]+\.[a-z]{2,}$/.test(item.replace(/^https?:\/\//, '').split('/')[0])}
+          validate={(item) => /^[\w.-]+\.[a-z]{2,}$/.test(item.replace(/^https?:\/\//, '').split('/')[0] ?? '')}
         />
       </div>
 

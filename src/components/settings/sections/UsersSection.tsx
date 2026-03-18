@@ -468,8 +468,8 @@ function UserRow({ user, isSelf, onEdit, onPassword, onResetLink, onSuspend, onR
   onDelete: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
-  const roleStyle = ROLE_STYLES[user.role] ?? ROLE_STYLES.user;
-  const statusStyle = STATUS_STYLES[user.status] ?? STATUS_STYLES.active;
+  const roleStyle = ROLE_STYLES[user.role] ?? ROLE_STYLES.user ?? { bg: 'var(--surface)', color: 'var(--text-dim)' };
+  const statusStyle = STATUS_STYLES[user.status] ?? STATUS_STYLES.active ?? { bg: 'rgba(34,197,94,0.15)', color: '#22c55e' };
 
   return (
     <div

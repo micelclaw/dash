@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Settings, Trash2, Loader2, MessageSquare, Upload } from 'lucide-react';
+import { RefreshCw, Settings, Trash2, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/use-websocket';

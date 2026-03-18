@@ -17,7 +17,7 @@ import { SettingSection } from '../SettingSection';
 import { ServiceStatusDot } from '@/components/ui/ServiceStatusDot';
 import { useServicesStore } from '@/stores/services.store';
 import { useSettingsStore } from '@/stores/settings.store';
-import type { ServiceLifecycleState, HardwareProfileTier } from '@/stores/services.store';
+import type { ServiceLifecycleState, HardwareProfileTier, LifecyclePolicy } from '@/stores/services.store';
 
 // ─── RAM Budget Bar ─────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ function RamBudgetBar() {
 
 function ProfileBadge() {
   const profile = useServicesStore((s) => s.profile);
-  const patchSettings = useSettingsStore((s) => s.patchSettings);
+  const patchSettings = useSettingsStore((s) => (s as any).patchSettings);
 
   if (!profile) return null;
 
@@ -101,12 +101,21 @@ function ProfileBadge() {
 
 // ─── Service Row ────────────────────────────────────────────────────
 
+const POLICY_LABELS: Record<LifecyclePolicy, string> = {
+  always: 'Always On',
+  ondemand: 'On Demand',
+  scheduled: 'Scheduled',
+};
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 function ServiceRow({ service }: { service: ServiceLifecycleState }) {
   const [expanded, setExpanded] = useState(false);
   const startService = useServicesStore((s) => s.startService);
   const stopService = useServicesStore((s) => s.stopService);
   const forceStopService = useServicesStore((s) => s.forceStopService);
-  const patchSettings = useSettingsStore((s) => s.patchSettings);
+  const updatePolicy = useServicesStore((s) => s.updatePolicy);
+  const patchSettings = useSettingsStore((s) => (s as any).patchSettings);
   const settings = useSettingsStore((s) => s.settings);
   const [loading, setLoading] = useState(false);
 
@@ -117,6 +126,14 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
   const effectiveTimeout = override.timeout_seconds
     ?? (lifecycleSettings.per_service_timeouts?.[service.name])
     ?? null;
+
+  // Schedule state for the config sub-UI
+  const [scheduleType, setScheduleType] = useState<'window' | 'interval'>(override.schedule?.type ?? 'window');
+  const [windowDays, setWindowDays] = useState<number[]>(override.schedule?.windows?.[0]?.days ?? [1, 2, 3, 4, 5, 6, 0]);
+  const [windowStart, setWindowStart] = useState(override.schedule?.windows?.[0]?.start_time ?? '08:00');
+  const [windowEnd, setWindowEnd] = useState(override.schedule?.windows?.[0]?.end_time ?? '00:00');
+  const [intervalEvery, setIntervalEvery] = useState(override.schedule?.interval_every_minutes ?? 120);
+  const [intervalOn, setIntervalOn] = useState(override.schedule?.interval_on_minutes ?? 10);
 
   const handleStart = async () => {
     setLoading(true);
@@ -164,8 +181,47 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
     }
   };
 
+  const handlePolicyChange = async (newPolicy: string) => {
+    try {
+      if (newPolicy === 'scheduled-window' || newPolicy === 'scheduled-interval') {
+        const sType = newPolicy === 'scheduled-window' ? 'window' : 'interval';
+        setScheduleType(sType);
+        const schedule = sType === 'window'
+          ? { type: 'window' as const, windows: [{ days: windowDays, start_time: windowStart, end_time: windowEnd }] }
+          : { type: 'interval' as const, interval_every_minutes: intervalEvery, interval_on_minutes: intervalOn };
+        await updatePolicy(service.name, 'scheduled', schedule);
+      } else {
+        await updatePolicy(service.name, newPolicy as LifecyclePolicy);
+      }
+      toast.success(`${service.display_name} policy updated`);
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to update policy');
+    }
+  };
+
+  const handleScheduleSave = async () => {
+    try {
+      const schedule = scheduleType === 'window'
+        ? { type: 'window' as const, windows: [{ days: windowDays, start_time: windowStart, end_time: windowEnd }] }
+        : { type: 'interval' as const, interval_every_minutes: intervalEvery, interval_on_minutes: intervalOn };
+      await updatePolicy(service.name, 'scheduled', schedule);
+      toast.success('Schedule updated');
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Failed to update schedule');
+    }
+  };
+
+  const toggleDay = (day: number) => {
+    setWindowDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
+  };
+
   const isRunning = service.state === 'running' || service.state === 'starting';
   const ChevronIcon = expanded ? ChevronUp : ChevronDown;
+
+  // Map policy to select value
+  const policySelectValue = service.policy === 'scheduled'
+    ? `scheduled-${override.schedule?.type ?? scheduleType}`
+    : service.policy;
 
   return (
     <div className="border-b border-[var(--border)]">
@@ -176,9 +232,9 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
       >
         <ServiceStatusDot status={service.state} size="md" />
         <span className="flex-1 text-sm text-[var(--text)]">{service.display_name}</span>
-        <span className="text-xs text-[var(--text-dim)] w-20">{service.policy}</span>
+        <span className="text-xs text-[var(--text-dim)] w-20">{POLICY_LABELS[service.policy] ?? service.policy}</span>
         <span className="text-xs text-[var(--text-dim)] w-16 text-right">
-          {service.ram_mb ? `${service.ram_mb} MB` : '—'}
+          {service.ram_mb ? `${service.ram_mb} MB` : '\u2014'}
         </span>
 
         {/* Action buttons */}
@@ -196,7 +252,7 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
           {(isRunning || service.state === 'draining') && (
             <button
               onClick={handleStop}
-              disabled={loading || service.policy === 'always'}
+              disabled={loading}
               className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-dim)] hover:text-red-500 disabled:opacity-50"
               title={service.state === 'draining' ? 'Force Stop' : 'Stop'}
             >
@@ -222,8 +278,6 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
       {expanded && (
         <div className="px-3 pb-3 pt-1 bg-[var(--surface)] text-xs space-y-2">
           <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[var(--text-dim)]">
-            <span>Policy</span>
-            <span className="text-[var(--text)]">{service.policy}</span>
             <span>RAM limit</span>
             <span className="text-[var(--text)]">{service.ram_limit_mb} MB</span>
             <span>Category</span>
@@ -250,10 +304,27 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
             )}
           </div>
 
+          {/* Policy selector */}
+          <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
+            <label className="text-[var(--text-dim)]">Policy:</label>
+            <select
+              value={policySelectValue}
+              onChange={(e) => handlePolicyChange(e.target.value)}
+              className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)]"
+            >
+              <option value="always">Always On</option>
+              <option value="ondemand">On Demand</option>
+              <option value="scheduled-window">Scheduled (Window)</option>
+              <option value="scheduled-interval">Scheduled (Interval)</option>
+            </select>
+          </div>
+
+          {/* Idle timeout for on-demand — auto-stops the service after this idle period */}
           {service.policy === 'ondemand' && (
-            <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
-              <label className="text-[var(--text-dim)]">Timeout:</label>
-              <select
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <label className="text-[var(--text-dim)]">Auto-stop after idle:</label>
+                <select
                 value={effectiveTimeout ? String(effectiveTimeout / 60) : ''}
                 onChange={(e) => handleTimeoutChange(parseInt(e.target.value))}
                 className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)]"
@@ -266,6 +337,89 @@ function ServiceRow({ service }: { service: ServiceLifecycleState }) {
                 <option value="30">30 min</option>
                 <option value="60">1 hour</option>
               </select>
+              </div>
+              <p className="text-[10px] text-[var(--text-muted)]">
+                The service will be stopped automatically if no activity is detected for this period.
+              </p>
+            </div>
+          )}
+
+          {/* Schedule config — Window */}
+          {service.policy === 'scheduled' && scheduleType === 'window' && (
+            <div className="space-y-2 pt-1 border-t border-[var(--border)]">
+              <div className="flex items-center gap-1">
+                <label className="text-[var(--text-dim)] w-12">Days:</label>
+                <div className="flex gap-1">
+                  {DAY_LABELS.map((label, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toggleDay(i)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] border ${
+                        windowDays.includes(i)
+                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                          : 'bg-transparent border-[var(--border)] text-[var(--text-dim)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[var(--text-dim)] w-12">From:</label>
+                <input
+                  type="time"
+                  value={windowStart}
+                  onChange={(e) => setWindowStart(e.target.value)}
+                  className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)]"
+                />
+                <label className="text-[var(--text-dim)]">To:</label>
+                <input
+                  type="time"
+                  value={windowEnd}
+                  onChange={(e) => setWindowEnd(e.target.value)}
+                  className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)]"
+                />
+              </div>
+              <button
+                onClick={handleScheduleSave}
+                className="px-3 py-1 rounded bg-amber-500/20 border border-amber-500/50 text-amber-400 hover:bg-amber-500/30 text-[11px]"
+              >
+                Save Schedule
+              </button>
+            </div>
+          )}
+
+          {/* Schedule config — Interval */}
+          {service.policy === 'scheduled' && scheduleType === 'interval' && (
+            <div className="space-y-2 pt-1 border-t border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <label className="text-[var(--text-dim)]">Run every</label>
+                <input
+                  type="number"
+                  min={5}
+                  max={1440}
+                  value={intervalEvery}
+                  onChange={(e) => setIntervalEvery(parseInt(e.target.value) || 120)}
+                  className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)] w-16"
+                />
+                <span className="text-[var(--text-dim)]">min, run for</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={intervalOn}
+                  onChange={(e) => setIntervalOn(parseInt(e.target.value) || 10)}
+                  className="bg-[var(--bg)] border border-[var(--border)] rounded px-2 py-0.5 text-xs text-[var(--text)] w-16"
+                />
+                <span className="text-[var(--text-dim)]">min</span>
+              </div>
+              <button
+                onClick={handleScheduleSave}
+                className="px-3 py-1 rounded bg-amber-500/20 border border-amber-500/50 text-amber-400 hover:bg-amber-500/30 text-[11px]"
+              >
+                Save Schedule
+              </button>
             </div>
           )}
         </div>
@@ -319,6 +473,7 @@ export function ServicesSection() {
     { key: 'all', label: `All (${services.length})` },
     { key: 'always', label: `Always-on (${services.filter((s) => s.policy === 'always').length})` },
     { key: 'ondemand', label: `On-demand (${services.filter((s) => s.policy === 'ondemand').length})` },
+    { key: 'scheduled', label: `Scheduled (${services.filter((s) => s.policy === 'scheduled').length})` },
   ];
 
   return (
@@ -380,7 +535,7 @@ export function ServicesSection() {
 
 function AdvancedSettings() {
   const settings = useSettingsStore((s) => s.settings);
-  const patchSettings = useSettingsStore((s) => s.patchSettings);
+  const patchSettings = useSettingsStore((s) => (s as any).patchSettings);
 
   const lifecycle = (settings as any)?.lifecycle ?? {};
   const defaultTimeout = lifecycle.default_timeout_minutes ?? 30;

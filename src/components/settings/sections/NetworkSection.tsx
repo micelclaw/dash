@@ -15,12 +15,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { RefreshCw, Plus, Trash2, Terminal, X, Loader2 } from 'lucide-react';
 import { api } from '@/services/api';
-import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
-import { SettingToggle } from '../SettingToggle';
-import { SettingInput } from '../SettingInput';
-import { SettingSelect } from '../SettingSelect';
-import { SaveBar } from '../SaveBar';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -42,16 +37,6 @@ interface VpnStatus {
   interface_up: boolean;
   peers_count: number;
   listen_port?: number;
-}
-
-interface VpnPeer {
-  id: string;
-  name: string;
-  public_key: string;
-  allowed_ips: string;
-  last_handshake?: string;
-  transfer_rx?: number;
-  transfer_tx?: number;
 }
 
 interface FirewallStatus {

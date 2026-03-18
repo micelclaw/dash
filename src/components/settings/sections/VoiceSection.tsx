@@ -37,11 +37,6 @@ interface VoiceStatus {
   tts: ServiceStatus;
 }
 
-const INPUT_MODE_OPTIONS = [
-  { value: 'hold', label: 'Hold to talk' },
-  { value: 'toggle', label: 'Click to toggle' },
-];
-
 const LANGUAGE_OPTIONS = [
   { value: 'auto', label: 'Auto detect' },
   { value: 'es', label: 'Español' },
@@ -193,7 +188,7 @@ export function VoiceSection() {
     try {
       const headers = { Authorization: `Bearer ${getToken()}` };
       // TCP checks in backend can take up to 3s each when services are transitioning
-      const res = await fetchWithTimeout(`${API}/voice/status`, { headers }, 10000);
+      const res = await fetchWithTimeout(`${API}/voice/status`, { headers }, 15000);
       const json = await res.json();
       if (json.data) {
         setStatus(json.data);
@@ -262,9 +257,13 @@ export function VoiceSection() {
         throw new Error(json?.error?.message || `HTTP ${res.status}`);
       }
 
-      // Backend confirmed service is TCP-ready — refresh status to update UI
-      await refreshStatus();
+      // Backend confirmed service is TCP-ready — update optimistically + refresh
+      setStatus((prev) => ({
+        ...prev,
+        [service]: { ...prev[service], available: true },
+      }));
       toast.success(`${label} is running`);
+      refreshStatus().catch(() => {});
     } catch (err) {
       if (abort.signal.aborted) return;
       toast.error(`Failed to start ${label}: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -293,8 +292,8 @@ export function VoiceSection() {
         ...prev,
         [service]: { ...prev[service], available: false },
       }));
-      // Also refresh from backend to confirm
-      refreshStatus().catch(() => {});
+      // Refresh from backend after a delay so TCP has time to go down
+      setTimeout(() => refreshStatus().catch(() => {}), 3000);
     } catch (err) {
       // Ignore abort errors (component unmount or navigation)
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -314,12 +313,13 @@ export function VoiceSection() {
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-      recorder.start();
+      const stopped = new Promise<void>((r) => { recorder.onstop = () => r(); });
+      recorder.start(500); // emit chunks every 500ms so ondataavailable fires during recording
       await new Promise((r) => setTimeout(r, 3000));
       recorder.stop();
       stream.getTracks().forEach((t) => t.stop());
 
-      await new Promise((r) => { recorder.onstop = r; });
+      await stopped;
       const blob = new Blob(chunks, { type: 'audio/webm' });
       const form = new FormData();
       form.append('file', blob, 'test.webm');
@@ -525,16 +525,7 @@ export function VoiceSection() {
       </SettingSection>
 
       {/* Voice Mode */}
-      <SettingSection title="Voice Mode" description="Configure how voice input works in the chat.">
-        <SettingSelect
-          label="Input mode"
-          value={voiceSettings?.input_mode ?? 'hold'}
-          options={INPUT_MODE_OPTIONS}
-          onChange={(v) => {
-            setLocalValue('voice.input_mode', v);
-            updateSection('voice', { ...voiceSettings, input_mode: v }).catch(() => toast.error('Failed to save input mode'));
-          }}
-        />
+      <SettingSection title="Voice Mode" description="Hold Space or click the mic button to record.">
         <SettingToggle
           label="Auto-play responses"
           description="Automatically play TTS for agent responses."

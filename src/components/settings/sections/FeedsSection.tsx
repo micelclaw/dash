@@ -10,7 +10,6 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
@@ -38,7 +37,7 @@ const SORT_OPTIONS = [
 
 export function FeedsSection() {
   const settings = useSettingsStore(s => s.settings);
-  const patchSettings = useSettingsStore(s => s.patchSettings);
+  const updateSection = useSettingsStore(s => s.updateSection);
 
   const feedsSettings = (settings as any)?.feeds ?? {};
   const retentionDays = feedsSettings.retention_days ?? 30;
@@ -47,7 +46,7 @@ export function FeedsSection() {
 
   const update = async (key: string, value: unknown) => {
     try {
-      await patchSettings({ feeds: { ...feedsSettings, [key]: value } });
+      await updateSection('feeds', { ...feedsSettings, [key]: value });
       toast.success('Settings saved');
     } catch {
       toast.error('Failed to save settings');
