@@ -100,7 +100,7 @@ export function GraphProximityPanel({ sourceType, sourceId, onOpenGraph }: Graph
   return (
     <IntelligencePanelHeader title="Graph Proximity" storageKey="graph-proximity" defaultCollapsed={false}>
       {visible.map(entity => {
-        const typeInfo = TYPE_ICONS[entity.entity_type] ?? TYPE_ICONS.topic;
+        const typeInfo = TYPE_ICONS[entity.entity_type] ?? TYPE_ICONS.topic ?? { icon: Hash, color: '#fbbf24' };
         const Icon = typeInfo.icon;
 
         return (

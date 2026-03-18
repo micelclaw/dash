@@ -724,7 +724,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             }}
           >
             {(['fulltext', 'semantic'] as const).map((sm) => {
-              const isActive = searchMode === sm || (searchMode === 'auto' && sm === 'fulltext');
               const isPro = sm === 'semantic';
               return (
                 <button

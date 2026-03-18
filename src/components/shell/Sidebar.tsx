@@ -28,7 +28,7 @@ interface SidebarProps {
   forceExpanded?: boolean;
 }
 
-export function Sidebar({ onOpenCommandPalette, forceExpanded }: SidebarProps) {
+export function Sidebar({ forceExpanded }: SidebarProps) {
   const storeCollapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);

@@ -22,7 +22,9 @@ import { useKeyboard } from '@/hooks/use-keyboard';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useNotificationStore } from '@/stores/notification.store';
+import type { Notification } from '@/types/notifications';
 import { useSecurityStore } from '@/stores/security.store';
+import { useSettingsStore } from '@/stores/settings.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useClipboardStore } from '@/stores/clipboard.store';
 import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
@@ -43,6 +45,9 @@ import { useServicesStore } from '@/stores/services.store';
 import { VideoOverlay } from '@/components/player/VideoOverlay';
 import { DownloadDialog } from '@/components/player/DownloadDialog';
 import { usePlayerStore } from '@/stores/player.store';
+import { useGatewayStore } from '@/stores/gateway.store';
+import { useExtractionStore } from '@/stores/extraction.store';
+import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -62,6 +67,52 @@ export function Shell() {
   const isChatPage = location.pathname === '/chat';
 
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
+
+  // Gateway onboarding status
+  const gatewayConfigured = useGatewayStore((s) => s.configured);
+  const fetchSnapshot = useGatewayStore((s) => s.fetchSnapshot);
+  const [onboardingJustCompleted, setOnboardingJustCompleted] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const prevConfiguredRef = useRef<boolean | null>(null);
+
+  const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+
+  useEffect(() => {
+    fetchSnapshot();
+    fetchSettings();
+  }, [fetchSnapshot, fetchSettings]);
+
+  // Poll every 10s while unconfigured to detect onboarding completion
+  useEffect(() => {
+    if (gatewayConfigured !== false) return;
+    const interval = setInterval(() => fetchSnapshot(), 10_000);
+    return () => clearInterval(interval);
+  }, [gatewayConfigured, fetchSnapshot]);
+
+  // Detect transition: configured false → true → trigger provisioning
+  useEffect(() => {
+    const prev = prevConfiguredRef.current;
+    prevConfiguredRef.current = gatewayConfigured;
+
+    if (prev === false && gatewayConfigured === true) {
+      // Onboarding just completed — provision agents
+      import('@/services/gateway.service').then(({ provisionAgents, syncUserProfile }) => {
+        provisionAgents()
+          .then((result) => {
+            console.log('[onboarding] provisioned agents:', result);
+            // Sync USER.md (pre-filled from DB) to all agent workspaces
+            return syncUserProfile().then((sync) => {
+              console.log('[onboarding] synced user profile:', sync);
+            }).catch(() => { /* best-effort */ });
+          })
+          .then(() => setOnboardingJustCompleted(true))
+          .catch((err) => {
+            console.error('[onboarding] provision failed:', err);
+            setOnboardingJustCompleted(true); // Still show green banner
+          });
+      });
+    }
+  }, [gatewayConfigured]);
 
   // Apply user theme + accent from settings
   useTheme();
@@ -110,6 +161,11 @@ export function Shell() {
 
     return () => { cancelled = true; disconnect(); };
   }, [tokens?.accessToken, connect, disconnect, refresh]);
+
+  // Start extraction WS listeners once (persists across navigation)
+  useEffect(() => {
+    useExtractionStore.getState().startListening();
+  }, []);
 
   // Auto-reconnect on auth failure: refresh JWT and retry WS
   useEffect(() => {
@@ -184,10 +240,10 @@ export function Shell() {
           ? Object.entries(domainBreakdown).find(([, v]) => (v.created ?? 0) > 0)?.[0]
             ?? Object.keys(domainBreakdown)[0]
           : undefined;
-        const domainTypeMap: Record<string, 'email' | 'calendar' | 'contacts' | 'sync'> = {
+        const domainTypeMap: Record<string, Notification['type']> = {
           emails: 'email', events: 'calendar', contacts: 'contacts',
         };
-        const notifType = (primaryDomain && domainTypeMap[primaryDomain]) ?? 'sync';
+        const notifType: Notification['type'] = (primaryDomain && domainTypeMap[primaryDomain]) || 'sync';
 
         // Deep link for single-record notifications
         const singleRecord = syncEvent.data.single_record as { domain: string; id: string } | null;
@@ -463,7 +519,15 @@ export function Shell() {
 
   return (
     <TooltipProvider>
-      <div style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)' }}>
+      <div style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)', paddingTop: (gatewayConfigured === false || (onboardingJustCompleted && !bannerDismissed)) ? 40 : 0 }}>
+        {/* Onboarding banner */}
+        {gatewayConfigured === false && !bannerDismissed && (
+          <OnboardingBanner variant="unconfigured" />
+        )}
+        {onboardingJustCompleted && !bannerDismissed && gatewayConfigured === true && (
+          <OnboardingBanner variant="completed" onDismiss={() => setBannerDismissed(true)} />
+        )}
+
         {/* Desktop sidebar */}
         {!isMobile && (
           <Sidebar onOpenCommandPalette={openPalette} />

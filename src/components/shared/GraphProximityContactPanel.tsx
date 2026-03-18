@@ -165,7 +165,7 @@ export function GraphProximityContactPanel({ contactId, onOpenGraph }: GraphProx
             Connected entities
           </div>
           {entities.map(entity => {
-            const typeInfo = TYPE_ICONS[entity.target_entity_type ?? entity.entity_type] ?? TYPE_ICONS.topic;
+            const typeInfo = TYPE_ICONS[entity.target_entity_type ?? entity.entity_type] ?? TYPE_ICONS.topic ?? { icon: Hash, color: '#fbbf24' };
             const Icon = typeInfo.icon;
             return (
               <div

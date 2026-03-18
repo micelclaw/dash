@@ -11,14 +11,17 @@
  */
 
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react';
-import { ArrowUp, ChevronUp, ChevronDown, Paperclip } from 'lucide-react';
+import { ArrowUp, ChevronUp, ChevronDown, Paperclip, X, FileText, Image as ImageIcon, File } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useModuleContext } from '@/hooks/use-module-context';
 import { useVoice } from '@/hooks/use-voice';
+import { useVoiceStream } from '@/hooks/use-voice-stream';
 import { AgentSelector } from './AgentSelector';
 import { VoiceButton } from '@/components/voice/VoiceButton';
 import { SpeakingIndicator } from '@/components/voice/SpeakingIndicator';
+import { api } from '@/services/api';
+import type { ChatAttachment } from '@/types/chat';
 
 interface ChatInputProps {
   onExpand?: () => void;
@@ -30,26 +33,72 @@ interface ChatInputProps {
 
 export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, compactAgent }: ChatInputProps) {
   const [text, setText] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const lastInputWasVoiceRef = useRef(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const moduleContext = useModuleContext();
   const voice = useVoice();
+  const voiceStream = useVoiceStream();
+  const isFullDuplex = true; // Always use streaming voice mode
+  const conversationId = useChatStore((s) => s.activeConversationId);
+
+  const uploadFile = useCallback(async (file: File): Promise<ChatAttachment | null> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('parent_folder', '/chat-attachments/');
+      const res = await api.upload<{ data: { id: string; filename: string; mime_type: string; size_bytes: number; filepath: string } }>('/files/upload', formData);
+      const d = res.data;
+      let previewUrl: string | undefined;
+      if (file.type.startsWith('image/')) {
+        previewUrl = URL.createObjectURL(file);
+      }
+      return { id: d.id, filename: d.filename, mime_type: d.mime_type, size_bytes: d.size_bytes, filepath: d.filepath, preview_url: previewUrl };
+    } catch (err) {
+      console.error('[chat] File upload failed:', err);
+      return null;
+    }
+  }, []);
+
+  const handleFileSelect = useCallback(async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
+    const results = await Promise.all(Array.from(fileList).map(uploadFile));
+    const successful = results.filter((r): r is ChatAttachment => r !== null);
+    if (successful.length > 0) {
+      setPendingFiles((prev) => [...prev, ...successful]);
+    }
+    setUploading(false);
+    // Reset input so same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [uploadFile]);
+
+  const removePendingFile = useCallback((id: string) => {
+    setPendingFiles((prev) => {
+      const removed = prev.find((f) => f.id === id);
+      if (removed?.preview_url) URL.revokeObjectURL(removed.preview_url);
+      return prev.filter((f) => f.id !== id);
+    });
+  }, []);
 
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed && pendingFiles.length === 0) return;
     lastInputWasVoiceRef.current = false;
-    sendMessage(trimmed, {
+    sendMessage(trimmed || '(attached files)', {
       module: moduleContext.moduleId,
       active_item: moduleContext.activeItem,
       editor_context: moduleContext.editorContext,
-    });
+    }, pendingFiles.length > 0 ? pendingFiles : undefined);
     setText('');
+    setPendingFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [text, sendMessage, moduleContext]);
+  }, [text, pendingFiles, sendMessage, moduleContext]);
 
   const handleVoiceStop = useCallback(async () => {
     const transcript = await voice.stopRecording();
@@ -62,6 +111,37 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       });
     }
   }, [voice, sendMessage, moduleContext]);
+
+  const resizeTextarea = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }, []);
+
+  const handleInput = useCallback(() => {
+    resizeTextarea();
+  }, [resizeTextarea]);
+
+  // Auto-resize textarea whenever text changes (covers programmatic setText from voice)
+  useEffect(() => {
+    resizeTextarea();
+  }, [text, resizeTextarea]);
+
+  // Full-duplex: show transcript in textarea when session ends (user reviews + sends with Enter)
+  const prevSessionActiveRef = useRef(false);
+  useEffect(() => {
+    const wasActive = prevSessionActiveRef.current;
+    prevSessionActiveRef.current = voiceStream.isSessionActive;
+
+    if (wasActive && !voiceStream.isSessionActive && isFullDuplex) {
+      const trimmed = voiceStream.transcript.trim();
+      if (trimmed) {
+        lastInputWasVoiceRef.current = true;
+        setText(trimmed);
+      }
+    }
+  }, [voiceStream.isSessionActive, voiceStream.transcript, isFullDuplex]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -76,23 +156,27 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     [handleSend, onCollapse],
   );
 
-  const handleInput = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 72) + 'px';
-  }, []);
-
-  // Space push-to-talk: only when textarea is not focused and no text is being typed
+  // Space push-to-talk / full-duplex hold-to-talk: only when textarea is not focused
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.code !== 'Space') return;
+      if (e.code !== 'Space' || e.repeat) return;
       // Don't interfere with typing in inputs/textareas
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((e.target as HTMLElement)?.isContentEditable) return;
-      if (voice.state !== 'idle' && voice.state !== 'recording') return;
 
+      if (isFullDuplex) {
+        // Full-duplex: hold Space to stream (start on keydown, stop on keyup)
+        e.preventDefault();
+        if (!voiceStream.isSessionActive) {
+          const convId = conversationId ?? crypto.randomUUID();
+          voiceStream.startSession(convId);
+        }
+        return;
+      }
+
+      // Push-to-talk: hold Space to record
+      if (voice.state !== 'idle' && voice.state !== 'recording') return;
       e.preventDefault();
       if (voice.state === 'idle') {
         voice.startRecording();
@@ -101,6 +185,15 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
 
     const handleKeyUp = (e: globalThis.KeyboardEvent) => {
       if (e.code !== 'Space') return;
+
+      if (isFullDuplex) {
+        // Full-duplex: release Space ends session
+        if (voiceStream.isSessionActive) {
+          voiceStream.endSession();
+        }
+        return;
+      }
+
       if (voice.state === 'recording') {
         handleVoiceStop();
       }
@@ -112,7 +205,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [voice, handleVoiceStop]);
+  }, [voice, voiceStream, handleVoiceStop, isFullDuplex, conversationId]);
 
   // TTS auto-play: when the last input was voice AND autoplay_responses is enabled
   useEffect(() => {
@@ -150,8 +243,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
         style={{
           flex: 1,
           display: 'flex',
-          alignItems: 'flex-end',
-          gap: 4,
+          flexDirection: 'column',
           background: 'var(--card)',
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius-md)',
@@ -159,6 +251,50 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           transition: 'border-color var(--transition-fast)',
         }}
       >
+        {/* Pending file chips */}
+        {pendingFiles.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, paddingBottom: 4 }}>
+            {pendingFiles.map((f) => (
+              <div
+                key={f.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 6px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.75rem',
+                  color: 'var(--text-dim)',
+                  maxWidth: 180,
+                }}
+              >
+                {f.preview_url ? (
+                  <img src={f.preview_url} alt="" style={{ width: 16, height: 16, objectFit: 'cover', borderRadius: 2 }} />
+                ) : f.mime_type === 'application/pdf' ? (
+                  <FileText size={12} />
+                ) : f.mime_type.startsWith('image/') ? (
+                  <ImageIcon size={12} />
+                ) : (
+                  <File size={12} />
+                )}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                  {f.filename}
+                </span>
+                <button
+                  onClick={() => removePendingFile(f.id)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+            {uploading && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', padding: '2px 4px' }}>Uploading...</span>
+            )}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           value={text}
@@ -168,7 +304,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           placeholder="Ask anything..."
           rows={1}
           style={{
-            flex: 1,
+            width: '100%',
             background: 'transparent',
             border: 'none',
             outline: 'none',
@@ -178,14 +314,30 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
             resize: 'none',
             lineHeight: 1.5,
             minHeight: 24,
-            maxHeight: 72,
+            maxHeight: 200,
+            overflowY: 'auto',
             padding: '2px 0',
+            wordBreak: 'break-word',
           }}
         />
       </div>
 
-      {/* Voice — recording/processing indicator or speaking indicator */}
-      {voice.state === 'speaking' ? (
+      {/* Voice — full-duplex mode or push-to-talk mode */}
+      {isFullDuplex ? (
+        voiceStream.state === 'speaking' ? (
+          <SpeakingIndicator onStop={voiceStream.stopTts} />
+        ) : (
+          <VoiceButton
+            state={voiceStream.state === 'listening' ? 'recording' : voiceStream.state}
+            duration={voiceStream.duration}
+            onStart={() => {
+              const convId = conversationId ?? crypto.randomUUID();
+              voiceStream.startSession(convId);
+            }}
+            onStop={voiceStream.endSession}
+          />
+        )
+      ) : voice.state === 'speaking' ? (
         <SpeakingIndicator onStop={voice.stopTts} />
       ) : (
         <VoiceButton
@@ -197,22 +349,33 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       )}
 
       {/* Attachment */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => handleFileSelect(e.target.files)}
+        accept="image/*,.pdf,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.sh,.sql,.log,.zip,.tar,.gz"
+      />
       <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading}
         style={{
           background: 'none',
           border: 'none',
-          cursor: 'pointer',
-          color: 'var(--text-muted)',
+          cursor: uploading ? 'wait' : 'pointer',
+          color: pendingFiles.length > 0 ? 'var(--amber)' : 'var(--text-muted)',
           padding: 4,
           display: 'flex',
           borderRadius: 'var(--radius-sm)',
+          opacity: uploading ? 0.5 : 1,
         }}
       >
         <Paperclip size={16} />
       </button>
 
       {/* Send button */}
-      {text.trim() && (
+      {(text.trim() || pendingFiles.length > 0) && (
         <button
           onClick={handleSend}
           style={{

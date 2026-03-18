@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Copy, Plus, Link2 } from 'lucide-react';
+import { X, Plus, Link2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useNotificationStore } from '@/stores/notification.store';
 

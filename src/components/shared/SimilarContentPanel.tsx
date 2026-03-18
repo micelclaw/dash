@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import {
   StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen, Link2,
@@ -68,7 +68,6 @@ export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPane
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [expandLoading, setExpandLoading] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     if (!isPro || !sourceId) return;

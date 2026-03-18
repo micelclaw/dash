@@ -15,8 +15,8 @@ import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Layout } from 'lucide-react';
-import type { Message, MessageApproval } from '@/types/chat';
+import { Layout, FileText, Image as ImageIcon, File } from 'lucide-react';
+import type { Message, MessageApproval, ChatAttachment } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
@@ -85,7 +85,18 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
             }}
           >
             {isUser ? (
-              <p style={{ margin: 0 }}>{message.content}</p>
+              <>
+                {message.attachments && message.attachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: message.content && message.content !== '(attached files)' ? 6 : 0 }}>
+                    {message.attachments.map((att) => (
+                      <AttachmentChip key={att.id} attachment={att} />
+                    ))}
+                  </div>
+                )}
+                {message.content && message.content !== '(attached files)' && (
+                  <p style={{ margin: 0 }}>{message.content}</p>
+                )}
+              </>
             ) : (
               <div className="chat-markdown">
                 <ReactMarkdown
@@ -461,6 +472,45 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentChip({ attachment }: { attachment: ChatAttachment }) {
+  const isImage = attachment.mime_type.startsWith('image/');
+  const isPdf = attachment.mime_type === 'application/pdf';
+  const sizeLabel = attachment.size_bytes < 1024
+    ? `${attachment.size_bytes} B`
+    : attachment.size_bytes < 1048576
+      ? `${(attachment.size_bytes / 1024).toFixed(0)} KB`
+      : `${(attachment.size_bytes / 1048576).toFixed(1)} MB`;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 8px',
+        background: 'rgba(0,0,0,0.15)',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: '0.75rem',
+        maxWidth: 200,
+      }}
+    >
+      {attachment.preview_url ? (
+        <img src={attachment.preview_url} alt="" style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }} />
+      ) : isImage ? (
+        <ImageIcon size={14} />
+      ) : isPdf ? (
+        <FileText size={14} />
+      ) : (
+        <File size={14} />
+      )}
+      <div style={{ overflow: 'hidden', flex: 1 }}>
+        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachment.filename}</div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.6875rem' }}>{sizeLabel}</div>
       </div>
     </div>
   );
