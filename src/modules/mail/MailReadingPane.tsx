@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-  ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Archive, Undo2,
+  ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
   Printer, ExternalLink, Trash2, Ban, ShieldAlert,
   AlertTriangle, Languages, Code, Download, Sparkles,
@@ -174,13 +174,13 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
 
   const handleEditDraft = () => {
     if (!email) return;
-    const toAddrs = (email.to_addresses as string[] | null) ?? [];
-    const ccAddrs = (email.cc_addresses as string[] | null) ?? [];
+    const toAddrs = email.to_addresses ?? [];
+    const ccAddrs = email.cc_addresses ?? [];
     onReply({
       mode: 'edit_draft',
       draft_id: email.id,
-      to: toAddrs.map(a => ({ address: a })),
-      cc: ccAddrs.map(a => ({ address: a })),
+      to: toAddrs.map(a => ({ address: typeof a === 'string' ? a : a.address, name: typeof a === 'string' ? undefined : a.name })),
+      cc: ccAddrs.map(a => ({ address: typeof a === 'string' ? a : a.address, name: typeof a === 'string' ? undefined : a.name })),
       subject: email.subject ?? '',
       body_html: email.body_html ?? email.body_plain ?? '',
       account_id: email.account_id ?? undefined,
@@ -190,7 +190,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
   const handleSendDraft = async () => {
     if (!email || !onSend) return;
     try {
-      const toAddrs = (email.to_addresses as string[] | null) ?? [];
+      const toAddrs = email.to_addresses ?? [];
       await onSend({
         account_id: email.account_id,
         to_addresses: toAddrs,

@@ -24,7 +24,7 @@ export function usePhotoSelection(items: { id: string }[]) {
         const toIdx = items.findIndex(f => f.id === id);
         if (fromIdx >= 0 && toIdx >= 0) {
           const [start, end] = [Math.min(fromIdx, toIdx), Math.max(fromIdx, toIdx)];
-          for (let i = start; i <= end; i++) next.add(items[i].id);
+          for (let i = start; i <= end; i++) next.add(items[i]!.id);
         }
       } else {
         next.has(id) ? next.delete(id) : next.add(id);

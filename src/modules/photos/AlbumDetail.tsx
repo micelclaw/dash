@@ -47,7 +47,7 @@ interface AlbumDetailProps {
 
 function AlbumPhotoThumbnail({
   photo,
-  albumId,
+  albumId: _albumId,
   onClick,
   onRemove,
   onViewExif,

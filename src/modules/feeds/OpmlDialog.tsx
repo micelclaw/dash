@@ -12,7 +12,6 @@
 
 import { useState, useRef } from 'react';
 import { X, Upload, Download, FileText, Loader2, Check, AlertCircle } from 'lucide-react';
-import { api } from '@/services/api';
 import { useFeedsStore } from '@/stores/feeds.store';
 
 interface OpmlImportResult {

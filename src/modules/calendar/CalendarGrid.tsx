@@ -54,8 +54,8 @@ function WorkingHoursOverlay() {
 
   const [startH, startM] = cal.working_hours_start.split(':').map(Number);
   const [endH, endM] = cal.working_hours_end.split(':').map(Number);
-  const startTop = (startH * 60 + startM) * (ROW_HEIGHT * 2) / 60;
-  const endTop = (endH * 60 + endM) * (ROW_HEIGHT * 2) / 60;
+  const startTop = ((startH ?? 0) * 60 + (startM ?? 0)) * (ROW_HEIGHT * 2) / 60;
+  const endTop = ((endH ?? 0) * 60 + (endM ?? 0)) * (ROW_HEIGHT * 2) / 60;
 
   if (endTop <= startTop) return null;
 
@@ -709,7 +709,7 @@ interface MonthGridProps {
   calendarColorMap?: Record<string, string>;
 }
 
-function MonthGrid({ currentDate, events, onEventClick, onSlotClick, onEventDelete, calendarColorMap }: MonthGridProps) {
+function MonthGrid({ currentDate, events, onEventClick, onSlotClick, calendarColorMap }: MonthGridProps) {
   const gridDays = useMemo(() => getMonthGridDays(currentDate), [currentDate]);
 
   // Group events by day string
@@ -901,7 +901,7 @@ interface AgendaViewProps {
   calendarColorMap?: Record<string, string>;
 }
 
-function AgendaView({ events, onEventClick, onEventDelete, calendarColorMap }: AgendaViewProps) {
+function AgendaView({ events, onEventClick, calendarColorMap }: AgendaViewProps) {
   // Group events by date
   const grouped = useMemo(() => {
     const map = new Map<string, { date: Date; events: CalendarEvent[] }>();

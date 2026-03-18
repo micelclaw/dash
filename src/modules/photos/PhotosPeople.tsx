@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Users, ArrowLeft, Pencil, Trash2, Image, UserPlus, UserX } from 'lucide-react';
+import { Users, ArrowLeft, Pencil, Trash2, Image, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';

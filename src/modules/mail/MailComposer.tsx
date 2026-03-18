@@ -60,7 +60,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
   // Update fromAccountId when accounts load (may be empty on first render)
   useEffect(() => {
     if (!fromAccountId && accounts.length > 0) {
-      setFromAccountId(accounts.find(a => a.is_default)?.id || accounts[0].id);
+      setFromAccountId(accounts.find(a => a.is_default)?.id || accounts[0]!.id);
     }
   }, [accounts, fromAccountId]);
 
@@ -87,13 +87,6 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isDirty = body.length > 0 || subject.length > 0 || toRecipients.length > 0;
-
-  const confirmDiscard = useCallback(() => {
-    if (isDirty) {
-      return window.confirm('Discard this draft?');
-    }
-    return true;
-  }, [isDirty]);
 
   // Escape to close (auto-saves draft if dirty)
   useEffect(() => {
@@ -878,7 +871,7 @@ function ChipInput({
                     onMouseDown={(e) => {
                       e.preventDefault();
                       setSaveContactMode(true);
-                      setSaveContactName(inputValue.trim().split('@')[0]);
+                      setSaveContactName(inputValue.trim().split('@')[0] ?? '');
                       setTimeout(() => saveNameRef.current?.focus(), 50);
                     }}
                     style={{

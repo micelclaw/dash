@@ -11,8 +11,8 @@
  */
 
 import { useState } from 'react';
-import { ExternalLink, Star, BookmarkPlus, FileText, Sparkles, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useFeedsStore, type RssArticle } from '@/stores/feeds.store';
+import { ExternalLink, Star, FileText, Sparkles, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { useFeedsStore } from '@/stores/feeds.store';
 import DOMPurify from 'dompurify';
 
 export function ArticleReader() {

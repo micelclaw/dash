@@ -432,7 +432,7 @@ export function Component() {
               emailId={selectedEmailId}
               onReply={handleReply}
               onForward={handleForward}
-              composerData={composerData?.mode !== 'new' ? composerData : null}
+              composerData={composerData ?? null}
               onSend={sendEmail}
               onCloseComposer={closeComposer}
               accounts={accounts}

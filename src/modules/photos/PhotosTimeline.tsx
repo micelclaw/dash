@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Trash2, Star, Loader2, Clock, CheckCircle2, PauseCircle } from 'lucide-react';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Star, Loader2, Clock, CheckCircle2, PauseCircle } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { usePhotoProcessingStore } from '@/stores/photo-processing.store';

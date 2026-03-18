@@ -55,12 +55,12 @@ export function Component() {
       switch (e.key) {
         case 'j': {
           const idx = store.articles.findIndex(a => a.id === store.activeArticleId);
-          if (idx < store.articles.length - 1) store.selectArticle(store.articles[idx + 1].id);
+          if (idx < store.articles.length - 1) store.selectArticle(store.articles[idx + 1]!.id);
           break;
         }
         case 'k': {
           const idx = store.articles.findIndex(a => a.id === store.activeArticleId);
-          if (idx > 0) store.selectArticle(store.articles[idx - 1].id);
+          if (idx > 0) store.selectArticle(store.articles[idx - 1]!.id);
           break;
         }
         case 's':

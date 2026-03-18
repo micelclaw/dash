@@ -18,7 +18,6 @@ import { OpmlDialog } from './OpmlDialog';
 
 export function FeedsSidebar() {
   const feeds = useFeedsStore(s => s.feeds);
-  const categories = useFeedsStore(s => s.categories);
   const viewMode = useFeedsStore(s => s.viewMode);
   const totalUnread = useFeedsStore(s => s.totalUnread);
   const unreadByFeed = useFeedsStore(s => s.unreadByFeed);

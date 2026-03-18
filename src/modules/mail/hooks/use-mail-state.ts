@@ -52,7 +52,7 @@ export const useMailState = create<MailState>()((set) => ({
           const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
           const next = new Set(s.selectedIds);
           for (let i = from; i <= to; i++) {
-            next.add(orderedIds[i]);
+            next.add(orderedIds[i]!);
           }
           return { selectedIds: next, lastSelectedId: id };
         }

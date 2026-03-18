@@ -120,7 +120,7 @@ export function CalendarMiniSidebar({
   }, [events]);
 
   // Calendar list: use API calendars if available, else derive from events
-  const calendarList = useMemo(() => {
+  const calendarList = useMemo((): CalendarInfo[] => {
     if (apiCalendars && apiCalendars.length > 0) {
       // Merge API calendars with any event calendar_names not in the list
       const apiNames = new Set(apiCalendars.map(c => c.name));

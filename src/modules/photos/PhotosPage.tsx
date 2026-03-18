@@ -269,7 +269,7 @@ export function Component() {
   // Auto-open ExifPanel with first photo when photos load
   useEffect(() => {
     if (!exifPhoto && photos.length > 0 && !photosLoading) {
-      setExifPhoto(photos[0]);
+      setExifPhoto(photos[0] ?? null);
     }
   }, [photos, photosLoading]);
 
@@ -281,7 +281,7 @@ export function Component() {
     const idx = photos.findIndex(p => p.id === targetId);
     if (idx >= 0) {
       setLightboxIndex(idx);
-      setExifPhoto(photos[idx]);
+      setExifPhoto(photos[idx] ?? null);
       setDetailsCollapsed(false);
       deepLinkHandled.current = true;
       setSearchParams({}, { replace: true });
@@ -672,7 +672,7 @@ export function Component() {
               onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
               bestOfCount={bestOfCount}
               bestOfCoverId={bestOfCoverId}
-              onBestOfClick={() => { setMinStars(4); setView('timeline'); }}
+              onBestOfClick={() => { setSelectedStars(new Set([4, 5])); setView('timeline'); }}
             />
           )}
 
