@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { Loader2, Play, Square, Settings, ExternalLink } from 'lucide-react';
+import { Loader2, Play, Square, ExternalLink } from 'lucide-react';
 
 interface AppStatus {
   name: string;
@@ -25,6 +25,8 @@ interface AppStatus {
 interface Props {
   app: AppStatus | null;
   loading: boolean;
+  starting?: boolean;
+  stopping?: boolean;
   icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
   color: string;
   description: string;
@@ -42,7 +44,7 @@ function formatUptime(seconds: number | null): string {
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
 }
 
-export function MultimediaStatusCard({ app, loading, icon: Icon, color, description, onInstall, onStart, onStop, onNavigate }: Props) {
+export function MultimediaStatusCard({ app, loading, starting = false, stopping = false, icon: Icon, color, description, onInstall, onStart, onStop, onNavigate }: Props) {
   const installed = app?.installed ?? false;
   const running = app?.running ?? false;
 
@@ -57,7 +59,7 @@ export function MultimediaStatusCard({ app, loading, icon: Icon, color, descript
         {loading ? (
           <Loader2 size={13} className="mm-spin" style={{ color: 'var(--text-muted)' }} />
         ) : (
-          <span className="mm-status-dot" style={{ background: running ? '#22c55e' : installed ? '#6b7280' : '#ef4444' }} />
+          <span className="mm-status-dot" style={{ background: stopping ? '#ef4444' : starting ? '#eab308' : running ? '#22c55e' : installed ? '#6b7280' : '#ef4444', animation: starting || stopping ? 'mm-pulse 1.5s ease-in-out infinite' : undefined }} />
         )}
       </div>
 
@@ -65,7 +67,7 @@ export function MultimediaStatusCard({ app, loading, icon: Icon, color, descript
         <div className="mm-card-meta">
           {running && app?.ram_mb != null && <span>RAM: {app.ram_mb} MB</span>}
           {running && app?.uptime_seconds != null && <span>Up: {formatUptime(app.uptime_seconds)}</span>}
-          {!running && <span style={{ color: 'var(--text-muted)' }}>Stopped</span>}
+          {!running && !starting && <span style={{ color: 'var(--text-muted)' }}>Stopped</span>}
         </div>
       )}
 
@@ -75,12 +77,22 @@ export function MultimediaStatusCard({ app, loading, icon: Icon, color, descript
             Install
           </button>
         )}
-        {installed && !running && (
+        {installed && !running && !starting && (
           <button className="mm-btn mm-btn-start" onClick={onStart}>
             <Play size={12} /> Start
           </button>
         )}
-        {installed && running && (
+        {starting && (
+          <button className="mm-btn" style={{ color: '#eab308', borderColor: 'rgba(234,179,8,0.3)', cursor: 'wait' }} disabled>
+            <Loader2 size={12} className="mm-spin" /> Starting
+          </button>
+        )}
+        {stopping && (
+          <button className="mm-btn" style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)', cursor: 'wait' }} disabled>
+            <Loader2 size={12} className="mm-spin" /> Stopping
+          </button>
+        )}
+        {installed && running && !stopping && (
           <>
             <button className="mm-btn mm-btn-open" onClick={onNavigate}>
               <ExternalLink size={12} /> Open

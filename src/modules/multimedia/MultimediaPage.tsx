@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { api } from '@/services/api';
 import {
-  AlertTriangle, RefreshCw, Loader2, Wand2,
+  AlertTriangle, RefreshCw, Wand2,
   Clapperboard, Download, Film, Tv, Music, BookOpen,
   Search, ListPlus, Music2, Library, Headphones,
 } from 'lucide-react';
@@ -60,6 +60,8 @@ export function Component() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [startingApps, setStartingApps] = useState<Set<string>>(new Set());
+  const [stoppingApps, setStoppingApps] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -81,10 +83,27 @@ export function Component() {
 
   const handleAction = async (app: string, action: 'start' | 'stop') => {
     try {
+      if (action === 'start') {
+        setStartingApps(prev => new Set(prev).add(app));
+      } else {
+        setStoppingApps(prev => new Set(prev).add(app));
+      }
       await api.post(`/multimedia/${app}/${action}`);
-      await refresh();
+      // Poll aggressively until state matches expected, or timeout
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2_000));
+        const res = await api.get<{ data: MultimediaSuiteStatus }>('/multimedia/status');
+        setStatus(res.data);
+        const appStatus = res.data.apps.find(a => a.name === app);
+        if (action === 'start' && appStatus?.running) break;
+        if (action === 'stop' && !appStatus?.running) break;
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} ${app}`);
+    } finally {
+      setStartingApps(prev => { const s = new Set(prev); s.delete(app); return s; });
+      setStoppingApps(prev => { const s = new Set(prev); s.delete(app); return s; });
     }
   };
 
@@ -111,13 +130,15 @@ export function Component() {
               key={name}
               app={svc(name)}
               loading={!status}
-              icon={meta.icon}
-              color={meta.color}
-              description={meta.description}
-              onInstall={() => navigate(meta.path)}
+              starting={startingApps.has(name)}
+              stopping={stoppingApps.has(name)}
+              icon={meta!.icon}
+              color={meta!.color}
+              description={meta!.description}
+              onInstall={() => navigate(meta!.path)}
               onStart={() => handleAction(name, 'start')}
               onStop={() => handleAction(name, 'stop')}
-              onNavigate={() => navigate(meta.path)}
+              onNavigate={() => navigate(meta!.path)}
             />
           );
         })}
@@ -189,6 +210,7 @@ export function Component() {
         .mm-btn-install:hover { filter: brightness(1.1); }
         .mm-spin { animation: mm-spin 1s linear infinite; }
         @keyframes mm-spin { to { transform: rotate(360deg); } }
+        @keyframes mm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
     </div>
   );

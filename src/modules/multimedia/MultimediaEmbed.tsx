@@ -54,7 +54,7 @@ interface MultimediaEmbedProps {
   color: string;
 }
 
-export function MultimediaEmbed({ serviceName, displayName, description, port, icon: Icon, color }: MultimediaEmbedProps) {
+export function MultimediaEmbed({ serviceName, displayName, description, icon: Icon, color }: MultimediaEmbedProps) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [appStatus, setAppStatus] = useState<MultimediaAppStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +72,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
     const poll = async () => {
       try {
         const res = await api.get<{ data: { lines: string[] } }>(
-          `/hal/processes/${encodeURIComponent(processId)}/logs?tail=20&since=10s`,
+          `/hal/processes/${encodeURIComponent(processId ?? '')}/logs?tail=20&since=10s`,
         );
         const lines = res.data?.lines ?? [];
         const fresh = lines.filter((l) => !seenLogsRef.current.has(l));
@@ -193,10 +193,26 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
 
   // Ready — iframe view
   if (phase === 'ready' && appStatus) {
-    // Use the same hostname as the browser to avoid cross-origin issues
-    // (e.g., if accessed via 127.0.0.1, iframe must also use 127.0.0.1)
+    // All apps use per-port Caddy proxies that strip X-Frame-Options/CSP.
+    // Core's reverse proxy breaks redirects (e.g. Jellyfin / → web/ becomes /jellyfinweb/).
+    const IFRAME_PORTS: Record<string, number> = {
+      jellyfin: 8097,
+      radarr: 7879,
+      sonarr: 8990,
+      lidarr: 8687,
+      readarr: 8788,
+      jellyseerr: 5056,
+      qbittorrent: 8086,
+      jackett: 9118,
+      navidrome: 4534,
+      calibreweb: 8084,
+      audiobookshelf: 13379,
+    };
     const hostname = window.location.hostname;
-    const directUrl = `${window.location.protocol}//${hostname}:${port}`;
+    const iframePort = IFRAME_PORTS[serviceName];
+    const proxyUrl = iframePort
+      ? `${window.location.protocol}//${hostname}:${iframePort}/`
+      : `${window.location.origin}/api/v1/multimedia/proxy/${serviceName}/`;
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Header bar */}
@@ -220,7 +236,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
             <span style={{ color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
           )}
           <a
-            href={directUrl}
+            href={proxyUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
@@ -232,7 +248,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, port, i
 
         {/* Iframe — apps are configured to allow embedding */}
         <iframe
-          src={directUrl}
+          src={proxyUrl}
           title={displayName}
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"
