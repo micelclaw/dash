@@ -69,7 +69,6 @@ export function parseDrawio(xml: string): DiagramFile {
 
   cells.forEach((cell) => {
     const id = cell.getAttribute('id') || '';
-    const parent = cell.getAttribute('parent') || '';
     const value = cell.getAttribute('value') || '';
     const style = parseStyle(cell.getAttribute('style') || '');
     const source = cell.getAttribute('source') || '';

@@ -302,7 +302,7 @@ function SliderField({
         min={min}
         max={max}
         step={step}
-        onValueChange={([v]) => onChange(v)}
+        onValueChange={([v]) => onChange(v ?? 0)}
         className="w-full [&_[data-slot=slider-track]]:h-1 [&_[data-slot=slider-range]]:bg-amber-500 [&_[data-slot=slider-thumb]]:size-3 [&_[data-slot=slider-thumb]]:border-amber-500"
       />
     </div>
@@ -880,7 +880,7 @@ function SelectionStats() {
   // Type distribution
   const typeCounts = new Map<string, number>();
   for (const n of selectedNodes) {
-    typeCounts.set(n.type, (typeCounts.get(n.type) || 0) + 1);
+    typeCounts.set(n.type ?? '', (typeCounts.get(n.type ?? '') || 0) + 1);
   }
 
   // Bounding box

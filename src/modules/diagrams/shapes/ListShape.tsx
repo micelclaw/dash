@@ -63,9 +63,9 @@ function ListShapeInner({ data: _d, selected }: NodeProps) {
   const toggleItem = useCallback((index: number) => {
     if (!nodeId) return;
     const newItems = [...items];
-    const current = newItems[index].status;
-    const nextIdx = (STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length;
-    newItems[index] = { ...newItems[index], status: STATUS_CYCLE[nextIdx] };
+    const current = newItems[index]!.status;
+    const nextIdx = (STATUS_CYCLE.indexOf(current ?? 'unchecked') + 1) % STATUS_CYCLE.length;
+    newItems[index] = { ...newItems[index], status: STATUS_CYCLE[nextIdx] ?? 'unchecked' } as { text: string; status: ItemStatus };
     updateNodeData(nodeId, { listItems: newItems });
   }, [nodeId, items, updateNodeData]);
 

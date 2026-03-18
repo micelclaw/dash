@@ -13,7 +13,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useParams } from 'react-router';
 import { ReactFlowProvider } from '@xyflow/react';
-import { Plus, Minimize2, Undo2, Redo2, Sparkles, Save, MoreVertical } from 'lucide-react';
+import { Plus, Minimize2, Undo2, Redo2, Save, MoreVertical } from 'lucide-react';
 import { useDiagramsStore } from '@/stores/diagrams.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { DiagramToolbar } from './DiagramToolbar';
@@ -187,7 +187,7 @@ function DiagramEditorInner() {
             id: n.id,
             selected: n.id === nextNode.id,
           }));
-          store.onNodesChange(changes);
+          store.onNodesChange(changes as import('@xyflow/react').NodeChange<import('./types').DiagramNode>[]);
           store.selectElement('node', nextNode.id);
         }
         return;

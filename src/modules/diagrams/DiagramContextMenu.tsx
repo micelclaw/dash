@@ -297,7 +297,7 @@ function SubMenu({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const onEnter = () => {
     clearTimeout(timeoutRef.current);

@@ -25,7 +25,6 @@ export function useDiagramFile(fileId?: string) {
   const navigate = useNavigate();
   const loadDiagram = useDiagramsStore((s) => s.loadDiagram);
   const reset = useDiagramsStore((s) => s.reset);
-  const toDiagramFile = useDiagramsStore((s) => s.toDiagramFile);
   const isDirty = useDiagramsStore((s) => s.isDirty);
   const saveStatus = useDiagramsStore((s) => s.saveStatus);
   const setSaveStatus = useDiagramsStore((s) => s.setSaveStatus);

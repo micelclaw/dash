@@ -21,19 +21,19 @@ function renderMarkdown(text: string): React.ReactNode[] {
   return text.split('\n').map((line, i) => {
     // Headers
     const h3 = line.match(/^###\s+(.*)/);
-    if (h3) return <div key={i} style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>{parseInline(h3[1])}</div>;
+    if (h3) return <div key={i} style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>{parseInline(h3[1]!)}</div>;
     const h2 = line.match(/^##\s+(.*)/);
-    if (h2) return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{parseInline(h2[1])}</div>;
+    if (h2) return <div key={i} style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{parseInline(h2[1]!)}</div>;
     const h1 = line.match(/^#\s+(.*)/);
-    if (h1) return <div key={i} style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{parseInline(h1[1])}</div>;
+    if (h1) return <div key={i} style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>{parseInline(h1[1]!)}</div>;
 
     // Unordered list
     const ul = line.match(/^[-*]\s+(.*)/);
-    if (ul) return <div key={i} style={{ paddingLeft: 12 }}>• {parseInline(ul[1])}</div>;
+    if (ul) return <div key={i} style={{ paddingLeft: 12 }}>• {parseInline(ul[1]!)}</div>;
 
     // Ordered list
     const ol = line.match(/^(\d+)\.\s+(.*)/);
-    if (ol) return <div key={i} style={{ paddingLeft: 12 }}>{ol[1]}. {parseInline(ol[2])}</div>;
+    if (ol) return <div key={i} style={{ paddingLeft: 12 }}>{ol[1]}. {parseInline(ol[2]!)}</div>;
 
     // Empty line
     if (!line.trim()) return <div key={i} style={{ height: 6 }} />;

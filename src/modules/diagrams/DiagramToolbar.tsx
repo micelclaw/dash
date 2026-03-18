@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState } from 'react';
 import { useReactFlow, useViewport } from '@xyflow/react';
 import {
   Undo2, Redo2, ZoomIn, ZoomOut, Maximize, Save,
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useDiagramsStore } from '@/stores/diagrams.store';
 import { useAutoLayout, type LayoutDirection } from './hooks/use-auto-layout';
-import { useElkLayout, type ElkAlgorithm } from './hooks/use-elk-layout';
+import { useElkLayout } from './hooks/use-elk-layout';
 import { api } from '@/services/api';
 import type { DiagramFile } from './types';
 

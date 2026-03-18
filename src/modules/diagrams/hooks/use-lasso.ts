@@ -24,8 +24,8 @@ export interface LassoState {
 function pointInPolygon(px: number, py: number, polygon: { x: number; y: number }[]): boolean {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x, yi = polygon[i].y;
-    const xj = polygon[j].x, yj = polygon[j].y;
+    const xi = polygon[i]!.x, yi = polygon[i]!.y;
+    const xj = polygon[j]!.x, yj = polygon[j]!.y;
     if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
       inside = !inside;
     }

@@ -32,35 +32,35 @@ interface ParsedEdge {
 function detectShape(text: string): { id: string; label: string; shape: string } {
   // [label] → rectangle
   let m = text.match(/^(\w+)\[(.+)\]$/);
-  if (m) return { id: m[1], label: m[2], shape: 'rectangle' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'rectangle' };
 
   // (label) → rounded
   m = text.match(/^(\w+)\((.+)\)$/);
-  if (m) return { id: m[1], label: m[2], shape: 'rounded' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'rounded' };
 
   // {label} → diamond
   m = text.match(/^(\w+)\{(.+)\}$/);
-  if (m) return { id: m[1], label: m[2], shape: 'diamond' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'diamond' };
 
   // ((label)) → circle
   m = text.match(/^(\w+)\(\((.+)\)\)$/);
-  if (m) return { id: m[1], label: m[2], shape: 'circle' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'circle' };
 
   // [(label)] → cylinder
   m = text.match(/^(\w+)\[\((.+)\)\]$/);
-  if (m) return { id: m[1], label: m[2], shape: 'cylinder' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'cylinder' };
 
   // [/label\] → parallelogram
   m = text.match(/^(\w+)\[\/(.+)\\?\]$/);
-  if (m) return { id: m[1], label: m[2], shape: 'parallelogram' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'parallelogram' };
 
   // {{label}} → hexagon
   m = text.match(/^(\w+)\{\{(.+)\}\}$/);
-  if (m) return { id: m[1], label: m[2], shape: 'hexagon' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'hexagon' };
 
   // >label] → banner
   m = text.match(/^(\w+)>(.+)\]$/);
-  if (m) return { id: m[1], label: m[2], shape: 'banner' };
+  if (m) return { id: m[1]!, label: m[2]!, shape: 'banner' };
 
   // Plain id
   return { id: text.trim(), label: text.trim(), shape: 'rectangle' };
@@ -80,8 +80,8 @@ export function parseMermaid(source: string): DiagramFile {
     // Edge patterns: A --> B, A -->|label| B, A -- label --> B
     const edgeMatch = line.match(/^(\S+)\s*(-->|---|-\.-|==>|-.->|--)\s*(?:\|([^|]+)\|)?\s*(\S+)$/);
     if (edgeMatch) {
-      const src = detectShape(edgeMatch[1]);
-      const tgt = detectShape(edgeMatch[4]);
+      const src = detectShape(edgeMatch[1]!);
+      const tgt = detectShape(edgeMatch[4]!);
       const label = edgeMatch[3]?.trim();
 
       if (!nodeMap.has(src.id)) nodeMap.set(src.id, src);
@@ -94,8 +94,8 @@ export function parseMermaid(source: string): DiagramFile {
     // Edge with label in middle: A -- label --> B
     const edgeMatch2 = line.match(/^(\S+)\s+--\s+(.+?)\s+-->\s+(\S+)$/);
     if (edgeMatch2) {
-      const src = detectShape(edgeMatch2[1]);
-      const tgt = detectShape(edgeMatch2[3]);
+      const src = detectShape(edgeMatch2[1]!);
+      const tgt = detectShape(edgeMatch2[3]!);
       const label = edgeMatch2[2]?.trim();
 
       if (!nodeMap.has(src.id)) nodeMap.set(src.id, src);

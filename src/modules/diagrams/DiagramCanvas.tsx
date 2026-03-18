@@ -122,7 +122,7 @@ export function DiagramCanvas({ onDrop, onDragOver }: DiagramCanvasProps) {
     setContextMenu({ type: 'edge', position: { x: e.clientX, y: e.clientY }, id: edge.id });
   }, []);
 
-  const onPaneContextMenu = useCallback((e: React.MouseEvent) => {
+  const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault();
     setContextMenu({ type: 'pane', position: { x: e.clientX, y: e.clientY } });
   }, []);
@@ -280,7 +280,7 @@ export function DiagramCanvas({ onDrop, onDragOver }: DiagramCanvasProps) {
         snapToGrid={settings.snapToGrid}
         snapGrid={[settings.gridSize, settings.gridSize]}
         defaultEdgeOptions={{ type: settings.defaultEdgeType }}
-        isValidConnection={stableIsValidConnection}
+        isValidConnection={stableIsValidConnection as never}
         connectionMode={ConnectionMode.Loose}
         connectionLineStyle={{ stroke: 'var(--amber, #d4a017)', strokeWidth: 2, strokeDasharray: '6 3' }}
         fitView

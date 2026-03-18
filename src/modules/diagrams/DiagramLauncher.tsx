@@ -80,11 +80,13 @@ export function DiagramLauncher() {
         edges: [],
         settings: {
           snapToGrid: true,
+          snapToGuides: true,
           gridSize: 20,
           showMinimap: true,
           showGrid: true,
           defaultEdgeType: 'smoothstep',
           connectionMode: 'loose',
+          autoSave: true,
         },
       };
       const json = JSON.stringify(blank, null, 2);

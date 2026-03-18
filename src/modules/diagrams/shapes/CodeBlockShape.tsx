@@ -20,7 +20,7 @@ import type { DiagramNodeData } from '../types';
 const LANGUAGES = ['javascript', 'typescript', 'python', 'go', 'rust', 'sql', 'json', 'yaml', 'bash', 'html', 'css'] as const;
 
 /** Basic syntax coloring via regex */
-function colorize(code: string, lang?: string): React.ReactNode[] {
+function colorize(code: string, _lang?: string): React.ReactNode[] {
   return code.split('\n').map((line, i) => {
     let colored = line
       // Strings
