@@ -35,7 +35,6 @@ const hasTailscaleCerts = fs.existsSync(tsCert) && fs.existsSync(tsKey);
 
 const useInternalCerts = hasInternalCerts;
 const useTailscaleCerts = !useInternalCerts && hasTailscaleCerts;
-const useHttps = useInternalCerts || useTailscaleCerts;
 
 /**
  * Vite plugin that adds Private Network Access (PNA) headers to all responses.

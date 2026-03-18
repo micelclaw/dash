@@ -78,21 +78,23 @@ export const useApiKeyStore = create<ApiKeyState>()((set, get) => ({
       if (useMock) {
         await new Promise((r) => setTimeout(r, 800));
         const result = { valid: true };
+        const existing = get().providers[provider];
         set({
           testing: null,
           providers: {
             ...get().providers,
-            [provider]: { ...get().providers[provider], valid: result.valid },
+            ...(existing ? { [provider]: { ...existing, valid: result.valid } } : {}),
           },
         });
         return result;
       }
       const res = await api.post<{ data: { valid: boolean } }>(`/settings/ai/api-keys/${provider}/test`);
+      const existing2 = get().providers[provider];
       set({
         testing: null,
         providers: {
           ...get().providers,
-          [provider]: { ...get().providers[provider], valid: res.data.valid },
+          ...(existing2 ? { [provider]: { ...existing2, valid: res.data.valid } } : {}),
         },
       });
       return res.data;

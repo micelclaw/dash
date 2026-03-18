@@ -11,7 +11,7 @@
  */
 
 import { create } from 'zustand';
-import type { Message, Conversation, Agent, ChatState, StreamingState } from '@/types/chat';
+import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttachment } from '@/types/chat';
 import { useWebSocketStore } from './websocket.store';
 import { api } from '@/services/api';
 
@@ -25,7 +25,7 @@ interface ChatStore {
   bubbleMessage: Message | null;
   agents: Agent[];
 
-  sendMessage: (text: string, context?: Record<string, unknown>) => void;
+  sendMessage: (text: string, context?: Record<string, unknown>, attachments?: ChatAttachment[]) => void;
   setChatState: (state: ChatState) => void;
   selectAgent: (name: string) => void;
   selectConversation: (id: string) => void;
@@ -49,12 +49,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   activeConversationId: null,
   messages: new Map(),
   streamingMessage: null,
-  selectedAgent: 'francis',
+  selectedAgent: 'main',
   chatState: 1,
   bubbleMessage: null,
   agents: [],
 
-  sendMessage: (text: string, context?: Record<string, unknown>) => {
+  sendMessage: (text: string, context?: Record<string, unknown>, attachments?: ChatAttachment[]) => {
     const { activeConversationId, selectedAgent, messages, chatState } = get();
     const convId = activeConversationId ?? crypto.randomUUID();
 
@@ -82,12 +82,18 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       role: 'user',
       content: text,
       timestamp: new Date().toISOString(),
+      attachments: attachments?.length ? attachments : undefined,
     };
 
     const existing = messages.get(convId) ?? [];
     const updated = new Map(messages);
     updated.set(convId, [...existing, userMsg]);
     set({ messages: updated });
+
+    // Build attachment metadata for WS payload (without preview_url)
+    const attachmentsMeta = attachments?.map(({ id, filename, mime_type, size_bytes, filepath }) => ({
+      id, filename, mime_type, size_bytes, filepath,
+    }));
 
     // In mock mode, simulate a streaming response
     const isMock = import.meta.env.VITE_MOCK_API === 'true';
@@ -99,6 +105,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         message: text,
         conversation_id: convId,
         context: context ?? null,
+        attachments: attachmentsMeta ?? null,
       });
     }
   },

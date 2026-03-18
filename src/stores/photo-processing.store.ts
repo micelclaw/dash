@@ -62,7 +62,7 @@ export const usePhotoProcessingStore = create<PhotoProcessingState>()((set) => (
       const cfg = PHASE_CONFIG.pending;
       for (const id of fileIds) {
         if (!next.has(id)) {
-          next.set(id, { phase: 'pending', label: cfg.label, color: cfg.color });
+          next.set(id, { phase: 'pending', label: cfg?.label ?? 'Loading…', color: cfg?.color ?? '#94a3b8' });
         }
       }
       return { processingFiles: next };

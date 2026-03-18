@@ -15,8 +15,7 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type {
   Board, Card, Column, FullBoard, CardFilters, ViewMode, Automation,
-  Label, CustomFieldDef, Checklist, Comment, Dependency, EntityLink,
-  BoardTemplate,
+  Label, CustomFieldDef,
 } from '@/modules/projects/types';
 
 interface ApiEnvelope<T> { data: T }
@@ -171,7 +170,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         columnCardIds[col.id] = sortedCards.map(c => c.id);
         for (const card of sortedCards) {
           // Extract embedded labels into cardLabelIds relationship
-          const cardAny = card as Record<string, unknown>;
+          const cardAny = card as unknown as Record<string, unknown>;
           const embeddedLabels = cardAny.labels as Array<{ id: string }> | undefined;
           if (embeddedLabels && embeddedLabels.length > 0) {
             cardLabelIds[card.id] = embeddedLabels.map(l => l.id);
@@ -323,7 +322,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     set((s) => ({
       columns: {
         ...s.columns,
-        [columnId]: { ...s.columns[columnId], position },
+        [columnId]: { ...s.columns[columnId], position } as Column,
       },
     }));
     try {
@@ -334,7 +333,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         set((s) => ({
           columns: {
             ...s.columns,
-            [columnId]: { ...s.columns[columnId], position: prevPosition },
+            [columnId]: { ...s.columns[columnId], position: prevPosition } as Column,
           },
         }));
       }
@@ -346,7 +345,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     set((s) => ({
       columns: {
         ...s.columns,
-        [columnId]: { ...s.columns[columnId], collapsed },
+        [columnId]: { ...s.columns[columnId], collapsed } as Column,
       },
     }));
     try {
@@ -356,7 +355,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       set((s) => ({
         columns: {
           ...s.columns,
-          [columnId]: { ...s.columns[columnId], collapsed: !collapsed },
+          [columnId]: { ...s.columns[columnId], collapsed: !collapsed } as Column,
         },
       }));
     }
@@ -398,7 +397,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         const { [cardId]: _, ...restCards } = s.cards;
         const columnCardIds = { ...s.columnCardIds };
         for (const colId of Object.keys(columnCardIds)) {
-          columnCardIds[colId] = columnCardIds[colId].filter(id => id !== cardId);
+          columnCardIds[colId] = (columnCardIds[colId] ?? []).filter(id => id !== cardId);
         }
         return {
           cards: restCards,
@@ -627,7 +626,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   getColumnCards: (columnId) => {
     const s = get();
     const ids = s.columnCardIds[columnId] ?? [];
-    return ids.map(id => s.cards[id]).filter(Boolean);
+    return ids.map(id => s.cards[id]).filter((c): c is NonNullable<typeof c> => !!c);
   },
 
   getCard: (cardId) => get().cards[cardId],
@@ -638,7 +637,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     const boardId = s.activeBoardId;
     if (!boardId) return [];
     const colIds = s.boardColumnIds[boardId] ?? [];
-    return colIds.map(id => s.columns[id]).filter(Boolean).sort((a, b) => a.position - b.position);
+    return colIds.map(id => s.columns[id]).filter((c): c is NonNullable<typeof c> => !!c).sort((a, b) => a.position - b.position);
   },
 
   // ─── WebSocket handlers ──────────────────────────────
@@ -689,7 +688,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
           const { [cardId]: _, ...restCards } = s.cards;
           const columnCardIds = { ...s.columnCardIds };
           for (const colId of Object.keys(columnCardIds)) {
-            columnCardIds[colId] = columnCardIds[colId].filter(id => id !== cardId);
+            columnCardIds[colId] = (columnCardIds[colId] ?? []).filter(id => id !== cardId);
           }
           return { cards: restCards, columnCardIds };
         });

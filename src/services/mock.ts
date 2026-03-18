@@ -156,10 +156,10 @@ let mockNotes: Note[] = [
 // ── Entity Links ──
 
 const MOCK_LINKS: EntityLink[] = [
-  { id: 'link-1', source_type: 'note', source_id: 'note-1', target_type: 'email', target_id: 'email-1', relationship: 'mentioned_in', link_type: 'relates_to', confidence: 0.92, strength: 0.78, created_by: 'llm', created_at: new Date().toISOString() },
-  { id: 'link-2', source_type: 'note', source_id: 'note-1', target_type: 'event', target_id: 'event-1', relationship: 'attendee_of', link_type: 'attended', confidence: 1.0, strength: null, created_by: 'system', created_at: new Date().toISOString() },
-  { id: 'link-3', source_type: 'contact', source_id: 'contact-1', target_type: 'note', target_id: 'note-1', relationship: 'mentioned_in', link_type: 'mentions', confidence: 0.88, strength: 0.65, created_by: 'llm', created_at: new Date().toISOString() },
-  { id: 'link-4', source_type: 'note', source_id: 'note-4', target_type: 'email', target_id: 'email-2', relationship: 'relates_to', link_type: 'budget_discussion', confidence: 0.95, strength: 0.9, created_by: 'llm', created_at: new Date().toISOString() },
+  { id: 'link-1', source_type: 'note', source_id: 'note-1', target_type: 'email', target_id: 'email-1', relationship: 'mentioned_in', link_type: 'relates_to', confidence: 0.92, strength: 0.78, heat_edge: 0, created_by: 'llm', created_at: new Date().toISOString() },
+  { id: 'link-2', source_type: 'note', source_id: 'note-1', target_type: 'event', target_id: 'event-1', relationship: 'attendee_of', link_type: 'attended', confidence: 1.0, strength: null, heat_edge: 0, created_by: 'system', created_at: new Date().toISOString() },
+  { id: 'link-3', source_type: 'contact', source_id: 'contact-1', target_type: 'note', target_id: 'note-1', relationship: 'mentioned_in', link_type: 'mentions', confidence: 0.88, strength: 0.65, heat_edge: 0, created_by: 'llm', created_at: new Date().toISOString() },
+  { id: 'link-4', source_type: 'note', source_id: 'note-4', target_type: 'email', target_id: 'email-2', relationship: 'relates_to', link_type: 'budget_discussion', confidence: 0.95, strength: 0.9, heat_edge: 0, created_by: 'llm', created_at: new Date().toISOString() },
 ];
 
 const MOCK_LINKED_RECORDS: Record<string, Record<string, unknown>> = {
@@ -481,21 +481,21 @@ const MOCK_EMAIL_LINKS: EntityLink[] = [
     id: 'elink-1', source_type: 'email', source_id: 'email-1',
     target_type: 'note', target_id: 'note-4',
     relationship: 'related_to', link_type: 'relates_to',
-    confidence: 0.91, strength: 0.82, created_by: 'llm',
+    confidence: 0.91, strength: 0.82, heat_edge: 0, created_by: 'llm',
     created_at: new Date().toISOString(),
   },
   {
     id: 'elink-2', source_type: 'email', source_id: 'email-1',
     target_type: 'event', target_id: 'evt-3',
     relationship: 'related_to', link_type: 'relates_to',
-    confidence: 0.88, strength: 0.75, created_by: 'llm',
+    confidence: 0.88, strength: 0.75, heat_edge: 0, created_by: 'llm',
     created_at: new Date().toISOString(),
   },
   {
     id: 'elink-3', source_type: 'contact', source_id: 'contact-2',
     target_type: 'email', target_id: 'email-1',
     relationship: 'sent_by', link_type: 'mentions',
-    confidence: 1.0, strength: null, created_by: 'system',
+    confidence: 1.0, strength: null, heat_edge: 0, created_by: 'system',
     created_at: new Date().toISOString(),
   },
 ];
@@ -718,9 +718,6 @@ const MOCK_MANAGED_AGENTS: ManagedAgent[] = [
     workspace_path: '/gateway/workspace/agents/elon/',
     status: 'active', last_active_at: new Date(Date.now() - 1800000).toISOString(),
     sessions_today: 5, tokens_today: 22100, created_at: daysAgo(45),
-    semantic_scopes: [
-      { domain: 'notes', filter_type: 'include', filter: { type: 'tags', tags: ['code', 'dev'] } },
-    ],
   },
   // Ana — Data Analyst (chief, child of Francis)
   {

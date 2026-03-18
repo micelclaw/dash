@@ -415,7 +415,7 @@ export const useDiagramsStore = create<DiagramsState>()((set, get) => {
       pushUndo();
       set({
         edges: get().edges.map((e) =>
-          e.id === id ? { ...e, type: edgeType, data: { ...e.data, pathType: edgeType } } : e,
+          e.id === id ? { ...e, type: edgeType, data: { ...e.data, pathType: edgeType } as DiagramEdgeData } : e,
         ),
         isDirty: true,
       });

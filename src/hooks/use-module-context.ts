@@ -96,9 +96,9 @@ export function useModuleContext(): ModuleContext {
     // Inject projects context when on a board route
     if (mod?.id === 'projects' && projectsActiveBoardId && path.match(/\/projects\/.+/)) {
       const colIds = projectsBoardColumnIds[projectsActiveBoardId] ?? [];
-      const orderedCols = colIds.map(id => projectsColumns[id]).filter(Boolean).sort((a, b) => a.position - b.position);
+      const orderedCols = colIds.map(id => projectsColumns[id]).filter(Boolean).sort((a, b) => a!.position - b!.position);
       const colSummary = orderedCols
-        .map((c) => `${c.title}: ${(projectsColumnCardIds[c.id] ?? []).length} cards`)
+        .map((c) => `${c!.title}: ${(projectsColumnCardIds[c!.id] ?? []).length} cards`)
         .join(', ');
 
       let selectedCard: Record<string, unknown> | null = null;

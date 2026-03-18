@@ -19,6 +19,19 @@ export type ServiceState = 'stopped' | 'starting' | 'running' | 'draining' | 'fa
 export type LifecyclePolicy = 'always' | 'ondemand' | 'scheduled';
 export type HardwareProfileTier = 'lite' | 'standard' | 'performance';
 
+export interface ScheduleWindow {
+  days: number[];
+  start_time: string;
+  end_time: string;
+}
+
+export interface ScheduleConfig {
+  type: 'window' | 'interval';
+  windows?: ScheduleWindow[];
+  interval_every_minutes?: number;
+  interval_on_minutes?: number;
+}
+
 export interface ServiceLifecycleState {
   name: string;
   display_name: string;
@@ -76,6 +89,7 @@ interface ServicesState {
   startService: (name: string) => Promise<void>;
   stopService: (name: string) => Promise<void>;
   forceStopService: (name: string) => Promise<void>;
+  updatePolicy: (name: string, policy: LifecyclePolicy, schedule?: ScheduleConfig) => Promise<void>;
   updateServiceFromWS: (event: string, data: Record<string, unknown>) => void;
 }
 
@@ -147,6 +161,11 @@ export const useServicesStore = create<ServicesState>()((set, get) => ({
       await get().fetchServices();
       throw err;
     }
+  },
+
+  updatePolicy: async (name: string, policy: LifecyclePolicy, schedule?: ScheduleConfig) => {
+    await api.put(`/services/${name}/policy`, { lifecycle: policy, schedule });
+    await get().fetchServices();
   },
 
   updateServiceFromWS: (event: string, data: Record<string, unknown>) => {

@@ -13,9 +13,9 @@
 import {
   MessageSquare, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
-  Settings, Puzzle, Bookmark, ShieldCheck, Activity, Wrench,
+  Settings, Puzzle, Activity, Wrench,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
-  Wallet, Receipt, Bitcoin, Zap, CreditCard, Clapperboard, Globe, Orbit,
+  Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
   Terminal, Radio,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';

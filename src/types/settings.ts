@@ -91,7 +91,7 @@ export interface Settings {
     default_reminder_minutes: number | null;
   };
   voice: {
-    input_mode: 'hold' | 'toggle';
+    full_duplex: boolean;
     autoplay_responses: boolean;
     shortcut_key: string;
   };

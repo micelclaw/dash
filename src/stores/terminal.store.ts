@@ -117,7 +117,7 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
       const tabs = s.tabs.filter((t) => t.id !== tabId);
       let activeTabId = s.activeTabId;
       if (activeTabId === tabId) {
-        activeTabId = tabs.length > 0 ? tabs[tabs.length - 1].id : null;
+        activeTabId = tabs.length > 0 ? tabs[tabs.length - 1]!.id : null;
       }
       const splitTabIds = s.splitTabIds;
       const needClearSplit = splitTabIds && (splitTabIds[0] === tabId || splitTabIds[1] === tabId);

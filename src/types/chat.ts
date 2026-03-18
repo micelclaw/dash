@@ -19,6 +19,16 @@ export interface MessageApproval {
   status: 'pending' | 'approved' | 'rejected' | 'expired';
 }
 
+export interface ChatAttachment {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  filepath: string;
+  /** Data URL for local preview (images only, not persisted) */
+  preview_url?: string;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -29,6 +39,7 @@ export interface Message {
   tokens_used?: number;
   timestamp: string;
   approval?: MessageApproval;
+  attachments?: ChatAttachment[];
 }
 
 export interface Conversation {

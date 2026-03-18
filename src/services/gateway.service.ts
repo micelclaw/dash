@@ -109,7 +109,7 @@ export async function loginChannel(type: string, account?: string): Promise<unkn
   return res.data;
 }
 
-export async function logoutChannel(type: string, account?: string): Promise<void> {
+export async function logoutChannel(type: string, _account?: string): Promise<void> {
   await api.post(`/gateway/channels/${type}/logout`);
 }
 
@@ -197,6 +197,33 @@ export async function getCronRuns(id: string, limit = 20): Promise<CronRun[]> {
   if (Array.isArray(d)) return d;
   if (d && typeof d === 'object' && 'runs' in d) return (d as { runs: CronRun[] }).runs;
   return [];
+}
+
+// ─── Provisioning ───────────────────────────────────────────────────
+
+export interface ProvisionResult {
+  provisioned: number;
+  agents: string[];
+  skipped: boolean;
+  reason?: string;
+}
+
+export async function provisionAgents(): Promise<ProvisionResult> {
+  const res = await api.post<{ data: ProvisionResult }>('/gateway/provision-agents');
+  return res.data;
+}
+
+// ─── User Profile Sync ──────────────────────────────────────────────
+
+export interface SyncUserProfileResult {
+  synced: string[];
+  skipped: string[];
+  source: string;
+}
+
+export async function syncUserProfile(): Promise<SyncUserProfileResult> {
+  const res = await api.post<{ data: SyncUserProfileResult }>('/gateway/sync-user-profile');
+  return res.data;
 }
 
 // ─── Logs ───────────────────────────────────────────────────────────

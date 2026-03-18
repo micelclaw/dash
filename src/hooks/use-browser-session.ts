@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useWebSocket } from './use-websocket';
 import { useCanvasStore } from '@/stores/canvas.store';
 

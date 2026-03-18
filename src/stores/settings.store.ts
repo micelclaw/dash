@@ -14,19 +14,15 @@ import { create } from 'zustand';
 import { api } from '@/services/api';
 import type { Settings } from '@/types/settings';
 
-function getNestedValue(obj: any, path: string): any {
-  return path.split('.').reduce((acc, key) => acc?.[key], obj);
-}
-
 function setNestedValue(obj: any, path: string, value: any): any {
   const clone = JSON.parse(JSON.stringify(obj));
   const keys = path.split('.');
   let current = clone;
   for (let i = 0; i < keys.length - 1; i++) {
-    if (current[keys[i]] === undefined) current[keys[i]] = {};
-    current = current[keys[i]];
+    if (current[keys[i]!] === undefined) current[keys[i]!] = {};
+    current = current[keys[i]!];
   }
-  current[keys[keys.length - 1]] = value;
+  current[keys[keys.length - 1]!] = value;
   return clone;
 }
 
@@ -116,7 +112,7 @@ const DEFAULT_SETTINGS: Settings = {
     default_reminder_minutes: null,
   },
   voice: {
-    input_mode: 'hold',
+    full_duplex: false,
     autoplay_responses: false,
     shortcut_key: 'Space',
   },
@@ -131,6 +127,7 @@ interface SettingsState {
 
   fetchSettings: () => Promise<void>;
   updateSection: (section: string, data: Record<string, unknown>) => Promise<void>;
+  patchSettings: (patch: Record<string, unknown>) => Promise<void>;
   setLocalValue: (path: string, value: unknown) => void;
   resetSection: (section: string) => void;
 }
@@ -181,10 +178,30 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     }
   },
 
+  patchSettings: async (patch: Record<string, unknown>) => {
+    const { settings } = get();
+    if (!settings) return;
+    try {
+      const useMock = import.meta.env.VITE_MOCK_API === 'true';
+      if (useMock) {
+        const updated = { ...settings };
+        for (const [section, data] of Object.entries(patch)) {
+          (updated as any)[section] = { ...(updated as any)[section], ...(data as Record<string, unknown>) };
+        }
+        set({ settings: updated, original: JSON.parse(JSON.stringify(updated)) });
+        return;
+      }
+      const res = await api.patch<{ data: Settings }>('/settings', patch);
+      set({ settings: res.data, original: JSON.parse(JSON.stringify(res.data)) });
+    } catch {
+      throw new Error('Failed to patch settings');
+    }
+  },
+
   setLocalValue: (path: string, value: unknown) => {
     const { settings, original } = get();
     if (!settings) return;
-    const section = path.split('.')[0];
+    const section = path.split('.')[0]!;
     const updated = setNestedValue(settings, path, value);
     const isDirty = JSON.stringify((updated as any)[section]) !== JSON.stringify((original as any)?.[section]);
     set({ settings: updated, dirty: { ...get().dirty, [section]: isDirty } });

@@ -11,7 +11,7 @@
  */
 
 export interface SearchResult {
-  domain: 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary' | 'conversation' | 'message';
+  domain: 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary' | 'conversation' | 'message' | 'bookmark';
   record_id: string;
   score: number;
   snippet: string;

@@ -25,6 +25,7 @@ import * as gw from '@/services/gateway.service';
 
 interface GatewayStore {
   // State
+  configured: boolean | null;
   status: GatewayStatus | null;
   health: GatewayHealth | null;
   channels: GatewayChannel[];
@@ -64,6 +65,7 @@ interface GatewayStore {
 }
 
 export const useGatewayStore = create<GatewayStore>()((set) => ({
+  configured: null,
   status: null,
   health: null,
   channels: [],
@@ -91,6 +93,7 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
     try {
       const snap = await gw.getSnapshot();
       set({
+        configured: snap.configured ?? null,
         status: snap.status,
         health: snap.health,
         channels: snap.channels?.channels ?? [],
