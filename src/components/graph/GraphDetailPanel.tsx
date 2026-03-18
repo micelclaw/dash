@@ -335,6 +335,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   // Single record — show title directly
                   if (count === 1) {
                     const rec = group.records[0];
+                    if (!rec) return null;
                     const title = rec.record_title || `1 ${meta.label.toLowerCase()}`;
                     return (
                       <button

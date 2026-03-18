@@ -26,6 +26,7 @@ interface GraphCanvasProps {
   searchQuery: string;
   categoryFilters: Record<string, boolean>;
   onNodeClick: (node: GraphNode) => void;
+  onResetGraph?: () => void;
   externalHoverNodeId?: string | null;
   width: number;
   height: number;
@@ -37,6 +38,7 @@ export function GraphCanvas({
   highlightNodeIds, highlightEdgeIds, searchQuery,
   categoryFilters,
   onNodeClick,
+  onResetGraph,
   externalHoverNodeId,
   width, height,
   mode = 'entities',
@@ -93,7 +95,7 @@ export function GraphCanvas({
       <GraphZoomControls
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
-        onZoomReset={zoomReset}
+        onZoomReset={() => { zoomReset(); onResetGraph?.(); }}
         onToggleFreeze={toggleFreeze}
         frozen={frozen}
         onToggleHulls={toggleHulls}

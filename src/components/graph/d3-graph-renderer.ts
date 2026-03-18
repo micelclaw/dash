@@ -89,7 +89,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   // State
   let simNodes: SimNode[] = [];
   let simLinks: SimLink[] = [];
-  let simulation: d3.ForceSimulation<SimNode, SimLink> | null = null;
+  let simulation: d3.Simulation<SimNode, SimLink> | null = null;
   let frozen = false;
   let frameId: number | null = null;
   let currentHeatMode = false;
@@ -98,7 +98,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let currentHighlightNodeIds = new Set<string>();
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
-  let hoveredNodeId: string | null = null;
 
   // ─── Heat canvas state ────────────────────────────────────────
   const heatCanvas = config.heatCanvas;
@@ -240,8 +239,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     heatCtx.setTransform(k, 0, 0, k, tx, ty);
 
     for (const node of simNodes) {
-      const score = node.heat_score;
-      if (score < 0.01) continue;
+      const score = Math.max(node.heat_score, 0.05); // minimum glow for cold nodes
 
       const splatRadius = HEAT_SPLAT_RADIUS + node._r * 2;
       const rgb = heatColorRGB(score);
@@ -400,12 +398,10 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         config.onNodeClick(d);
       })
       .on('mouseenter', (event: MouseEvent, d) => {
-        hoveredNodeId = d.id;
         applyHoverDimming(d.id);
         config.onNodeHover(d, event);
       })
       .on('mouseleave', () => {
-        hoveredNodeId = null;
         clearHoverDimming();
         config.onNodeHover(null, null);
       });
@@ -523,7 +519,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       })
       .attr('filter', d => {
         if (currentHighlightNodeIds.size > 0 && currentHighlightNodeIds.has(d.id)) return 'url(#glow)';
-        if (currentHeatMode && d.heat_score > 0.2) return 'url(#glow)';
+        if (currentHeatMode) return 'url(#glow)';
         return 'none';
       });
 
@@ -739,10 +735,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
   function setExternalHover(nodeId: string | null) {
     if (nodeId) {
-      hoveredNodeId = nodeId;
       applyHoverDimming(nodeId);
     } else {
-      hoveredNodeId = null;
       clearHoverDimming();
     }
   }

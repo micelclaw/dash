@@ -152,6 +152,11 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     }
   }, [centerId]);
 
+  const handleResetGraph = useCallback(() => {
+    setCenterId(null);
+    setCenterType(null);
+  }, []);
+
   const handleCenterEntity = useCallback((entityId: string) => {
     // Look up entity_type from current nodes for record mode centering
     const targetNode = nodes.find(n => n.id === entityId);
@@ -287,6 +292,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               searchQuery={searchQuery}
               categoryFilters={categoryFilters}
               onNodeClick={handleNodeClick}
+              onResetGraph={handleResetGraph}
               externalHoverNodeId={detailHoverEntityId}
               width={dimensions.width}
               height={dimensions.height}
