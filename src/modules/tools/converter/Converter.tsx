@@ -86,8 +86,8 @@ const CURRENCY_TTL = 24 * 60 * 60 * 1000;
 function getCurrencyUnits(rates: Record<string, number>): UnitDef[] {
   return Object.keys(rates).map(code => ({
     id: code, label: code,
-    toBase: (v: number) => v / rates[code],     // to EUR
-    fromBase: (v: number) => v * rates[code],   // from EUR
+    toBase: (v: number) => v / rates[code]!,     // to EUR
+    fromBase: (v: number) => v * rates[code]!,   // from EUR
   }));
 }
 
@@ -101,7 +101,7 @@ export function Converter() {
 
   // Fetch currency rates
   useEffect(() => {
-    if (CATEGORIES[catIdx].id !== 'currency' || fetchedRef.current) return;
+    if (CATEGORIES[catIdx]?.id !== 'currency' || fetchedRef.current) return;
     fetchedRef.current = true;
 
     const cached = sessionStorage.getItem(CURRENCY_CACHE_KEY);
@@ -122,7 +122,7 @@ export function Converter() {
       .catch(() => { /* use fallback */ });
   }, [catIdx]);
 
-  const cat = CATEGORIES[catIdx];
+  const cat = CATEGORIES[catIdx]!;
   const units = cat.id === 'currency' ? getCurrencyUnits(currencyRates) : cat.units;
 
   // Reset indices when category changes
@@ -139,8 +139,8 @@ export function Converter() {
   }, [fromIdx, toIdx]);
 
   const numVal = parseFloat(value) || 0;
-  const from = units[fromIdx] || units[0];
-  const to = units[toIdx] || units[1];
+  const from = units[fromIdx] ?? units[0];
+  const to = units[toIdx] ?? units[1];
   const result = from && to ? to.fromBase(from.toBase(numVal)) : 0;
 
   const formatResult = (v: number) => {
@@ -239,10 +239,10 @@ export function Converter() {
         padding: '4px 0',
       }}>
         {units.filter((_, i) => i !== fromIdx && i !== toIdx).slice(0, 4).map(u => {
-          const converted = u.fromBase(from.toBase(numVal));
+          const converted = u.fromBase(from!.toBase(numVal));
           return (
             <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>{numVal} {from.label}</span>
+              <span>{numVal} {from?.label}</span>
               <span style={{ color: 'var(--text)' }}>{formatResult(converted)} {u.label}</span>
             </div>
           );

@@ -14,7 +14,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Search, RefreshCw, Play, Square, RotateCcw, FileText, ChevronUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { useProcessesStore } from '@/stores/processes.store';
-import type { ClawProcess, OllamaLoadedModel, MetricHistory } from '@/stores/processes.store';
+import type { ClawProcess, OllamaLoadedModel } from '@/stores/processes.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { LogsPanel } from './LogsPanel';
 

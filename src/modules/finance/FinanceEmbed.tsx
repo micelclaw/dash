@@ -70,7 +70,7 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
     const poll = async () => {
       try {
         const res = await api.get<{ data: { lines: string[] } }>(
-          `/hal/processes/${encodeURIComponent(processId)}/logs?tail=20&since=10s`,
+          `/hal/processes/${encodeURIComponent(processId ?? '')}/logs?tail=20&since=10s`,
         );
         const lines = res.data?.lines ?? [];
         const fresh = lines.filter((l) => !seenLogsRef.current.has(l));

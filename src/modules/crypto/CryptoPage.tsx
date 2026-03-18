@@ -11,16 +11,15 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { api } from '@/services/api';
 
 // ─── Subdirectory imports ─────────────────────────────────────
 import { StackSetupGuide } from './setup/StackSetupGuide';
 import { SectionHeader } from './shared/SectionHeader';
 import type {
-  CryptoServiceStatus, BtcSync, MoneroSync,
   BtcExtendedStats, MoneroExtendedStats,
-  LightningInfo, LightningExtendedStats,
+  LightningExtendedStats,
   StackStatus, WizardTarget,
 } from './shared/crypto.types';
 
@@ -32,7 +31,7 @@ import { MoneroNodeCard } from './monero/MoneroNodeCard';
 import { MoneroSetupWizard } from './monero/MoneroSetupWizard';
 import { MoneroWalletCard } from './monero/MoneroWalletCard';
 import { BtcPayCard } from './btcpay/BtcPayCard';
-import { BtcPayStatusCard, type BtcPayInfo } from './btcpay/BtcPayStatusCard';
+import { type BtcPayInfo } from './btcpay/BtcPayStatusCard';
 import { BtcPayInstallPanel } from './btcpay/BtcPayInstallPanel';
 import { BtcPayKeySetup } from './btcpay/BtcPayKeySetup';
 import { RotkiCard } from './rotki/RotkiCard';

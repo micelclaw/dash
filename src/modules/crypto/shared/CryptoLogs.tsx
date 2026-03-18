@@ -26,7 +26,7 @@ function formatLine(line: string): string {
 
 export function CryptoLogs({ service, active, tail = 5 }: Props) {
   const [lines, setLines] = useState<string[]>([]);
-  const intervalRef = useRef<number>();
+  const intervalRef = useRef<number>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

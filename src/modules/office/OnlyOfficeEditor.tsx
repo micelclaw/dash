@@ -47,9 +47,7 @@ export function Component() {
   const [startupLogs, setStartupLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [pendingSession, setPendingSession] = useState<{ config: any; token: string } | null>(null);
-  const { createSession, clearSession, fullscreen, toggleFullscreen, currentSession } = useOfficeStore();
-  const filename = (currentSession?.config as any)?.document?.title ?? 'document';
-
+  const { createSession, clearSession, fullscreen, toggleFullscreen } = useOfficeStore();
   // Track whether we've been through a startup phase (to keep logs visible during brief loading transitions)
   const wasWaitingRef = useRef(false);
   // Track if first poll (to use broader log window)

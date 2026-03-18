@@ -10,7 +10,6 @@
  * https://micelclaw.com
  */
 
-import { useNavigate } from 'react-router';
 import { CreditCard, ExternalLink, Loader2, Play, Square, Download, Wrench } from 'lucide-react';
 import type { BtcPayInfo } from './BtcPayStatusCard';
 
@@ -40,7 +39,6 @@ const formatBtc = (val: number) => {
 };
 
 export function BtcPayCard({ svc, loading, starting, info, onInstall, onStart, onStop, onConfigure }: Props) {
-  const navigate = useNavigate();
   const running = svc?.running ?? false;
   const installed = svc?.installed ?? false;
 

@@ -37,7 +37,7 @@ export function ConnectionDialog({ open, onClose, onConnect }: ConnectionDialogP
   const [privateKeyPath, setPrivateKeyPath] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [jumpHost, setJumpHost] = useState('');
-  const [saveConnection, setSaveConnection] = useState(true);
+  const [, setSaveConnection] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testError, setTestError] = useState('');

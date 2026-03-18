@@ -66,7 +66,7 @@ export function Waveform({ analyser, active, width = 280, height = 60 }: Wavefor
       let x = 0;
 
       for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
+        const v = (dataArray[i] ?? 128) / 128.0;
         const y = (v * height) / 2;
         if (i === 0) ctx!.moveTo(x, y);
         else ctx!.lineTo(x, y);

@@ -18,6 +18,8 @@ import { TabBar } from './TabBar';
 import { SplitView } from './SplitView';
 import { ConnectionDialog } from './ConnectionDialog';
 import { SnippetPanel } from './SnippetPanel';
+import { OnboardingGuide } from '@/components/onboarding/OnboardingGuide';
+import { useGatewayStore } from '@/stores/gateway.store';
 
 export function Component() {
   const token = useAuthStore((s) => s.tokens?.accessToken);
@@ -33,6 +35,7 @@ export function Component() {
   const [ws, setWs] = useState<TerminalWebSocket | null>(null);
   const [sshDialogOpen, setSSHDialogOpen] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
+  const gatewayConfigured = useGatewayStore((s) => s.configured);
 
   // Connect WS on mount
   useEffect(() => {
@@ -59,6 +62,19 @@ export function Component() {
   // Open default tabs when WS connects and no tabs exist
   useEffect(() => {
     if (!ws || tabs.length > 0) return;
+    // Wait until gateway configured status is known
+    if (gatewayConfigured === null) return;
+
+    // If onboarding needed, open terminal in ~/.openclaw
+    if (gatewayConfigured === false) {
+      addTab('local', { label: 'OpenClaw', cwd: '~/.openclaw' });
+      const { tabs: created } = useTerminalStore.getState();
+      if (created.length > 0) {
+        useTerminalStore.getState().setActiveTab(created[0]!.id);
+      }
+      return;
+    }
+
     fetchDefaults().then((defaults) => {
       for (const d of defaults) {
         addTab(d.type as 'local' | 'ssh', { label: d.label, cwd: d.cwd || undefined });
@@ -66,10 +82,10 @@ export function Component() {
       // Activate the first tab
       const { tabs: created } = useTerminalStore.getState();
       if (created.length > 0) {
-        useTerminalStore.getState().setActiveTab(created[0].id);
+        useTerminalStore.getState().setActiveTab(created[0]!.id);
       }
     });
-  }, [ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ws, gatewayConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -110,7 +126,7 @@ export function Component() {
         const next = e.shiftKey
           ? (idx - 1 + tabs.length) % tabs.length
           : (idx + 1) % tabs.length;
-        setActiveTab(tabs[next].id);
+        setActiveTab(tabs[next]!.id);
       }
     };
 
@@ -176,6 +192,7 @@ export function Component() {
           onClose={() => setSnippetsOpen(false)}
           onPaste={handlePasteSnippet}
         />
+        <OnboardingGuide open={gatewayConfigured === false} />
       </div>
 
       <ConnectionDialog

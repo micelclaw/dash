@@ -299,7 +299,7 @@ export function BtcStatusCard({ svc, sync, extended, loading, starting, onInstal
                       <span className="btc-peer-tag">{p.inbound ? 'in' : 'out'}</span>
                       {p.pingtime != null && <span className="btc-peer-ping">{(p.pingtime * 1000).toFixed(0)}ms</span>}
                       <span className="btc-peer-ver">{p.subver.replace(/\//g, '')}</span>
-                      <button className="btc-peer-ban" onClick={() => handleBanPeer(p.addr.split(':')[0])} title="Ban"><Ban size={10} /></button>
+                      <button className="btc-peer-ban" onClick={() => handleBanPeer(p.addr.split(':')[0] ?? '')} title="Ban"><Ban size={10} /></button>
                     </div>
                   ))}
                 </div>

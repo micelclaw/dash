@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Search, Loader2, Copy, Check, Send } from 'lucide-react';
+import { Plus, Trash2, Search, Loader2, Copy, Check } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 
 interface AddressBookEntry {

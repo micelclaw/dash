@@ -118,7 +118,7 @@ export function AppCard({ app, selected, onClick, onRefresh }: AppCardProps) {
         <Badge
           variant="outline"
           className="text-[10px] px-1.5 py-0"
-          style={{ borderColor: levelStyle.border, color: levelStyle.color }}
+          style={{ borderColor: levelStyle?.border, color: levelStyle?.color }}
         >
           L{app.appLevel}
         </Badge>

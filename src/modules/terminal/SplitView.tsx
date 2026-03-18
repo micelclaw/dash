@@ -71,7 +71,7 @@ export function SplitView({ ws }: SplitViewProps) {
 
   // Single mode
   if (splitMode === 'none' || !splitTabIds) {
-    const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+    const activeTab = (tabs.find((t) => t.id === activeTabId) || tabs[0])!;
     return (
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {tabs.map((tab) => (
@@ -102,7 +102,7 @@ export function SplitView({ ws }: SplitViewProps) {
   const tab2 = tabs.find((t) => t.id === splitTabIds[1]);
   if (!tab1 || !tab2) {
     // Fallback to single mode if split tabs no longer exist
-    const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+    const activeTab = (tabs.find((t) => t.id === activeTabId) || tabs[0])!;
     return (
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         <TerminalPanel

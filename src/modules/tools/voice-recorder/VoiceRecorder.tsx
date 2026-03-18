@@ -11,7 +11,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Circle, Pause, Square, Play, Save } from 'lucide-react';
+import { Circle, Pause, Square, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { Waveform } from './Waveform';

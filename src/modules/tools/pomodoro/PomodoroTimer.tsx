@@ -25,8 +25,6 @@ interface TimerState {
 }
 
 const DEFAULT_FOCUS = 25 * 60 * 1000;
-const DEFAULT_SHORT = 5 * 60 * 1000;
-const DEFAULT_LONG = 15 * 60 * 1000;
 const SESSIONS_BEFORE_LONG = 4;
 
 function formatMs(ms: number): string {
@@ -81,7 +79,7 @@ export function PomodoroTimer() {
   // Stopwatch laps
   const [laps, setLaps] = useState<number[]>([]);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const getElapsed = useCallback((): number => {
     if (timer.status === 'running' && timer.startedAt) {
@@ -147,7 +145,7 @@ export function PomodoroTimer() {
         duration = phase === 'focus' ? focusMin * 60000 : phase === 'short-break' ? shortMin * 60000 : longMin * 60000;
       } else if (mode === 'timer') {
         const parts = timerInput.split(':').map(Number);
-        const secs = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + (parts[1] || 0);
+        const secs = parts.length === 3 ? (parts[0]! ?? 0) * 3600 + (parts[1]! ?? 0) * 60 + (parts[2]! ?? 0) : (parts[0]! ?? 0) * 60 + (parts[1]! || 0);
         duration = secs * 1000;
       } else {
         duration = 0;
@@ -170,7 +168,7 @@ export function PomodoroTimer() {
     if (mode === 'pomodoro') d = focusMin * 60000;
     else if (mode === 'timer') {
       const parts = timerInput.split(':').map(Number);
-      const secs = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + (parts[1] || 0);
+      const secs = parts.length === 3 ? (parts[0]! ?? 0) * 3600 + (parts[1]! ?? 0) * 60 + (parts[2]! ?? 0) : (parts[0]! ?? 0) * 60 + (parts[1]! || 0);
       d = secs * 1000;
     } else d = 0;
 
@@ -299,7 +297,7 @@ export function PomodoroTimer() {
             onChange={(e) => {
               setTimerInput(e.target.value);
               const parts = e.target.value.split(':').map(Number);
-              const secs = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + (parts[1] || 0);
+              const secs = parts.length === 3 ? (parts[0]! ?? 0) * 3600 + (parts[1]! ?? 0) * 60 + (parts[2]! ?? 0) : (parts[0]! ?? 0) * 60 + (parts[1]! || 0);
               setDisplayMs(secs * 1000);
             }}
             placeholder="MM:SS"
