@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import type {
   DdnsStatus, DdnsConfig, DdnsHistoryEntry,
-  DdnsProviderType, DdnsProviderStatus, DdnsUpdateResult,
+  DdnsProviderType, DdnsProviderStatus,
 } from '../hooks/use-ddns';
 
 interface DdnsSectionProps {
@@ -372,7 +372,7 @@ function ProviderRow({ provider, onToggle, onRemove }: {
   );
 }
 
-function SettingsPanel({ intervalMinutes, detectionMethod, customDetectionUrl, interfaceName, onUpdate }: {
+function SettingsPanel({ intervalMinutes, detectionMethod, onUpdate }: {
   intervalMinutes: number;
   detectionMethod: string;
   customDetectionUrl: string | null;

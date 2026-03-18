@@ -56,7 +56,7 @@ function peerStatus(client: WgClient): { label: string; color: string } {
 }
 
 export function WgPeersSection({
-  clients, loading, endpointChanged, endpointReachable, endpointMethod, onDismissIpChange, onCreate, onRemove, onToggle, onRename, onGetConfig, onGetQrCode,
+  clients, loading, endpointChanged, endpointReachable, endpointMethod, onDismissIpChange, onCreate, onRemove, onToggle, onRename: _onRename, onGetConfig, onGetQrCode,
 }: WgPeersSectionProps) {
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);

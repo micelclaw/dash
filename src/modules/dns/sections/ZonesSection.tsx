@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import {
-  Globe, Plus, ArrowLeft, RefreshCw, Trash2, Shield, Cloud,
+  Globe, Plus, ArrowLeft, Shield, Cloud,
   CheckCircle, AlertTriangle, ChevronRight, BookOpen,
 } from 'lucide-react';
 import type { DnsZone, DnsRecord, DnsRecordInput, DnsTemplate, DnssecStatus, NsVerificationResult, AddZoneInput } from '../hooks/use-dns-zones';

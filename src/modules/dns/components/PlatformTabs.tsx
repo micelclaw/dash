@@ -28,7 +28,7 @@ const platformLabels: Record<Platform, string> = {
 };
 
 export function PlatformTabs({ platforms, children }: PlatformTabsProps) {
-  const [active, setActive] = useState<Platform>(platforms[0]);
+  const [active, setActive] = useState<Platform>(platforms[0] ?? 'linux');
 
   return (
     <div>

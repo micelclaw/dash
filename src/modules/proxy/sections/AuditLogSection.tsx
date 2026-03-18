@@ -43,9 +43,7 @@ export function AuditLogSection() {
   const fetchLog = useCallback(async (p = 0) => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: AuditResult }>('/hal/network/proxy/audit-log', {
-        params: { limit: PAGE_SIZE, offset: p * PAGE_SIZE },
-      });
+      const res = await api.get<{ data: AuditResult }>('/hal/network/proxy/audit-log', { limit: PAGE_SIZE, offset: p * PAGE_SIZE });
       setEntries(res.data.data);
       setTotal(res.data.total);
       setPage(p);

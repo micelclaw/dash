@@ -48,7 +48,7 @@ export function SslSection({ status, domain, loading, onSetDomain }: SslSectionP
 
   const sslStatus = status?.ssl_status ?? 'none';
   const sslColor = SSL_COLORS[sslStatus];
-  const SslIcon = SSL_ICONS[sslStatus];
+  const SslIcon = SSL_ICONS[sslStatus] ?? AlertCircle;
 
   return (
     <div style={{ padding: 24, maxWidth: 800 }}>

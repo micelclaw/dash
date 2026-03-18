@@ -13,7 +13,7 @@
 import { useState, useEffect } from 'react';
 import {
   RefreshCw, Plus, Trash2, Pencil, X, Shield, Cloud,
-  CheckCircle, AlertTriangle, FileText, Zap, Lock, Info, Copy,
+  CheckCircle, AlertTriangle, FileText, Zap, Lock, Info,
 } from 'lucide-react';
 import type { DnsZone, DnsRecord, DnsRecordInput, DnsRecordType, DnssecStatus } from '../hooks/use-dns-zones';
 import { DnsCallout } from '../components/DnsCallout';
@@ -49,7 +49,7 @@ const EMPTY_RECORD: DnsRecordInput = { type: 'A', name: '', content: '', ttl: 1,
 
 export function ZoneEditor({
   zone, records, loading,
-  onSync, onVerifyNs, onUpdateDdns,
+  onSync, onVerifyNs, onUpdateDdns: _onUpdateDdns,
   onCreateRecord, onUpdateRecord, onDeleteRecord,
   onShowTemplates, onRemove,
   onGetDnssecStatus, onEnableDnssec, onDisableDnssec,

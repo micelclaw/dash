@@ -330,8 +330,8 @@ function UseCaseCard({ useCase: uc, open, onToggle }: {
           textAlign: 'left', fontFamily: 'var(--font-sans)',
         }}
       >
-        <Chevron size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-        <Icon size={18} style={{ color: '#7c3aed', flexShrink: 0 }} />
+        <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}><Chevron size={14} /></span>
+        <span style={{ color: '#7c3aed', flexShrink: 0 }}><Icon size={18} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
             {uc.title}
@@ -454,7 +454,7 @@ function UtilityCard({ info }: { info: UtilityInfo }) {
       marginBottom: 10,
       display: 'flex', gap: 12, alignItems: 'flex-start',
     }}>
-      <Icon size={18} style={{ color: '#22c55e', flexShrink: 0, marginTop: 2 }} />
+      <span style={{ color: '#22c55e', flexShrink: 0, marginTop: 2 }}><Icon size={18} /></span>
       <div>
         <div style={{
           fontSize: '0.875rem', fontWeight: 600,

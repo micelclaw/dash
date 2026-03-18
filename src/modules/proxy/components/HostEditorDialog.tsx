@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { X, Plus, Trash2, Globe, Server, Mail, Zap } from 'lucide-react';
+import { X, Plus, Globe, Server, Mail, Zap } from 'lucide-react';
 import type { ProxyHostInput, ProxyHost } from '../hooks/use-proxy-hosts';
 
 interface HostEditorDialogProps {

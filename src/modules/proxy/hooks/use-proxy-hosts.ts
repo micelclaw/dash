@@ -111,8 +111,8 @@ export function useProxyHosts(hostType?: HostType) {
 
   const fetchHosts = useCallback(async () => {
     try {
-      const params = hostType ? { type: hostType } : undefined;
-      const res = await api.get<{ data: ProxyHost[] }>('/hal/network/proxy/hosts', { params });
+      const params = hostType ? { type: hostType as string } : undefined;
+      const res = await api.get<{ data: ProxyHost[] }>('/hal/network/proxy/hosts', params);
       setHosts(res.data);
     } catch {
       setHosts([]);

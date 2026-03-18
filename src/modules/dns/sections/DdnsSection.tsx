@@ -19,7 +19,7 @@ import { DnsCallout } from '../components/DnsCallout';
 import { InfoTooltip } from '../components/InfoTooltip';
 import type {
   DdnsStatus, DdnsConfig, DdnsHistoryEntry,
-  DdnsProviderType, DdnsProviderStatus, DdnsUpdateResult,
+  DdnsProviderType, DdnsProviderStatus,
 } from '../hooks/use-ddns';
 
 interface DdnsSectionProps {
@@ -382,7 +382,7 @@ function ProviderRow({ provider, onToggle, onRemove }: {
   );
 }
 
-function SettingsPanel({ intervalMinutes, detectionMethod, customDetectionUrl, interfaceName, onUpdate }: {
+function SettingsPanel({ intervalMinutes, detectionMethod, customDetectionUrl: _customDetectionUrl, interfaceName: _interfaceName, onUpdate }: {
   intervalMinutes: number;
   detectionMethod: string;
   customDetectionUrl: string | null;

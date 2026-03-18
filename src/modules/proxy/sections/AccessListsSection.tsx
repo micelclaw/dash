@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, RefreshCw, ShieldCheck, User, Globe, X, Pencil } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, ShieldCheck, User, Globe, X } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -161,8 +161,8 @@ export function AccessListsSection() {
             </div>
             {authEntries.map((entry, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <input type="text" placeholder="username" value={entry.username} onChange={(e) => { const a = [...authEntries]; a[i].username = e.target.value; setAuthEntries(a); }} style={{ ...inputStyle, flex: 1 }} />
-                <input type="password" placeholder="password" value={entry.password} onChange={(e) => { const a = [...authEntries]; a[i].password = e.target.value; setAuthEntries(a); }} style={{ ...inputStyle, flex: 1 }} />
+                <input type="text" placeholder="username" value={entry.username} onChange={(e) => { const a = [...authEntries]; a[i]!.username = e.target.value; setAuthEntries(a); }} style={{ ...inputStyle, flex: 1 }} />
+                <input type="password" placeholder="password" value={entry.password} onChange={(e) => { const a = [...authEntries]; a[i]!.password = e.target.value; setAuthEntries(a); }} style={{ ...inputStyle, flex: 1 }} />
                 <button onClick={() => setAuthEntries(authEntries.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}><X size={14} /></button>
               </div>
             ))}
@@ -176,11 +176,11 @@ export function AccessListsSection() {
             </div>
             {clientEntries.map((entry, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <select value={entry.directive} onChange={(e) => { const c = [...clientEntries]; c[i].directive = e.target.value; setClientEntries(c); }} style={{ ...inputStyle, width: 100, flex: 'none' }}>
+                <select value={entry.directive} onChange={(e) => { const c = [...clientEntries]; c[i]!.directive = e.target.value; setClientEntries(c); }} style={{ ...inputStyle, width: 100, flex: 'none' }}>
                   <option value="allow">Allow</option>
                   <option value="deny">Deny</option>
                 </select>
-                <input type="text" placeholder="192.168.1.0/24" value={entry.address} onChange={(e) => { const c = [...clientEntries]; c[i].address = e.target.value; setClientEntries(c); }} style={{ ...inputStyle, flex: 1 }} />
+                <input type="text" placeholder="192.168.1.0/24" value={entry.address} onChange={(e) => { const c = [...clientEntries]; c[i]!.address = e.target.value; setClientEntries(c); }} style={{ ...inputStyle, flex: 1 }} />
                 <button onClick={() => setClientEntries(clientEntries.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 4 }}><X size={14} /></button>
               </div>
             ))}

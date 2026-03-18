@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Plus, Trash2, RefreshCw, Power, TestTube, Pencil, ArrowRight, Globe, Loader2 } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, TestTube, Pencil, ArrowRight, Globe, Loader2, X } from 'lucide-react';
 import type { ProxyHost, ProxyHostInput, UpstreamTestResult } from '../hooks/use-proxy-hosts';
 import { HostEditorDialog } from '../components/HostEditorDialog';
 

@@ -73,14 +73,14 @@ export function TransferChart({ snapshots, peers, width = 700, height = 280 }: T
     }
 
     for (let i = 1; i < snapshots.length; i++) {
-      labels.push(formatTime(snapshots[i].timestamp));
+      labels.push(formatTime(snapshots[i]!.timestamp));
       for (const id of peerIds) {
-        const prev = snapshots[i - 1].peers[id];
-        const curr = snapshots[i].peers[id];
+        const prev = snapshots[i - 1]?.peers[id];
+        const curr = snapshots[i]?.peers[id];
         const delta = curr && prev
           ? Math.max(0, (curr.rx + curr.tx) - (prev.rx + prev.tx))
           : 0;
-        result[id].push(delta);
+        result[id]!.push(delta);
         if (!hiddenPeers.has(id) && delta > max) max = delta;
       }
     }

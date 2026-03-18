@@ -149,7 +149,7 @@ export function OverviewSection({ status, routes, loading, actionInProgress, pro
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {/* SSL Card */}
         <button
-          onClick={() => onNavigate('ssl')}
+          onClick={() => onNavigate('certificates')}
           style={{
             borderRadius: 'var(--radius-md)',
             border: '1px solid var(--border)',

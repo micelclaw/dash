@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Crown, Globe, CheckCircle, Clock, AlertCircle, Trash2, Info } from 'lucide-react';
+import { Crown, Globe, CheckCircle, Clock, Trash2, Info } from 'lucide-react';
 import type { MicelclawSubdomainData } from '../hooks/use-subdomain';
 import { DnsCallout } from '../components/DnsCallout';
 import { InfoTooltip } from '../components/InfoTooltip';

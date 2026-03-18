@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Crown, Globe, CheckCircle, Clock, AlertCircle, Trash2 } from 'lucide-react';
+import { Crown, Globe, CheckCircle, Clock, Trash2 } from 'lucide-react';
 import type { SubdomainRequest } from '../hooks/use-subdomain';
 
 interface SubdomainSectionProps {

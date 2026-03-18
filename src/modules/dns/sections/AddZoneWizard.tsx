@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Globe, Shield, Cloud, Wifi, WifiOff, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
+import { Shield, Cloud, Wifi, WifiOff, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
 import type { AddZoneInput } from '../hooks/use-dns-zones';
 import type { DnsProviderAccount } from '../hooks/use-dns-providers';
 import { InfoTooltip } from '../components/InfoTooltip';
