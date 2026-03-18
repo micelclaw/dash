@@ -14,7 +14,6 @@ import { useCallback } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
 import { useProjectsStore } from '@/stores/projects.store';
 import { calculatePosition } from '../utils/position';
-import type { Card } from '../types';
 
 export function useDragDrop(boardId: string) {
   const columns = useProjectsStore((s) => s.columns);
@@ -32,7 +31,7 @@ export function useDragDrop(boardId: string) {
 
       if (type === 'COLUMN') {
         const colIds = boardColumnIds[boardId] ?? [];
-        const sortedCols = colIds.map(id => columns[id]).filter(Boolean)
+        const sortedCols = colIds.map(id => columns[id]).filter((c): c is NonNullable<typeof c> => !!c)
           .sort((a, b) => a.position - b.position);
         const position = calculatePosition(
           sortedCols.map((c) => ({ position: c.position, id: c.id })),
@@ -49,11 +48,11 @@ export function useDragDrop(boardId: string) {
         .filter(id => id !== draggableId);
       const targetCards = targetCardIds
         .map(id => cards[id])
-        .filter(Boolean)
-        .sort((a: Card, b: Card) => a.position - b.position);
+        .filter((c): c is NonNullable<typeof c> => !!c)
+        .sort((a, b) => a.position - b.position);
 
       const position = calculatePosition(
-        targetCards.map((c: Card) => ({ position: c.position, id: c.id })),
+        targetCards.map((c) => ({ position: c.position, id: c.id })),
         destination.index,
         draggableId,
       );

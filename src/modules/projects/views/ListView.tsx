@@ -14,7 +14,6 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { PriorityBadge } from '../components/PriorityDot';
-import { PRIORITY_COLORS } from '../utils/design-tokens';
 import type { Card, CustomFieldDef } from '../types';
 
 type SortField = 'title' | 'priority' | 'due_date' | 'column' | 'card_number' | 'created_at' | 'updated_at';
@@ -114,7 +113,7 @@ export function ListView() {
             key = 'unassigned';
             label = 'Unassigned';
           } else {
-            key = card.assignee_ids[0];
+            key = card.assignee_ids[0]!;
             label = key;
           }
           break;
@@ -159,7 +158,7 @@ export function ListView() {
     if (field === 'priority') value = editValue || null;
     if (field === 'due_date') value = editValue || null;
 
-    if (String(value) !== String((card as Record<string, unknown>)[field] ?? '')) {
+    if (String(value) !== String((card as unknown as Record<string, unknown>)[field] ?? '')) {
       updateCard(activeBoardId, cardId, { [field]: value });
     }
     setEditing(null);
@@ -328,7 +327,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
         const checklist = card.checklist ?? [];
         const checked = checklist.filter(c => c.checked).length;
         const isEditingTitle = editing?.cardId === card.id && editing.field === 'title';
-        const cardLabelsArr = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter(Boolean);
+        const cardLabelsArr = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter((l): l is NonNullable<typeof l> => !!l);
 
         return (
           <tr

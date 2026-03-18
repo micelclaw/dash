@@ -136,7 +136,6 @@ function getCellDuration(zoom: ZoomLevel): number {
 
 export function TimelineView() {
   const cardsMap = useProjectsStore((s) => s.cards);
-  const columns = useProjectsStore((s) => s.columns);
   const selectCard = useProjectsStore((s) => s.selectCard);
   const updateCard = useProjectsStore((s) => s.updateCard);
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
@@ -149,7 +148,6 @@ export function TimelineView() {
   const datedCards = useMemo(() => allCards.filter(c => c.due_date || c.start_date), [allCards]);
   const undatedCards = useMemo(() => allCards.filter(c => !c.due_date && !c.start_date), [allCards]);
 
-  const columnMap = useMemo(() => new Map(Object.values(columns).map(c => [c.id, c])), [columns]);
 
   const { cells } = useMemo(() => getTimelineRange(datedCards, zoom), [datedCards, zoom]);
   const cellWidth = ZOOM_CONFIG[zoom].cellWidth;
@@ -164,7 +162,7 @@ export function TimelineView() {
   // Calculate today's X position
   const todayX = useMemo(() => {
     if (cells.length === 0) return -1;
-    const firstCell = cells[0];
+    const firstCell = cells[0]!;
     const days = daysBetween(firstCell, today);
     const cellDur = getCellDuration(zoom);
     return (days / cellDur) * cellWidth;
@@ -172,12 +170,12 @@ export function TimelineView() {
 
   const zoomIn = () => {
     const idx = ZOOM_ORDER.indexOf(zoom);
-    if (idx > 0) setZoom(ZOOM_ORDER[idx - 1]);
+    if (idx > 0) setZoom(ZOOM_ORDER[idx - 1]!);
   };
 
   const zoomOut = () => {
     const idx = ZOOM_ORDER.indexOf(zoom);
-    if (idx < ZOOM_ORDER.length - 1) setZoom(ZOOM_ORDER[idx + 1]);
+    if (idx < ZOOM_ORDER.length - 1) setZoom(ZOOM_ORDER[idx + 1]!);
   };
 
   // Drag state for bar move
@@ -206,7 +204,7 @@ export function TimelineView() {
       origEnd: endDate,
     });
 
-    const handleMove = (ev: MouseEvent) => {
+    const handleMove = (_ev: MouseEvent) => {
       // Visual feedback handled via CSS (cursor)
     };
 
@@ -266,7 +264,7 @@ export function TimelineView() {
 
     const start = new Date(startStr);
     const end = new Date(endStr);
-    const firstCell = cells[0];
+    const firstCell = cells[0]!;
     const cellDur = getCellDuration(zoom);
 
     const startDays = daysBetween(firstCell, start);
@@ -333,7 +331,6 @@ export function TimelineView() {
 
           {/* Card rows */}
           {datedCards.map((card) => {
-            const col = columnMap.get(card.column_id);
             return (
               <div
                 key={card.id}

@@ -10,11 +10,11 @@
  * https://micelclaw.com
  */
 
-import React, { useCallback, useMemo } from 'react';
-import { Calendar, CheckSquare, MessageSquare, GitBranch, Hash } from 'lucide-react';
+import React, { useCallback } from 'react';
+import { Calendar, CheckSquare, MessageSquare, GitBranch } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { PRIORITY_COLORS, getCardAgeOpacity } from '../utils/design-tokens';
-import type { Card, CustomFieldDef } from '../types';
+import type { Card } from '../types';
 
 const OVERDUE_COLOR = 'var(--error)';
 
@@ -55,7 +55,7 @@ export const KanbanCard = React.memo(function KanbanCard({
   const checklist = card.checklist ?? [];
   const checked = checklist.filter((c) => c.checked).length;
   const isSelected = multiSelectedIds.has(card.id);
-  const cardLabels = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter(Boolean);
+  const cardLabels = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter((l): l is NonNullable<typeof l> => !!l);
 
   // Card aging opacity
   const agingOpacity = cardAging?.enabled

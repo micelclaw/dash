@@ -77,7 +77,7 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
   };
 
   const colCards = useMemo(
-    () => cardIds.map(id => cards[id]).filter(Boolean),
+    () => cardIds.map(id => cards[id]).filter((c): c is NonNullable<typeof c> => !!c),
     [cardIds, cards],
   );
 
@@ -219,7 +219,7 @@ export function KanbanBoard() {
 
   const boardId = activeBoardId!;
   const { dragState, onDragStart, onDragOver, onDragEnd } = useDndKanban(boardId);
-  const { matchingIds, hasActiveFilters } = useCardFilters();
+  const { matchingIds } = useCardFilters();
 
   const orderedColumnIds = useMemo(() => {
     const colIds = boardColumnIds[boardId] ?? [];

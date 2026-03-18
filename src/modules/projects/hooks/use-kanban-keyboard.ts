@@ -53,7 +53,7 @@ export function useKanbanKeyboard(onToggleShortcuts: () => void) {
     // Alt+1-5: view shortcuts
     if (e.altKey && VIEW_KEYS[e.key]) {
       e.preventDefault();
-      setView(VIEW_KEYS[e.key]);
+      setView(VIEW_KEYS[e.key]!);
       return;
     }
 

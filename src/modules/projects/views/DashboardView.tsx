@@ -14,9 +14,8 @@ import { useMemo } from 'react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  LineChart, Line,
 } from 'recharts';
-import { AlertTriangle, Clock } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { PRIORITY_COLORS } from '../utils/design-tokens';
 
@@ -36,7 +35,7 @@ export function DashboardView() {
     for (const card of allCards) {
       const col = columnMap.get(card.column_id);
       const name = col?.title ?? 'Unknown';
-      const entry = counts.get(card.column_id) ?? { name, value: 0, color: col?.color || STATUS_COLORS[counts.size % STATUS_COLORS.length] };
+      const entry = counts.get(card.column_id) ?? { name, value: 0, color: col?.color || STATUS_COLORS[counts.size % STATUS_COLORS.length]! };
       entry.value++;
       counts.set(card.column_id, entry);
     }
@@ -203,7 +202,6 @@ export function DashboardView() {
           ) : (
             <div style={{ maxHeight: 220, overflow: 'auto' }}>
               {overdueCards.map((card) => {
-                const col = columnMap.get(card.column_id);
                 const daysOverdue = Math.ceil((Date.now() - new Date(card.due_date!).getTime()) / (1000 * 60 * 60 * 24));
                 return (
                   <div

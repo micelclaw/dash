@@ -18,10 +18,6 @@ import type { Card } from '../types';
 
 type CalendarMode = 'month' | 'week';
 
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
 function isSameDay(d1: Date, d2: Date): boolean {
   return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 }
@@ -35,7 +31,6 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 export function CalendarView() {
   const cardsMap = useProjectsStore((s) => s.cards);
   const selectCard = useProjectsStore((s) => s.selectCard);
-  const updateCard = useProjectsStore((s) => s.updateCard);
   const createCard = useProjectsStore((s) => s.createCard);
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
   const boardColumnIds = useProjectsStore((s) => s.boardColumnIds);
@@ -58,7 +53,7 @@ export function CalendarView() {
     const map = new Map<string, Card[]>();
     for (const card of allCards) {
       if (!card.due_date) continue;
-      const key = card.due_date.split('T')[0];
+      const key = card.due_date.split('T')[0]!;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(card);
     }
@@ -97,7 +92,7 @@ export function CalendarView() {
     }
     // Pad to fill last row
     while (days.length % 7 !== 0) {
-      const last = days[days.length - 1];
+      const last = days[days.length - 1]!;
       const d = new Date(last);
       d.setDate(d.getDate() + 1);
       days.push(d);
@@ -222,8 +217,6 @@ export function CalendarView() {
           const isCurrentMonth = date.getMonth() === viewDate.getMonth();
           const isToday = isSameDay(date, today);
           const isNewCardDay = newCardDate === key;
-          const overdue = dayCards.filter(c => !c.completed_at);
-          const hasOverdue = overdue.length > 0 && date < today;
 
           return (
             <div

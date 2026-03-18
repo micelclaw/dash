@@ -10,14 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Tag, Archive, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { api } from '@/services/api';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
 import { useCardLinks } from '../hooks/use-card-links';
-import type { Card, ChecklistItem, Comment, Dependency, Label, CustomFieldDef } from '../types';
+import type { ChecklistItem, Comment, Dependency, CustomFieldDef } from '../types';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
 const EMPTY_LABEL_IDS: string[] = [];
@@ -55,7 +55,6 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
-  const [tags, setTags] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [newCheckItem, setNewCheckItem] = useState('');
 
@@ -82,7 +81,6 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
       setDescription(card.description ?? '');
       setPriority(card.priority ?? 'medium');
       setDueDate(card.due_date ? card.due_date.slice(0, 10) : '');
-      setTags((card.tags ?? []).join(', '));
     }
   }, [card?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -718,7 +716,7 @@ function CustomFieldInput({ fieldDef, value, onSave }: {
             placeholder="https://..."
             style={{ ...fieldInputStyle, flex: 1 }}
           />
-          {value && (
+          {!!value && (
             <a href={String(value)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', display: 'flex' }}>
               <ExternalLink size={12} />
             </a>

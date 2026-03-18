@@ -79,7 +79,7 @@ export function useDndKanban(boardId: string) {
 
       const reordered = arrayMove(sorted, oldIdx, newIdx);
       const placedAt = reordered.indexOf(String(active.id));
-      const colItems = sorted.map(id => columns[id]).filter(Boolean);
+      const colItems = sorted.map(id => columns[id]).filter((c): c is NonNullable<typeof c> => !!c);
       const position = calculatePosition(colItems, placedAt, String(active.id));
       reorderColumn(boardId, String(active.id), position);
       return;
@@ -106,14 +106,14 @@ export function useDndKanban(boardId: string) {
         targetColumnId = overCard.column_id;
         const colCards = (columnCardIds[targetColumnId] ?? [])
           .map(id => cards[id])
-          .filter(Boolean);
+          .filter((c): c is NonNullable<typeof c> => !!c);
         targetIndex = colCards.findIndex(c => c.id === String(over.id));
         if (targetIndex === -1) targetIndex = colCards.length;
       }
 
       const colCards = (columnCardIds[targetColumnId] ?? [])
         .map(id => cards[id])
-        .filter(Boolean);
+        .filter((c): c is NonNullable<typeof c> => !!c);
       const position = calculatePosition(colCards, targetIndex, cardId);
       moveCard(boardId, cardId, targetColumnId, position);
     }
