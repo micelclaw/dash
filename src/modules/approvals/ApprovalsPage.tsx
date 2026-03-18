@@ -105,17 +105,17 @@ function ApprovalCard({ approval, onApprove, onReject }: {
   onApprove: (id: string, level: number) => void;
   onReject: (id: string) => void;
 }) {
-  const levelInfo = LEVEL_LABELS[approval.level] || LEVEL_LABELS[2];
+  const levelInfo = LEVEL_LABELS[approval.level] ?? LEVEL_LABELS[2];
 
   return (
     <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <ShieldCheck size={16} color={levelInfo.color} />
+        <ShieldCheck size={16} color={levelInfo?.color} />
         <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)', flex: 1 }}>
           {approval.summary}
         </span>
-        <span style={{ fontSize: '0.6875rem', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: `${levelInfo.color}20`, color: levelInfo.color, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-          L{approval.level} {levelInfo.text}
+        <span style={{ fontSize: '0.6875rem', padding: '2px 8px', borderRadius: 'var(--radius-sm)', background: `${levelInfo?.color}20`, color: levelInfo?.color, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+          L{approval.level} {levelInfo?.text}
         </span>
       </div>
 
@@ -146,12 +146,12 @@ function ApprovalCard({ approval, onApprove, onReject }: {
 // ─── History Row ─────────────────────────────────────────
 
 function HistoryRow({ approval }: { approval: ApprovalRequest }) {
-  const statusInfo = STATUS_ICONS[approval.status] || STATUS_ICONS.pending;
-  const Icon = statusInfo.icon;
+  const statusInfo = STATUS_ICONS[approval.status] ?? STATUS_ICONS.pending;
+  const Icon = statusInfo?.icon;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-      <Icon size={16} color={statusInfo.color} />
+      {Icon && <Icon size={16} color={statusInfo?.color} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontFamily: 'var(--font-sans)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {approval.summary}
@@ -160,7 +160,7 @@ function HistoryRow({ approval }: { approval: ApprovalRequest }) {
           {approval.requested_by} &middot; {timeAgo(approval.created_at)}
         </div>
       </div>
-      <span style={{ fontSize: '0.6875rem', color: statusInfo.color, fontWeight: 500, fontFamily: 'var(--font-sans)', textTransform: 'capitalize' }}>
+      <span style={{ fontSize: '0.6875rem', color: statusInfo?.color, fontWeight: 500, fontFamily: 'var(--font-sans)', textTransform: 'capitalize' }}>
         {approval.status}
       </span>
     </div>

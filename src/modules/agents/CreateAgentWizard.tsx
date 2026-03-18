@@ -31,16 +31,16 @@ const MODEL_OPTIONS = [
 ];
 
 const SKILL_OPTIONS = [
-  { id: 'notes', name: 'Notes', icon: '📝' },
-  { id: 'calendar', name: 'Calendar', icon: '📅' },
-  { id: 'mail', name: 'Mail', icon: '📧' },
-  { id: 'drive', name: 'Drive', icon: '💾' },
-  { id: 'search', name: 'Search', icon: '🔍' },
-  { id: 'photos', name: 'Photos', icon: '📸' },
-  { id: 'diary', name: 'Diary', icon: '📔' },
-  { id: 'contacts', name: 'Contacts', icon: '👥' },
-  { id: 'graph', name: 'Graph', icon: '🕸️' },
-  { id: 'insights', name: 'Insights', icon: '💡' },
+  { id: 'claw-notes', name: 'Notes', icon: '📝' },
+  { id: 'claw-calendar', name: 'Calendar', icon: '📅' },
+  { id: 'claw-mail', name: 'Mail', icon: '📧' },
+  { id: 'claw-drive', name: 'Drive', icon: '💾' },
+  { id: 'claw-search', name: 'Search', icon: '🔍' },
+  { id: 'claw-photos', name: 'Photos', icon: '📸' },
+  { id: 'claw-diary', name: 'Diary', icon: '📔' },
+  { id: 'claw-contacts', name: 'Contacts', icon: '👥' },
+  { id: 'claw-graph', name: 'Graph', icon: '🕸️' },
+  { id: 'claw-insights', name: 'Insights', icon: '💡' },
 ];
 
 const STEPS = [

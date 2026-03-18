@@ -18,7 +18,6 @@ import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
-import { StatusPill } from '../components/StatusPill';
 import { CronJobEditor } from '../components/CronJobEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { CronJob } from '../types';
