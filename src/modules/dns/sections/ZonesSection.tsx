@@ -157,6 +157,8 @@ export function ZonesSection(props: ZonesSectionProps) {
   // ─── Zone list ───────────────────────────────────────────
   const micelclawZones = zones.filter(z => z.zone_type === 'micelclaw_subdomain');
   const ownZones = zones.filter(z => z.zone_type === 'own_domain');
+  const localZones = zones.filter(z => z.zone_type === 'local');
+  const otherZones = zones.filter(z => !['micelclaw_subdomain', 'own_domain', 'local'].includes(z.zone_type));
 
   return (
     <div style={{ padding: 24, maxWidth: 900 }}>
@@ -196,6 +198,12 @@ export function ZonesSection(props: ZonesSectionProps) {
           )}
           {ownZones.length > 0 && (
             <ZoneGroup label="Your Domains" zones={ownZones} onSelect={onSelectZone} />
+          )}
+          {localZones.length > 0 && (
+            <ZoneGroup label="Local Zones" zones={localZones} onSelect={onSelectZone} />
+          )}
+          {otherZones.length > 0 && (
+            <ZoneGroup label="Other Zones" zones={otherZones} onSelect={onSelectZone} />
           )}
         </>
       )}

@@ -228,7 +228,8 @@ export function MailServerSection() {
   const [credentials, setCredentials] = useState<MailCredentials | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [testEmail, setTestEmail] = useState('test@mail-tester.com');
-  const [loading, setLoading] = useState({ status: true, dns: false, relay: false, relayTest: false, testEmail: false, start: false, stop: false });
+  const [hostnameInput, setHostnameInput] = useState('');
+  const [loading, setLoading] = useState({ status: true, dns: false, relay: false, relayTest: false, testEmail: false, start: false, stop: false, hostname: false, recreate: false });
 
   // ─── Fetch data ──────────────────────────────────────────
 
@@ -236,6 +237,7 @@ export function MailServerSection() {
     try {
       const res = await api.get<{ data: MailServerStatus }>('/mail/server/status');
       setStatus(res.data);
+      if (res.data.hostname && !hostnameInput) setHostnameInput(res.data.hostname);
       if (res.data.last_dns_check) setDnsResult(res.data.last_dns_check);
     } catch {
       // Server may not have mail server routes if not configured
@@ -261,7 +263,7 @@ export function MailServerSection() {
     setLoading((l) => ({ ...l, start: true }));
     toast.info('Starting mail server — this may take a few minutes on first install...');
     try {
-      await api.post('/mail/server/start');
+      await api.post('/mail/server/start', undefined, { timeout: 120_000 });
       toast.success('Mail server started');
       await fetchStatus();
     } catch (err: unknown) {
@@ -354,6 +356,34 @@ export function MailServerSection() {
         username: '',
         password: '',
       }));
+    }
+  };
+
+  const handleSaveHostname = async () => {
+    if (!hostnameInput.trim()) return;
+    setLoading((l) => ({ ...l, hostname: true }));
+    try {
+      await api.put('/mail/server/hostname', { hostname: hostnameInput.trim() });
+      toast.success(`Hostname updated to ${hostnameInput.trim()}`);
+      await fetchStatus();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to update hostname');
+    } finally {
+      setLoading((l) => ({ ...l, hostname: false }));
+    }
+  };
+
+  const handleRecreate = async () => {
+    setLoading((l) => ({ ...l, recreate: true }));
+    toast.info('Recreating mail server container — this may take a minute...');
+    try {
+      await api.post('/mail/server/recreate', undefined, { timeout: 120_000 });
+      toast.success('Mail server container recreated');
+      await fetchStatus();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to recreate container');
+    } finally {
+      setLoading((l) => ({ ...l, recreate: false }));
     }
   };
 
@@ -453,7 +483,23 @@ export function MailServerSection() {
 
           <div style={S.row}>
             <span style={S.label}>Hostname</span>
-            <span style={S.value}>{status.hostname || '--'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                style={{ ...S.input, width: 200 }}
+                value={hostnameInput}
+                onChange={(e) => setHostnameInput(e.target.value)}
+                placeholder="mail.micelclaw.com"
+              />
+              {hostnameInput !== (status.hostname || '') && (
+                <button
+                  style={{ ...S.btn, padding: '4px 10px', fontSize: '0.75rem' }}
+                  onClick={handleSaveHostname}
+                  disabled={loading.hostname}
+                >
+                  {loading.hostname ? <Loader2 size={12} className="animate-spin" /> : 'Save'}
+                </button>
+              )}
+            </div>
           </div>
           <div style={S.row}>
             <span style={S.label}>Domains</span>
@@ -479,26 +525,35 @@ export function MailServerSection() {
           )}
         </div>
 
-        {adminUrl && (
-          <a
-            href={adminUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              ...S.btn,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              marginTop: 4,
-              padding: '8px 32px',
-              background: '#16a34a',
-              color: '#fff',
-              border: '1px solid #15803d',
-            }}
+        <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          {adminUrl && (
+            <a
+              href={adminUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                ...S.btn,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                padding: '8px 32px',
+                background: '#16a34a',
+                color: '#fff',
+                border: '1px solid #15803d',
+              }}
+            >
+              <ExternalLink size={14} />
+              Open Admin Panel
+            </a>
+          )}
+          <button
+            style={{ ...S.btn, padding: '8px 20px' }}
+            onClick={handleRecreate}
+            disabled={loading.recreate}
           >
-            <ExternalLink size={14} />
-            Open Admin Panel
-          </a>
-        )}
+            {loading.recreate ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Recreate Container
+          </button>
+        </div>
       </SettingSection>
 
       {/* ── DNS Health Check ──────────────────────────────── */}
