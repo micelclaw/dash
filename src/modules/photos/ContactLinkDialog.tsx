@@ -15,7 +15,7 @@ import { api } from '@/services/api';
 
 interface Contact {
   id: string;
-  name: string;
+  displayName: string;
   email?: string;
   company?: string;
 }
@@ -27,10 +27,11 @@ interface ContactLinkDialogProps {
   onClose: () => void;
   onLink: (contactId: string) => void;
   onUnlink: () => void;
+  onCreateAndLink?: (displayName: string) => void;
 }
 
 export function ContactLinkDialog({
-  open, clusterName, linkedContactId, onClose, onLink, onUnlink,
+  open, clusterName, linkedContactId, onClose, onLink, onUnlink, onCreateAndLink,
 }: ContactLinkDialogProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
@@ -127,7 +128,23 @@ export function ContactLinkDialog({
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>Searching...</p>
           )}
           {!loading && query && results.length === 0 && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '8px 0' }}>No contacts found</p>
+            <div style={{ padding: '8px 0' }}>
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>No contacts found</p>
+              {onCreateAndLink && (
+                <button
+                  onClick={() => { onCreateAndLink(query.trim()); onClose(); }}
+                  style={{
+                    width: '100%', marginTop: 8, padding: '8px 12px',
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    fontSize: '0.8125rem', color: 'var(--amber)',
+                    fontFamily: 'var(--font-sans)', textAlign: 'left',
+                  }}
+                >
+                  + Create &ldquo;{query.trim()}&rdquo; as contact
+                </button>
+              )}
+            </div>
           )}
           {results.map((c) => (
             <div
@@ -148,11 +165,11 @@ export function ContactLinkDialog({
                 alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.75rem', fontWeight: 600, color: '#000', flexShrink: 0,
               }}>
-                {c.name.charAt(0).toUpperCase()}
+                {c.displayName.charAt(0).toUpperCase()}
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
-                  {c.name}
+                  {c.displayName}
                 </div>
                 {(c.email || c.company) && (
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -78,5 +78,15 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
     setPhotos(prev => prev.filter(p => !ids.has(p.id)));
   }, []);
 
-  return { photos, loading, hasMore, loadMore, fetchPhotos, removePhotos };
+  const updatePhotoMetadata = useCallback((fileId: string, metadata: Record<string, unknown>) => {
+    setPhotos(prev => prev.map(p =>
+      p.id === fileId ? { ...p, metadata: { ...p.metadata, ...metadata } } : p
+    ));
+  }, []);
+
+  const prependPhoto = useCallback((photo: Photo) => {
+    setPhotos(prev => [photo, ...prev]);
+  }, []);
+
+  return { photos, loading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto };
 }

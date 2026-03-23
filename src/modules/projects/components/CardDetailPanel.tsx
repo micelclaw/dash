@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Tag, Archive, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { api } from '@/services/api';
@@ -31,6 +32,15 @@ const DOMAIN_ICONS: Record<string, typeof FileText> = {
   bookmarks: Bookmark,
 };
 
+const DOMAIN_ROUTES: Record<string, string> = {
+  note: '/notes',
+  event: '/calendar',
+  contact: '/contacts',
+  email: '/mail',
+  file: '/drive',
+  kanban_card: '/projects',
+};
+
 interface CardDetailPanelProps {
   boardId: string;
   cardId: string;
@@ -40,6 +50,7 @@ interface CardDetailPanelProps {
 interface ApiEnvelope<T> { data: T }
 
 export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelProps) {
+  const navigate = useNavigate();
   const card = useProjectsStore((s) => s.cards[cardId]);
   const columns = useProjectsStore((s) => s.columns);
   const labels = useProjectsStore((s) => s.labels);
@@ -491,13 +502,16 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
               )}
               {linkedItems.map(link => {
                 const Icon = DOMAIN_ICONS[link.domain] ?? FileText;
+                const route = DOMAIN_ROUTES[link.domain];
                 return (
                   <div key={link.id} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '4px 6px', borderRadius: 4, marginBottom: 2,
+                    cursor: route ? 'pointer' : undefined,
                   }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = '')}
+                    onClick={() => route && navigate(`${route}?id=${link.domainId}`)}
                   >
                     <Icon size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <span style={{
@@ -510,7 +524,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
                       {link.domain.replace('_', ' ')}
                     </span>
                     <button
-                      onClick={() => removeLink(link.id)}
+                      onClick={(e) => { e.stopPropagation(); removeLink(link.id); }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
                     >
                       <X size={10} />

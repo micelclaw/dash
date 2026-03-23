@@ -12,7 +12,7 @@
 
 import {
   User, Briefcase, MapPin, Hash, Building2, Calendar,
-  StickyNote, Mail, FolderOpen, BookOpen,
+  StickyNote, Mail, FolderOpen, BookOpen, Kanban,
 } from 'lucide-react';
 import { entityTypeColor } from './graph-utils';
 import type { LucideIcon } from 'lucide-react';
@@ -39,6 +39,7 @@ const RECORD_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
   { type: 'event', label: 'Events', icon: Calendar },
   { type: 'file', label: 'Files', icon: FolderOpen },
   { type: 'diary', label: 'Diary', icon: BookOpen },
+  { type: 'kanban_card', label: 'Kanban', icon: Kanban },
 ];
 
 export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: GraphCategoryFiltersProps) {

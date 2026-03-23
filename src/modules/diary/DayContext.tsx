@@ -11,13 +11,21 @@
  */
 
 import { useNavigate } from 'react-router';
-import { Calendar, StickyNote, Mail, Camera } from 'lucide-react';
+import { Calendar, StickyNote, Mail, Camera, MessageCircle } from 'lucide-react';
 import { useDayContext } from './hooks/use-day-context';
 import { formatTime } from '@/lib/date-helpers';
 
 interface DayContextProps {
   entryDate: string;
 }
+
+const PLATFORM_LABELS: Record<string, string> = {
+  signal: 'Signal',
+  slack: 'Slack',
+  discord: 'Discord',
+  telegram: 'Telegram',
+  teams: 'Teams',
+};
 
 const itemStyle: React.CSSProperties = {
   cursor: 'pointer',
@@ -29,7 +37,8 @@ export function DayContext({ entryDate }: DayContextProps) {
   const navigate = useNavigate();
 
   if (!context) return null;
-  if (context.events.length === 0 && context.notes.length === 0 && context.emailCount === 0 && context.photoCount === 0) return null;
+  const totalMessages = context.messages.reduce((sum, m) => sum + m.count, 0);
+  if (context.events.length === 0 && context.notes.length === 0 && context.emailCount === 0 && context.photoCount === 0 && totalMessages === 0) return null;
 
   return (
     <div
@@ -120,6 +129,25 @@ export function DayContext({ entryDate }: DayContextProps) {
           <Camera size={14} style={{ color: 'var(--mod-photos)', flexShrink: 0 }} />
           <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
             {context.photoCount} photo{context.photoCount !== 1 ? 's' : ''} taken
+          </span>
+        </div>
+      )}
+
+      {totalMessages > 0 && (
+        <div
+          onClick={() => {
+            const firstPlatform = context.messages[0]?.platform;
+            navigate(firstPlatform ? `/messages?platform=${firstPlatform}` : '/messages');
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, cursor: 'pointer', transition: 'color var(--transition-fast)' }}
+          onMouseEnter={ev => { ev.currentTarget.style.color = 'var(--mod-chat)'; }}
+          onMouseLeave={ev => { ev.currentTarget.style.color = 'inherit'; }}
+        >
+          <MessageCircle size={14} style={{ color: 'var(--mod-chat)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.8125rem', color: 'inherit' }}>
+            {context.messages.map(m =>
+              `${m.count} ${PLATFORM_LABELS[m.platform] ?? m.platform} message${m.count !== 1 ? 's' : ''}`
+            ).join(', ')}
           </span>
         </div>
       )}

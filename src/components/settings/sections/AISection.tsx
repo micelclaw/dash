@@ -505,7 +505,7 @@ export function AISection() {
       </SettingSection>
 
       {/* Multimodal Model */}
-      <SettingSection title="Multimodal Model" description="Ollama vision model for photo scene descriptions. Install via ollama pull qwen3-vl:2b.">
+      <SettingSection title="Multimodal Model" description="Local Ollama model used for photo descriptions, entity extraction, diary narratives, and digests.">
         <MultimodalModelSection />
       </SettingSection>
 

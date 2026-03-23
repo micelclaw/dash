@@ -62,6 +62,12 @@ export function getPreviewUrl(fileId: string, width?: number): string {
   return `/api/v1/files/${fileId}/preview?${params.toString()}`;
 }
 
+/** Build an authenticated face crop URL for a cluster avatar. */
+export function getFaceCropUrl(clusterId: string): string {
+  const token = useAuthStore.getState().tokens?.accessToken;
+  return `/api/v1/photos/faces/${clusterId}/crop?token=${token}`;
+}
+
 /** Simple numeric hash from a string (for gradient placeholders) */
 export function simpleHash(str: string): number {
   let hash = 0;

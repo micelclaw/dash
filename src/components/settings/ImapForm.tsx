@@ -136,7 +136,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
             style={inputStyle}
             value={imapHost}
             onChange={(e) => setImapHost(e.target.value)}
-            placeholder={isSynology ? 'nas.local' : 'imap.example.com'}
+            placeholder={isSynology ? 'nas.local' : 'imap.example.com or localhost'}
             required
           />
         </div>
@@ -158,7 +158,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
             style={inputStyle}
             value={smtpHost}
             onChange={(e) => setSmtpHost(e.target.value)}
-            placeholder={isSynology ? 'nas.local' : 'smtp.example.com'}
+            placeholder={isSynology ? 'nas.local' : 'smtp.example.com or localhost'}
           />
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
             Leave empty to use same as IMAP

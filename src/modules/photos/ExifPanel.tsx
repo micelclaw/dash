@@ -11,14 +11,61 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Save, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Save, PanelRightClose, PanelRightOpen, Search } from 'lucide-react';
 import { getPreviewUrl, formatFileSize } from '@/lib/file-utils';
 import { useExif } from './hooks/use-exif';
 import { StarRating } from './StarRating';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type { Photo } from '@/types/files';
+
+function FindSimilarToggle({ photoId }: { photoId: string }) {
+  const similarPanelOpen = usePhotoAiStore((s) => s.similarPanelOpen);
+  const fetchSimilar = usePhotoAiStore((s) => s.fetchSimilar);
+  const closeSimilarPanel = usePhotoAiStore((s) => s.closeSimilarPanel);
+  const isPro = useAuthStore((s) => s.user?.tier === 'pro');
+  const [hovered, setHovered] = useState(false);
+
+  const handleClick = () => {
+    if (similarPanelOpen) {
+      closeSimilarPanel();
+    } else {
+      if (!isPro) {
+        toast.error('Similar Photos is a Pro feature');
+        return;
+      }
+      fetchSimilar(photoId);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={similarPanelOpen ? 'Close similar photos' : 'Find similar photos'}
+      style={{
+        background: similarPanelOpen ? 'var(--amber)' : (hovered ? 'var(--surface)' : 'transparent'),
+        border: similarPanelOpen ? 'none' : '1px solid var(--border)',
+        color: similarPanelOpen ? '#000' : (hovered ? 'var(--text)' : 'var(--text-muted)'),
+        cursor: 'pointer',
+        padding: '3px 10px',
+        borderRadius: 'var(--radius-sm)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        fontSize: '0.7rem',
+        fontFamily: 'var(--font-sans)',
+        fontWeight: 500,
+      }}
+    >
+      <Search size={12} />
+      Similar
+    </button>
+  );
+}
 
 interface ExifPanelProps {
   photo: Photo;
@@ -169,25 +216,28 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         <h3 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
           Photo Details
         </h3>
-        {onToggleCollapse && (
-          <button
-            onClick={onToggleCollapse}
-            title="Collapse details"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              padding: 4,
-              borderRadius: 'var(--radius-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <PanelRightClose size={16} />
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
+          <FindSimilarToggle photoId={photo.id} />
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              title="Collapse details"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: 4,
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PanelRightClose size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -279,6 +329,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
                 margin: 0, fontSize: '0.8125rem',
                 color: photo.metadata?.ai_description ? 'var(--text)' : 'var(--text-muted)',
                 lineHeight: 1.5, flex: 1, fontStyle: photo.metadata?.ai_description ? 'normal' : 'italic',
+                maxHeight: 120, overflowY: 'auto',
               }}>
                 {photo.metadata?.ai_description ? String(photo.metadata.ai_description) : '—'}
               </p>

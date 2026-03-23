@@ -33,6 +33,7 @@ export interface GatewaySnapshot {
   channels: { channels: GatewayChannel[]; auth_providers: unknown[] };
   models: { models: GatewayModel[]; default_model?: string; fallbacks?: string[]; aliases?: Record<string, string> };
   sessions: { count: number; sessions: GatewaySession[] };
+  configured?: boolean | null;
   _runtime_ready?: boolean;
 }
 

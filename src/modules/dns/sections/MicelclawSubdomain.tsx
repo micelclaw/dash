@@ -26,7 +26,7 @@ interface SubdomainSectionProps {
 
 const RECORD_TYPE_OPTIONS = [
   { value: 'web', label: 'Web (A/CNAME)', description: 'Point your subdomain to your server', tooltip: 'Necesario para acceder a tu Dash y servicios web desde tu subdominio.' },
-  { value: 'email', label: 'Email (MX/SPF/DKIM)', description: 'Set up email for your subdomain', tooltip: 'Actívalo solo si vas a usar tu propio servidor de correo (Poste.io). Sin esto, no podrás enviar ni recibir emails desde tu dominio.' },
+  { value: 'email', label: 'Email (MX/SPF/DKIM)', description: 'Set up email for your subdomain', tooltip: 'Actívalo solo si vas a usar tu propio servidor de correo (Mailu). Sin esto, no podrás enviar ni recibir emails desde tu dominio.' },
   { value: 'custom', label: 'Custom Records', description: 'Add custom DNS records later', tooltip: 'Para usuarios avanzados. Te permite añadir cualquier tipo de registro DNS después.' },
 ];
 

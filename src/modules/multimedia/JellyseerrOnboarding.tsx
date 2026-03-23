@@ -176,7 +176,7 @@ export function JellyseerrOnboarding({ open, onClose }: JellyseerrOnboardingProp
 
   if (!open) return null;
 
-  const current = STEPS[step];
+  const current = STEPS[step]!;
   const isFirst = step === 0;
   const isLast = step === STEPS.length - 1;
 

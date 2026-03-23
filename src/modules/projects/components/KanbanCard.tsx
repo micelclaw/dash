@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { Calendar, CheckSquare, MessageSquare, GitBranch } from 'lucide-react';
+import { Calendar, CheckSquare, MessageSquare, GitBranch, Link2 } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { PRIORITY_COLORS, getCardAgeOpacity } from '../utils/design-tokens';
 import type { Card } from '../types';
@@ -34,6 +34,7 @@ interface KanbanCardProps {
   cardAging?: { enabled: boolean; daysToAge: number };
   commentCount?: number;
   dependencyCount?: number;
+  linkCount?: number;
 }
 
 export const KanbanCard = React.memo(function KanbanCard({
@@ -43,6 +44,7 @@ export const KanbanCard = React.memo(function KanbanCard({
   cardAging,
   commentCount = 0,
   dependencyCount = 0,
+  linkCount = 0,
 }: KanbanCardProps) {
   const selectCard = useProjectsStore((s) => s.selectCard);
   const labels = useProjectsStore((s) => s.labels);
@@ -333,6 +335,22 @@ export const KanbanCard = React.memo(function KanbanCard({
               >
                 <GitBranch size={11} />
                 {dependencyCount}
+              </span>
+            )}
+
+            {linkCount > 0 && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 11,
+                  color: 'var(--text-dim)',
+                }}
+                title={`${linkCount} linked items`}
+              >
+                <Link2 size={11} />
+                {linkCount}
               </span>
             )}
 

@@ -14,7 +14,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   User, Briefcase, MapPin, Hash, Building2, CalendarDays,
-  StickyNote, Calendar, Mail, BookOpen, FolderOpen,
+  StickyNote, Calendar, Mail, BookOpen, FolderOpen, LayoutGrid,
   ChevronDown, ChevronUp, Maximize2,
 } from 'lucide-react';
 import { HeatBadge } from '@/components/shared/HeatBadge';
@@ -77,6 +77,8 @@ const DOMAIN_META: Record<string, { icon: LucideIcon; color: string; route: stri
   file:          { icon: FolderOpen, color: 'var(--mod-drive)',    route: '/drive',    label: 'Files' },
   contacts:      { icon: User,       color: 'var(--mod-contacts)', route: '/contacts', label: 'Contacts' },
   contact:       { icon: User,       color: 'var(--mod-contacts)', route: '/contacts', label: 'Contacts' },
+  kanban_cards:  { icon: LayoutGrid, color: '#f97316',             route: '/projects', label: 'Cards' },
+  kanban_card:   { icon: LayoutGrid, color: '#f97316',             route: '/projects', label: 'Cards' },
 };
 
 const CONNECTED_PAGE_SIZE = 5;

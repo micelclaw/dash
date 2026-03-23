@@ -55,6 +55,7 @@ export interface D3GraphUpdateParams {
   highlightEdgeIds: Set<string>;
   searchMatches: Set<string> | null;
   visibleNodeIds: Set<string>;
+  strengthThreshold?: number;
 }
 
 export interface D3GraphInstance {
@@ -68,6 +69,7 @@ export interface D3GraphInstance {
   isFrozen(): boolean;
   centerOnNode(nodeId: string): void;
   setExternalHover(nodeId: string | null): void;
+  setSelectedNode(nodeId: string | null): void;
   destroy(): void;
 }
 
@@ -98,6 +100,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let currentHighlightNodeIds = new Set<string>();
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
+  let currentSelectedNodeId: string | null = null;
+  let currentStrengthThreshold = 0;
 
   // ─── Heat canvas state ────────────────────────────────────────
   const heatCanvas = config.heatCanvas;
@@ -183,15 +187,15 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     simulation = d3.forceSimulation<SimNode, SimLink>(simNodes)
       .force('link', d3.forceLink<SimNode, SimLink>(simLinks)
         .id(d => d.id)
-        .distance(100)
+        .distance(180)
         .strength(d => d._edge.strength ?? 0.3)
       )
       .force('charge', d3.forceManyBody<SimNode>()
-        .strength(-400)
-        .distanceMax(500)
+        .strength(-800)
+        .distanceMax(800)
       )
       .force('collision', d3.forceCollide<SimNode>()
-        .radius(d => d._r + 15)
+        .radius(d => d._r + 25)
       )
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
       .force('x', d3.forceX<SimNode>().x(d => groupCenterX(d.entity_type)).strength(0.10))
@@ -520,8 +524,12 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .attr('filter', d => {
         if (currentHighlightNodeIds.size > 0 && currentHighlightNodeIds.has(d.id)) return 'url(#glow)';
         if (currentHeatMode) return 'url(#glow)';
+        if (d.id === currentSelectedNodeId) return 'url(#glow)';
         return 'none';
       });
+
+    // Re-apply selected node stroke after node rebuild
+    applySelectedHighlight();
 
     // ── Labels ──
     const nodeCount = simNodes.length;
@@ -630,6 +638,30 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         if (currentHighlightNodeIds.size > 0 && !currentHighlightNodeIds.has(d.id)) return 0.15;
         return 1;
       });
+
+    // Re-apply selected node highlight after clearing hover
+    applySelectedHighlight();
+  }
+
+  // ─── Selected node persistent highlight ────────────────────────
+
+  function applySelectedHighlight() {
+    nodeGroup.selectAll<SVGGElement, SimNode>('.graph-node').each(function (d) {
+      const el = d3.select(this).select('.node-shape');
+      if (d.id === currentSelectedNodeId) {
+        el.attr('stroke', '#f59e0b').attr('stroke-width', 2.5);
+      } else {
+        const color = currentHeatMode
+          ? (() => { const rgb = heatColorRGB(d.heat_score); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
+          : entityTypeColor(d.entity_type);
+        el.attr('stroke', color).attr('stroke-width', 1.5);
+      }
+    });
+  }
+
+  function setSelectedNode(nodeId: string | null) {
+    currentSelectedNodeId = nodeId;
+    applySelectedHighlight();
   }
 
   // ─── Public API ─────────────────────────────────────────────────
@@ -642,6 +674,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     currentHighlightNodeIds = params.highlightNodeIds;
     currentHighlightEdgeIds = params.highlightEdgeIds;
     currentSearchMatches = params.searchMatches;
+    currentStrengthThreshold = params.strengthThreshold ?? 0;
 
     // Build filtered node list
     const filteredNodes = params.nodes.filter(n => params.visibleNodeIds.has(n.id));
@@ -665,7 +698,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     });
 
     simLinks = params.edges
-      .filter(e => visibleIds.has(e.source_id) && visibleIds.has(e.target_id))
+      .filter(e => visibleIds.has(e.source_id) && visibleIds.has(e.target_id)
+        && (e.strength ?? 0) >= currentStrengthThreshold)
       .map(e => ({ source: e.source_id, target: e.target_id, _edge: e }) as unknown as SimLink);
 
     bindData();
@@ -763,6 +797,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     isFrozen: () => frozen,
     centerOnNode,
     setExternalHover,
+    setSelectedNode,
     destroy,
   };
 }

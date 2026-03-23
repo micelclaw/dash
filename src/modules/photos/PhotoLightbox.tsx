@@ -11,14 +11,13 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Image, Search, Users } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Image, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
-import { simpleHash, formatFileSize, getPreviewUrl } from '@/lib/file-utils';
+import { formatFileSize, getPreviewUrl } from '@/lib/file-utils';
 import { formatDateShort, formatTime } from '@/lib/date-helpers';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import type { FaceDetection } from '@/stores/photo-ai.store';
-import { useAuthStore } from '@/stores/auth.store';
 import { StarRating } from './StarRating';
 import { SimilarPhotosPanel } from './SimilarPhotosPanel';
 import { FaceOverlay } from './FaceOverlay';
@@ -47,10 +46,7 @@ export function PhotoLightbox({
 
   // Photo AI state
   const similarPanelOpen = usePhotoAiStore((s) => s.similarPanelOpen);
-  const fetchSimilar = usePhotoAiStore((s) => s.fetchSimilar);
   const closeSimilarPanel = usePhotoAiStore((s) => s.closeSimilarPanel);
-  const isPro = useAuthStore((s) => s.user?.tier === 'pro');
-
   // Face detection overlay
   const fetchFaceDetections = usePhotoAiStore((s) => s.fetchFaceDetections);
   const clearFaceDetections = usePhotoAiStore((s) => s.clearFaceDetections);
@@ -161,15 +157,6 @@ export function PhotoLightbox({
     }
   }, [currentIndex, photos, onUpdatePhoto]);
 
-  const handleFindSimilar = useCallback(() => {
-    if (!photo) return;
-    if (!isPro) {
-      toast.error('Similar Photos is a Pro feature');
-      return;
-    }
-    fetchSimilar(photo.id);
-  }, [photo, isPro, fetchSimilar]);
-
   const handleNavigateToSimilar = useCallback((targetId: string) => {
     const idx = photos.findIndex((p) => p.id === targetId);
     if (idx >= 0) {
@@ -179,7 +166,6 @@ export function PhotoLightbox({
 
   if (!photo) return null;
 
-  const hue = simpleHash(photo.id) % 360;
   const previewUrl = getPreviewUrl(photo.id, 1200);
   const dateObj = photo.taken_at ? new Date(photo.taken_at) : new Date(photo.created_at);
   const camera = photo.metadata?.camera;
@@ -194,8 +180,8 @@ export function PhotoLightbox({
   const aestheticStars = cf?.aesthetic_override ?? aiStars;
 
   const navBtnStyle = (id: string, disabled: boolean): React.CSSProperties => ({
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: 'var(--radius-full)',
     border: 'none',
     background: hoveredBtn === id && !disabled ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
@@ -226,12 +212,11 @@ export function PhotoLightbox({
   return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.95)',
-        zIndex: 50,
         display: 'flex',
         flexDirection: 'column',
+        height: '100%',
+        background: '#000',
+        position: 'relative',
       }}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -245,9 +230,9 @@ export function PhotoLightbox({
         onMouseLeave={() => setHoveredBtn(null)}
         style={{
           position: 'absolute',
-          top: 16,
-          right: similarPanelOpen ? 296 : 16,
-          zIndex: 51,
+          top: 12,
+          right: 12,
+          zIndex: 2,
           width: 36,
           height: 36,
           borderRadius: 'var(--radius-full)',
@@ -258,7 +243,7 @@ export function PhotoLightbox({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'background var(--transition-fast), right 0.2s',
+          transition: 'background var(--transition-fast)',
         }}
       >
         <X size={18} />
@@ -267,16 +252,16 @@ export function PhotoLightbox({
       {/* Main layout: photo area + optional similar panel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Photo area */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {/* Main content area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+          {/* Photo + navigation */}
           <div
             style={{
               flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 16,
-              padding: '48px 16px 0',
+              gap: 12,
+              padding: '12px 12px 0',
               minHeight: 0,
             }}
           >
@@ -295,23 +280,14 @@ export function PhotoLightbox({
             <div
               ref={imageContainerRef}
               style={{
-                maxWidth: similarPanelOpen ? '70vw' : '90vw',
-                maxHeight: '75vh',
-                aspectRatio: photo.metadata?.width && photo.metadata?.height
-                  ? `${photo.metadata.width} / ${photo.metadata.height}`
-                  : '4 / 3',
-                width: '100%',
-                maxInlineSize: similarPanelOpen ? 700 : 900,
-                borderRadius: 'var(--radius-md)',
+                flex: 1,
+                minHeight: 0,
+                minWidth: 0,
                 overflow: 'hidden',
-                background: `linear-gradient(135deg, hsl(${hue}, 35%, 25%), hsl(${(hue + 40) % 360}, 35%, 18%))`,
                 display: 'flex',
-                flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 12,
                 position: 'relative',
-                transition: 'max-width 0.2s, max-inline-size 0.2s',
               }}
             >
               {!imgError ? (
@@ -322,8 +298,8 @@ export function PhotoLightbox({
                     onError={() => setImgError(true)}
                     onLoad={() => setImgLoaded(true)}
                     style={{
-                      width: '100%',
-                      height: '100%',
+                      maxWidth: '100%',
+                      maxHeight: '100%',
                       objectFit: 'contain',
                       opacity: imgLoaded ? 1 : 0,
                       transition: 'opacity 0.2s',
@@ -379,18 +355,10 @@ export function PhotoLightbox({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
-              padding: '8px 24px 0',
+              padding: '6px 24px 0',
               flexShrink: 0,
             }}
           >
-            <button
-              onClick={(e) => { e.stopPropagation(); handleFindSimilar(); }}
-              onMouseEnter={() => setHoveredBtn('similar')}
-              onMouseLeave={() => setHoveredBtn(null)}
-              style={actionBtnStyle('similar')}
-            >
-              <Search size={12} /> Find similar
-            </button>
             {faceDetections && faceDetections.length > 0 && (
               <button
                 onClick={(e) => { e.stopPropagation(); toggleFaceOverlay(); }}
@@ -406,7 +374,7 @@ export function PhotoLightbox({
           {/* Info bar */}
           <div
             style={{
-              padding: '8px 24px 12px',
+              padding: '6px 24px 10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

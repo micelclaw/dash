@@ -31,7 +31,6 @@ interface AiStats {
     multimodal: { available: boolean; id: string | null; loaded: boolean };
     siglip: { available: boolean; size_mb: number };
     dinov2: { available: boolean; size_mb: number };
-    musiq: { available: boolean; size_mb: number };
   };
 }
 
@@ -41,13 +40,12 @@ interface LogEntry {
   type: 'info' | 'phase' | 'error' | 'done';
 }
 
-type Phase = 'multimodal' | 'siglip' | 'dinov2' | 'laion' | 'faces' | 'post';
+type Phase = 'multimodal' | 'siglip' | 'dinov2' | 'faces' | 'post';
 
 const PHASES: { key: Phase; label: string; icon: typeof Eye }[] = [
   { key: 'multimodal', label: 'Vision AI',  icon: Eye },
   { key: 'siglip',     label: 'SigLIP',     icon: Cpu },
   { key: 'dinov2',     label: 'DINOv2',     icon: Cpu },
-  { key: 'laion',      label: 'Aesthetic',  icon: Cpu },
   { key: 'faces',      label: 'Faces',      icon: Users },
   { key: 'post',       label: 'Indexing',   icon: Database },
 ];
@@ -531,7 +529,6 @@ export function PhotoPipelineProgress() {
             { name: stats.models.multimodal.id ?? 'Vision AI', key: 'multimodal', available: stats.models.multimodal.available, detail: stats.models.multimodal.available ? (stats.models.multimodal.loaded ? 'loaded' : 'downloaded') : 'not downloaded', downloadable: false },
             { name: 'SigLIP', key: 'siglip', available: stats.models.siglip.available, detail: stats.models.siglip.available ? 'visual similarity' : `${stats.models.siglip.size_mb} MB`, downloadable: true },
             { name: 'DINOv2', key: 'dinov2', available: stats.models.dinov2.available, detail: stats.models.dinov2.available ? 'visual features' : `${stats.models.dinov2.size_mb} MB`, downloadable: true },
-            { name: 'LAION Aesthetic', key: 'musiq', available: stats.models.musiq.available, detail: stats.models.musiq.available ? 'aesthetic scoring' : `${stats.models.musiq.size_mb} MB`, downloadable: false },
           ].map(m => (
             <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', fontSize: '0.75rem', fontFamily: 'var(--font-sans)' }}>
               {m.available

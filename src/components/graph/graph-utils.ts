@@ -72,8 +72,9 @@ const TYPE_COLORS: Record<string, string> = {
   contact: '#ec4899',
   note:    '#8b5cf6',
   email:   '#06b6d4',
-  file:    '#84cc16',
-  diary:   '#f43f5e',
+  file:         '#84cc16',
+  diary:        '#f43f5e',
+  kanban_card:  '#f97316',
 };
 
 export function entityTypeColor(entityType: string): string {
@@ -103,7 +104,8 @@ export function entityTypeShape(entityType: string): NodeShape {
     case 'note':    return 'square';
     case 'email':   return 'diamond';
     case 'file':    return 'triangle';
-    case 'diary':   return 'octagon';
+    case 'diary':        return 'octagon';
+    case 'kanban_card':  return 'hexagon';
     default: return 'circle';
   }
 }

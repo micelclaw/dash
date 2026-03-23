@@ -36,6 +36,9 @@ interface ProjectsState {
   boardColumnIds: Record<string, string[]>;   // boardId → columnId[]
   columnCardIds: Record<string, string[]>;    // columnId → cardId[]
   cardLabelIds: Record<string, string[]>;     // cardId → labelId[]
+  cardCommentCounts: Record<string, number>;  // cardId → count
+  cardDependencyCounts: Record<string, number>;
+  cardLinkCounts: Record<string, number>;
 
   // Active board
   activeBoardId: string | null;
@@ -124,6 +127,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   boardColumnIds: {},
   columnCardIds: {},
   cardLabelIds: {},
+  cardCommentCounts: {},
+  cardDependencyCounts: {},
+  cardLinkCounts: {},
   activeBoardId: null,
   activeBoardTitle: null,
   activeBoardPermission: null,
@@ -160,6 +166,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       const columnCardIds: Record<string, string[]> = {};
       const cards: Record<string, Card> = {};
       const cardLabelIds: Record<string, string[]> = {};
+      const cardCommentCounts: Record<string, number> = {};
+      const cardDependencyCounts: Record<string, number> = {};
+      const cardLinkCounts: Record<string, number> = {};
 
       const sortedCols = [...board.columns].sort((a, b) => a.position - b.position);
       for (const col of sortedCols) {
@@ -175,6 +184,13 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
           if (embeddedLabels && embeddedLabels.length > 0) {
             cardLabelIds[card.id] = embeddedLabels.map(l => l.id);
           }
+          // Extract enrichment counts
+          const cc = (cardAny._comment_count ?? cardAny._commentCount ?? 0) as number;
+          const dc = (cardAny._dependency_count ?? cardAny._dependencyCount ?? 0) as number;
+          const lc = (cardAny._link_count ?? cardAny._linkCount ?? 0) as number;
+          if (cc > 0) cardCommentCounts[card.id] = cc;
+          if (dc > 0) cardDependencyCounts[card.id] = dc;
+          if (lc > 0) cardLinkCounts[card.id] = lc;
           cards[card.id] = card;
         }
       }
@@ -199,6 +215,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         boardColumnIds: { [boardId]: boardColumnIds },
         columnCardIds,
         cardLabelIds,
+        cardCommentCounts,
+        cardDependencyCounts,
+        cardLinkCounts,
         activeBoardTitle: board.title,
         activeBoardPermission: board._permission ?? 'owner',
         activeView: (board.default_view as ViewMode) || 'board',

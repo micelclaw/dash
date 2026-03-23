@@ -49,6 +49,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
   const [heatMapMode, setHeatMapMode] = useState(false);
+  const [strengthThreshold, setStrengthThreshold] = useState(0);
   const [highlightNodeIds, setHighlightNodeIds] = useState<Set<string>>(new Set());
   const [highlightEdgeIds, setHighlightEdgeIds] = useState<Set<string>>(new Set());
   const [categoryFilters, setCategoryFilters] = useState<Record<string, boolean>>({});
@@ -294,6 +295,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               onNodeClick={handleNodeClick}
               onResetGraph={handleResetGraph}
               externalHoverNodeId={detailHoverEntityId}
+              selectedNodeId={selectedNode?.id ?? null}
+              strengthThreshold={graphMode === 'records' ? strengthThreshold : undefined}
               width={dimensions.width}
               height={dimensions.height}
               mode={graphMode}
@@ -330,7 +333,23 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         <span>Showing {nodes.length} of {stats.entities}</span>
         {heatMapMode && <span style={{ color: '#f43f5e' }}>Heat map</span>}
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {graphMode === 'records' && (
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.625rem' }}>
+            <span>Strength:</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={strengthThreshold * 100}
+              onChange={e => setStrengthThreshold(Number(e.target.value) / 100)}
+              style={{ width: 80, accentColor: 'var(--amber)', cursor: 'pointer' }}
+            />
+            <span style={{ minWidth: 28, textAlign: 'right' }}>{Math.round(strengthThreshold * 100)}%</span>
+          </div>
+        )}
+
+        <div style={{ marginLeft: graphMode === 'records' ? 8 : 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ marginRight: 4 }}>Limit:</span>
           {[100, 250, 500, 2000].map(n => {
             const label = n === 2000 ? 'All' : String(n);

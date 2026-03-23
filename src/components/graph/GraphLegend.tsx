@@ -19,7 +19,7 @@ interface GraphLegendProps {
 }
 
 const ENTITY_TYPE_LIST = ['person', 'project', 'location', 'topic', 'organization', 'event'];
-const RECORD_TYPE_LIST = ['contact', 'note', 'email', 'event', 'file', 'diary'];
+const RECORD_TYPE_LIST = ['contact', 'note', 'email', 'event', 'file', 'diary', 'kanban_card'];
 
 const ENTITY_LINK_TYPES = [
   { key: 'manual', label: 'Manual' },

@@ -24,9 +24,11 @@ export interface UseGraphRendererParams {
   categoryFilters: Record<string, boolean>;
   onNodeClick: (node: GraphNode) => void;
   externalHoverNodeId?: string | null;
+  selectedNodeId?: string | null;
   width: number;
   height: number;
   hideLabels?: boolean;
+  strengthThreshold?: number;
 }
 
 export function useGraphRenderer(params: UseGraphRendererParams) {
@@ -126,11 +128,13 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
       highlightEdgeIds: params.highlightEdgeIds,
       searchMatches,
       visibleNodeIds,
+      strengthThreshold: params.strengthThreshold,
     });
   }, [
     params.nodes, params.edges, params.heatMapMode,
     params.highlightNodeIds, params.highlightEdgeIds,
     searchMatches, visibleNodeIds, showHulls, params.hideLabels,
+    params.strengthThreshold,
   ]);
 
   // ── External hover (from detail panel) ──────────────────────────────
@@ -138,6 +142,12 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
   useEffect(() => {
     instanceRef.current?.setExternalHover(params.externalHoverNodeId ?? null);
   }, [params.externalHoverNodeId]);
+
+  // ── Selected node persistent highlight ─────────────────────────────
+
+  useEffect(() => {
+    instanceRef.current?.setSelectedNode(params.selectedNodeId ?? null);
+  }, [params.selectedNodeId]);
 
   // ── Zoom controls ─────────────────────────────────────────────────
 

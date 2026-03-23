@@ -14,11 +14,17 @@ import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import type { ApiListResponse } from '@/types/api';
 
+interface MessageSummary {
+  platform: string;
+  count: number;
+}
+
 interface DayContext {
   events: { id: string; title: string; start_at: string }[];
   notes: { id: string; title: string | null }[];
   emailCount: number;
   photoCount: number;
+  messages: MessageSummary[];
 }
 
 export function useDayContext(entryDate: string | null): DayContext | null {
@@ -43,13 +49,27 @@ export function useDayContext(entryDate: string | null): DayContext | null {
         to: entryDate,
         limit: 1,
       }),
+      api.get<ApiListResponse<{ id: string; platform: string; direction: string; sender_name: string; content: string | null; sent_at: string }>>('/messages', {
+        since: `${entryDate}T00:00:00`,
+        until: `${entryDate}T23:59:59`,
+        limit: 100,
+      }),
     ])
-      .then(([events, notes, photos]) => {
+      .then(([events, notes, photos, msgs]) => {
+        // Group messages by platform
+        const platformCounts = new Map<string, number>();
+        for (const m of msgs.data) {
+          platformCounts.set(m.platform, (platformCounts.get(m.platform) ?? 0) + 1);
+        }
+        const messages: MessageSummary[] = [...platformCounts.entries()]
+          .map(([platform, count]) => ({ platform, count }));
+
         setContext({
           events: events.data,
           notes: notes.data.filter(n => n.created_at?.startsWith(entryDate)),
           emailCount: 0, // TODO: get from API when email module is available
           photoCount: (photos as any).meta?.total ?? photos.data.length,
+          messages,
         });
       })
       .catch(() => setContext(null));

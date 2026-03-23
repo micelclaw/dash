@@ -23,6 +23,8 @@ interface MultimodalModelStatus {
   id: string;
   label: string;
   sizeBytes: number;
+  quant?: string;
+  vram?: string;
   downloaded: boolean;
   loaded: boolean;
 }
@@ -47,7 +49,7 @@ export function MultimodalModelSection() {
   const [pulling, setPulling] = useState<Map<string, PullState>>(new Map());
   const abortRefs = useRef<Map<string, AbortController>>(new Map());
 
-  const selectedModel = settings?.ai?.local_models?.multimodal_model ?? 'qwen3-vl:2b';
+  const selectedModel = settings?.ai?.local_models?.multimodal_model ?? 'qwen3.5:0.8b';
 
   const fetchModels = useCallback(async () => {
     try {
@@ -166,7 +168,7 @@ export function MultimodalModelSection() {
                 {m.label}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)', marginTop: 1 }}>
-                {m.id} · {formatBytes(m.sizeBytes)}
+                {m.id} · {m.quant ?? '—'} · {m.vram ? `${m.vram} VRAM` : formatBytes(m.sizeBytes)}
               </div>
               {isPulling && (
                 <div style={{ marginTop: 4 }}>
@@ -238,7 +240,7 @@ export function MultimodalModelSection() {
       )}
 
       <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginTop: 4, lineHeight: 1.4 }}>
-        To install: <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 2 }}>ollama pull qwen3-vl:2b</code>
+        To install: <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 2 }}>ollama pull qwen3.5:0.8b</code>
       </div>
 
       <style>{`

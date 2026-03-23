@@ -11,7 +11,7 @@
  */
 
 import {
-  MessageSquare, Search, StickyNote, Calendar, Mail, Users,
+  MessageSquare, MessageCircle, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
   Settings, Puzzle, Activity, Wrench,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
@@ -44,6 +44,7 @@ export const MODULES: ModuleConfig[] = [
   // Multimedia
   { id: 'multimedia', label: 'Multimedia',  icon: Clapperboard,  color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia' },
   // Social
+  { id: 'messages', label: 'Messages',      icon: MessageCircle, color: 'var(--mod-chat)',     path: '/messages', group: 'Social' },
   { id: 'feeds',    label: 'Feeds',         icon: Rss,           color: 'var(--mod-feeds)',    path: '/feeds',    group: 'Social' },
   // Files
   { id: 'drive',    label: 'Drive',         icon: FolderOpen,    color: 'var(--mod-drive)',    path: '/drive',    group: 'Files' },

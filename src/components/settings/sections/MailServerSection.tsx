@@ -10,14 +10,17 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Server, Play, Square, RefreshCw, CheckCircle2, AlertTriangle,
-  XCircle, Copy, Eye, EyeOff, Send, ExternalLink, Shield, Loader2,
+  XCircle, Copy, Eye, EyeOff, Send, ExternalLink, Shield, Loader2, KeyRound, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useServicesStore } from '@/stores/services.store';
+import { useWebSocket } from '@/hooks/use-websocket';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { SettingSection } from '../SettingSection';
 
 // ─── Types (mirror backend mail-server.types.ts) ─────────────────
@@ -231,7 +234,37 @@ export function MailServerSection() {
   const [showPassword, setShowPassword] = useState(false);
   const [testEmail, setTestEmail] = useState('test@mail-tester.com');
   const [hostnameInput, setHostnameInput] = useState('');
-  const [loading, setLoading] = useState({ status: true, dns: false, relay: false, relayTest: false, testEmail: false, start: false, stop: false, hostname: false, recreate: false });
+  const [loading, setLoading] = useState({ status: true, dns: false, relay: false, relayTest: false, testEmail: false, start: false, stop: false, hostname: false, recreate: false, uninstall: false });
+  const [adminCreds, setAdminCreds] = useState<{ email: string; password: string } | null>(null);
+  const [confirmUninstall, setConfirmUninstall] = useState(false);
+  const [showSetupDialog, setShowSetupDialog] = useState(false);
+  const [setupForm, setSetupForm] = useState({ hostname: 'mail.localhost', email: 'admin@localhost', password: '' });
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordData, setForgotPasswordData] = useState<{ email: string; password: string } | null>(null);
+  const [loadingForgotPw, setLoadingForgotPw] = useState(false);
+
+  // Derive "starting" state from lifecycle store — survives page refresh
+  const mailuService = useServicesStore((s) => s.services.find((svc) => svc.name === 'mailu'));
+  const isStarting = loading.start || mailuService?.state === 'starting';
+
+  // ─── Install logs (streamed via WebSocket) ─────────────
+  const [installLogs, setInstallLogs] = useState<string[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+  const wsLogEvent = useWebSocket('service.logs');
+
+  useEffect(() => {
+    if (!wsLogEvent?.data) return;
+    const data = wsLogEvent.data as Record<string, unknown>;
+    if (data.service !== 'mailu') return;
+    const lines = data.lines as string[] | undefined;
+    if (lines?.length) {
+      setInstallLogs(prev => [...prev, ...lines].slice(-200));
+    }
+  }, [wsLogEvent]);
+
+  useEffect(() => {
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [installLogs]);
 
   // ─── Fetch data ──────────────────────────────────────────
 
@@ -248,8 +281,10 @@ export function MailServerSection() {
     }
   }, []);
 
+  const fetchServicesOnce = useServicesStore((s) => s.fetchServices);
   useEffect(() => {
     fetchStatus();
+    fetchServicesOnce(); // Hydrate lifecycle state so isStarting survives refresh
 
     // Fetch relay config
     api.get<{ data: RelayConfig }>('/mail/server/relay').then((r) => setRelay(r.data)).catch(() => {});
@@ -257,26 +292,65 @@ export function MailServerSection() {
       setPresets(Object.values(r.data));
     }).catch(() => {});
     api.get<{ data: MailCredentials }>('/mail/server/credentials').then((r) => setCredentials(r.data)).catch(() => {});
-  }, [fetchStatus]);
+  }, [fetchStatus, fetchServicesOnce]);
 
   // ─── Actions ─────────────────────────────────────────────
 
-  const handleStart = async () => {
+  // Track whether current session initiated a first install (no creds before)
+  const [pendingFirstInstall, setPendingFirstInstall] = useState(false);
+
+  const handleStart = async (setup?: { hostname: string; email: string; password: string }) => {
+    setShowSetupDialog(false);
     setLoading((l) => ({ ...l, start: true }));
+    setInstallLogs([]);
+
+    // Check if this is a first install (no credentials yet)
+    const isFirstInstall = !status?.installed;
+    if (isFirstInstall) setPendingFirstInstall(true);
+
     toast.info('Starting mail server — this may take a few minutes on first install...');
     try {
-      await api.post('/mail/server/start', undefined, { timeout: 120_000 });
-      toast.success('Mail server started');
-      await fetchStatus();
+      const body = setup ? { hostname: setup.hostname, email: setup.email, password: setup.password } : undefined;
+      await api.post('/mail/server/start', body);
+      // Route returns immediately — keep loading.start true until lifecycle
+      // delivers service.starting/service.ready via WebSocket (see useEffect below)
     } catch (err: unknown) {
       const msg = (err as Error).message;
       toast.error(msg && msg !== 'Request failed' ? msg : 'Failed to start mail server. Check server logs for details.');
-      // Still try to refresh status — the container might have started
-      setTimeout(fetchStatus, 3000);
-    } finally {
+      setPendingFirstInstall(false);
       setLoading((l) => ({ ...l, start: false }));
+      setTimeout(fetchStatus, 3000);
     }
   };
+
+  // Poll status while installing/starting — don't rely solely on WebSocket
+  useEffect(() => {
+    if (!isStarting) return;
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await api.get<{ data: MailServerStatus }>('/mail/server/status');
+        const s = res.data;
+
+        if (s.installed && s.running) {
+          clearInterval(poll);
+          setLoading((l) => ({ ...l, start: false }));
+          setStatus(s);
+          if (s.hostname && !hostnameInput) setHostnameInput(s.hostname);
+
+          if (pendingFirstInstall) {
+            setPendingFirstInstall(false);
+            toast.success('Mail server installed successfully!');
+            api.get<{ data: { email: string; password: string } }>('/mail/server/admin-password')
+              .then((r) => setAdminCreds(r.data))
+              .catch(() => {});
+          }
+        }
+      } catch { /* keep polling */ }
+    }, 5_000);
+
+    return () => clearInterval(poll);
+  }, [isStarting, pendingFirstInstall]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStop = async () => {
     setLoading((l) => ({ ...l, stop: true }));
@@ -288,6 +362,22 @@ export function MailServerSection() {
       toast.error((err as Error).message || 'Failed to stop mail server');
     } finally {
       setLoading((l) => ({ ...l, stop: false }));
+    }
+  };
+
+  const handleUninstall = async () => {
+    setConfirmUninstall(false);
+    setLoading((l) => ({ ...l, uninstall: true }));
+    try {
+      await api.post('/mail/server/uninstall', undefined, { timeout: 60_000 });
+      toast.success('Mail server uninstalled');
+      setStatus(null);
+      setCredentials(null);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to uninstall mail server');
+    } finally {
+      setLoading((l) => ({ ...l, uninstall: false }));
+      await fetchStatus();
     }
   };
 
@@ -347,6 +437,19 @@ export function MailServerSection() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setLoadingForgotPw(true);
+    try {
+      const res = await api.get<{ data: { email: string; password: string } }>('/mail/server/admin-password');
+      setForgotPasswordData(res.data);
+      setShowForgotPassword(true);
+    } catch {
+      toast.error('Could not retrieve admin credentials');
+    } finally {
+      setLoadingForgotPw(false);
+    }
+  };
+
   const applyPreset = (presetName: string) => {
     const preset = presets.find((p) => p.name === presetName);
     if (preset) {
@@ -393,7 +496,7 @@ export function MailServerSection() {
 
   if (loading.status) {
     return (
-      <SettingSection title="Mail Server" description="Self-hosted email server (Poste.io).">
+      <SettingSection title="Mail Server" description="Self-hosted email server (Mailu).">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 16, color: 'var(--text-muted)' }}>
           <Loader2 size={16} className="animate-spin" />
           <span style={{ fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>Loading mail server status...</span>
@@ -406,51 +509,172 @@ export function MailServerSection() {
 
   if (!status || !status.installed) {
     return (
-      <SettingSection title="Mail Server" description="Self-hosted email server powered by Poste.io.">
-        <div
-          style={{
-            ...S.card,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 12,
-            padding: 32,
-            textAlign: 'center',
-          }}
-        >
-          <Server size={32} style={{ color: 'var(--text-muted)' }} />
-          <div>
-            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', margin: '0 0 4px 0', fontFamily: 'var(--font-sans)' }}>
-              Set up your own mail server
-            </p>
-            <p style={S.muted}>
-              Send and receive email from your own domain. Includes SMTP, IMAP, antispam, and DKIM signing.
-            </p>
-          </div>
-          <button
-            style={S.btnPrimary}
-            onClick={handleStart}
-            disabled={loading.start}
+      <>
+        <SettingSection title="Mail Server" description="Self-hosted email server powered by Mailu.">
+          <div
+            style={{
+              ...S.card,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
+              padding: 32,
+              textAlign: 'center',
+            }}
           >
-            {loading.start ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            Install & Start
-          </button>
-          <p style={S.muted}>Requires ~768 MB RAM. Pro tier recommended.</p>
-        </div>
-      </SettingSection>
+            <Server size={32} style={{ color: 'var(--text-muted)' }} />
+            <div>
+              <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', margin: '0 0 4px 0', fontFamily: 'var(--font-sans)' }}>
+                Set up your own mail server
+              </p>
+              <p style={S.muted}>
+                Send and receive email from your own domain. Includes SMTP, IMAP, antispam, and DKIM signing.
+              </p>
+            </div>
+            <button
+              style={S.btnPrimary}
+              onClick={() => isStarting ? undefined : setShowSetupDialog(true)}
+              disabled={isStarting}
+            >
+              {isStarting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              {isStarting ? 'Installing...' : 'Install & Start'}
+            </button>
+            {!isStarting && (
+              <p style={S.muted}>Requires ~768 MB RAM. Pro tier recommended.</p>
+            )}
+            {(isStarting || installLogs.length > 0) && (
+              <div
+                ref={logRef}
+                style={{
+                  marginTop: 8, width: '100%', textAlign: 'left',
+                  maxHeight: 220, overflow: 'auto',
+                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)', padding: '8px 10px',
+                  fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5,
+                  lineHeight: 1.7, color: 'var(--text-muted)',
+                }}
+              >
+                {installLogs.length === 0
+                  ? <div style={{ opacity: 0.5 }}>Waiting for logs...</div>
+                  : installLogs.map((line, i) => (
+                      <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{line}</div>
+                    ))
+                }
+              </div>
+            )}
+          </div>
+        </SettingSection>
+
+        {/* ── Setup Dialog ────────────────────────────── */}
+        <Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
+          <DialogContent>
+            <DialogTitle>Mail Server Setup</DialogTitle>
+            <DialogDescription>
+              Configure your mail server before installation.
+            </DialogDescription>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Hostname</label>
+                <input
+                  style={{ ...S.input, width: '100%' }}
+                  value={setupForm.hostname}
+                  onChange={(e) => {
+                    const hostname = e.target.value;
+                    const domain = hostname.replace(/^mail\./, '') || 'localhost';
+                    setSetupForm((f) => ({ ...f, hostname, email: `admin@${domain}` }));
+                  }}
+                  placeholder="mail.example.com"
+                />
+                <p style={{ ...S.muted, marginTop: 4 }}>e.g. mail.micelclaw.com</p>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Admin Email</label>
+                <input
+                  style={{ ...S.input, width: '100%' }}
+                  value={setupForm.email}
+                  onChange={(e) => setSetupForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="admin@example.com"
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Admin Password</label>
+                <input
+                  style={{ ...S.input, width: '100%' }}
+                  type="password"
+                  value={setupForm.password}
+                  onChange={(e) => setSetupForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Choose a strong password"
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                <button style={{ ...S.btn, padding: '8px 20px' }} onClick={() => setShowSetupDialog(false)}>
+                  Cancel
+                </button>
+                <button
+                  style={S.btnPrimary}
+                  disabled={!setupForm.hostname || !setupForm.email || !setupForm.password}
+                  onClick={() => handleStart(setupForm)}
+                >
+                  <Play size={14} /> Install & Start
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Admin Credentials Dialog (first install) ─── */}
+        <Dialog open={!!adminCreds} onOpenChange={(open) => { if (!open) setAdminCreds(null); }}>
+          <DialogContent>
+            <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <KeyRound size={18} /> Mail Server Admin Credentials
+            </DialogTitle>
+            <DialogDescription>
+              Your admin account has been created. You can retrieve the password later via "Forgot password?".
+            </DialogDescription>
+            {adminCreds && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Email</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                    <span style={{ flex: 1 }}>{adminCreds.email}</span>
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                      onClick={() => { navigator.clipboard.writeText(adminCreds.email); toast.success('Email copied'); }}
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Password</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                    <span style={{ flex: 1 }}>{adminCreds.password}</span>
+                    <button
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                      onClick={() => { navigator.clipboard.writeText(adminCreds.password); toast.success('Password copied'); }}
+                    >
+                      <Copy size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      </>
     );
   }
 
   // ─── Main UI ───────────────────────────────────────────────
 
-  const adminUrl = 'http://localhost:8880';
+  const adminUrl = 'http://localhost:8880/admin/';
 
   return (
     <>
       {/* ── Status ──────────────────────────────────────── */}
       <SettingSection
         title="Mail Server"
-        description="Self-hosted email server powered by Poste.io."
+        description="Self-hosted email server powered by Mailu."
         action={
           <div style={{ display: 'flex', gap: 8 }}>
             {status.running ? (
@@ -459,9 +683,9 @@ export function MailServerSection() {
                 Stop
               </button>
             ) : (
-              <button style={S.btn} onClick={handleStart} disabled={loading.start}>
-                {loading.start ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                Start
+              <button style={S.btn} onClick={() => handleStart()} disabled={isStarting}>
+                {isStarting ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+                {isStarting ? 'Starting...' : 'Start'}
               </button>
             )}
             <button style={S.btn} onClick={fetchStatus}>
@@ -550,11 +774,14 @@ export function MailServerSection() {
                 ...S.btn,
                 textDecoration: 'none',
                 display: 'inline-flex',
-                fontSize: '0.75rem',
-                opacity: 0.7,
+                padding: '8px 32px',
+                background: '#16a34a',
+                color: '#fff',
+                border: '1px solid #15803d',
               }}
             >
-              Mailu Admin (fallback)
+              <ExternalLink size={14} />
+              Open Admin Panel
             </a>
           )}
           <button
@@ -565,8 +792,85 @@ export function MailServerSection() {
             {loading.recreate ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Recreate Container
           </button>
+          <button
+            style={{ ...S.btn, padding: '8px 20px' }}
+            onClick={handleForgotPassword}
+            disabled={loadingForgotPw}
+          >
+            {loadingForgotPw ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+            Forgot password?
+          </button>
+          <button
+            style={{ ...S.btn, padding: '8px 20px', color: 'var(--text-danger, #ef4444)' }}
+            onClick={() => setConfirmUninstall(true)}
+            disabled={loading.uninstall}
+          >
+            {loading.uninstall ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Uninstall
+          </button>
         </div>
       </SettingSection>
+
+      {/* ── Confirm Uninstall Dialog ─────────────────────── */}
+      <Dialog open={confirmUninstall} onOpenChange={setConfirmUninstall}>
+        <DialogContent>
+          <DialogTitle>Uninstall Mail Server?</DialogTitle>
+          <DialogDescription>
+            This will remove all Mailu containers, configuration, and mail data. This action cannot be undone.
+          </DialogDescription>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+            <button style={{ ...S.btn, padding: '8px 20px' }} onClick={() => setConfirmUninstall(false)}>
+              Cancel
+            </button>
+            <button
+              style={{ ...S.btn, padding: '8px 20px', background: 'var(--danger, #ef4444)', color: 'white' }}
+              onClick={handleUninstall}
+            >
+              <Trash2 size={14} /> Uninstall
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Forgot Password Dialog ─────────────────────────── */}
+      <Dialog open={showForgotPassword} onOpenChange={(open) => { if (!open) { setShowForgotPassword(false); setForgotPasswordData(null); } }}>
+        <DialogContent>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <KeyRound size={18} /> Admin Credentials
+          </DialogTitle>
+          <DialogDescription>
+            Your stored mail server admin credentials.
+          </DialogDescription>
+          {forgotPasswordData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Email</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                  <span style={{ flex: 1 }}>{forgotPasswordData.email}</span>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                    onClick={() => { navigator.clipboard.writeText(forgotPasswordData.email); toast.success('Email copied'); }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Password</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                  <span style={{ flex: 1 }}>{forgotPasswordData.password}</span>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                    onClick={() => { navigator.clipboard.writeText(forgotPasswordData.password); toast.success('Password copied'); }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── DNS Health Check ──────────────────────────────── */}
       {status.running && (
@@ -850,6 +1154,46 @@ export function MailServerSection() {
           </div>
         </SettingSection>
       )}
+
+      {/* ── Admin Credentials Dialog (first install) ─── */}
+      <Dialog open={!!adminCreds} onOpenChange={(open) => { if (!open) setAdminCreds(null); }}>
+        <DialogContent>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <KeyRound size={18} /> Mail Server Admin Credentials
+          </DialogTitle>
+          <DialogDescription>
+            Your admin account has been created. You can retrieve the password later via "Forgot password?".
+          </DialogDescription>
+          {adminCreds && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Email</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                  <span style={{ flex: 1 }}>{adminCreds.email}</span>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                    onClick={() => { navigator.clipboard.writeText(adminCreds.email); toast.success('Email copied'); }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Password</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-secondary)', padding: '8px 12px', borderRadius: 6, fontFamily: 'monospace' }}>
+                  <span style={{ flex: 1 }}>{adminCreds.password}</span>
+                  <button
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2 }}
+                    onClick={() => { navigator.clipboard.writeText(adminCreds.password); toast.success('Password copied'); }}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

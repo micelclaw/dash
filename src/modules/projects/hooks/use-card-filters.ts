@@ -24,6 +24,7 @@ export function useCardFilters(): {
 } {
   const cards = useProjectsStore((s) => s.cards);
   const filters = useProjectsStore((s) => s.filters);
+  const cardLabelIds = useProjectsStore((s) => s.cardLabelIds);
 
   return useMemo(() => {
     const hasActive = !!(
@@ -38,16 +39,16 @@ export function useCardFilters(): {
     const searchLower = filters.search?.toLowerCase();
 
     for (const card of Object.values(cards)) {
-      if (matchesCard(card, filters, searchLower)) {
+      if (matchesCard(card, filters, cardLabelIds, searchLower)) {
         matching.add(card.id);
       }
     }
 
     return { matchingIds: matching, hasActiveFilters: true };
-  }, [cards, filters]);
+  }, [cards, filters, cardLabelIds]);
 }
 
-function matchesCard(card: Card, filters: CardFilters, searchLower?: string): boolean {
+function matchesCard(card: Card, filters: CardFilters, cardLabelIds: Record<string, string[]>, searchLower?: string): boolean {
   if (searchLower) {
     const titleMatch = card.title.toLowerCase().includes(searchLower);
     const descMatch = card.description?.toLowerCase().includes(searchLower);
@@ -71,6 +72,10 @@ function matchesCard(card: Card, filters: CardFilters, searchLower?: string): bo
 
   if (filters.due_after) {
     if (!card.due_date || card.due_date < filters.due_after) return false;
+  }
+
+  if (filters.label_id) {
+    if (!(cardLabelIds[card.id] ?? []).includes(filters.label_id)) return false;
   }
 
   return true;

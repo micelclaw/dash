@@ -42,7 +42,151 @@ interface ObserverPrivacy {
   content_filter: 'full' | 'metadata_only';
 }
 
-const OBSERVER_TYPES = ['slack-observer', 'discord-observer', 'telegram-observer', 'teams-observer', 'signal-observer'];
+const OBSERVER_TYPES = ['slack-observer', 'discord-observer', 'telegram-observer', 'teams-observer', 'signal-observer', 'simplex-observer', 'session-observer', 'threema-observer'];
+
+// ─── Privacy metadata per platform ───────────────────────
+
+// excellent = top privacy feature, good = positive, mild = slightly concerning,
+// neutral = mixed, warning = concerning, bad = negative, critical = severe
+type TagType = 'excellent' | 'good' | 'mild' | 'neutral' | 'warning' | 'bad' | 'critical';
+
+interface PrivacyTag {
+  label: string;
+  type: TagType;
+}
+
+interface PlatformPrivacy {
+  subtitle: string;
+  score: number;
+  tags: PrivacyTag[];
+}
+
+const TAG_COLORS: Record<TagType, { bg: string; text: string; border: string }> = {
+  excellent: { bg: 'rgba(16, 185, 129, 0.14)', text: '#34d399', border: 'rgba(16, 185, 129, 0.30)' },  // emerald
+  good:      { bg: 'rgba(34, 197, 94, 0.12)',  text: '#4ade80', border: 'rgba(34, 197, 94, 0.25)' },   // green
+  mild:      { bg: 'rgba(132, 204, 22, 0.12)', text: '#a3e635', border: 'rgba(132, 204, 22, 0.25)' },  // lime
+  neutral:   { bg: 'rgba(212, 160, 23, 0.12)', text: '#d4a017', border: 'rgba(212, 160, 23, 0.25)' },  // amber
+  warning:   { bg: 'rgba(234, 138, 30, 0.12)', text: '#f59e0b', border: 'rgba(234, 138, 30, 0.25)' },  // orange
+  bad:       { bg: 'rgba(220, 38, 38, 0.12)',  text: '#f87171', border: 'rgba(220, 38, 38, 0.25)' },   // red
+  critical:  { bg: 'rgba(159, 18, 57, 0.15)',  text: '#fb7185', border: 'rgba(159, 18, 57, 0.30)' },   // rose/maroon
+};
+
+function scoreBarColor(score: number): string {
+  if (score >= 80) return '#10b981';
+  if (score >= 60) return '#22c55e';
+  if (score >= 40) return '#d4a017';
+  if (score >= 25) return '#ea8a1e';
+  return '#dc2626';
+}
+
+const PLATFORM_PRIVACY: Record<string, PlatformPrivacy> = {
+  SimpleX: {
+    subtitle: 'Proyecto open source',
+    score: 96,
+    tags: [
+      { label: 'Código abierto', type: 'good' },
+      { label: 'Cifrado extremo a extremo', type: 'good' },
+      { label: 'No requiere teléfono', type: 'good' },
+      { label: 'Sin identificadores de usuario', type: 'excellent' },
+      { label: 'Zero-knowledge', type: 'excellent' },
+      { label: 'Red descentralizada', type: 'good' },
+      { label: 'Auto-hospedable', type: 'good' },
+      { label: 'Resistente a censura', type: 'excellent' },
+    ],
+  },
+  Threema: {
+    subtitle: 'Suiza · Pago único',
+    score: 90,
+    tags: [
+      { label: 'Código abierto', type: 'good' },
+      { label: 'Cifrado extremo a extremo', type: 'good' },
+      { label: 'No requiere teléfono', type: 'good' },
+      { label: 'Zero-knowledge', type: 'excellent' },
+      { label: 'Servidores en Suiza', type: 'good' },
+      { label: 'Sin anuncios ni rastreo', type: 'good' },
+      { label: 'Borrado inmediato en servidor', type: 'excellent' },
+    ],
+  },
+  Session: {
+    subtitle: 'Suiza · Descentralizado',
+    score: 85,
+    tags: [
+      { label: 'Código abierto', type: 'good' },
+      { label: 'Cifrado extremo a extremo', type: 'good' },
+      { label: 'No requiere teléfono', type: 'good' },
+      { label: 'Red descentralizada', type: 'good' },
+      { label: 'Oculta tu IP', type: 'excellent' },
+      { label: 'Sin anuncios ni rastreo', type: 'good' },
+      { label: 'Vinculado a criptomoneda', type: 'neutral' },
+    ],
+  },
+  Signal: {
+    subtitle: 'EEUU · Fundación sin ánimo de lucro',
+    score: 78,
+    tags: [
+      { label: 'Código abierto', type: 'good' },
+      { label: 'Cifrado extremo a extremo', type: 'good' },
+      { label: 'Requiere teléfono', type: 'mild' },
+      { label: 'Sin anuncios ni rastreo', type: 'good' },
+      { label: 'Servidores centralizados', type: 'neutral' },
+    ],
+  },
+  Telegram: {
+    subtitle: 'Dubái · Empresa privada',
+    score: 35,
+    tags: [
+      { label: 'Solo cliente abierto', type: 'neutral' },
+      { label: 'Cifrado solo en chats secretos', type: 'warning' },
+      { label: 'Requiere teléfono', type: 'bad' },
+      { label: 'Servidor cerrado', type: 'bad' },
+      { label: 'Guarda mensajes en la nube', type: 'bad' },
+    ],
+  },
+  WhatsApp: {
+    subtitle: 'EEUU · Propiedad de Meta',
+    score: 30,
+    tags: [
+      { label: 'Código cerrado', type: 'bad' },
+      { label: 'Cifrado extremo a extremo', type: 'good' },
+      { label: 'Requiere teléfono', type: 'warning' },
+      { label: 'Propiedad de Meta', type: 'bad' },
+      { label: 'Comparte datos con Meta', type: 'critical' },
+    ],
+  },
+  Teams: {
+    subtitle: 'EEUU · Microsoft',
+    score: 20,
+    tags: [
+      { label: 'Código cerrado', type: 'bad' },
+      { label: 'Sin cifrado real', type: 'critical' },
+      { label: 'Recopila datos extensos', type: 'critical' },
+      { label: 'La empresa lee tu contenido', type: 'critical' },
+      { label: 'Orientado a empresas', type: 'neutral' },
+    ],
+  },
+  Slack: {
+    subtitle: 'EEUU · Salesforce',
+    score: 18,
+    tags: [
+      { label: 'Código cerrado', type: 'bad' },
+      { label: 'Sin cifrado real', type: 'critical' },
+      { label: 'Recopila datos extensos', type: 'critical' },
+      { label: 'La empresa lee tu contenido', type: 'critical' },
+      { label: 'Orientado a empresas', type: 'neutral' },
+    ],
+  },
+  Discord: {
+    subtitle: 'EEUU · Empresa privada',
+    score: 15,
+    tags: [
+      { label: 'Código cerrado', type: 'bad' },
+      { label: 'Sin cifrado real', type: 'critical' },
+      { label: 'Recopila datos extensos', type: 'critical' },
+      { label: 'La empresa lee tu contenido', type: 'critical' },
+      { label: 'Publicidad integrada', type: 'bad' },
+    ],
+  },
+};
 
 function timeAgo(ts: string | null): string {
   if (!ts) return '';
@@ -125,11 +269,11 @@ export function ChannelObserversSection() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const slackConnector = connectors.find(c => c.connector_type === 'slack-observer');
   const discordConnector = connectors.find(c => c.connector_type === 'discord-observer');
   const telegramConnector = connectors.find(c => c.connector_type === 'telegram-observer');
-  const teamsConnector = connectors.find(c => c.connector_type === 'teams-observer');
   const signalConnector = connectors.find(c => c.connector_type === 'signal-observer');
+  const simplexConnector = connectors.find(c => c.connector_type === 'simplex-observer');
+  const sessionConnector = connectors.find(c => c.connector_type === 'session-observer');
   const configConnector = connectors.find(c => c.id === configId);
 
   const handleConnect = (serviceId: string) => {
@@ -174,59 +318,45 @@ export function ChannelObserversSection() {
         title="Channel Observers"
         description="Import and observe your messaging platforms."
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* Slack row */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {/* SimpleX — 96/100 */}
           <PlatformRow
-            icon={<SlackIcon size={20} />}
-            name="Slack"
-            connector={slackConnector}
-            progress={slackConnector ? syncProgress[slackConnector.id] : undefined}
-            onConnect={() => handleConnect('slack-observer')}
-            onConfigure={() => slackConnector && setConfigId(slackConnector.id)}
-            onSync={() => slackConnector && handleSync(slackConnector.id)}
-            onDisconnect={() => slackConnector && handleDisconnect(slackConnector.id)}
+            icon={<SimplexIcon size={32} />}
+            name="SimpleX"
+            privacy={PLATFORM_PRIVACY.SimpleX}
+            connector={simplexConnector}
+            progress={simplexConnector ? syncProgress[simplexConnector.id] : undefined}
+            onConnect={() => handleConnect('simplex-observer')}
+            onConfigure={() => simplexConnector && setConfigId(simplexConnector.id)}
+            onSync={() => simplexConnector && handleSync(simplexConnector.id)}
+            onDisconnect={() => simplexConnector && handleDisconnect(simplexConnector.id)}
           />
 
-          {/* Discord row */}
+          {/* Threema — 90/100 (frontend only) */}
           <PlatformRow
-            icon={<DiscordIcon size={20} />}
-            name="Discord"
-            connector={discordConnector}
-            progress={discordConnector ? syncProgress[discordConnector.id] : undefined}
-            onConnect={() => handleConnect('discord-observer')}
-            onConfigure={() => discordConnector && setConfigId(discordConnector.id)}
-            onSync={() => discordConnector && handleSync(discordConnector.id)}
-            onDisconnect={() => discordConnector && handleDisconnect(discordConnector.id)}
+            icon={<ThreemaIcon size={32} />}
+            name="Threema"
+            privacy={PLATFORM_PRIVACY.Threema}
           />
 
-          {/* Telegram row */}
+          {/* Session — 85/100 */}
           <PlatformRow
-            icon={<TelegramIcon size={20} />}
-            name="Telegram"
-            connector={telegramConnector}
-            progress={telegramConnector ? syncProgress[telegramConnector.id] : undefined}
-            onConnect={() => handleConnect('telegram-observer')}
-            onConfigure={() => telegramConnector && setConfigId(telegramConnector.id)}
-            onSync={() => telegramConnector && handleSync(telegramConnector.id)}
-            onDisconnect={() => telegramConnector && handleDisconnect(telegramConnector.id)}
+            icon={<SessionIcon size={32} />}
+            name="Session"
+            privacy={PLATFORM_PRIVACY.Session}
+            connector={sessionConnector}
+            progress={sessionConnector ? syncProgress[sessionConnector.id] : undefined}
+            onConnect={() => handleConnect('session-observer')}
+            onConfigure={() => sessionConnector && setConfigId(sessionConnector.id)}
+            onSync={() => sessionConnector && handleSync(sessionConnector.id)}
+            onDisconnect={() => sessionConnector && handleDisconnect(sessionConnector.id)}
           />
 
-          {/* Teams row */}
+          {/* Signal — 78/100 */}
           <PlatformRow
-            icon={<TeamsIcon size={20} />}
-            name="Teams"
-            connector={teamsConnector}
-            progress={teamsConnector ? syncProgress[teamsConnector.id] : undefined}
-            onConnect={() => handleConnect('teams-observer')}
-            onConfigure={() => teamsConnector && setConfigId(teamsConnector.id)}
-            onSync={() => teamsConnector && handleSync(teamsConnector.id)}
-            onDisconnect={() => teamsConnector && handleDisconnect(teamsConnector.id)}
-          />
-
-          {/* Signal row */}
-          <PlatformRow
-            icon={<SignalIcon size={20} />}
+            icon={<SignalIcon size={32} />}
             name="Signal"
+            privacy={PLATFORM_PRIVACY.Signal}
             connector={signalConnector}
             progress={signalConnector ? syncProgress[signalConnector.id] : undefined}
             onConnect={() => handleConnect('signal-observer')}
@@ -235,48 +365,126 @@ export function ChannelObserversSection() {
             onDisconnect={() => signalConnector && handleDisconnect(signalConnector.id)}
           />
 
-          {/* WhatsApp row */}
+          {/* Telegram — 35/100 */}
+          <PlatformRow
+            icon={<TelegramIcon size={32} />}
+            name="Telegram"
+            privacy={PLATFORM_PRIVACY.Telegram}
+            connector={telegramConnector}
+            progress={telegramConnector ? syncProgress[telegramConnector.id] : undefined}
+            onConnect={() => handleConnect('telegram-observer')}
+            onConfigure={() => telegramConnector && setConfigId(telegramConnector.id)}
+            onSync={() => telegramConnector && handleSync(telegramConnector.id)}
+            onDisconnect={() => telegramConnector && handleDisconnect(telegramConnector.id)}
+          />
+
+          {/* Teams — 20/100 (not implemented yet) */}
+          <PlatformRow
+            icon={<TeamsIcon size={32} />}
+            name="Teams"
+            privacy={PLATFORM_PRIVACY.Teams}
+          />
+
+          {/* Slack — 18/100 (not implemented yet) */}
+          <PlatformRow
+            icon={<SlackIcon size={32} />}
+            name="Slack"
+            privacy={PLATFORM_PRIVACY.Slack}
+          />
+
+          {/* Discord — 15/100 */}
+          <PlatformRow
+            icon={<DiscordIcon size={32} />}
+            name="Discord"
+            privacy={PLATFORM_PRIVACY.Discord}
+            connector={discordConnector}
+            progress={discordConnector ? syncProgress[discordConnector.id] : undefined}
+            onConnect={() => handleConnect('discord-observer')}
+            onConfigure={() => discordConnector && setConfigId(discordConnector.id)}
+            onSync={() => discordConnector && handleSync(discordConnector.id)}
+            onDisconnect={() => discordConnector && handleDisconnect(discordConnector.id)}
+          />
+
+          {/* WhatsApp — 30/100 (import-only) */}
+          {(() => { const wap = PLATFORM_PRIVACY.WhatsApp!; return (
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 14px',
+            padding: '10px 14px',
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <WhatsAppIcon size={20} />
-              <div>
-                <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)' }}>
-                  WhatsApp
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Left: icon + name */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 140 }}>
+                <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <WhatsAppIcon size={32} />
                 </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {whatsappStats
-                    ? `${whatsappStats.channel_count} chat${whatsappStats.channel_count !== 1 ? 's' : ''} imported (${whatsappStats.message_count.toLocaleString()} messages)`
-                    : 'Import chat export files'}
+                <div style={{ lineHeight: 1.2 }}>
+                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>WhatsApp</span>
+                  <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 1 }}>
+                    {wap.subtitle}
+                    {whatsappStats && (
+                      <span> · {whatsappStats.channel_count} chat{whatsappStats.channel_count !== 1 ? 's' : ''} ({whatsappStats.message_count.toLocaleString()} msgs)</span>
+                    )}
+                  </div>
                 </div>
               </div>
+              {/* Center: tags */}
+              <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', alignContent: 'center', gap: 4 }}>
+                {wap.tags.map(tag => {
+                  const c = TAG_COLORS[tag.type];
+                  return (
+                    <span key={tag.label} style={{
+                      fontSize: '0.6875rem',
+                      lineHeight: 1,
+                      padding: '3px 9px',
+                      borderRadius: 8,
+                      background: c.bg,
+                      color: c.text,
+                      border: `1px solid ${c.border}`,
+                      fontFamily: 'var(--font-sans)',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {tag.label}
+                    </span>
+                  );
+                })}
+              </div>
+              {/* Right: score + import */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Privacidad</div>
+                  <div style={{ width: 60, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                    <div style={{ width: `${wap.score}%`, height: '100%', borderRadius: 2, background: scoreBarColor(wap.score) }} />
+                  </div>
+                  <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: scoreBarColor(wap.score), whiteSpace: 'nowrap' }}>
+                    {wap.score}/100
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowImport(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '4px 12px',
+                    background: 'none',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '0.6875rem',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <Upload size={12} />
+                  {whatsappStats ? 'Import another' : 'Import chat'}
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => setShowImport(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 12px',
-                background: 'none',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-                fontSize: '0.75rem',
-                transition: 'all var(--transition-fast)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-            >
-              <Upload size={14} />
-              {whatsappStats ? 'Import another' : 'Import chat'}
-            </button>
           </div>
+          ); })()}
         </div>
       </SettingSection>
 
@@ -425,95 +633,160 @@ export function ChannelObserversSection() {
 interface PlatformRowProps {
   icon: React.ReactNode;
   name: string;
-  connector: ConnectorInfo | undefined;
+  privacy?: PlatformPrivacy;
+  connector?: ConnectorInfo | undefined;
   progress?: { channel?: string; processed: number; total: number };
-  onConnect: () => void;
-  onConfigure: () => void;
-  onSync: () => void;
-  onDisconnect: () => void;
+  onConnect?: () => void;
+  onConfigure?: () => void;
+  onSync?: () => void;
+  onDisconnect?: () => void;
 }
 
-function PlatformRow({ icon, name, connector, progress, onConnect, onConfigure, onSync, onDisconnect }: PlatformRowProps) {
+function PlatformRow({ icon, name, privacy, connector, progress, onConnect, onConfigure, onSync, onDisconnect }: PlatformRowProps) {
   const connected = connector && connector.status !== 'disconnected';
   const syncing = !!progress;
 
   return (
     <div style={{
-      padding: '12px 14px',
+      padding: '10px 14px',
       background: 'var(--surface)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-md)',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {icon}
-          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)' }}>{name}</span>
+      {/* Main row: icon+name | tags | score+button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        {/* Left: icon + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 140 }}>
+          <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {icon}
+          </div>
+          <div style={{ lineHeight: 1.2 }}>
+            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{name}</span>
+            {privacy && (
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 1 }}>
+                {privacy.subtitle}
+              </div>
+            )}
+          </div>
         </div>
 
-        {connected ? (
-          <span style={{
-            fontSize: '0.6875rem', fontWeight: 500,
-            color: '#22c55e',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-            Connected
-          </span>
-        ) : (
-          <button
-            onClick={onConnect}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '4px 10px',
-              background: 'none',
-              border: '1px solid var(--amber)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--amber)',
-              cursor: 'pointer',
-              fontFamily: 'var(--font-sans)',
-              fontSize: '0.6875rem', fontWeight: 500,
-              transition: 'all var(--transition-fast)',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 160, 23, 0.1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-          >
-            Connect &rarr;
-          </button>
+        {/* Center: tags */}
+        {privacy && (
+          <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', alignContent: 'center', gap: 4 }}>
+            {privacy.tags.map(tag => {
+              const c = TAG_COLORS[tag.type];
+              return (
+                <span key={tag.label} style={{
+                  fontSize: '0.6875rem',
+                  lineHeight: 1,
+                  padding: '3px 9px',
+                  borderRadius: 8,
+                  background: c.bg,
+                  color: c.text,
+                  border: `1px solid ${c.border}`,
+                  fontFamily: 'var(--font-sans)',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {tag.label}
+                </span>
+              );
+            })}
+          </div>
         )}
+
+        {/* Right: score + button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {privacy && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Privacidad</div>
+              <div style={{
+                width: 60, height: 3, borderRadius: 2,
+                background: 'var(--border)',
+                overflow: 'hidden',
+              }}>
+                <div style={{
+                  width: `${privacy.score}%`, height: '100%',
+                  borderRadius: 2,
+                  background: scoreBarColor(privacy.score),
+                }} />
+              </div>
+              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: scoreBarColor(privacy.score), whiteSpace: 'nowrap' }}>
+                {privacy.score}/100
+              </span>
+            </div>
+          )}
+
+          {connected ? (
+            <span style={{
+              fontSize: '0.625rem', fontWeight: 500,
+              color: '#22c55e',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e' }} />
+              Connected
+            </span>
+          ) : onConnect ? (
+            <button
+              onClick={onConnect}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '4px 12px',
+                background: 'none',
+                border: '1px solid var(--amber)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--amber)',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                fontSize: '0.6875rem', fontWeight: 500,
+                transition: 'all var(--transition-fast)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 160, 23, 0.1)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+            >
+              Connect &rarr;
+            </button>
+          ) : (
+            <span style={{
+              fontSize: '0.6875rem', fontWeight: 500,
+              color: 'var(--text-muted)',
+              padding: '4px 12px',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              Próximamente
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Details when connected */}
+      {/* Connected details below */}
       {connected && connector && (
-        <div style={{ marginTop: 8, paddingLeft: 30 }}>
-          {/* Status info */}
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+        <div style={{ marginTop: 6, paddingLeft: 46 }}>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 5 }}>
             {connector.display_name && <span>{connector.display_name}</span>}
             {connector.last_sync_at && (
               <span>{connector.display_name ? ' · ' : ''}Last sync: {timeAgo(connector.last_sync_at)}</span>
             )}
           </div>
 
-          {/* Sync progress */}
           {syncing && progress && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: '0.75rem', color: 'var(--amber)',
-              marginBottom: 8,
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: '0.6875rem', color: 'var(--amber)',
+              marginBottom: 5,
             }}>
-              <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
               <span>
                 Syncing{progress.channel ? ` ${progress.channel}` : ''}...
-                {progress.total > 0 && ` ${progress.processed}/${progress.total} messages`}
+                {progress.total > 0 && ` ${progress.processed}/${progress.total}`}
               </span>
             </div>
           )}
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <ActionButton icon={<Settings size={12} />} label="Configure channels" onClick={onConfigure} />
-            <ActionButton icon={<RefreshCw size={12} />} label="Sync now" onClick={onSync} />
-            <ActionButton icon={<Trash2 size={12} />} label="Disconnect" onClick={onDisconnect} danger />
+          <div style={{ display: 'flex', gap: 5 }}>
+            {onConfigure && <ActionButton icon={<Settings size={11} />} label="Configure" onClick={onConfigure} />}
+            {onSync && <ActionButton icon={<RefreshCw size={11} />} label="Sync now" onClick={onSync} />}
+            {onDisconnect && <ActionButton icon={<Trash2 size={11} />} label="Disconnect" onClick={onDisconnect} danger />}
           </div>
         </div>
       )}
@@ -608,11 +881,43 @@ function TeamsIcon({ size = 24 }: { size?: number }) {
   );
 }
 
+function ThreemaIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C7.03 2 3 5.58 3 10c0 2.13 1.02 4.05 2.66 5.44L5 20l3.54-1.47C9.6 18.84 10.77 19 12 19c4.97 0 9-3.58 9-8s-4.03-8-9-8z" fill="#3a3a3a"/>
+      <circle cx="8.5" cy="10" r="1.5" fill="#fff"/>
+      <circle cx="12" cy="10" r="1.5" fill="#fff"/>
+      <circle cx="15.5" cy="10" r="1.5" fill="#fff"/>
+    </svg>
+  );
+}
+
 function SignalIcon({ size = 24 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#3a76f0"/>
       <path d="M12 6.5c-3.04 0-5.5 2.46-5.5 5.5 0 .97.25 1.88.7 2.67L6.5 17.5l2.83-.7c.79.45 1.7.7 2.67.7 3.04 0 5.5-2.46 5.5-5.5S15.04 6.5 12 6.5z" fill="white"/>
+    </svg>
+  );
+}
+
+function SimplexIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" fill="#3DB548" opacity="0.15"/>
+      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#3DB548" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
+      <path d="M12 7v10M7.5 9.5L12 12l4.5-2.5M7.5 14.5L12 12l4.5 2.5" stroke="#3DB548" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+function SessionIcon({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill="#00F782" opacity="0.15"/>
+      <circle cx="12" cy="12" r="10" stroke="#00F782" strokeWidth="1.5"/>
+      <circle cx="12" cy="12" r="4" fill="#00F782"/>
+      <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="#00F782" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   );
 }

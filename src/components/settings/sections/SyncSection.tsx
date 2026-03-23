@@ -63,7 +63,8 @@ export function SyncSection() {
     }
     try {
       const res = await api.get<{ data: ConnectorInfo[] }>('/sync/connectors');
-      setConnectors(res.data);
+      // Filter out channel observers — they are shown in ChannelObserversSection
+      setConnectors((res.data ?? []).filter(c => !c.connector_type.endsWith('-observer')));
     } catch {
       setConnectors([]);
     }

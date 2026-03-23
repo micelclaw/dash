@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Mail, Calendar, Users, Loader2, MessageSquare, Check, Container } from 'lucide-react';
+import { X, Mail, Calendar, Users, Loader2, Check, Container } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { DavForm } from './DavForm';
@@ -69,15 +69,18 @@ const SERVICES: ServiceDef[] = [
     flow: 'oauth', provider: 'microsoft', scopes: 'Chat.Read,ChannelMessage.Read.All' },
   { id: 'signal-observer', category: 'Messaging', name: 'Signal', icon: 'signal', color: '#3a76f0',
     flow: 'bot_token' },
+  { id: 'simplex-observer', category: 'Messaging', name: 'SimpleX', icon: 'simplex', color: '#3DB548',
+    flow: 'bot_token' },
+  { id: 'session-observer', category: 'Messaging', name: 'Session', icon: 'session', color: '#00F782',
+    flow: 'bot_token' },
 ];
 
-const CATEGORIES = ['Email', 'Calendar', 'Contacts', 'Messaging'] as const;
+const CATEGORIES = ['Email', 'Calendar', 'Contacts'] as const;
 
 const CATEGORY_ICONS: Record<string, typeof Mail> = {
   Email: Mail,
   Calendar: Calendar,
   Contacts: Users,
-  Messaging: MessageSquare,
 };
 
 // ─── Service Icon (SVG inline) ───────────────────────────
@@ -142,6 +145,23 @@ function ServiceIcon({ type, size = 24 }: { type: string; size?: number }) {
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#3a76f0"/>
           <path d="M12 6.5c-3.04 0-5.5 2.46-5.5 5.5 0 .97.25 1.88.7 2.67L6.5 17.5l2.83-.7c.79.45 1.7.7 2.67.7 3.04 0 5.5-2.46 5.5-5.5S15.04 6.5 12 6.5z" fill="white"/>
+        </svg>
+      );
+    case 'simplex':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#3DB548"/>
+          <path d="M7 8.5L12 6l5 2.5v3L12 14 7 11.5v-3z" fill="white" opacity="0.9"/>
+          <path d="M7 12.5L12 15l5-2.5v3L12 18l-5-2.5v-3z" fill="white" opacity="0.7"/>
+        </svg>
+      );
+    case 'session':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#00F782"/>
+          <circle cx="9" cy="10" r="2.5" fill="#000" opacity="0.8"/>
+          <circle cx="15" cy="10" r="2.5" fill="#000" opacity="0.8"/>
+          <path d="M8 15c0 0 1.5 2 4 2s4-2 4-2" stroke="#000" strokeWidth="1.5" strokeLinecap="round" opacity="0.8"/>
         </svg>
       );
     default:
@@ -299,7 +319,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
             {step === 'pick' ? 'Add Integration' : step === 'oauth-pending' ? 'Authorizing...' : selectedService?.name}
           </div>
           <button
-            onClick={step === 'form' ? () => setStep('pick') : onClose}
+            onClick={step === 'form' ? (prefilterService ? onClose : () => setStep('pick')) : onClose}
             style={{
               background: 'none', border: 'none', color: 'var(--text-dim)',
               cursor: 'pointer', padding: 4, display: 'flex',
@@ -389,7 +409,9 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
             </div>
           )}
 
-          {step === 'form' && selectedService && (
+          {step === 'form' && selectedService && (() => {
+            const handleFormCancel = prefilterService ? onClose : () => setStep('pick');
+            return (
             <>
               {(selectedService.flow === 'caldav' || selectedService.flow === 'carddav') && (
                 <DavForm
@@ -397,7 +419,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
                   preset={selectedService.preset}
                   serviceName={selectedService.name}
                   onComplete={handleFormComplete}
-                  onCancel={() => setStep('pick')}
+                  onCancel={handleFormCancel}
                 />
               )}
               {selectedService.flow === 'imap' && (
@@ -405,29 +427,42 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
                   preset={selectedService.preset}
                   serviceName={selectedService.name}
                   onComplete={handleFormComplete}
-                  onCancel={() => setStep('pick')}
+                  onCancel={handleFormCancel}
                 />
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'discord-observer' && (
                 <DiscordBotForm
                   onComplete={handleFormComplete}
-                  onCancel={() => setStep('pick')}
+                  onCancel={handleFormCancel}
                 />
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'telegram-observer' && (
                 <TelegramBotForm
                   onComplete={handleFormComplete}
-                  onCancel={() => setStep('pick')}
+                  onCancel={handleFormCancel}
                 />
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'signal-observer' && (
                 <SignalForm
                   onComplete={handleFormComplete}
-                  onCancel={() => setStep('pick')}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'simplex-observer' && (
+                <SimplexForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'session-observer' && (
+                <SessionForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
                 />
               )}
             </>
-          )}
+            );
+          })()}
         </div>
       </div>
 
@@ -1019,5 +1054,359 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
         </>
       )}
     </div>
+  );
+}
+
+// ─── SimpleX Chat Form ──────────────────────────────────
+// Flow: Deploy simplex-chat → Configure API URL → Connect
+
+type SimplexStep = 'deploy' | 'ready';
+
+function SimplexForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const [step, setStep] = useState<SimplexStep>('deploy');
+  const [apiUrl, setApiUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [deployStatus, setDeployStatus] = useState<'idle' | 'deploying' | 'ready' | 'error'>('idle');
+
+  // Check if simplex-chat is already running on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<{ data: { running: boolean; url: string | null } }>('/simplex-chat/status');
+        if (res.data?.running && res.data.url) {
+          setApiUrl(res.data.url);
+          setDeployStatus('ready');
+          setStep('ready');
+        }
+      } catch {
+        // API not available
+      }
+    })();
+  }, []);
+
+  async function handleDeploy() {
+    setDeploying(true);
+    setDeployStatus('deploying');
+    try {
+      const res = await api.post<{ data: { running: boolean; url: string | null } }>('/simplex-chat/start');
+      if (res.data?.running && res.data.url) {
+        setApiUrl(res.data.url);
+        setDeployStatus('ready');
+        toast.success('SimpleX Chat is running');
+        setStep('ready');
+      } else {
+        setDeployStatus('error');
+        toast.error('SimpleX Chat started but API not healthy');
+      }
+    } catch (err: any) {
+      setDeployStatus('error');
+      toast.error(err?.message || 'Failed to deploy SimpleX Chat');
+    } finally {
+      setDeploying(false);
+    }
+  }
+
+  async function handleConnect() {
+    if (!apiUrl) return;
+    setSaving(true);
+    try {
+      await api.post('/sync/connectors', {
+        connector_type: 'simplex-observer',
+        config: { api_url: apiUrl },
+      });
+      onComplete();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to connect SimpleX');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '8px 10px',
+    background: 'var(--surface)', border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+    fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+    outline: 'none', boxSizing: 'border-box' as const,
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Step indicators */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+        {(['deploy', 'ready'] as SimplexStep[]).map((s, i) => (
+          <div key={s} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: i <= ['deploy', 'ready'].indexOf(step)
+              ? '#3DB548' : 'var(--border)',
+            transition: 'background 0.3s',
+          }} />
+        ))}
+      </div>
+
+      {/* ─── STEP 1: Deploy ──────────────────────────── */}
+      {step === 'deploy' && (
+        <>
+          {deployStatus !== 'ready' && (
+            <div style={{
+              padding: '10px 12px',
+              background: 'rgba(61, 181, 72, 0.08)',
+              border: '1px solid rgba(61, 181, 72, 0.2)',
+              borderRadius: 'var(--radius-md)',
+            }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 8 }}>
+                SimpleX requires a <strong>simplex-chat</strong> service. Deploy it automatically:
+              </div>
+              <button
+                type="button"
+                onClick={handleDeploy}
+                disabled={deploying}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  width: '100%', padding: '8px 12px',
+                  background: deploying ? 'var(--surface)' : 'rgba(61, 181, 72, 0.15)',
+                  border: '1px solid rgba(61, 181, 72, 0.3)',
+                  borderRadius: 'var(--radius-sm)', color: '#3DB548',
+                  cursor: deploying ? 'default' : 'pointer',
+                  fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+                  fontWeight: 500, justifyContent: 'center',
+                  transition: 'all var(--transition-fast)',
+                }}
+              >
+                {deploying ? (
+                  <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Deploying SimpleX Chat...</>
+                ) : deployStatus === 'error' ? (
+                  <><Container size={14} /> Retry deploy</>
+                ) : (
+                  <><Container size={14} /> Deploy SimpleX Chat</>
+                )}
+              </button>
+              {deploying && (
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                  Pulling image and starting container... this may take a minute.
+                </div>
+              )}
+              {deployStatus === 'error' && (
+                <div style={{ fontSize: '0.6875rem', color: 'var(--error)', marginTop: 6 }}>
+                  Deployment failed. You can retry or enter a custom URL below.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manual URL input */}
+          {!deploying && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', margin: '4px 0' }}>
+              or enter a custom WebSocket API URL:
+            </div>
+          )}
+          {!deploying && (
+            <>
+              <input
+                type="url"
+                value={apiUrl}
+                onChange={e => setApiUrl(e.target.value)}
+                placeholder="ws://localhost:5225"
+                style={inputStyle}
+              />
+              <button
+                type="button"
+                onClick={() => { if (apiUrl) { setDeployStatus('ready'); setStep('ready'); } }}
+                disabled={!apiUrl}
+                style={{
+                  padding: '8px 12px',
+                  background: apiUrl ? 'var(--surface-hover)' : 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)', color: 'var(--text)',
+                  cursor: apiUrl ? 'pointer' : 'default',
+                  fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+                  opacity: apiUrl ? 1 : 0.5,
+                }}
+              >
+                Use this URL
+              </button>
+            </>
+          )}
+        </>
+      )}
+
+      {/* ─── STEP 2: Ready to connect ────────────────── */}
+      {step === 'ready' && (
+        <>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 12px',
+            background: 'rgba(34, 197, 94, 0.08)',
+            border: '1px solid rgba(34, 197, 94, 0.25)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.8125rem', color: '#22c55e',
+          }}>
+            <Check size={14} />
+            SimpleX Chat running at {apiUrl}
+          </div>
+
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            SimpleX Chat is running and ready. Click Connect to start observing messages.
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                flex: 1, padding: '8px 12px',
+                background: 'none', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)', color: 'var(--text-dim)',
+                cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+              }}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={handleConnect}
+              disabled={saving}
+              style={{
+                flex: 1, padding: '8px 12px',
+                background: 'var(--amber)', border: 'none',
+                borderRadius: 'var(--radius-md)', color: '#000',
+                cursor: saving ? 'default' : 'pointer', fontWeight: 600,
+                fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? 'Connecting...' : 'Connect'}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Session Form ───────────────────────────────────────
+
+function SessionForm({ onComplete, onCancel }: { onComplete: () => void; onCancel: () => void }) {
+  const [sessionId, setSessionId] = useState('');
+  const [privateKey, setPrivateKey] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!sessionId || !privateKey) return;
+
+    setSaving(true);
+    try {
+      await api.post('/sync/connectors', {
+        connector_type: 'session-observer',
+        config: {
+          session_id: sessionId,
+          private_key: privateKey,
+          display_name: displayName || undefined,
+        },
+      });
+      onComplete();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to connect Session');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        Enter your Session ID and recovery phrase (private key) to observe messages.
+      </div>
+      <div>
+        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+          Session ID
+        </label>
+        <input
+          type="text"
+          value={sessionId}
+          onChange={e => setSessionId(e.target.value)}
+          placeholder="05abc123..."
+          required
+          style={{
+            width: '100%', padding: '8px 10px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+            fontFamily: 'var(--font-mono, var(--font-sans))', fontSize: '0.8125rem',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4 }}>
+          Your public Session ID (starts with 05).
+        </div>
+      </div>
+      <div>
+        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+          Private Key / Recovery Phrase
+        </label>
+        <input
+          type="password"
+          value={privateKey}
+          onChange={e => setPrivateKey(e.target.value)}
+          placeholder="Recovery phrase or hex private key"
+          required
+          style={{
+            width: '100%', padding: '8px 10px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+            fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <div>
+        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+          Display Name (optional)
+        </label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
+          placeholder="My Session"
+          style={{
+            width: '100%', padding: '8px 10px',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+            fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+            outline: 'none', boxSizing: 'border-box',
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            flex: 1, padding: '8px 12px',
+            background: 'none', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', color: 'var(--text-dim)',
+            cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+          }}
+        >
+          Back
+        </button>
+        <button
+          type="submit"
+          disabled={saving || !sessionId || !privateKey}
+          style={{
+            flex: 1, padding: '8px 12px',
+            background: 'var(--amber)', border: 'none',
+            borderRadius: 'var(--radius-md)', color: '#000',
+            cursor: saving ? 'default' : 'pointer', fontWeight: 600,
+            fontFamily: 'var(--font-sans)', fontSize: '0.8125rem',
+            opacity: saving || !sessionId || !privateKey ? 0.6 : 1,
+          }}
+        >
+          {saving ? 'Connecting...' : 'Connect'}
+        </button>
+      </div>
+    </form>
   );
 }

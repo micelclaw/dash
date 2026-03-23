@@ -236,7 +236,7 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos } = usePhotos({ search, selectedStars });
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto } = usePhotos({ search, selectedStars });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -318,6 +318,16 @@ export function Component() {
     if (view === 'people') fetchFaceClusters();
   }, [view, fetchFaceClusters]);
 
+  // Refresh photos on WS reconnect (catches missed photo_done events)
+  const wsStatus = useWebSocketStore((s) => s.status);
+  const prevWsStatus = useRef(wsStatus);
+  useEffect(() => {
+    if (prevWsStatus.current === 'reconnecting' && wsStatus === 'connected') {
+      fetchPhotos(true);
+    }
+    prevWsStatus.current = wsStatus;
+  }, [wsStatus, fetchPhotos]);
+
   // Track per-photo processing progress via WebSocket
   const wsClient = useWebSocketStore((s) => s.client);
   const setFilePhase = usePhotoProcessingStore((s) => s.setFilePhase);
@@ -336,16 +346,25 @@ export function Component() {
       const { file_id, phase } = e.data as { file_id: string; phase: string };
       setFilePhase(file_id, phase);
     });
-    const unsub2 = wsClient.on('photo.worker.complete', () => {
-      clearNonPending();
+    const unsub2 = wsClient.on('photo.worker.complete', (e) => {
+      const { pending_remaining } = e.data as { pending_remaining?: number };
+      if (pending_remaining != null && pending_remaining <= 0) {
+        clearAllProcessing();
+      } else {
+        clearNonPending();
+      }
       fetchPhotos(true);
     });
     const unsub3 = wsClient.on('photo.worker.abort', () => {
       clearAllProcessing();
     });
     const unsub4 = wsClient.on('photo.worker.photo_done', (e) => {
-      const { file_id } = e.data as { file_id: string };
+      const { file_id, metadata } = e.data as { file_id: string; metadata?: Record<string, unknown> };
       clearFile(file_id);
+      // Update photo metadata in-place so badge switches to "PROCESSED" without refetch
+      if (metadata) {
+        updatePhotoMetadata(file_id, metadata);
+      }
     });
     const unsub5 = wsClient.on('photo.worker.paused', () => {
       setProcessingPaused(true);
@@ -353,7 +372,10 @@ export function Component() {
     const unsub6 = wsClient.on('photo.worker.resumed', () => {
       setProcessingPaused(false);
     });
-    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); };
+    const unsub7 = wsClient.on('photo.worker.thumbnails_ready', () => {
+      fetchPhotos(true);
+    });
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
   }, [wsClient, setFilesPending, setFilePhase, clearNonPending, clearAllProcessing, clearFile, setProcessingPaused, fetchPhotos]);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -376,18 +398,20 @@ export function Component() {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('parent_folder', '/Photos');
-        await api.upload('/files/upload', formData);
+        const res = await api.upload<{ data: Photo }>('/files/upload', formData);
         success++;
+        // Prepend the new photo so it appears immediately (thumbnail already generated server-side)
+        const newPhoto = { ...res.data, taken_at: null, thumbnail_url: '' } as Photo;
+        prependPhoto(newPhoto);
       } catch {
         toast.error(`Failed to upload ${file.name}`);
       }
     }
     if (success > 0) {
       toast.success(`${success} photo${success !== 1 ? 's' : ''} uploaded`);
-      fetchPhotos(true);
       if (selectedAlbumId) fetchAlbumPhotos(true);
     }
-  }, [fetchPhotos, selectedAlbumId, fetchAlbumPhotos]);
+  }, [prependPhoto, selectedAlbumId, fetchAlbumPhotos]);
 
   const handleAlbumClick = useCallback((albumId: string) => {
     setSelectedAlbumId(albumId);
@@ -423,7 +447,7 @@ export function Component() {
     setLightboxIndex(index);
     const photo = activePhotos[index];
     if (photo) setExifPhoto(photo);
-  }, []);
+  }, [activePhotos]);
 
   const handleAddToAlbum = useCallback(async (photoId: string, albumId: string) => {
     try {
@@ -629,90 +653,103 @@ export function Component() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Main content area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
-          {view === 'timeline' && searchResults !== null ? (
-            <SearchResultsGrid
-              results={searchResults}
-              loading={searchLoading}
-              searchType={searchMeta?.search_type ?? 'fulltext'}
-              isPro={!!isPro}
-              search={search}
-              onPhotoClick={(id) => {
-                const idx = searchResults.findIndex((r) => r.id === id);
-                if (idx >= 0) setLightboxIndex(idx);
-              }}
-            />
-          ) : view === 'timeline' ? (
-            <PhotosTimeline
-              photos={photos}
-              loading={photosLoading}
-              hasMore={hasMore}
-              onLoadMore={loadMore}
-              onPhotoClick={handlePhotoClick}
-              onFilesDropped={handleUpload}
-              albums={albums}
-              onAddToAlbum={handleAddToAlbum}
-              onSetAsCover={handleSetAsCover}
-              onCreateAlbum={handleCreateAlbumInline}
-              onViewExif={(photo) => setExifPhoto(photo)}
-              onDeletePhoto={(id) => setDeletePhotoId(id)}
-              selectedIds={timelineSelection.selectedIds}
-              onToggleSelect={timelineSelection.toggleSelection}
-            />
-          ) : null}
-
-          {view === 'albums' && !selectedAlbum && (
-            <PhotosAlbums
-              albums={albums}
-              loading={albumsLoading}
-              onAlbumClick={handleAlbumClick}
-              onCreateAlbumClick={() => setCreateAlbumOpen(true)}
-              onEditAlbum={(album) => setEditAlbum(album)}
-              onRequestFiles={(album) => setRequestFilesAlbum(album)}
-              onShareAlbum={(album) => setShareAlbum(album)}
-              onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
-              bestOfCount={bestOfCount}
-              bestOfCoverId={bestOfCoverId}
-              onBestOfClick={() => { setSelectedStars(new Set([4, 5])); setView('timeline'); }}
+          {/* Photo viewer (replaces content when a photo is open) */}
+          {lightboxIndex !== null && (
+            <PhotoLightbox
+              photos={lightboxPhotos}
+              currentIndex={lightboxIndex}
+              onClose={handleLightboxClose}
+              onNavigate={handleLightboxNavigate}
             />
           )}
 
-          {view === 'albums' && selectedAlbum && (
-            <AlbumDetail
-              album={selectedAlbum}
-              photos={albumPhotos}
-              loading={albumPhotosLoading}
-              onBack={handleAlbumBack}
-              onDelete={async (albumId) => { await deleteAlbum(albumId); setSelectedAlbumId(null); }}
-              onPhotoClick={handlePhotoClick}
-              onShareAlbum={() => setShareAlbum(selectedAlbum)}
-              onEditAlbum={() => setEditAlbum(selectedAlbum)}
-              onRemoveFromAlbum={handleRemoveFromAlbum}
-              onViewExif={(photo) => setExifPhoto(photo)}
-              onDeletePhoto={(id) => setDeletePhotoId(id)}
-              onSetAsCover={handleSetAsCoverForCurrentAlbum}
-              selectedIds={albumSelection.selectedIds}
-              onToggleSelect={albumSelection.toggleSelection}
-              onBatchRemove={() => setBatchRemoveOpen(true)}
-              onBatchDelete={() => setBatchDeleteOpen(true)}
-              onClearSelection={albumSelection.clearSelection}
-            />
-          )}
+          {/* Content views — hidden (not unmounted) when viewer is open to preserve scroll */}
+          <div style={{ flex: 1, display: lightboxIndex !== null ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}>
+            {view === 'timeline' && searchResults !== null ? (
+              <SearchResultsGrid
+                results={searchResults}
+                loading={searchLoading}
+                searchType={searchMeta?.search_type ?? 'fulltext'}
+                isPro={!!isPro}
+                search={search}
+                onPhotoClick={(id) => {
+                  const idx = searchResults.findIndex((r) => r.id === id);
+                  if (idx >= 0) setLightboxIndex(idx);
+                }}
+              />
+            ) : view === 'timeline' ? (
+              <PhotosTimeline
+                photos={photos}
+                loading={photosLoading}
+                hasMore={hasMore}
+                onLoadMore={loadMore}
+                onPhotoClick={handlePhotoClick}
+                onFilesDropped={handleUpload}
+                albums={albums}
+                onAddToAlbum={handleAddToAlbum}
+                onSetAsCover={handleSetAsCover}
+                onCreateAlbum={handleCreateAlbumInline}
+                onViewExif={(photo) => setExifPhoto(photo)}
+                onDeletePhoto={(id) => setDeletePhotoId(id)}
+                selectedIds={timelineSelection.selectedIds}
+                onToggleSelect={timelineSelection.toggleSelection}
+              />
+            ) : null}
 
-          {view === 'people' && (
-            <PhotosPeople
-              onPhotoClick={handlePhotoClick}
-            />
-          )}
+            {view === 'albums' && !selectedAlbum && (
+              <PhotosAlbums
+                albums={albums}
+                loading={albumsLoading}
+                onAlbumClick={handleAlbumClick}
+                onCreateAlbumClick={() => setCreateAlbumOpen(true)}
+                onEditAlbum={(album) => setEditAlbum(album)}
+                onRequestFiles={(album) => setRequestFilesAlbum(album)}
+                onShareAlbum={(album) => setShareAlbum(album)}
+                onDeleteAlbum={(album) => setDeleteAlbumConfirm(album)}
+                bestOfCount={bestOfCount}
+                bestOfCoverId={bestOfCoverId}
+                onBestOfClick={() => { setSelectedStars(new Set([4, 5])); setView('timeline'); }}
+              />
+            )}
 
-          {view === 'dejavu' && (
-            <PhotosDejaVu onViewPhoto={(id) => {
-              api.get<{ data: Photo }>(`/files/${id}`).then(res => setExifPhoto(res.data)).catch(() => {});
-            }} />
-          )}
+            {view === 'albums' && selectedAlbum && (
+              <AlbumDetail
+                album={selectedAlbum}
+                photos={albumPhotos}
+                loading={albumPhotosLoading}
+                onBack={handleAlbumBack}
+                onDelete={async (albumId) => { await deleteAlbum(albumId); setSelectedAlbumId(null); }}
+                onPhotoClick={handlePhotoClick}
+                onShareAlbum={() => setShareAlbum(selectedAlbum)}
+                onEditAlbum={() => setEditAlbum(selectedAlbum)}
+                onRemoveFromAlbum={handleRemoveFromAlbum}
+                onViewExif={(photo) => setExifPhoto(photo)}
+                onDeletePhoto={(id) => setDeletePhotoId(id)}
+                onSetAsCover={handleSetAsCoverForCurrentAlbum}
+                selectedIds={albumSelection.selectedIds}
+                onToggleSelect={albumSelection.toggleSelection}
+                onBatchRemove={() => setBatchRemoveOpen(true)}
+                onBatchDelete={() => setBatchDeleteOpen(true)}
+                onClearSelection={albumSelection.clearSelection}
+              />
+            )}
 
-          {view === 'dna' && (
-            <PhotosDNA />
-          )}
+            {view === 'people' && (
+              <PhotosPeople
+                onPhotoClick={handlePhotoClick}
+              />
+            )}
+
+            {view === 'dejavu' && (
+              <PhotosDejaVu onViewPhoto={(id) => {
+                api.get<{ data: Photo }>(`/files/${id}`).then(res => setExifPhoto(res.data)).catch(() => {});
+              }} />
+            )}
+
+            {view === 'dna' && (
+              <PhotosDNA />
+            )}
+          </div>
         </div>
 
         {/* ExifPanel sidebar */}
@@ -726,15 +763,6 @@ export function Component() {
         )}
       </div>
 
-      {/* Lightbox overlay (outside flex — fullscreen) */}
-      {lightboxIndex !== null && (
-        <PhotoLightbox
-          photos={lightboxPhotos}
-          currentIndex={lightboxIndex}
-          onClose={handleLightboxClose}
-          onNavigate={handleLightboxNavigate}
-        />
-      )}
 
       {/* Share photo modal */}
       {sharePhoto && (

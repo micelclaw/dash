@@ -345,7 +345,7 @@ function PortForwardingHelp({ localIp, port }: { localIp: string | null; port: n
         <strong style={{ color: '#f59e0b', fontSize: '0.75rem' }}>Port {p}/TCP+UDP — reachability unverified</strong>
       </div>
       <div style={{ color: 'var(--text-muted)' }}>
-        UPnP could not open the port automatically. If you have already configured port forwarding, connect a client to verify. Otherwise, forward port <strong style={{ color: 'var(--text)' }}>{p} TCP+UDP</strong> on your router to <code style={codeStyle}>{ip}</code>. The status will update to <strong style={{ color: '#22c55e' }}>Reachable</strong> once a client connects.
+        UPnP could not open the port automatically. This can also appear if no peer has connected yet. If you have already configured port forwarding, connect a client to verify. Otherwise, forward port <strong style={{ color: 'var(--text)' }}>{p} TCP+UDP</strong> on your router to <code style={codeStyle}>{ip}</code>. The status will update to <strong style={{ color: '#22c55e' }}>Reachable</strong> once a client connects.
       </div>
 
       {/* Collapsible examples */}

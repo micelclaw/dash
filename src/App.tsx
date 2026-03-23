@@ -77,6 +77,7 @@ const router = createBrowserRouter([
           { path: '/crypto/lightning', lazy: () => import('@/modules/crypto/lightning/LightningViewport') },
           { path: '/crypto/monero/wallet', lazy: () => import('@/modules/crypto/monero/viewport/MoneroWalletViewport') },
           { path: '/crypto/rotki', lazy: () => import('@/modules/crypto/rotki/RotkiEmbed') },
+          { path: '/messages', lazy: () => import('@/modules/messages/MessagesPage') },
           { path: '/feeds', lazy: () => import('@/modules/feeds/FeedsPage') },
           { path: '/feeds/:feedId', lazy: () => import('@/modules/feeds/FeedsPage') },
           { path: '/drive', lazy: () => import('@/modules/drive/DrivePage') },

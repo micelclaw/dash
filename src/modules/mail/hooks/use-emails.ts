@@ -190,7 +190,14 @@ export function useEmails(filters: EmailFilters = {}) {
   };
 
   const sendEmail = async (data: Record<string, unknown>) => {
-    const res = await api.post<{ data: Email }>('/emails/send', data);
+    // Timeout scales with actual recipient count (addresses may be comma-separated within array elements)
+    const countAddrs = (arr?: string[]) => arr ? arr.reduce((n, a) => n + a.split(',').length, 0) : 0;
+    const recipientCount =
+      countAddrs(data.to_addresses as string[]) +
+      countAddrs(data.cc_addresses as string[]) +
+      countAddrs(data.bcc_addresses as string[]);
+    const timeout = 15_000 + recipientCount * 2_000;
+    const res = await api.post<{ data: Email }>('/emails/send', data, { timeout });
     return res.data;
   };
 

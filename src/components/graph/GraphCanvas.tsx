@@ -28,6 +28,8 @@ interface GraphCanvasProps {
   onNodeClick: (node: GraphNode) => void;
   onResetGraph?: () => void;
   externalHoverNodeId?: string | null;
+  selectedNodeId?: string | null;
+  strengthThreshold?: number;
   width: number;
   height: number;
   mode?: 'entities' | 'records';
@@ -40,6 +42,8 @@ export function GraphCanvas({
   onNodeClick,
   onResetGraph,
   externalHoverNodeId,
+  selectedNodeId,
+  strengthThreshold,
   width, height,
   mode = 'entities',
 }: GraphCanvasProps) {
@@ -62,7 +66,8 @@ export function GraphCanvas({
     nodes, edges, heatMapMode,
     highlightNodeIds, highlightEdgeIds,
     searchQuery, categoryFilters,
-    onNodeClick, externalHoverNodeId,
+    onNodeClick, externalHoverNodeId, selectedNodeId,
+    strengthThreshold,
     width, height,
     hideLabels: mode === 'records',
   });

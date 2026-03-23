@@ -125,6 +125,10 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
 // ─── Sortable Card ──────────────────────────────────────
 
 const SortableCard = React.memo(function SortableCard({ card, boardSettings, dimmed }: { card: Card; boardSettings?: BoardSettings; dimmed?: boolean }) {
+  const commentCount = useProjectsStore((s) => s.cardCommentCounts[card.id] ?? 0);
+  const dependencyCount = useProjectsStore((s) => s.cardDependencyCounts[card.id] ?? 0);
+  const linkCount = useProjectsStore((s) => s.cardLinkCounts[card.id] ?? 0);
+
   const {
     attributes,
     listeners,
@@ -151,6 +155,9 @@ const SortableCard = React.memo(function SortableCard({ card, boardSettings, dim
         showLabelsText={boardSettings?.showLabelsText}
         showCardNumbers={boardSettings?.showCardNumbers ?? true}
         cardAging={boardSettings?.cardAging}
+        commentCount={commentCount}
+        dependencyCount={dependencyCount}
+        linkCount={linkCount}
       />
     </div>
   );

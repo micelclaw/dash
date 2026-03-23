@@ -224,7 +224,7 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   },
 
   mergeFaceClusters: async (targetId: string, sourceId: string) => {
-    await api.post(`/photos/faces/${targetId}/merge`, { source_cluster_id: sourceId });
+    await api.post(`/photos/faces/${targetId}/merge`, { merge_with: sourceId });
     // Re-fetch clusters after merge
     get().fetchFaceClusters();
   },
