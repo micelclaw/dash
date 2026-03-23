@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Settings, Pause, Play, Loader2, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
@@ -140,9 +140,12 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<{ processed: number; total?: number; folder?: string; phase?: string } | null>(null);
 
+  const fallbackRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   // Listen for sync progress WS events
   const progressEvent = useWebSocket('sync.progress');
   const completedEvent = useWebSocket('sync.completed');
+  const errorEvent = useWebSocket('sync.error');
 
   useEffect(() => {
     if (progressEvent?.data?.connector_id === connector.id) {
@@ -155,11 +158,26 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     if (!completedEvent) return;
     // Clear syncing state when this connector's sync completes
     if (completedEvent.data?.connector_id === connector.id) {
+      clearTimeout(fallbackRef.current);
       setProgress(null);
       setSyncing(false);
       onRefresh();
     }
   }, [completedEvent]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!errorEvent) return;
+    if (errorEvent.data?.connector_id === connector.id) {
+      clearTimeout(fallbackRef.current);
+      setProgress(null);
+      setSyncing(false);
+      onRefresh();
+    }
+  }, [errorEvent]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => clearTimeout(fallbackRef.current);
+  }, []);
 
   const label = connector.display_name || TYPE_LABELS[connector.connector_type] || connector.name;
   const statusColor = STATUS_COLORS[connector.status] ?? 'var(--text-muted)';
@@ -171,9 +189,12 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
       toast.success(`Sync started: ${label}`);
     } catch {
       toast.error('Failed to start sync');
+      setSyncing(false);
+      return;
     }
-    // Keep spinner for 3s to give visual feedback
-    setTimeout(() => { setSyncing(false); onRefresh(); }, 3000);
+    // Fallback: if WS never fires, reset after 120s
+    clearTimeout(fallbackRef.current);
+    fallbackRef.current = setTimeout(() => { setSyncing(false); onRefresh(); }, 120_000);
   };
 
   const handleTogglePause = async () => {

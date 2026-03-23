@@ -10,13 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { Mail, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
 import { useEmails } from './hooks/use-emails';
@@ -147,27 +148,69 @@ export function Component() {
 
   // Sync
   const [syncing, setSyncing] = useState(false);
+  const pendingSyncsRef = useRef<Set<string>>(new Set());
+  const syncFallbackRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const syncCompleted = useWebSocket('sync.completed');
+  const syncError = useWebSocket('sync.error');
+
+  useEffect(() => {
+    if (!syncCompleted || pendingSyncsRef.current.size === 0) return;
+    const cid = syncCompleted.data?.connector_id as string | undefined;
+    if (cid && pendingSyncsRef.current.has(cid)) {
+      pendingSyncsRef.current.delete(cid);
+      fetchEmails();
+      if (pendingSyncsRef.current.size === 0) {
+        clearTimeout(syncFallbackRef.current);
+        setSyncing(false);
+      }
+    }
+  }, [syncCompleted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!syncError || pendingSyncsRef.current.size === 0) return;
+    const cid = syncError.data?.connector_id as string | undefined;
+    if (cid && pendingSyncsRef.current.has(cid)) {
+      pendingSyncsRef.current.delete(cid);
+      toast.error(`Sync error: ${syncError.data?.error ?? 'unknown'}`);
+      if (pendingSyncsRef.current.size === 0) {
+        clearTimeout(syncFallbackRef.current);
+        setSyncing(false);
+      }
+    }
+  }, [syncError]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => clearTimeout(syncFallbackRef.current);
+  }, []);
+
   const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
-      // Find IMAP connectors and trigger sync
-      const res = await api.get<{ data: Array<{ id: string; connector_type: string; status: string }> }>('/sync/connectors', { connector_type: 'imap-generic' });
-      const connectors = res.data.filter(c => c.status !== 'disconnected');
+      // Find all email connectors (IMAP + Gmail)
+      const res = await api.get<{ data: Array<{ id: string; connector_type: string; status: string; domains: string[] }> }>('/sync/connectors');
+      const connectors = res.data.filter(c => (c.domains ?? []).includes('emails') && c.status !== 'disconnected');
       if (connectors.length === 0) {
         toast.error('No email connectors configured');
-      } else {
-        for (const c of connectors) {
-          await api.post(`/sync/connectors/${c.id}/run`);
-        }
-        toast.success('Sync started');
-        // Refresh emails after a delay
-        setTimeout(() => { fetchEmails(); setSyncing(false); }, 5000);
+        setSyncing(false);
         return;
       }
+      pendingSyncsRef.current = new Set(connectors.map(c => c.id));
+      for (const c of connectors) {
+        await api.post(`/sync/connectors/${c.id}/run`);
+      }
+      toast.success('Sync started');
+      // Fallback: if WS never fires, reset after 120s
+      clearTimeout(syncFallbackRef.current);
+      syncFallbackRef.current = setTimeout(() => {
+        pendingSyncsRef.current.clear();
+        setSyncing(false);
+        fetchEmails();
+      }, 120_000);
     } catch {
       toast.error('Sync failed');
+      setSyncing(false);
     }
-    setSyncing(false);
   }, [fetchEmails]);
 
   // Collapsible list

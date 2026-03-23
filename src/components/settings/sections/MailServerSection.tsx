@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Server, Play, Square, RefreshCw, CheckCircle2, AlertTriangle,
   XCircle, Copy, Eye, EyeOff, Send, ExternalLink, Shield, Loader2,
@@ -221,6 +222,7 @@ function copyToClipboard(text: string) {
 // ─── Component ───────────────────────────────────────────────────
 
 export function MailServerSection() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<MailServerStatus | null>(null);
   const [dnsResult, setDnsResult] = useState<DnsCheckResult | null>(null);
   const [relay, setRelay] = useState<RelayConfig>({ enabled: false, host: '', port: 587, username: '', password: '', encryption: 'starttls' });
@@ -526,6 +528,19 @@ export function MailServerSection() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+          <button
+            style={{
+              ...S.btn,
+              padding: '8px 32px',
+              background: '#16a34a',
+              color: '#fff',
+              border: '1px solid #15803d',
+            }}
+            onClick={() => navigate('/mail-server')}
+          >
+            <ExternalLink size={14} />
+            Open Admin Panel
+          </button>
           {adminUrl && (
             <a
               href={adminUrl}
@@ -535,14 +550,11 @@ export function MailServerSection() {
                 ...S.btn,
                 textDecoration: 'none',
                 display: 'inline-flex',
-                padding: '8px 32px',
-                background: '#16a34a',
-                color: '#fff',
-                border: '1px solid #15803d',
+                fontSize: '0.75rem',
+                opacity: 0.7,
               }}
             >
-              <ExternalLink size={14} />
-              Open Admin Panel
+              Mailu Admin (fallback)
             </a>
           )}
           <button

@@ -16,7 +16,7 @@ import {
   Settings, Puzzle, Activity, Wrench,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
-  Terminal, Radio,
+  Terminal, Radio, Server,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -55,6 +55,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'dns',       label: 'DNS',          icon: Orbit,         color: '#3b82f6',              path: '/dns',       group: 'Network' },
   { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'Network' },
   // System
+  { id: 'mail-server', label: 'Mail Server', icon: Server, color: 'var(--mod-mail)', path: '/mail-server', group: 'System' },
   { id: 'terminal', label: 'Terminal',      icon: Terminal,      color: 'var(--mod-terminal)', path: '/terminal', group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
   { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },

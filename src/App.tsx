@@ -89,6 +89,7 @@ const router = createBrowserRouter([
           { path: '/proxy', lazy: () => import('@/modules/proxy/ProxyPage') },
           { path: '/dns', lazy: () => import('@/modules/dns/DnsModule') },
           { path: '/portainer', lazy: () => import('@/modules/portainer/PortainerPage') },
+          { path: '/mail-server/*', lazy: () => import('@/modules/mail-server/MailServerModule') },
           { path: '/terminal', lazy: () => import('@/modules/terminal/TerminalPage') },
           { path: '/approvals', lazy: () => import('@/modules/approvals/ApprovalsPage') },
           { path: '/digest/history', lazy: () => import('@/modules/digest/DigestHistoryPage') },
