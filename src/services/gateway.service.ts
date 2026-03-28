@@ -171,10 +171,6 @@ export async function addCronJob(params: {
   return res.data;
 }
 
-export async function editCronJob(id: string, params: Record<string, string>): Promise<unknown> {
-  const res = await api.patch<{ data: unknown }>(`/gateway/cron/${id}`, params);
-  return res.data;
-}
 
 export async function deleteCronJob(id: string): Promise<void> {
   await api.delete(`/gateway/cron/${id}`);

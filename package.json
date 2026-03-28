@@ -11,7 +11,9 @@
     "lint": "eslint .",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
-    "e2e:headed": "playwright test --headed"
+    "e2e:headed": "playwright test --headed",
+    "contracts": "playwright test --config playwright.contracts.config.ts",
+    "contracts:headed": "playwright test --config playwright.contracts.config.ts --headed"
   },
   "dependencies": {
     "@dagrejs/dagre": "^2.0.4",

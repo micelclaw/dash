@@ -10,9 +10,9 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronDown, PanelRight, MessageSquare, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -23,6 +23,9 @@ import { ChatInput } from '@/components/shell/ChatInput';
 import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
 import { ContextCard } from '@/components/shell/ContextCard';
+import { ContextSignals } from '@/components/shell/ContextSignals';
+import { InsightsWidget } from '@/components/shell/InsightsWidget';
+import type { InsightsWidgetHandle } from '@/components/shell/InsightsWidget';
 
 export function Component() {
   const isMobile = useIsMobile();
@@ -34,6 +37,15 @@ export function Component() {
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
   const navigate = useNavigate();
+  const insightsRef = useRef<InsightsWidgetHandle>(null);
+  const [insightsCollapsed, setInsightsCollapsed] = useState(() => {
+    try { return localStorage.getItem('claw-insights-collapsed') === 'true'; } catch { return false; }
+  });
+  const toggleInsightsCollapsed = () => {
+    const next = !insightsCollapsed;
+    setInsightsCollapsed(next);
+    try { localStorage.setItem('claw-insights-collapsed', String(next)); } catch { /* ignore */ }
+  };
 
   // Set chat state to 3 on mount
   useEffect(() => {
@@ -214,6 +226,25 @@ export function Component() {
           {/* Chat column */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <ContextCard />
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)]">
+                <Lightbulb size={14} className="text-amber-400" />
+                <span className="text-xs font-semibold text-[var(--text)]">Insights</span>
+                <div className="flex-1" />
+                <button onClick={() => insightsRef.current?.refresh()} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-muted)]" title="Refresh insights">
+                  <RefreshCw size={12} />
+                </button>
+                <button onClick={toggleInsightsCollapsed} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-muted)]" title={insightsCollapsed ? 'Expand' : 'Collapse'}>
+                  {insightsCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                </button>
+              </div>
+              {!insightsCollapsed && (
+                <>
+                  <InsightsWidget ref={insightsRef} />
+                  <ContextSignals />
+                </>
+              )}
+            </div>
             <ChatPanel />
           </div>
 

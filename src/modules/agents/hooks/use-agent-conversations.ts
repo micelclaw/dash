@@ -30,10 +30,11 @@ export function useAgentConversations({ period, agent }: UseAgentConversationsPa
       setLoading(true);
       try {
         const params = new URLSearchParams();
-        if (agent) params.set('agent', agent);
+        if (agent) params.set('from_agent', agent);
+        if (period) params.set('period', period);
         const [convRes, statsRes] = await Promise.all([
-          api.get<{ data: AgentConversation[] }>(`/agent-conversations?${params}`),
-          api.get<{ data: ConversationStats }>('/agent-conversations/stats'),
+          api.get<{ data: AgentConversation[] }>(`/conversations?${params}`),
+          api.get<{ data: ConversationStats }>(`/conversations/stats?period=${encodeURIComponent(period)}`),
         ]);
         if (!cancelled) {
           setConversations(convRes.data);

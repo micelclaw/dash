@@ -18,9 +18,10 @@ import { AppDetail } from './AppDetail';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { RegistryBrowser } from './RegistryBrowser';
 import type { InstalledApp } from '@/types/apps';
 
-type Tab = 'installed' | 'available' | 'adapted';
+type Tab = 'installed' | 'available' | 'adapted' | 'registry';
 
 export function Component() {
   const {
@@ -146,7 +147,7 @@ export function Component() {
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: 2 }}>
-            {(['installed', 'available', 'adapted'] as Tab[]).map((t) => (
+            {(['installed', 'available', 'adapted', 'registry'] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -166,6 +167,7 @@ export function Component() {
                 {t === 'installed' && `Installed${meta ? ` (${meta.total})` : ''}`}
                 {t === 'available' && 'Available'}
                 {t === 'adapted' && `Adapted${tab === 'adapted' && meta ? ` (${meta.total})` : ''}`}
+                {t === 'registry' && 'Registry'}
               </button>
             ))}
           </div>
@@ -214,7 +216,9 @@ export function Component() {
 
         {/* Content */}
         <ScrollArea className="flex-1">
-          {tab === 'available' ? (
+          {tab === 'registry' ? (
+            <RegistryBrowser />
+          ) : tab === 'available' ? (
             <div style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               justifyContent: 'center', height: '100%', minHeight: 300,
