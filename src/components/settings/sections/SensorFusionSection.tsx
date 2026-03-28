@@ -510,6 +510,53 @@ function RuleCard({
             </div>
           ))}
           <div style={{ color: 'var(--text-muted)', marginTop: 6 }}>Cooldown: {rule.cooldownMinutes} min</div>
+          <RuleLogViewer ruleId={rule.id} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RuleLogViewer({ ruleId }: { ruleId: string }) {
+  const [logs, setLogs] = useState<Array<{ timestamp: string; trigger: string; result: string; status: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
+
+  const load = async () => {
+    if (visible) { setVisible(false); return; }
+    setVisible(true);
+    setLoading(true);
+    try {
+      const res = await api.get<{ data: Array<{ timestamp: string; trigger: string; result: string; status: string }> }>(`/sensor-fusion/rules/${ruleId}/log`);
+      setLogs(res.data ?? []);
+    } catch {
+      setLogs([]);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button onClick={load} style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', fontSize: '0.6875rem', padding: 0, fontFamily: 'var(--font-sans)' }}>
+        {visible ? 'Hide Logs' : 'View Logs'}
+      </button>
+      {visible && (
+        <div style={{ marginTop: 4, maxHeight: 200, overflow: 'auto' }}>
+          {loading ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>Loading...</div>
+          ) : logs.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>No execution logs</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {logs.map((log, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, fontSize: '0.6875rem', padding: '2px 0', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(log.timestamp).toLocaleString()}</span>
+                  <span style={{ color: 'var(--text-dim)' }}>{log.trigger}</span>
+                  <span style={{ color: log.status === 'success' ? '#22c55e' : log.status === 'error' ? '#ef4444' : 'var(--text-dim)' }}>{log.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

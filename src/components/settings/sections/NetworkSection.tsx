@@ -620,6 +620,142 @@ function FirewallSubSection() {
   );
 }
 
+// ─── Firewall Services Sub-section ──────────────────────
+
+interface FirewallService {
+  name: string;
+  port: number;
+  protocol: string;
+  lan_allowed: boolean;
+  external_allowed: boolean;
+}
+
+function FirewallServicesSubSection() {
+  const [services, setServices] = useState<FirewallService[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+
+  const fetchServices = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: FirewallService[] }>('/hal/firewall/services');
+      setServices(res.data ?? []);
+    } catch {
+      // endpoint may not be available
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchServices(); }, [fetchServices]);
+
+  const toggleAccess = async (name: string, field: 'lan_allowed' | 'external_allowed', value: boolean) => {
+    setUpdating(name);
+    try {
+      const svc = services.find(s => s.name === name);
+      if (!svc) return;
+      await api.put(`/hal/firewall/services/${name}`, {
+        lan_allowed: field === 'lan_allowed' ? value : svc.lan_allowed,
+        external_allowed: field === 'external_allowed' ? value : svc.external_allowed,
+      });
+      setServices(prev => prev.map(s => s.name === name ? { ...s, [field]: value } : s));
+      toast.success(`${name} access updated`);
+    } catch {
+      toast.error(`Failed to update ${name}`);
+    }
+    setUpdating(null);
+  };
+
+  const filtered = services.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()));
+
+  if (loading) {
+    return (
+      <SettingSection title="Service Access" description="Control which services are accessible from LAN or externally.">
+        <div style={{ padding: '16px 0', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
+      </SettingSection>
+    );
+  }
+
+  if (services.length === 0) return null;
+
+  return (
+    <SettingSection
+      title="Service Access"
+      description="Control which services are accessible from LAN or externally."
+      action={
+        <button onClick={fetchServices} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}>
+          <RefreshCw size={14} />
+        </button>
+      }
+    >
+      <div style={{ marginBottom: 8 }}>
+        <input
+          placeholder="Filter services..."
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          style={{
+            width: '100%', height: 30, padding: '0 10px',
+            background: 'var(--bg)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+            fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)',
+          }}
+        />
+      </div>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <span style={{ flex: 1 }}>Service</span>
+        <span style={{ width: 60, textAlign: 'center' }}>LAN</span>
+        <span style={{ width: 60, textAlign: 'center' }}>External</span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {filtered.map(svc => (
+          <div key={svc.name} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ fontWeight: 500, color: 'var(--text)' }}>{svc.name}</span>
+              <span style={{ marginLeft: 6, fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>:{svc.port}/{svc.protocol}</span>
+            </div>
+            <div style={{ width: 60, display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={() => toggleAccess(svc.name, 'lan_allowed', !svc.lan_allowed)}
+                disabled={updating === svc.name}
+                style={{
+                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: updating === svc.name ? 'not-allowed' : 'pointer',
+                  background: svc.lan_allowed ? '#22c55e' : 'var(--border)',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 2, left: svc.lan_allowed ? 16 : 2,
+                  width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </button>
+            </div>
+            <div style={{ width: 60, display: 'flex', justifyContent: 'center' }}>
+              <button
+                onClick={() => toggleAccess(svc.name, 'external_allowed', !svc.external_allowed)}
+                disabled={updating === svc.name}
+                style={{
+                  width: 32, height: 18, borderRadius: 9, border: 'none', cursor: updating === svc.name ? 'not-allowed' : 'pointer',
+                  background: svc.external_allowed ? '#f59e0b' : 'var(--border)',
+                  position: 'relative', transition: 'background 0.2s',
+                }}
+              >
+                <span style={{
+                  position: 'absolute', top: 2, left: svc.external_allowed ? 16 : 2,
+                  width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </SettingSection>
+  );
+}
+
 // ─── Main Section ───────────────────────────────────────
 
 export function NetworkSection() {
@@ -628,6 +764,7 @@ export function NetworkSection() {
       <ProxySubSection />
       <VpnSubSection />
       <FirewallSubSection />
+      <FirewallServicesSubSection />
     </>
   );
 }

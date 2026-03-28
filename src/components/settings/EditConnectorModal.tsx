@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, Loader2 } from 'lucide-react';
+import { X, Loader2, CheckCircle2, XCircle, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
@@ -49,6 +49,10 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   const [error, setError] = useState('');
   const [connector, setConnector] = useState<ConnectorDetail | null>(null);
   const [emailAccount, setEmailAccount] = useState<EmailAccountDetail | null>(null);
+
+  const [testResult, setTestResult] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
+  const [folders, setFolders] = useState<string[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
 
   // Form fields
   const [displayName, setDisplayName] = useState('');
@@ -160,6 +164,29 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     }
   };
 
+  const handleTestConnection = async () => {
+    if (!emailAccount) return;
+    setTestResult('testing');
+    try {
+      const res = await api.post<{ data: { success: boolean } }>(`/email-accounts/${emailAccount.id}/test`);
+      setTestResult(res.data?.success ? 'success' : 'failed');
+    } catch {
+      setTestResult('failed');
+    }
+  };
+
+  const handleLoadFolders = async () => {
+    if (!emailAccount) return;
+    setFoldersLoading(true);
+    try {
+      const res = await api.get<{ data: string[] }>(`/email-accounts/${emailAccount.id}/folders`);
+      setFolders(res.data ?? []);
+    } catch {
+      toast.error('Failed to load folders');
+    }
+    setFoldersLoading(false);
+  };
+
   if (!connectorId) return null;
 
   const isImap = connector?.connector_type === 'imap-generic';
@@ -259,6 +286,47 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                     <label style={labelStyle}>Username</label>
                     <input style={inputStyle} value={username} onChange={(e) => setUsername(e.target.value)} />
                   </div>
+
+                  {/* Test Connection + Folders */}
+                  {emailAccount && (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button
+                        onClick={handleTestConnection}
+                        disabled={testResult === 'testing'}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+                          background: 'var(--surface)', border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md)', color: 'var(--text-dim)',
+                          fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                        }}
+                      >
+                        {testResult === 'testing' ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> :
+                         testResult === 'success' ? <CheckCircle2 size={12} style={{ color: '#22c55e' }} /> :
+                         testResult === 'failed' ? <XCircle size={12} style={{ color: '#ef4444' }} /> : null}
+                        {testResult === 'testing' ? 'Testing...' : testResult === 'success' ? 'Connected' : testResult === 'failed' ? 'Failed' : 'Test Connection'}
+                      </button>
+                      <button
+                        onClick={handleLoadFolders}
+                        disabled={foldersLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
+                          background: 'var(--surface)', border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-md)', color: 'var(--text-dim)',
+                          fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                        }}
+                      >
+                        <FolderOpen size={12} />
+                        {foldersLoading ? 'Loading...' : 'Show Folders'}
+                      </button>
+                    </div>
+                  )}
+                  {folders.length > 0 && (
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {folders.map(f => (
+                        <span key={f} style={{ padding: '2px 6px', background: 'var(--surface-hover)', borderRadius: 'var(--radius-sm)' }}>{f}</span>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 

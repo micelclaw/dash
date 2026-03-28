@@ -16,7 +16,7 @@ import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, MessageSquare, Server, Database,
-  Mic, Radio,
+  Mic, Radio, Key, UserCircle, Copy, Brain, History, KeyRound,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -47,6 +47,12 @@ import { DatabaseSection } from '@/components/settings/sections/DatabaseSection'
 import { VoiceSection } from '@/components/settings/sections/VoiceSection';
 import { SensorFusionSection } from '@/components/settings/sections/SensorFusionSection';
 import { PermissionsSection } from '@/components/settings/sections/PermissionsSection';
+import { AgentTokensSection } from '@/components/settings/sections/AgentTokensSection';
+import { AccountSection } from '@/components/settings/sections/AccountSection';
+import { DuplicatesSection } from '@/components/settings/sections/DuplicatesSection';
+import { PreferencesSection } from '@/components/settings/sections/PreferencesSection';
+import { ApprovalsHistorySection } from '@/components/settings/sections/ApprovalsHistorySection';
+import { MyApiKeysSection } from '@/components/settings/sections/MyApiKeysSection';
 
 interface SidebarItem {
   id: string;
@@ -58,6 +64,7 @@ interface SidebarItem {
 
 function buildSections(isAdmin: boolean): SidebarItem[] {
   const sections: SidebarItem[] = [
+    { id: 'account', label: 'Account', icon: UserCircle },
     { id: 'general', label: 'General', icon: Globe },
     { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
     { id: 'voice', label: 'Voice', icon: Mic },
@@ -77,12 +84,17 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
     { id: 'digest', label: 'Digest', icon: Newspaper },
     { id: 'feeds', label: 'Feeds', icon: Rss },
     { id: 'observers', label: 'Channel Observers', icon: MessageSquare },
+    { id: 'duplicates', label: 'Duplicates', icon: Copy },
+    { id: 'preferences', label: 'Learned Preferences', icon: Brain },
   ];
   if (isAdmin) {
     sections.push({ id: 'users', label: 'Users', icon: Users, dividerBefore: true });
   }
   sections.push({ id: 'database', label: 'Database', icon: Database, dividerBefore: !isAdmin });
   sections.push({ id: 'security', label: 'Security', icon: Shield });
+  sections.push({ id: 'approvals-history', label: 'Approvals History', icon: History });
+  sections.push({ id: 'agent-tokens', label: 'Agent Tokens', icon: Key });
+  sections.push({ id: 'my-api-keys', label: 'My API Keys', icon: KeyRound });
   sections.push({ id: 'permissions', label: 'Permissions', icon: Shield });
   sections.push({ id: 'license', label: 'License', icon: CreditCard });
   return sections;
@@ -90,6 +102,7 @@ function buildSections(isAdmin: boolean): SidebarItem[] {
 
 function renderSection(section: string) {
   switch (section) {
+    case 'account': return <AccountSection />;
     case 'general': return <GeneralSection />;
     case 'ai': return <AISection />;
     case 'voice': return <VoiceSection />;
@@ -114,6 +127,11 @@ function renderSection(section: string) {
     case 'services': return <ServicesSection />;
     case 'sensor-fusion': return <SensorFusionSection />;
     case 'permissions': return <PermissionsSection />;
+    case 'agent-tokens': return <AgentTokensSection />;
+    case 'duplicates': return <DuplicatesSection />;
+    case 'preferences': return <PreferencesSection />;
+    case 'approvals-history': return <ApprovalsHistorySection />;
+    case 'my-api-keys': return <MyApiKeysSection />;
     default: return <GeneralSection />;
   }
 }

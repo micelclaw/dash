@@ -471,7 +471,7 @@ export function PermissionsSection() {
           : { type: 'entity', entity_ids: (s.filter as { type: 'entity'; entityIds: string[] }).entityIds },
     }));
 
-    await api.put(`/managed-agents/${agentId}`, { semantic_scopes: apiScopes });
+    await api.patch(`/managed-agents/${agentId}`, { semantic_scopes: apiScopes });
     setAgents((prev) =>
       prev.map((a) => (a.id === agentId ? { ...a, semanticScopes: scopes } : a)),
     );
@@ -489,7 +489,7 @@ export function PermissionsSection() {
           : { type: 'entity', entity_ids: (s.filter as { type: 'entity'; entityIds: string[] }).entityIds },
     }));
 
-    await api.put(`/apps/${appId}`, { semantic_scopes: apiScopes });
+    await api.patch(`/apps/${appId}`, { semantic_scopes: apiScopes });
     setApps((prev) =>
       prev.map((a) => (a.id === appId ? { ...a, semanticScopes: scopes } : a)),
     );

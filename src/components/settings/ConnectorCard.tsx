@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Settings, Pause, Play, Loader2, Trash2 } from 'lucide-react';
+import { RefreshCw, Settings, Pause, Play, Loader2, Trash2, Unlink } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -232,6 +232,24 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     }
   };
 
+  const oauthProvider = connector.connector_type.startsWith('google-') || connector.connector_type === 'gmail'
+    ? 'google'
+    : connector.connector_type.startsWith('microsoft-') || connector.connector_type === 'teams-observer'
+      ? 'microsoft'
+      : null;
+
+  const handleRevokeOAuth = async () => {
+    if (!oauthProvider) return;
+    if (!confirm(`Revoke OAuth access for ${oauthProvider}? This will disconnect ALL ${oauthProvider} connectors.`)) return;
+    try {
+      await api.delete(`/sync/oauth/${oauthProvider}`);
+      toast.success(`OAuth access revoked for ${oauthProvider}`);
+      onRefresh();
+    } catch {
+      toast.error('Failed to revoke OAuth access');
+    }
+  };
+
   const iconBtnStyle: React.CSSProperties = {
     background: 'none', border: 'none',
     color: 'var(--text-dim)', cursor: 'pointer',
@@ -327,6 +345,11 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
           {onConfigure && (
             <button onClick={() => onConfigure(connector.id)} style={iconBtnStyle} title="Configure">
               <Settings size={14} />
+            </button>
+          )}
+          {oauthProvider && (
+            <button onClick={handleRevokeOAuth} style={{ ...iconBtnStyle, color: 'var(--warning, #f59e0b)' }} title={`Revoke ${oauthProvider} OAuth`}>
+              <Unlink size={14} />
             </button>
           )}
           <button onClick={handleDelete} style={{ ...iconBtnStyle, color: 'var(--error)' }} title="Disconnect">
