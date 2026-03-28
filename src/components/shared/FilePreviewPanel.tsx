@@ -11,11 +11,13 @@
  */
 
 import { useState } from 'react';
-import { X, Download, Trash2 } from 'lucide-react';
+import { X, Download, Trash2, Share2 } from 'lucide-react';
 import { FileIcon } from './FileIcon';
 import { RelatedItemsPanel } from './RelatedItemsPanel';
 import { SimilarContentPanel } from './SimilarContentPanel';
 import { GraphProximityPanel } from './GraphProximityPanel';
+import { FileVersionHistory } from './FileVersionHistory';
+import { ShareModal } from './ShareModal';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { formatFileSize, isImageMime, getMimeLabel, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
@@ -39,6 +41,7 @@ export function FilePreviewPanel({
   useCoNavigation('file', file.id);
   const isImage = isImageMime(file.mime_type);
   const [imgError, setImgError] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   return (
     <div
@@ -134,12 +137,21 @@ export function FilePreviewPanel({
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <PreviewAction icon={Download} label="Download" onClick={() => { void downloadFile(file.id, file.is_directory ? `${file.filename}.zip` : file.filename); }} />
+            <PreviewAction icon={Share2} label="Share" onClick={() => setShareOpen(true)} />
             {onDelete && (
               <PreviewAction icon={Trash2} label="Delete" onClick={() => onDelete(file.id)} variant="danger" />
             )}
           </div>
         </div>
       </div>
+
+      {!file.is_directory && (
+        <FileVersionHistory fileId={file.id} filename={file.filename} />
+      )}
+
+      {shareOpen && (
+        <ShareModal open={shareOpen} file={file} onClose={() => setShareOpen(false)} />
+      )}
     </div>
   );
 }

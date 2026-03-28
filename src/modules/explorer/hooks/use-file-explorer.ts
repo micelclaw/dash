@@ -210,7 +210,7 @@ export function useFileExplorer() {
       const { api } = await import('@/services/api');
       const formData = new FormData();
       formData.append('file', f);
-      await api.upload(`/vfs/write?path=${encodeURIComponent(apiPath)}`, formData);
+      await api.upload(`/vfs/write?path=${encodeURIComponent(apiPath)}`, formData, 'PUT');
       fetchVfs(currentPath);
     } else {
       await uploadFile(f, currentPath);

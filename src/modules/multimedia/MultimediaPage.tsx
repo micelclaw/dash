@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MultimediaStatusCard } from './MultimediaStatusCard';
 import { MultimediaSetupWizard } from './MultimediaSetupWizard';
+import { MediaDownloads } from './MediaDownloads';
 
 interface MultimediaAppStatus {
   name: string;
@@ -169,6 +170,8 @@ export function Component() {
       {renderGroup('Media Servers', CONSUMER_APPS)}
       {renderGroup('Downloads & Automation', PRODUCER_APPS)}
       {renderGroup('Indexers & Requests', SUPPORT_APPS)}
+
+      <MediaDownloads />
 
       {showWizard && (
         <MultimediaSetupWizard

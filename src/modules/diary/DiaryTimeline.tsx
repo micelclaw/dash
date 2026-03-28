@@ -13,6 +13,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { Search, Plus, X } from 'lucide-react';
 import { DiaryTimelineItem } from './DiaryTimelineItem';
+import { DiaryStatsWidget } from './DiaryStatsWidget';
 import type { DiaryEntry } from './types';
 
 interface DiaryTimelineProps {
@@ -112,6 +113,11 @@ export function DiaryTimeline({
             </button>
           )}
         </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ padding: '8px 12px 0' }}>
+        <DiaryStatsWidget />
       </div>
 
       {/* Today ghost entry */}

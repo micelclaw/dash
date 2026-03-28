@@ -107,7 +107,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
   }, [node?.id]);
 
   // Connected entities — derived from co-occurrence edges in the loaded graph
-  const connectedEntities = useMemo(() => {
+  const localConnected = useMemo(() => {
     if (!node) return [];
     const nodeMap = new Map(graphNodes.map(n => [n.id, n]));
     const neighbors: ConnectedEntity[] = [];
@@ -132,6 +132,26 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
 
     return neighbors.sort((a, b) => b.weight - a.weight);
   }, [node?.id, graphNodes, graphEdges]);
+
+  // Fallback: fetch connections from API when local edges are sparse
+  const [apiConnections, setApiConnections] = useState<ConnectedEntity[]>([]);
+  useEffect(() => {
+    if (!node || localConnected.length > 0) {
+      setApiConnections([]);
+      return;
+    }
+    api.get<{ data: Array<{ id: string; name: string; entity_type: string; weight?: number }> }>('/graph/connections?entity_id=' + node.id)
+      .then(res => {
+        const maxW = Math.max(1, ...((res.data ?? []).map(c => c.weight ?? 1)));
+        setApiConnections((res.data ?? []).map(c => ({
+          id: c.id, name: c.name, entity_type: c.entity_type,
+          weight: (c.weight ?? 1) / maxW,
+        })));
+      })
+      .catch(() => setApiConnections([]));
+  }, [node?.id, localConnected.length]);
+
+  const connectedEntities = localConnected.length > 0 ? localConnected : apiConnections;
 
   // Mentions — fetched from API (entity mode only)
   useEffect(() => {

@@ -22,6 +22,8 @@ import { SmartStatusCard } from './components/SmartStatusCard';
 import { PoolSection } from './components/PoolSection';
 import { ShareSection } from './components/ShareSection';
 import { NasLayerBanner } from './components/NasLayerBanner';
+import { FileStatsCard } from './components/FileStatsCard';
+import { FileDuplicatesCard } from './components/FileDuplicatesCard';
 
 export function Component() {
   const loading = useStorageStore((s) => s.loading);
@@ -118,6 +120,9 @@ export function Component() {
         </div>
 
         <VolumeTable />
+
+        <FileStatsCard />
+        <FileDuplicatesCard />
 
         {showPools && <PoolSection />}
         {showShares && <ShareSection />}
