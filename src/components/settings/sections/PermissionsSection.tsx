@@ -442,17 +442,17 @@ export function PermissionsSection() {
         const tokens: AgentToken[] = (agentsRes.data as unknown as Array<Record<string, unknown>>).map((a) => ({
           id: a.id as string,
           agentId: a.id as string,
-          agentName: (a.name || a.display_name || a.displayName || 'Agent') as string,
-          displayName: (a.display_name || a.displayName || a.name || 'Agent') as string,
-          semanticScopes: (a.semantic_scopes || a.semanticScopes || []) as SemanticScope[],
+          agentName: (a.name || a.display_name || 'Agent') as string,
+          displayName: (a.display_name || a.name || 'Agent') as string,
+          semanticScopes: (a.semantic_scopes || []) as SemanticScope[],
         }));
         setAgents(tokens);
 
         const appTokens: AppToken[] = appsRes.data.map((a) => ({
           id: a.id as string,
-          appName: (a.app_name || a.appName || a.name || 'App') as string,
-          displayName: (a.app_name || a.appName || a.name || 'App') as string,
-          semanticScopes: (a.semantic_scopes || a.semanticScopes || []) as SemanticScope[],
+          appName: (a.app_name || a.name || 'App') as string,
+          displayName: (a.app_name || a.name || 'App') as string,
+          semanticScopes: (a.semantic_scopes || []) as SemanticScope[],
         }));
         setApps(appTokens);
       })

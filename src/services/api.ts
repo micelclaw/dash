@@ -16,28 +16,6 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const API_PREFIX = '/api/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
 
-/**
- * Convert camelCase keys to snake_case recursively.
- * The real API (Drizzle ORM) returns camelCase but all frontend
- * types and mock data use snake_case.
- */
-function camelToSnake(str: string): string {
-  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-}
-
-function transformKeys(obj: unknown): unknown {
-  if (obj === null || obj === undefined) return obj;
-  if (Array.isArray(obj)) return obj.map(transformKeys);
-  if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      result[camelToSnake(key)] = transformKeys(value);
-    }
-    return result;
-  }
-  return obj;
-}
-
 export class ApiError extends Error {
   constructor(
     public code: string,
@@ -131,14 +109,16 @@ class ApiClient {
       );
     }
 
-    // Transform camelCase keys from API to snake_case for frontend
-    const useMockMode = import.meta.env.VITE_MOCK_API === 'true';
-    return (useMockMode ? json : transformKeys(json)) as T;
+    // The backend serializes all responses in snake_case (see
+    // core/src/plugins/case-transform.ts). Mock fixtures match the
+    // same contract, so we can pass the body straight through.
+    return json as T;
   }
 
   /**
-   * Raw POST that skips camelCase→snake_case key transformation.
-   * Needed for ONLYOFFICE config which requires exact camelCase keys.
+   * Raw POST kept as a thin alias for `post` for legacy callers
+   * (notably the ONLYOFFICE config flow) that need a guaranteed
+   * pass-through with no future envelope post-processing.
    */
   async rawPost<T>(path: string, body?: unknown): Promise<T> {
     const url = `${BASE_URL}${API_PREFIX}${path}`;
@@ -214,7 +194,7 @@ class ApiClient {
       throw new ApiError('UPLOAD_FAILED', text, undefined, res.status);
     }
     const json = await res.json();
-    return transformKeys(json) as T;
+    return json as T;
   }
 }
 

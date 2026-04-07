@@ -20,9 +20,9 @@ import { SettingSection } from '../SettingSection';
 interface Binding {
   id: string;
   platform: string;
-  platformUserId: string;
-  displayName: string | null;
-  createdAt: string;
+  platform_user_id: string;
+  display_name: string | null;
+  created_at: string;
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -37,7 +37,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 export function AccountSection() {
   const user = useAuthStore(s => s.user);
-  const [displayName, setDisplayName] = useState(user?.displayName ?? '');
+  const [displayName, setDisplayName] = useState(user?.display_name ?? '');
   const [saving, setSaving] = useState(false);
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [loadingBindings, setLoadingBindings] = useState(true);
@@ -53,7 +53,7 @@ export function AccountSection() {
   }, []);
 
   useEffect(() => { loadBindings(); }, [loadBindings]);
-  useEffect(() => { setDisplayName(user?.displayName ?? ''); }, [user?.displayName]);
+  useEffect(() => { setDisplayName(user?.display_name ?? ''); }, [user?.display_name]);
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -91,7 +91,7 @@ export function AccountSection() {
               />
               <button
                 onClick={handleSaveProfile}
-                disabled={saving || displayName === (user?.displayName ?? '')}
+                disabled={saving || displayName === (user?.display_name ?? '')}
                 className="px-3 py-1.5 text-xs font-medium rounded-md bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
@@ -129,8 +129,8 @@ export function AccountSection() {
                     {PLATFORM_LABELS[binding.platform] ?? binding.platform}
                   </div>
                   <div className="text-[10px] text-[var(--text-muted)]">
-                    {binding.displayName ?? binding.platformUserId}
-                    {' · '}Linked {new Date(binding.createdAt).toLocaleDateString()}
+                    {binding.display_name ?? binding.platform_user_id}
+                    {' · '}Linked {new Date(binding.created_at).toLocaleDateString()}
                   </div>
                 </div>
                 <button

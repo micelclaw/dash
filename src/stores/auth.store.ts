@@ -41,9 +41,8 @@ export const useAuthStore = create<AuthStore>()(
           { email, password },
         );
         const d = res.data;
-        // API keys are snake_case after transformer (access_token, refresh_token)
-        const accessToken = (d.access_token ?? d.accessToken) as string;
-        const refreshToken = (d.refresh_token ?? d.refreshToken) as string;
+        const accessToken = d.access_token as string;
+        const refreshToken = d.refresh_token as string;
         const user = d.user as User;
         user.tier = (res.tier as Tier) ?? 'free';
         set({ user, tokens: { accessToken, refreshToken }, isAuthenticated: true });
@@ -71,8 +70,8 @@ export const useAuthStore = create<AuthStore>()(
             set({
               user: updatedUser,
               tokens: {
-                accessToken: (d.access_token ?? d.accessToken) as string,
-                refreshToken: (d.refresh_token ?? d.refreshToken) as string,
+                accessToken: d.access_token as string,
+                refreshToken: d.refresh_token as string,
               },
             });
           } catch {

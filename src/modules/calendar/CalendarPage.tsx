@@ -77,7 +77,7 @@ export function Component() {
       setBoardCalendars(res.data.map(b => ({
         id: b.id,
         name: `kanban:${b.id}`,
-        displayName: b.title,
+        display_name: b.title,
         color: b.color || '#d4a017',
         source: 'kanban',
         visible: true,

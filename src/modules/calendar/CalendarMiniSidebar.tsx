@@ -30,7 +30,7 @@ import type { CalendarEvent } from './types';
 export interface CalendarInfo {
   id: string;
   name: string;
-  displayName?: string;
+  display_name?: string;
   color: string;
   source: string;
   visible: boolean;
@@ -369,7 +369,7 @@ export function CalendarMiniSidebar({
                     }}
                   />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {cal.displayName ?? name}
+                    {cal.display_name ?? name}
                   </span>
                 </label>
               }
@@ -464,7 +464,7 @@ export function CalendarMiniSidebar({
                     }}
                   />
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {cal.displayName ?? cal.name}
+                    {cal.display_name ?? cal.name}
                   </span>
                 </label>
               );

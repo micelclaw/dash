@@ -56,27 +56,27 @@ export interface AppManifest {
 
 export interface InstalledApp {
   id: string;
-  appName: string;
+  app_name: string;
   version: string;
-  appLevel: number;
+  app_level: number;
   status: AppStatus;
   source: AppSource;
-  installPath: string | null;
+  install_path: string | null;
   manifest: AppManifest;
-  installedBy: string | null;
-  installedAt: string;
-  updatedAt: string;
+  installed_by: string | null;
+  installed_at: string;
+  updated_at: string;
 }
 
 export interface AppRuntimeStatus {
-  appName: string;
+  app_name: string;
   version: string;
   level: AppLevel;
   status: 'loaded' | 'error' | 'disabled' | 'pending_migration';
-  routesRegistered: number;
-  tablesCreated: number;
-  containersRunning?: number;
-  loadedAt: string;
+  routes_registered: number;
+  tables_created: number;
+  containers_running?: number;
+  loaded_at: string;
   error?: string;
 }
 

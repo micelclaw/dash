@@ -20,10 +20,10 @@ interface AgentToken {
   id: string;
   name: string;
   scopes: string[];
-  agentId: string | null;
-  expiresAt: string | null;
-  createdAt: string;
-  lastUsedAt: string | null;
+  agent_id: string | null;
+  expires_at: string | null;
+  created_at: string;
+  last_used_at: string | null;
 }
 
 interface CreateTokenResponse {
@@ -231,11 +231,11 @@ export function AgentTokensSection() {
                     ))}
                   </div>
                   <span className="text-[10px] text-[var(--text-muted)]">
-                    Created {new Date(token.createdAt).toLocaleDateString()}
+                    Created {new Date(token.created_at).toLocaleDateString()}
                   </span>
-                  {token.lastUsedAt && (
+                  {token.last_used_at && (
                     <span className="text-[10px] text-[var(--text-muted)]">
-                      · Last used {new Date(token.lastUsedAt).toLocaleDateString()}
+                      · Last used {new Date(token.last_used_at).toLocaleDateString()}
                     </span>
                   )}
                 </div>

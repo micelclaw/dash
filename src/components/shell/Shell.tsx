@@ -499,8 +499,8 @@ export function Shell() {
   useEffect(() => {
     if (!sensorEvent) return;
     if (sensorEvent.event === 'sensor.rule_triggered') {
-      const ruleName = sensorEvent.data.ruleName as string;
-      const actions = sensorEvent.data.actionsExecuted as number;
+      const ruleName = sensorEvent.data.rule_name as string;
+      const actions = sensorEvent.data.actions_executed as number;
       toast(`${ruleName} activated`, {
         description: `${actions} action${actions === 1 ? '' : 's'} executed`,
         duration: 5000,

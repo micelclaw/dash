@@ -185,9 +185,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
             cardLabelIds[card.id] = embeddedLabels.map(l => l.id);
           }
           // Extract enrichment counts
-          const cc = (cardAny._comment_count ?? cardAny._commentCount ?? 0) as number;
-          const dc = (cardAny._dependency_count ?? cardAny._dependencyCount ?? 0) as number;
-          const lc = (cardAny._link_count ?? cardAny._linkCount ?? 0) as number;
+          const cc = (cardAny._comment_count ?? 0) as number;
+          const dc = (cardAny._dependency_count ?? 0) as number;
+          const lc = (cardAny._link_count ?? 0) as number;
           if (cc > 0) cardCommentCounts[card.id] = cc;
           if (dc > 0) cardDependencyCounts[card.id] = dc;
           if (lc > 0) cardLinkCounts[card.id] = lc;
