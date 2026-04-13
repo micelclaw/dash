@@ -9,30 +9,24 @@ import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { AuthProfileEntry } from '../types';
-import { BuiltinProviderKeysBlock } from './BuiltinProviderKeysBlock';
 import { LocalOllamaBlock } from './LocalOllamaBlock';
-import { ModelProvidersBlock } from '@/components/settings/sections/ModelProvidersBlock';
+import { ProviderStatusBlock } from './ProviderStatusBlock';
 
 /**
- * Models → Advanced sub-tab. The single place for everything credentials,
- * runtime, and provider-related:
- *   - Built-in provider keys (Anthropic / OpenAI / Google / DeepSeek)
- *   - Custom providers (vLLM, OpenRouter, Together AI, ...)
+ * Models → Advanced sub-tab. Power-user configuration:
+ *   - Provider status (informational overview of credentials)
  *   - Local Ollama runtime + embedding reindex
  *   - Aliases (short names → fully-qualified models)
  *   - Fallbacks (text + image)
- *   - Auth profiles (saved credentials per provider)
  */
 export function ModelsAdvancedView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <BuiltinProviderKeysBlock />
-      <ModelProvidersBlock />
+      <ProviderStatusBlock />
       <LocalOllamaBlock />
       <AliasesBlock />
       <FallbacksBlock kind="text" />
       <FallbacksBlock kind="image" />
-      <AuthProfilesBlock />
     </div>
   );
 }
@@ -242,79 +236,7 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
   );
 }
 
-// ─── Auth profiles ──────────────────────────────────────────────────
-
-function AuthProfilesBlock() {
-  const [profiles, setProfiles] = useState<AuthProfileEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [removing, setRemoving] = useState<string | null>(null);
-  const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
-
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    try {
-      setProfiles(await gwService.getAuthProfiles());
-    } catch { /* silent — file may not exist yet */ }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetch(); }, [fetch]);
-
-  const doRemove = async () => {
-    const profileId = confirmTarget;
-    if (!profileId) return;
-    setRemoving(profileId);
-    setConfirmTarget(null);
-    try {
-      await gwService.removeAuthProfile(profileId);
-      toast.success('Auth profile removed');
-      await fetch();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove auth profile');
-    } finally { setRemoving(null); }
-  };
-
-  return (
-    <Section title="Auth profiles" description="API keys saved for model providers. Tokens are never displayed in full.">
-      {loading ? <SectionLoading /> : (
-        <>
-          {profiles.length === 0 && (
-            <EmptyHint>
-              No auth profiles yet. Add one by clicking <strong>Configure provider</strong> next to a model in the Catalog tab.
-            </EmptyHint>
-          )}
-          {profiles.map((p) => (
-            <Row key={p.profile_id}>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.8125rem',
-                  color: 'var(--text)',
-                }}>
-                  🔐 {p.profile_id}
-                </span>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                  {p.provider} · {p.type} · {p.token_masked}
-                  {p.expires && <> · expires {new Date(p.expires).toLocaleDateString()}</>}
-                </span>
-              </span>
-              <RemoveButton onClick={() => setConfirmTarget(p.profile_id)} loading={removing === p.profile_id} />
-            </Row>
-          ))}
-        </>
-      )}
-      <ConfirmDialog
-        open={confirmTarget !== null}
-        onClose={() => setConfirmTarget(null)}
-        onConfirm={doRemove}
-        title="Remove auth profile?"
-        description={confirmTarget ? `Models that depend on "${confirmTarget}" will stop working until you reconfigure the provider.` : ''}
-        confirmLabel="Remove"
-        variant="danger"
-      />
-    </Section>
-  );
-}
+// (AuthProfilesBlock removed — functionality moved to ProviderStatusBlock)
 
 // ─── Shared bits ────────────────────────────────────────────────────
 

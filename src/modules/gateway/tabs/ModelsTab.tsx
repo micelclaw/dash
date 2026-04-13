@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key } from 'lucide-react';
+import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSettingsStore } from '@/stores/settings.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
@@ -41,7 +42,40 @@ const PROVIDER_COLORS: Record<string, string> = {
   cohere: '#39594d',
 };
 
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  google: 'Google',
+  deepseek: 'DeepSeek',
+  openrouter: 'OpenRouter',
+  groq: 'Groq',
+  xai: 'xAI (Grok)',
+  mistral: 'Mistral',
+  cohere: 'Cohere',
+  together: 'Together AI',
+  fireworks: 'Fireworks',
+  cerebras: 'Cerebras',
+  ollama: 'Ollama',
+  'amazon-bedrock': 'Amazon Bedrock',
+  'hugging-face': 'Hugging Face',
+  'venice-ai': 'Venice AI',
+  litellm: 'LiteLLM',
+  chutes: 'Chutes',
+  minimax: 'MiniMax',
+  qwen: 'Qwen',
+};
+
 type View = 'configured' | 'catalog' | 'advanced';
+type CatalogSubView = 'providers' | 'models';
+
+interface ProviderEntry {
+  provider: string;
+  label: string;
+  color: string;
+  modelCount: number;
+  configuredCount: number;
+  hasAuth: boolean;
+}
 
 export function ModelsTab() {
   const isMobile = useIsMobile();
@@ -71,6 +105,13 @@ export function ModelsTab() {
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [refreshHover, setRefreshHover] = useState(false);
   const [wizardModel, setWizardModel] = useState<CatalogModel | null>(null);
+  const [catalogSubView, setCatalogSubView] = useState<CatalogSubView>('providers');
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [customWizardType, setCustomWizardType] = useState<import('../components/ModelSetupWizard').ProviderType | null>(null);
+  const [customProviderIds, setCustomProviderIds] = useState<string[]>([]);
+  const [discoveredCounts, setDiscoveredCounts] = useState<Record<string, number>>({});
+  const ollamaStatus = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_status ?? 'disconnected');
+  const ollamaUrl = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_url ?? 'http://127.0.0.1:11434');
 
   useEffect(() => {
     if (models.length === 0) fetchModels();
@@ -79,6 +120,34 @@ export function ModelsTab() {
   useEffect(() => {
     if (view === 'catalog' && catalog.length === 0 && !catalogLoading) fetchCatalog();
   }, [view, catalog.length, catalogLoading, fetchCatalog]);
+
+  // Fetch custom provider IDs from config (so the grid shows them even with 0 catalog models)
+  const fetchCustomProviders = useCallback(async () => {
+    try {
+      const config = await gwService.getProvidersConfig();
+      setCustomProviderIds(Object.keys(config.providers ?? {}));
+    } catch { /* silent */ }
+  }, []);
+  useEffect(() => {
+    if (view === 'catalog') fetchCustomProviders();
+  }, [view, fetchCustomProviders]);
+
+  // Background discover for custom providers with 0 catalog models (to show count in grid)
+  useEffect(() => {
+    if (view !== 'catalog' || catalogSubView !== 'providers') return;
+    const catalogProviders = new Set(catalog.map(m => m.provider));
+    const toDiscover = customProviderIds.filter(id => !catalogProviders.has(id));
+    if (toDiscover.length === 0) return;
+    let cancelled = false;
+    for (const id of toDiscover) {
+      gwService.discoverProviderModels(id).then((result) => {
+        if (!cancelled) {
+          setDiscoveredCounts(prev => ({ ...prev, [id]: result.models.length }));
+        }
+      }).catch(() => { /* silent */ });
+    }
+    return () => { cancelled = true; };
+  }, [view, catalogSubView, customProviderIds, catalog]);
 
   const handleSetDefault = async (model: GatewayModel) => {
     setSettingDefault(model.id);
@@ -117,12 +186,132 @@ export function ModelsTab() {
     }
   };
 
-  // Provider list derived from catalog
+  // Provider list derived from catalog (kept for backwards compat)
   const providers = useMemo(() => {
     const set = new Set<string>();
     for (const m of catalog) set.add(m.provider);
     return Array.from(set).sort();
   }, [catalog]);
+
+  // Provider entries for the catalog grid (catalog models + custom providers from config)
+  const providerEntries = useMemo((): ProviderEntry[] => {
+    const grouped = new Map<string, { count: number; available: boolean; configured: number }>();
+    for (const m of catalog) {
+      const entry = grouped.get(m.provider) ?? { count: 0, available: false, configured: 0 };
+      entry.count++;
+      if (m.available) entry.available = true;
+      if (m.configured) entry.configured++;
+      grouped.set(m.provider, entry);
+    }
+    // Merge custom providers from config that have 0 models in the catalog
+    for (const id of customProviderIds) {
+      if (!grouped.has(id)) {
+        grouped.set(id, { count: discoveredCounts[id] ?? 0, available: true, configured: 0 });
+      }
+    }
+    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => ({
+      provider,
+      label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
+      color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
+      modelCount: info.count,
+      configuredCount: info.configured,
+      hasAuth: info.available,
+    }));
+    // Providers with auth first, then alphabetical
+    entries.sort((a, b) => {
+      if (a.hasAuth !== b.hasAuth) return a.hasAuth ? -1 : 1;
+      return a.label.localeCompare(b.label);
+    });
+    return entries;
+  }, [catalog, customProviderIds, discoveredCounts]);
+
+  const handleProviderClick = (provider: string) => {
+    const entry = providerEntries.find(e => e.provider === provider);
+    if (!entry?.hasAuth) {
+      // No credentials — open wizard for this provider
+      const representative = catalog.find(m => m.provider === provider && !m.configured);
+      if (representative) {
+        setWizardModel(representative);
+      } else {
+        setCustomWizardType('custom');
+      }
+      setSelectedProvider(provider);
+      return;
+    }
+    // Has credentials — go directly to models
+    setSelectedProvider(provider);
+    setCatalogSubView('models');
+  };
+
+  const handleWizardSuccess = () => {
+    fetchModels();
+    fetchCatalog();
+    fetchCustomProviders();
+    if (selectedProvider) {
+      setCatalogSubView('models');
+    }
+  };
+
+  // ── Discover models for custom providers with 0 catalog models ──
+  const [discoveredModels, setDiscoveredModels] = useState<gwService.DiscoveredModel[]>([]);
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (catalogSubView !== 'models' || !selectedProvider) { setDiscoveredModels([]); return; }
+    const isCustom = customProviderIds.includes(selectedProvider);
+    const hasCatalogModels = catalog.some(m => m.provider === selectedProvider);
+    if (!isCustom || hasCatalogModels) { setDiscoveredModels([]); return; }
+    // Auto-discover
+    let cancelled = false;
+    setDiscovering(true);
+    setDiscoverError(null);
+    gwService.discoverProviderModels(selectedProvider).then((result) => {
+      if (!cancelled) setDiscoveredModels(result.models);
+    }).catch((err) => {
+      if (!cancelled) setDiscoverError(err instanceof Error ? err.message : 'Failed to discover models');
+    }).finally(() => {
+      if (!cancelled) setDiscovering(false);
+    });
+    return () => { cancelled = true; };
+  }, [catalogSubView, selectedProvider, customProviderIds, catalog]);
+
+  const handleAddDiscoveredModel = async (modelId: string) => {
+    const key = `${selectedProvider}/${modelId}`;
+    setMutatingModel(key);
+    try {
+      await addModel(key);
+      toast.success(`Added ${modelId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add model');
+    } finally {
+      setMutatingModel(null);
+    }
+  };
+
+  // ── Delete custom provider ──
+  const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
+
+  const handleDeleteProvider = async (providerId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Remove provider "${providerId}"? Models from this provider will be removed.`)) return;
+    setDeletingProvider(providerId);
+    try {
+      await gwService.deleteProvider(providerId);
+      toast.success(`Provider "${providerId}" removed`);
+      fetchModels();
+      fetchCatalog();
+      fetchCustomProviders();
+      if (selectedProvider === providerId) {
+        setCatalogSubView('providers');
+        setSelectedProvider(null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete provider');
+    } finally {
+      setDeletingProvider(null);
+    }
+  };
 
   // Filtered lists
   const filteredModels = useMemo(() => {
@@ -148,8 +337,13 @@ export function ModelsTab() {
 
   const loading = view === 'advanced' ? false : (view === 'configured' ? modelsLoading : catalogLoading);
   const error = view === 'advanced' ? null : (view === 'configured' ? modelsError : catalogError);
-  const isEmpty = view === 'advanced' ? false : (view === 'configured' ? filteredModels.length === 0 : filteredCatalog.length === 0);
-  const count = view === 'advanced' ? 0 : (view === 'configured' ? filteredModels.length : filteredCatalog.length);
+  const count = view === 'advanced' ? 0
+    : view === 'configured' ? filteredModels.length
+    : catalogSubView === 'providers' ? providerEntries.length
+    : filteredCatalog.filter(m => m.provider === selectedProvider).length;
+  const countLabel = view === 'catalog' && catalogSubView === 'providers'
+    ? `${count} provider${count !== 1 ? 's' : ''}`
+    : `${count} model${count !== 1 ? 's' : ''}`;
 
   if (loading && (view === 'configured' ? models.length === 0 : catalog.length === 0)) {
     return (
@@ -195,7 +389,7 @@ export function ModelsTab() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search models..."
+              placeholder={view === 'catalog' && catalogSubView === 'providers' ? 'Search providers...' : 'Search models...'}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -209,14 +403,14 @@ export function ModelsTab() {
           </div>
 
           {/* View toggle */}
-          <ViewToggle view={view} onChange={(v) => { setView(v); setProviderFilter(null); }} />
+          <ViewToggle view={view} onChange={(v) => { setView(v); setProviderFilter(null); setCatalogSubView('providers'); setSelectedProvider(null); setSearch(''); }} />
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{
               fontSize: '0.8125rem', color: 'var(--text-dim)',
               fontFamily: 'var(--font-sans)',
             }}>
-              {count} model{count !== 1 ? 's' : ''}
+              {countLabel}
             </span>
             <button
               onClick={() => view === 'configured' ? fetchModels() : fetchCatalog()}
@@ -238,87 +432,424 @@ export function ModelsTab() {
           </div>
         </div>
 
-        {/* Provider chips (catalog view only) */}
-        {view === 'catalog' && providers.length > 0 && (
-          <div style={{
-            display: 'flex', gap: 6, marginBottom: 14,
-            overflowX: 'auto', paddingBottom: 4,
-            scrollbarWidth: 'thin',
-          }}>
-            <ProviderChip
-              label="All"
-              active={providerFilter === null}
-              onClick={() => setProviderFilter(null)}
-            />
-            {providers.map(p => (
-              <ProviderChip
-                key={p}
-                label={p}
-                color={PROVIDER_COLORS[p]}
-                active={providerFilter === p}
-                onClick={() => setProviderFilter(providerFilter === p ? null : p)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Model list */}
-        {isEmpty ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', padding: 60, gap: 12,
-          }}>
-            <Cpu size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
-            <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              {search || providerFilter ? 'No models match your search' : 'No models configured'}
-            </span>
-          </div>
-        ) : view === 'advanced' ? (
+        {/* Content by view */}
+        {view === 'advanced' ? (
           <ModelsAdvancedView />
+        ) : view === 'configured' ? (
+          filteredModels.length === 0 ? (
+            <EmptyState text={search ? 'No models match your search' : 'No models configured'} />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {filteredModels.map((model) => (
+                <ConfiguredRow
+                  key={model.id || model.model}
+                  model={model}
+                  isMobile={isMobile}
+                  isHovered={hoveredRow === model.id}
+                  onHover={setHoveredRow}
+                  settingDefault={settingDefault}
+                  onSetDefault={handleSetDefault}
+                  mutatingModel={mutatingModel}
+                  onRemove={handleRemoveModel}
+                />
+              ))}
+            </div>
+          )
+        ) : catalogSubView === 'providers' ? (
+          /* ── Catalog: Provider Grid (Step 1) ── */
+          <>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? '160px' : '220px'}, 1fr))`,
+              gap: 10,
+            }}>
+              {providerEntries
+                .filter(e => !search || e.label.toLowerCase().includes(search.toLowerCase()) || e.provider.toLowerCase().includes(search.toLowerCase()))
+                .map((entry) => (
+                  <ProviderCard
+                    key={entry.provider}
+                    entry={entry}
+                    onClick={() => handleProviderClick(entry.provider)}
+                    onDelete={customProviderIds.includes(entry.provider) ? (e) => handleDeleteProvider(entry.provider, e) : undefined}
+                    deleting={deletingProvider === entry.provider}
+                  />
+                ))}
+
+              {/* Ollama (if not in catalog because disconnected) */}
+              {!providerEntries.some(e => e.provider === 'ollama') && (
+                <ProviderCard
+                  entry={{
+                    provider: 'ollama',
+                    label: 'Ollama',
+                    color: PROVIDER_COLORS.ollama,
+                    modelCount: 0,
+                    configuredCount: 0,
+                    hasAuth: false,
+                  }}
+                  subtitle={ollamaStatus === 'connected' ? 'No models pulled yet' : `Disconnected · ${ollamaUrl}`}
+                  onClick={() => { setView('advanced'); }}
+                />
+              )}
+
+              {/* Custom provider types (aligned with OpenClaw CLI) */}
+              <AddProviderTypeCard
+                label="Custom Provider"
+                description="Any OpenAI or Anthropic-compatible endpoint"
+                onClick={() => setCustomWizardType('custom')}
+              />
+              <AddProviderTypeCard
+                label="Ollama"
+                description="Local or cloud Ollama instance"
+                onClick={() => setCustomWizardType('ollama')}
+              />
+              <AddProviderTypeCard
+                label="SGLang"
+                description="Fast self-hosted server"
+                onClick={() => setCustomWizardType('sglang')}
+              />
+              <AddProviderTypeCard
+                label="vLLM"
+                description="Local/self-hosted OpenAI-compatible"
+                onClick={() => setCustomWizardType('vllm')}
+              />
+              <AddProviderTypeCard
+                label="LM Studio"
+                description="Local LM Studio server"
+                onClick={() => setCustomWizardType('lm-studio')}
+              />
+            </div>
+          </>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {view === 'configured'
-              ? filteredModels.map((model) => (
-                  <ConfiguredRow
-                    key={model.id || model.model}
-                    model={model}
-                    isMobile={isMobile}
-                    isHovered={hoveredRow === model.id}
-                    onHover={setHoveredRow}
-                    settingDefault={settingDefault}
-                    onSetDefault={handleSetDefault}
-                    mutatingModel={mutatingModel}
-                    onRemove={handleRemoveModel}
-                  />
-                ))
-              : filteredCatalog.map((model) => (
-                  <CatalogRow
-                    key={model.key}
-                    model={model}
-                    isMobile={isMobile}
-                    isHovered={hoveredRow === model.key}
-                    onHover={setHoveredRow}
-                    mutatingModel={mutatingModel}
-                    onAdd={handleAddModel}
-                    onRemove={handleRemoveModel}
-                    onConfigure={(m) => setWizardModel(m)}
-                  />
-                ))
-            }
-          </div>
+          /* ── Catalog: Provider Models (Step 2) ── */
+          <>
+            {/* Back + provider header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <button
+                onClick={() => { setCatalogSubView('providers'); setSelectedProvider(null); setSearch(''); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  background: 'transparent', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', padding: '5px 10px',
+                  color: 'var(--text-dim)', fontSize: '0.75rem',
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                <ArrowLeft size={12} /> All providers
+              </button>
+              {selectedProvider && (() => {
+                const entry = providerEntries.find(e => e.provider === selectedProvider);
+                const color = PROVIDER_COLORS[selectedProvider] ?? 'var(--text-dim)';
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      width: 24, height: 24, borderRadius: 'var(--radius-sm)',
+                      background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Cpu size={12} style={{ color }} />
+                    </div>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>
+                      {PROVIDER_LABELS[selectedProvider] ?? selectedProvider}
+                    </span>
+                    {entry?.hasAuth
+                      ? <StatusPill status="available" />
+                      : <StatusPill status="no_auth" />
+                    }
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Model list for selected provider */}
+            {(() => {
+              const providerModels = filteredCatalog.filter(m => m.provider === selectedProvider);
+              const q = search.toLowerCase();
+
+              // Discovered models (custom providers with 0 catalog models)
+              if (providerModels.length === 0 && discovering) {
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
+                    <Loader2 size={14} className="spin" /> Discovering models from {selectedProvider}...
+                  </div>
+                );
+              }
+              if (providerModels.length === 0 && discoverError) {
+                return (
+                  <div style={{
+                    padding: 20, background: '#ef444410', border: '1px solid #ef444425',
+                    borderRadius: 'var(--radius-md)',
+                  }}>
+                    <p style={{ color: '#ef4444', fontSize: '0.8125rem', fontWeight: 500, marginBottom: 4 }}>
+                      Could not connect to this provider
+                    </p>
+                    <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: 8 }}>{discoverError}</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.6875rem', lineHeight: 1.4 }}>
+                      Check that the server is running and the Base URL is correct. You can delete this provider and recreate it with the right URL.
+                    </p>
+                  </div>
+                );
+              }
+              if (providerModels.length === 0 && discoveredModels.length > 0) {
+                const filtered = search
+                  ? discoveredModels.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+                  : discoveredModels;
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 4 }}>
+                      {discoveredModels.length} model{discoveredModels.length !== 1 ? 's' : ''} discovered from {selectedProvider}. Click Add to configure.
+                    </p>
+                    {filtered.map((dm) => {
+                      const key = `${selectedProvider}/${dm.id}`;
+                      return (
+                        <DiscoveredModelRow
+                          key={dm.id}
+                          modelId={dm.id}
+                          modelName={dm.name}
+                          provider={selectedProvider!}
+                          loading={mutatingModel === key}
+                          onAdd={() => handleAddDiscoveredModel(dm.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              }
+              if (providerModels.length === 0) {
+                const isCustom = customProviderIds.includes(selectedProvider!);
+                const text = search
+                  ? 'No models match your search'
+                  : isCustom && !discovering
+                    ? 'No models available. If this is LM Studio, make sure at least one model is loaded.'
+                    : 'No models available for this provider';
+                return <EmptyState text={text} />;
+              }
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {providerModels.map((model) => (
+                    <CatalogRow
+                      key={model.key}
+                      model={model}
+                      isMobile={isMobile}
+                      isHovered={hoveredRow === model.key}
+                      onHover={setHoveredRow}
+                      mutatingModel={mutatingModel}
+                      onAdd={handleAddModel}
+                      onRemove={handleRemoveModel}
+                      onConfigure={(m) => setWizardModel(m)}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+          </>
         )}
       </div>
       {wizardModel && (
         <ModelSetupWizard
           model={wizardModel}
           onClose={() => setWizardModel(null)}
-          onSuccess={() => {
-            fetchModels();
-            fetchCatalog();
-          }}
+          onSuccess={handleWizardSuccess}
+        />
+      )}
+      {customWizardType && (
+        <ModelSetupWizard
+          model={null}
+          providerType={customWizardType}
+          onClose={() => setCustomWizardType(null)}
+          onSuccess={handleWizardSuccess}
         />
       )}
     </ScrollArea>
+  );
+}
+
+// ─── Empty State ───────────────────────────────────────────────────
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', padding: 60, gap: 12,
+    }}>
+      <Cpu size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
+      <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>{text}</span>
+    </div>
+  );
+}
+
+// ─── Provider Card (Catalog grid) ──────────────────────────────────
+
+function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
+  entry: ProviderEntry;
+  subtitle?: string;
+  onClick: () => void;
+  onDelete?: (e: React.MouseEvent) => void;
+  deleting?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 8,
+        padding: '16px 14px',
+        background: hovered ? 'var(--surface-hover)' : 'var(--card)',
+        border: `1px solid ${entry.hasAuth ? entry.color + '30' : 'var(--border)'}`,
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer',
+        transition: 'var(--transition-fast)',
+        textAlign: 'left',
+        fontFamily: 'var(--font-sans)',
+        minHeight: 90,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+          background: `${entry.color}15`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Cpu size={14} style={{ color: entry.color }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
+            {entry.label}
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 1 }}>
+            {subtitle ?? `${entry.modelCount} model${entry.modelCount !== 1 ? 's' : ''}${entry.configuredCount > 0 ? ` · ${entry.configuredCount} configured` : ''}`}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {entry.hasAuth ? (
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0,
+            }} />
+          ) : (
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', background: 'var(--text-muted)', opacity: 0.5, flexShrink: 0,
+            }} />
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              disabled={deleting}
+              style={{
+                background: 'transparent', border: 'none', cursor: deleting ? 'wait' : 'pointer',
+                color: 'var(--text-muted)', padding: 2, display: 'flex', opacity: deleting ? 0.5 : 1,
+              }}
+              title="Remove provider"
+            >
+              {deleting ? <Loader2 size={12} className="spin" /> : <Trash2 size={12} />}
+            </button>
+          )}
+          <ChevronRight size={14} style={{ color: 'var(--text-dim)', opacity: 0.5 }} />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function AddProviderTypeCard({ label, description, onClick }: {
+  label: string;
+  description: string;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 8,
+        padding: '16px 14px',
+        background: hovered ? 'var(--surface-hover)' : 'transparent',
+        border: '1px dashed var(--border)',
+        borderRadius: 'var(--radius-md)',
+        cursor: 'pointer',
+        transition: 'var(--transition-fast)',
+        textAlign: 'left',
+        fontFamily: 'var(--font-sans)',
+        minHeight: 90,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: 'var(--radius-sm)',
+          border: '1px dashed var(--border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Plus size={14} style={{ color: 'var(--text-dim)' }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
+            {label}
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 1, lineHeight: 1.3 }}>
+            {description}
+          </div>
+        </div>
+        <ChevronRight size={14} style={{ color: 'var(--text-dim)', opacity: 0.5 }} />
+      </div>
+    </button>
+  );
+}
+
+// ─── Discovered Model Row (from provider /models endpoint) ─────────
+
+function DiscoveredModelRow({ modelId, modelName, provider, loading, onAdd }: {
+  modelId: string;
+  modelName: string;
+  provider: string;
+  loading: boolean;
+  onAdd: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const providerColor = PROVIDER_COLORS[provider?.toLowerCase()] ?? 'var(--text-dim)';
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '10px 14px',
+        background: hovered ? 'var(--surface-hover)' : 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        transition: 'var(--transition-fast)',
+      }}
+    >
+      <div style={{
+        width: 34, height: 34, borderRadius: 'var(--radius-sm)',
+        background: `${providerColor}15`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <Cpu size={16} style={{ color: providerColor }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          fontSize: '0.8125rem', fontWeight: 500,
+          color: 'var(--text)', fontFamily: 'var(--font-mono)',
+        }}>
+          {modelName || modelId}
+        </span>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginTop: 2 }}>
+          Discovered from API
+        </div>
+      </div>
+      <ActionButton
+        icon={<Plus size={12} />}
+        label="Add"
+        loading={loading}
+        onClick={onAdd}
+        variant="primary"
+      />
+    </div>
   );
 }
 
@@ -490,15 +1021,13 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
             loading={settingDefault === model.id}
           />
         )}
-        {!model.is_default && (
-          <ActionButton
-            icon={<X size={12} />}
-            label="Remove"
-            loading={mutatingModel === model.id}
-            onClick={() => onRemove(model.id)}
-            variant="danger"
-          />
-        )}
+        <ActionButton
+          icon={<X size={12} />}
+          label="Remove"
+          loading={mutatingModel === model.id}
+          onClick={() => onRemove(model.id)}
+          variant="danger"
+        />
       </div>
     </div>
   );

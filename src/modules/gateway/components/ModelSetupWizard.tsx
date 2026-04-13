@@ -9,8 +9,11 @@ import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import type { CatalogModel } from '../types';
 
+export type ProviderType = 'custom' | 'ollama' | 'sglang' | 'vllm' | 'lm-studio';
+
 interface ModelSetupWizardProps {
-  model: CatalogModel;
+  model: CatalogModel | null;
+  providerType?: ProviderType;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -77,10 +80,72 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
 
 const CUSTOM_PROVIDER_PREFIX = 'custom-api-';
 
-export function ModelSetupWizard({ model, onClose, onSuccess }: ModelSetupWizardProps) {
-  const isCustomProvider = model.provider.startsWith(CUSTOM_PROVIDER_PREFIX);
+// ─── Fixed provider defaults (OpenClaw CLI alignment) ──────────────
 
-  if (isCustomProvider) {
+interface FixedProviderDefaults {
+  label: string;
+  providerId: string;
+  baseUrl: string;
+  apiType: string;
+  apiKey: string;
+  apiKeyPlaceholder: string;
+  apiKeyRequired: boolean;
+}
+
+const FIXED_PROVIDER_DEFAULTS: Record<string, FixedProviderDefaults> = {
+  ollama: {
+    label: 'Ollama',
+    providerId: 'ollama',
+    baseUrl: 'http://127.0.0.1:11434',
+    apiType: 'ollama',
+    apiKey: 'ollama-local',
+    apiKeyPlaceholder: 'Leave default for local Ollama',
+    apiKeyRequired: false,
+  },
+  vllm: {
+    label: 'vLLM',
+    providerId: 'vllm',
+    baseUrl: 'http://127.0.0.1:8000/v1',
+    apiType: 'openai-completions',
+    apiKey: '',
+    apiKeyPlaceholder: 'sk-...',
+    apiKeyRequired: true,
+  },
+  sglang: {
+    label: 'SGLang',
+    providerId: 'sglang',
+    baseUrl: 'http://127.0.0.1:30000/v1',
+    apiType: 'openai-completions',
+    apiKey: '',
+    apiKeyPlaceholder: 'sk-...',
+    apiKeyRequired: true,
+  },
+  'lm-studio': {
+    label: 'LM Studio',
+    providerId: 'lm-studio',
+    baseUrl: 'http://127.0.0.1:1234',
+    apiType: 'openai-completions',
+    apiKey: '',
+    apiKeyPlaceholder: 'LM Studio API token (if auth enabled)',
+    apiKeyRequired: false,
+  },
+};
+
+export function ModelSetupWizard({ model, providerType, onClose, onSuccess }: ModelSetupWizardProps) {
+  // Standalone mode with specific provider type (user clicked a type card)
+  if (!model && providerType) {
+    const defaults = FIXED_PROVIDER_DEFAULTS[providerType];
+    if (defaults) {
+      return <FixedProviderForm defaults={defaults} onClose={onClose} onSuccess={onSuccess} />;
+    }
+    // 'custom' type falls through to CustomProviderForm
+    return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
+  }
+  // Standalone custom provider mode (no type specified)
+  if (!model) {
+    return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
+  }
+  if (model.provider.startsWith(CUSTOM_PROVIDER_PREFIX)) {
     return <CustomProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
   }
   return <StandardProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
@@ -88,7 +153,7 @@ export function ModelSetupWizard({ model, onClose, onSuccess }: ModelSetupWizard
 
 // ─── Standard provider form (Anthropic, OpenAI, etc.) ──────────────
 
-function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps) {
+function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps & { model: CatalogModel }) {
   const info = PROVIDER_INFO[model.provider] ?? {
     label: model.provider,
     description: `Configure an API key for ${model.provider}.`,
@@ -235,11 +300,10 @@ function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardPro
 // ─── Custom provider form (custom-api-*) ────────────────────────────
 
 function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps) {
-  // For custom providers we need: provider id (already set), base URL, API key, API format
-  // The provider ID comes from model.provider, e.g. "custom-api-deepseek-com"
-  // For new providers, the user can edit the ID — but for adding a model from
-  // an existing custom provider, we just need the API key.
-  const [providerId, setProviderId] = useState(model.provider);
+  // For custom providers we need: provider id, base URL, API key, API format.
+  // When model is null, this is standalone mode (no pre-selected catalog model).
+  // When model is set, the provider ID comes from model.provider.
+  const [providerId, setProviderId] = useState(model?.provider ?? '');
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiFormat, setApiFormat] = useState('openai-completions');
@@ -268,8 +332,8 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
       });
       toast.success(`Custom provider ${providerId} configured`);
 
-      // Then add the model itself
-      if (!model.configured) {
+      // If opened from a catalog model, add that model too
+      if (model && !model.configured) {
         await gwService.addModel(model.key);
         toast.success(`${model.name || model.key} added`);
       }
@@ -289,9 +353,11 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
       <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
         Configure an OpenAI-compatible API endpoint. Works with self-hosted LLMs (LiteLLM, vLLM, Ollama-compat) and providers like DeepSeek that expose an OpenAI-style API.
       </p>
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 12 }}>
-        Adding: <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{model.name || model.key}</strong>
-      </p>
+      {model && (
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 12 }}>
+          Adding: <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{model.name || model.key}</strong>
+        </p>
+      )}
 
       <Field label="Provider ID">
         <input
@@ -357,6 +423,149 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
       <ButtonRow
         cancelLabel="Cancel"
         confirmLabel={saving ? 'Saving...' : 'Save & Add'}
+        onCancel={onClose}
+        onConfirm={handleSave}
+        confirmDisabled={!canSave || saving}
+        loading={saving}
+      />
+    </ModalShell>
+  );
+}
+
+// ─── Fixed provider form (Ollama, vLLM, SGLang, LM Studio) ────────
+
+function FixedProviderForm({ defaults, onClose, onSuccess }: {
+  defaults: FixedProviderDefaults;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [baseUrl, setBaseUrl] = useState(defaults.baseUrl);
+  const [apiKey, setApiKey] = useState(defaults.apiKey);
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const canSave = baseUrl.trim() && (!defaults.apiKeyRequired || apiKey.trim().length >= 1);
+
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [connectionError, setConnectionError] = useState('');
+
+  const testConnection = async () => {
+    setConnectionStatus('testing');
+    setConnectionError('');
+    try {
+      // Try discover endpoint — it probes the provider's URL server-side
+      await gwService.discoverProviderModels(defaults.providerId);
+      setConnectionStatus('ok');
+    } catch {
+      // Provider not saved yet, so discover will 404. Instead, just save and
+      // let discover run post-save. We validate the URL format only.
+      try {
+        new URL(baseUrl);
+        setConnectionStatus('idle');
+      } catch {
+        setConnectionStatus('error');
+        setConnectionError('Invalid URL format');
+      }
+    }
+  };
+
+  const handleSave = async () => {
+    if (!canSave) return;
+
+    // Validate URL format
+    try {
+      new URL(baseUrl);
+    } catch {
+      toast.error('Invalid Base URL — please enter a valid URL');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const providerConfig: Record<string, unknown> = {
+        baseUrl,
+        api: defaults.apiType,
+        models: [],
+      };
+      if (apiKey) providerConfig.apiKey = apiKey;
+      await gwService.updateProvidersConfig({
+        models: { providers: { [defaults.providerId]: providerConfig } },
+      });
+
+      // Post-save: test if the provider is reachable via discover
+      try {
+        const result = await gwService.discoverProviderModels(defaults.providerId);
+        if (result.models.length > 0) {
+          toast.success(`${defaults.label} configured — ${result.models.length} model${result.models.length !== 1 ? 's' : ''} found`);
+        } else {
+          toast.success(`${defaults.label} configured`);
+          toast.warning(`Could not reach ${defaults.label} at ${baseUrl} — check that the server is running and the URL is correct`, { duration: 8000 });
+        }
+      } catch {
+        toast.success(`${defaults.label} configured`);
+        toast.warning(`Could not reach ${defaults.label} at ${baseUrl} — check that the server is running and the URL is correct`, { duration: 8000 });
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Failed to configure ${defaults.label}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={`Set up ${defaults.label}`} onClose={onClose}>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
+        Configure the connection to your {defaults.label} instance.
+      </p>
+
+      <Field label="Base URL">
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder={defaults.baseUrl}
+          autoFocus
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label={defaults.apiKeyRequired ? 'API Key' : 'API Key (optional)'}>
+        <div style={{ position: 'relative' }}>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={defaults.apiKeyPlaceholder}
+            style={{ ...inputStyle, paddingRight: 36 }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(!showKey)}
+            style={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-dim)', display: 'flex', padding: 4,
+            }}
+          >
+            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      </Field>
+
+      <p style={{
+        fontSize: '0.6875rem', color: 'var(--text-dim)',
+        background: 'var(--surface)', padding: '8px 10px',
+        borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+        marginBottom: 16, lineHeight: 1.4,
+      }}>
+        Provider ID: <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.providerId}</code> · API type: <code style={{ fontFamily: 'var(--font-mono)' }}>{defaults.apiType}</code>
+      </p>
+
+      <ButtonRow
+        cancelLabel="Cancel"
+        confirmLabel={saving ? 'Saving...' : 'Save'}
         onCancel={onClose}
         onConfirm={handleSave}
         confirmDisabled={!canSave || saving}

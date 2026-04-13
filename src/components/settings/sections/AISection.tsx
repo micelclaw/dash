@@ -132,10 +132,10 @@ export function AISection() {
         >
           <div>
             <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-              Manage API keys, providers and local runtimes
+              Manage models, providers and local runtimes
             </div>
             <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.4 }}>
-              Built-in provider keys (Anthropic, OpenAI, Google, DeepSeek), custom providers (vLLM, OpenRouter, Together AI, ...), and local Ollama runtime all live in <strong>Gateway → Models → Advanced</strong>.
+              Add models from the <strong>Catalog</strong>, manage local Ollama runtime, and view provider credentials in <strong>Gateway → Models</strong>.
             </div>
           </div>
           <ExternalLink size={16} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />

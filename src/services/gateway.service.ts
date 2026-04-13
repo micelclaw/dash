@@ -661,6 +661,29 @@ export async function updateProvidersConfig(config: { models?: Record<string, un
   await api.patch('/gateway/providers-config', config);
 }
 
+// ─── Custom Provider: Discover + Delete ───────────────────────────
+
+export interface DiscoveredModel {
+  id: string;
+  name: string;
+  input: string[];
+}
+
+export interface DiscoverResult {
+  provider: string;
+  base_url: string;
+  models: DiscoveredModel[];
+}
+
+export async function discoverProviderModels(providerId: string): Promise<DiscoverResult> {
+  const res = await api.get<{ data: DiscoverResult }>(`/gateway/providers/${encodeURIComponent(providerId)}/discover`);
+  return res.data;
+}
+
+export async function deleteProvider(providerId: string): Promise<void> {
+  await api.delete(`/gateway/providers/${encodeURIComponent(providerId)}`);
+}
+
 // ─── Commands Config ───────────────────────────────────────────────
 
 export async function getCommandsConfig(): Promise<Record<string, unknown>> {
