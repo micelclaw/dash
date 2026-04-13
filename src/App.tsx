@@ -95,9 +95,16 @@ const router = createBrowserRouter([
           { path: '/approvals', lazy: () => import('@/modules/approvals/ApprovalsPage') },
           { path: '/digest/history', lazy: () => import('@/modules/digest/DigestHistoryPage') },
           { path: '/settings', lazy: () => import('@/modules/settings/SettingsPage') },
+          // Ola 7 (oc7-7): Raw JSON editor — admin-only, registered BEFORE
+          // /settings/:section so the literal "raw" wins over the param.
+          { path: '/settings/raw', lazy: () => import('@/modules/settings/RawConfigPage').then((m) => ({ Component: m.default })) },
           { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
-          { path: '/clawhub', lazy: () => import('@/modules/clawhub/ClawHubPage') },
+          { path: '/micelhub', lazy: () => import('@/modules/micelhub/MicelHubPage') },
           { path: '/gateway', lazy: () => import('@/modules/gateway/GatewayPage') },
+          { path: '/flows', lazy: () => import('@/modules/flows/FlowsPage') },
+          { path: '/flows/:flowId', lazy: () => import('@/modules/flows/FlowEditor') },
+          { path: '/studio', lazy: () => import('@/modules/studio/StudioPage') },
+          { path: '/studio/:projectId', lazy: () => import('@/modules/studio/ProjectDetailPage') },
           // Dev-only routes
           ...(import.meta.env.DEV
             ? [{ path: '/dev/components', lazy: () => import('@/modules/dev/ComponentsDemo') }]

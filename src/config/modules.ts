@@ -13,10 +13,10 @@
 import {
   MessageSquare, MessageCircle, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
-  Settings, Puzzle, Activity, Wrench,
+  Settings, Puzzle, Activity, Wrench, Workflow,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
-  Terminal, Radio, Server,
+  Terminal, Radio, Server, Hammer,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -24,8 +24,10 @@ export const MODULES: ModuleConfig[] = [
   { id: 'chat',     label: 'AI Chat',       icon: MessageSquare, color: 'var(--mod-chat)',     path: '/chat',     group: null },
   { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-search)',   path: '/search',   group: null },
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: null },
-  { id: 'clawhub',  label: 'ClawHub',       icon: Puzzle,        color: 'var(--mod-clawhub)',  path: '/clawhub',  group: null },
+  { id: 'micelhub', label: 'MicelHub',      icon: Puzzle,        color: 'var(--mod-micelhub)', path: '/micelhub', group: null },
+  { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null },
   { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null },
+  { id: 'flows',    label: 'Flows',         icon: Workflow,      color: 'var(--mod-flows)',    path: '/flows',    group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },
