@@ -31,9 +31,18 @@ export interface ManagedAgent {
 
 export interface AgentSkill {
   id: string;
+  skill_id?: string;
   name: string;
   icon: string;
   enabled: boolean;
+  domain: string;
+}
+
+export interface AvailableSkill {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
   domain: string;
 }
 

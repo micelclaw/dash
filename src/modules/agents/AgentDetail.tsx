@@ -12,13 +12,18 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowRight, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { AgentActivity } from './AgentActivity';
+import { AgentToolAccess } from './AgentToolAccess';
+import { AgentAdvancedConfig } from './AgentAdvancedConfig';
 import { getAgentColor, AGENT_PALETTE } from './agent-colors';
 import type { ManagedAgent } from './types';
+
+type AgentDetailTab = 'overview' | 'tools' | 'advanced';
 
 interface AgentDetailProps {
   agentId: string;
@@ -47,11 +52,6 @@ function formatRelativeTime(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
-function modelId(model: string): string {
-  // Normalize: ensure "anthropic/" prefix
-  return model.includes('/') ? model : `anthropic/${model}`;
-}
-
 function ModelLabel({ model }: { model: string }) {
   // "anthropic/claude-haiku-4-5" → "Claude Haiku 4.5"
   const raw = model.includes('/') ? model.split('/')[1]! : model;
@@ -62,6 +62,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const { agent, loading, refetch } = useAgentDetail(agentId);
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<AgentDetailTab>('overview');
 
   // Inline editing
   const [editingField, setEditingField] = useState<'display_name' | 'role' | null>(null);
@@ -144,16 +145,26 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   }, [modelOpen]);
 
   const handleModelSelect = useCallback(async (model: string) => {
-    if (!agent || modelId(model) === modelId(agent.model)) { setModelOpen(false); return; }
+    if (!agent || model === agent.model) { setModelOpen(false); return; }
+    // Validate against the loaded list — the backend rejects any model not
+    // in agents.defaults.models with MODEL_NOT_CONFIGURED, but catching it
+    // here gives the user instant feedback without a round trip.
+    if (models.length > 0 && !models.includes(model)) {
+      toast.error(`Model "${model}" is not in the configured list`);
+      setModelOpen(false);
+      return;
+    }
     setModelSaving(true);
     try {
       await api.post(`/managed-agents/${agent.id}/set-model`, { model });
       refetch();
       onAgentChanged?.();
       setModelOpen(false);
-    } catch { /* ignore */ }
-    finally { setModelSaving(false); }
-  }, [agent, refetch, onAgentChanged]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to set model';
+      toast.error(msg);
+    } finally { setModelSaving(false); }
+  }, [agent, refetch, onAgentChanged, models]);
 
   if (loading || !agent) {
     return (
@@ -440,9 +451,9 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                           padding: '8px 14px',
                           background: hoveredModel === m ? 'var(--surface-hover)' : 'transparent',
                           border: 'none',
-                          color: modelId(m) === modelId(agent.model) ? 'var(--amber)' : 'var(--text)',
+                          color: m === agent.model ? 'var(--amber)' : 'var(--text)',
                           fontSize: '0.75rem',
-                          fontWeight: modelId(m) === modelId(agent.model) ? 600 : 400,
+                          fontWeight: m === agent.model ? 600 : 400,
                           cursor: 'pointer',
                           fontFamily: 'var(--font-sans)',
                           transition: 'var(--transition-fast)',
@@ -450,7 +461,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                         }}
                       >
                         <ModelLabel model={m} />
-                        {modelId(m) === modelId(agent.model) && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8 }}>current</span>}
+                        {m === agent.model && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8 }}>current</span>}
                       </button>
                     ))
                   )}
@@ -478,123 +489,119 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
         </div>
       </div>
 
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)' }} />
-
-      {/* Identity */}
-      <AgentIdentity agentId={agentId} />
-
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)' }} />
-
-      {/* Skills */}
-      <AgentSkills skills={agent.skills} />
-
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)' }} />
-
-      {/* Activity */}
-      <AgentActivity agent={agent} />
-
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)' }} />
-
-      {/* Sub-agents */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <h4 style={{
-          fontSize: '0.8125rem',
-          fontWeight: 600,
-          color: 'var(--text)',
-          margin: 0,
-        }}>
-          Sub-agents ({children.length})
-        </h4>
-        {children.length === 0 ? (
-          <span style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-          }}>
-            No sub-agents
-          </span>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {children.map(child => (
-              <div
-                key={child.id}
-                onClick={() => onSelect(child.id)}
-                onMouseEnter={() => setHoveredChildId(child.id)}
-                onMouseLeave={() => setHoveredChildId(null)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '8px 10px',
-                  background: hoveredChildId === child.id
-                    ? 'var(--surface-hover)'
-                    : 'var(--surface)',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  cursor: 'pointer',
-                  transition: 'var(--transition-fast)',
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}>
-                  <span style={{ fontSize: '1rem' }}>{child.avatar || '🤖'}</span>
-                  <div>
-                    <div style={{
-                      fontSize: '0.8125rem',
-                      fontWeight: 500,
-                      color: 'var(--text)',
-                    }}>
-                      {child.display_name}
-                    </div>
-                    <div style={{
-                      fontSize: '0.6875rem',
-                      color: 'var(--text-dim)',
-                    }}>
-                      {child.skills.length} skill{child.skills.length !== 1 ? 's' : ''} — {child.role}
-                    </div>
-                  </div>
-                </div>
-                <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+        {([
+          { key: 'overview' as const, label: 'Overview' },
+          { key: 'tools' as const, label: 'Tools' },
+          { key: 'advanced' as const, label: 'Advanced' },
+        ]).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '8px 16px',
+              fontSize: '0.75rem',
+              fontWeight: activeTab === tab.key ? 600 : 400,
+              color: activeTab === tab.key ? 'var(--amber)' : 'var(--text-dim)',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === tab.key ? '2px solid var(--amber)' : '2px solid transparent',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              transition: 'var(--transition-fast)',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Divider */}
-      <div style={{ height: 1, background: 'var(--border)' }} />
+      {/* Tab content */}
+      {activeTab === 'overview' && (
+        <>
+          {/* Identity */}
+          <AgentIdentity agentId={agentId} />
 
-      {/* Footer */}
-      <button
-        onClick={() => onBrowseFiles?.(agent.id)}
-        onMouseEnter={() => setBrowseHover(true)}
-        onMouseLeave={() => setBrowseHover(false)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-          background: browseHover ? 'var(--surface-hover)' : 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--text)',
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          padding: '8px 16px',
-          cursor: 'pointer',
-          transition: 'var(--transition-fast)',
-          fontFamily: 'var(--font-sans)',
-          width: '100%',
-        }}
-      >
-        Browse Files <ArrowRight size={14} />
-      </button>
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Skills */}
+          <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} onSkillsChanged={refetch} />
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Activity */}
+          <AgentActivity agent={agent} />
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Sub-agents */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+              Sub-agents ({children.length})
+            </h4>
+            {children.length === 0 ? (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No sub-agents</span>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {children.map(child => (
+                  <div
+                    key={child.id}
+                    onClick={() => onSelect(child.id)}
+                    onMouseEnter={() => setHoveredChildId(child.id)}
+                    onMouseLeave={() => setHoveredChildId(null)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 10px',
+                      background: hoveredChildId === child.id ? 'var(--surface-hover)' : 'var(--surface)',
+                      borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+                      cursor: 'pointer', transition: 'var(--transition-fast)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '1rem' }}>{child.avatar || '🤖'}</span>
+                      <div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{child.display_name}</div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+                          {child.skills.length} skill{child.skills.length !== 1 ? 's' : ''} — {child.role}
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Browse Files */}
+          <button
+            onClick={() => onBrowseFiles?.(agent.id)}
+            onMouseEnter={() => setBrowseHover(true)}
+            onMouseLeave={() => setBrowseHover(false)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              background: browseHover ? 'var(--surface-hover)' : 'var(--surface)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+              color: 'var(--text)', fontSize: '0.8125rem', fontWeight: 500,
+              padding: '8px 16px', cursor: 'pointer', transition: 'var(--transition-fast)',
+              fontFamily: 'var(--font-sans)', width: '100%',
+            }}
+          >
+            Browse Files <ArrowRight size={14} />
+          </button>
+        </>
+      )}
+
+      {activeTab === 'tools' && (
+        <AgentToolAccess agentId={agent.id} agentName={agent.display_name || agent.name} />
+      )}
+
+      {activeTab === 'advanced' && (
+        <AgentAdvancedConfig />
+      )}
     </div>
   );
 }

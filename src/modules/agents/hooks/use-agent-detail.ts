@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
+import { useWebSocket } from '@/hooks/use-websocket';
 import type { ManagedAgent } from '../types';
 
 export function useAgentDetail(agentId: string | null) {
@@ -33,6 +34,18 @@ export function useAgentDetail(agentId: string | null) {
     load(agentId).then(() => { if (cancelled) setAgent(null); });
     return () => { cancelled = true; };
   }, [agentId, load]);
+
+  // Cross-tab invalidation: when another dash tab changes this agent's
+  // model via set-model, the backend broadcasts agent.model_changed via
+  // WebSocket. Refetch so this tab reflects the change without a reload.
+  const modelChangedEvent = useWebSocket('agent.model_changed');
+  useEffect(() => {
+    if (!modelChangedEvent || !agentId) return;
+    const changedId = modelChangedEvent.data?.agent_id as string | undefined;
+    if (changedId === agentId) {
+      load(agentId);
+    }
+  }, [modelChangedEvent, agentId, load]);
 
   const refetch = useCallback(() => {
     if (agentId) load(agentId);

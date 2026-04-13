@@ -235,7 +235,7 @@ function FileRow({ filename, agentId }: FileRowProps) {
   );
 }
 
-const IDENTITY_FILES = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'AGENTS.md'];
+const IDENTITY_FILES = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'AGENTS.md', 'HEARTBEAT.md'];
 
 export function AgentIdentity({ agentId }: AgentIdentityProps) {
   return (

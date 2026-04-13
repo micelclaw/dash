@@ -10,10 +10,10 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { api } from '@/services/api';
-import type { ManagedAgent } from './types';
+import type { ManagedAgent, AvailableSkill } from './types';
 
 interface CreateAgentWizardProps {
   onClose: () => void;
@@ -30,17 +30,12 @@ const MODEL_OPTIONS = [
   { value: 'gemini-3-flash', label: 'gemini-3-flash', provider: 'Google' },
 ];
 
-const SKILL_OPTIONS = [
+// Fallback in case API fails — kept minimal
+const SKILL_OPTIONS_FALLBACK = [
   { id: 'claw-notes', name: 'Notes', icon: '📝' },
   { id: 'claw-calendar', name: 'Calendar', icon: '📅' },
   { id: 'claw-mail', name: 'Mail', icon: '📧' },
-  { id: 'claw-drive', name: 'Drive', icon: '💾' },
   { id: 'claw-search', name: 'Search', icon: '🔍' },
-  { id: 'claw-photos', name: 'Photos', icon: '📸' },
-  { id: 'claw-diary', name: 'Diary', icon: '📔' },
-  { id: 'claw-contacts', name: 'Contacts', icon: '👥' },
-  { id: 'claw-graph', name: 'Graph', icon: '🕸️' },
-  { id: 'claw-insights', name: 'Insights', icon: '💡' },
 ];
 
 const STEPS = [
@@ -185,8 +180,15 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
   // Step 2: Model
   const [model, setModel] = useState('claude-opus-4-6');
 
-  // Step 3: Skills
+  // Step 3: Skills (loaded dynamically from API)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [skillOptions, setSkillOptions] = useState<{ id: string; name: string; icon: string }[]>([]);
+
+  useEffect(() => {
+    api.get<{ data: AvailableSkill[] }>('/managed-agents/available-skills')
+      .then(res => setSkillOptions(res.data.map(s => ({ id: s.id, name: s.name, icon: s.icon }))))
+      .catch(() => setSkillOptions(SKILL_OPTIONS_FALLBACK));
+  }, []);
 
   // Step 4: Parent
   const [parentMode, setParentMode] = useState<'top' | 'sub'>('top');
@@ -380,7 +382,7 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
         gridTemplateColumns: '1fr 1fr',
         gap: 8,
       }}>
-        {SKILL_OPTIONS.map(skill => {
+        {skillOptions.map(skill => {
           const isSelected = selectedSkills.includes(skill.id);
           const isHovered = hoveredSkill === skill.id;
           return (
