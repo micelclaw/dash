@@ -570,7 +570,7 @@ export function PermissionsSection() {
       >
         {apps.length === 0 ? (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', padding: '16px 0', textAlign: 'center' }}>
-            No apps installed. Install apps from ClawHub first.
+            No apps installed. Install apps from MicelHub first.
           </div>
         ) : (
           apps.map((app) => (

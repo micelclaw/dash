@@ -44,7 +44,7 @@ const DEFAULT_SETTINGS: Settings = {
       ollama_status: 'disconnected',
       available_models: [],
       embedding_model: 'qwen3-embedding:0.6b',
-      multimodal_model: 'qwen3.5:0.8b',
+      multimodal_model: '',
     },
   },
   sync: {

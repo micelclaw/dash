@@ -18,6 +18,8 @@ import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
 import { SettingSelect } from '../SettingSelect';
+import { SettingsBlock } from '../shared/SettingsBlock';
+import { ApprovalsForwardingSection } from './ApprovalsForwardingSection';
 
 const LEVEL_OPTIONS = [
   { value: '0', label: '0 - Auto' },
@@ -340,6 +342,27 @@ export function SecuritySection() {
           max={1440}
         />
       </SettingSection>
+
+      <ApprovalsForwardingBlock />
     </>
+  );
+}
+
+// ── Fused block: Approvals Forwarding (was its own
+// /settings/approvals-forwarding section before Ola 9 reorg). Lives
+// here because forwarding is a security/approvals concern.
+function ApprovalsForwardingBlock() {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <SettingsBlock
+      title="Approvals forwarding"
+      description="Reenviar a canales externos"
+      expanded={expanded}
+      onToggle={() => setExpanded((v) => !v)}
+    >
+      <div style={{ marginTop: 4 }}>
+        <ApprovalsForwardingSection />
+      </div>
+    </SettingsBlock>
   );
 }

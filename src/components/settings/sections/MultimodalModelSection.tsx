@@ -49,7 +49,7 @@ export function MultimodalModelSection() {
   const [pulling, setPulling] = useState<Map<string, PullState>>(new Map());
   const abortRefs = useRef<Map<string, AbortController>>(new Map());
 
-  const selectedModel = settings?.ai?.local_models?.multimodal_model ?? 'qwen3.5:0.8b';
+  const selectedModel = settings?.ai?.local_models?.multimodal_model ?? null;
 
   const fetchModels = useCallback(async () => {
     try {
@@ -58,7 +58,11 @@ export function MultimodalModelSection() {
     } catch { /* silent */ }
   }, []);
 
-  useEffect(() => { fetchModels(); }, [fetchModels]);
+  useEffect(() => {
+    fetchModels();
+    const interval = setInterval(fetchModels, 5_000);
+    return () => clearInterval(interval);
+  }, [fetchModels]);
 
   const handleSelect = async (id: string) => {
     setLocalValue('ai.local_models.multimodal_model', id);
@@ -121,7 +125,7 @@ export function MultimodalModelSection() {
         return next;
       });
       // Give Ollama a moment to index, then refresh
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, 500));
       await fetchModels();
     }
 
@@ -141,14 +145,19 @@ export function MultimodalModelSection() {
         return (
           <div
             key={m.id}
-            onClick={() => !isPulling && handleSelect(m.id)}
+            onClick={() => {
+              if (isPulling) return;
+              if (!m.downloaded) { toast.error('Pull the model first'); return; }
+              handleSelect(m.id);
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 12px',
               background: isSelected ? 'rgba(212, 160, 23, 0.08)' : 'var(--surface)',
               border: `1px solid ${isSelected ? 'var(--amber)' : 'var(--border)'}`,
               borderRadius: 'var(--radius-md)',
-              cursor: isPulling ? 'default' : 'pointer',
+              cursor: isPulling ? 'default' : m.downloaded ? 'pointer' : 'not-allowed',
+              opacity: !m.downloaded && !isPulling ? 0.6 : 1,
               transition: 'border-color 0.15s, background 0.15s',
             }}
           >
@@ -236,6 +245,12 @@ export function MultimodalModelSection() {
       {models.length === 0 && (
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', padding: '8px 0' }}>
           Checking Ollama…
+        </div>
+      )}
+
+      {models.length > 0 && !selectedModel && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--error, #ef4444)', fontFamily: 'var(--font-sans)', padding: '8px 0' }}>
+          No model selected. Select and download a model to enable Photo AI.
         </div>
       )}
 

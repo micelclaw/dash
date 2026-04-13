@@ -21,6 +21,7 @@ import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
 import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
+import { SettingsBlock } from '../shared/SettingsBlock';
 
 const ROTATION_OPTIONS = [
   { value: 'smart', label: 'Smart' },
@@ -267,6 +268,294 @@ export function StorageSection() {
       </SettingSection>
 
       <SaveBar visible={!!dirty.storage} saving={saving} onSave={handleSave} onDiscard={() => resetSection('storage')} />
+
+      {/* Ola 7 (oc7-5.1h) — OpenClaw canvas hosting */}
+      <CanvasHostBlock />
     </>
+  );
+}
+
+// ─── Canvas Host Config block (Ola 7, oc7-5.1h) ────────────────────
+//
+// Exposes `canvasHost.*` (enabled, root, port, liveReload). Lives
+// inside StorageSection because `root` is a filesystem path. Saves
+// independently from the rest of Storage (different endpoint).
+//
+// When enabled, OpenClaw spins up an HTTP server that serves files
+// from `root`. The dash consumes this via the /canvas-host/* proxy
+// in Core (which adds the capability token transparently). Files
+// auto-reload in the iframe when chokidar detects changes.
+
+import * as gwService from '@/services/gateway.service';
+import type { CanvasHostConfig } from '@/services/gateway.service';
+
+function CanvasHostBlock() {
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const [enabled, setEnabled] = useState(false);
+  const [root, setRoot] = useState('');
+  const [port, setPort] = useState(18793);
+  const [liveReload, setLiveReload] = useState(true);
+
+  const fetchConfig = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await gwService.getCanvasConfig();
+      setEnabled(data.enabled ?? false);
+      setRoot(data.root ?? '');
+      setPort(data.port ?? 18793);
+      setLiveReload(data.live_reload ?? true);
+      setDirty(false);
+    } catch {
+      // Silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (expanded && !loading && !dirty) fetchConfig();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const config: CanvasHostConfig = {
+        enabled,
+        root: root || undefined,
+        port,
+        live_reload: liveReload,
+      };
+      await gwService.updateCanvasConfig(config);
+      toast.success('Canvas host config updated');
+      setDirty(false);
+    } catch {
+      toast.error('Failed to update canvas host config');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openCanvasUrl = `http://localhost:${port}/__openclaw__/canvas/`;
+
+  return (
+    <SettingsBlock
+      title="OpenClaw Canvas Host"
+      description="Static HTTP server for canvas files"
+      expanded={expanded}
+      onToggle={() => setExpanded((e) => !e)}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveLabel="Save canvas host"
+      footerExtra={
+        enabled ? (
+          <a
+            href={openCanvasUrl}
+            target="_blank"
+            rel="noopener"
+            style={{
+              fontSize: '0.6875rem',
+              color: 'var(--amber)',
+              textDecoration: 'none',
+            }}
+          >
+            Open: {openCanvasUrl} ↗
+          </a>
+        ) : null
+      }
+    >
+      <p
+        style={{
+          margin: '12px 0',
+          fontSize: '0.6875rem',
+          color: 'var(--text-muted)',
+          lineHeight: 1.5,
+        }}
+      >
+        OpenClaw can serve HTML files from a directory over HTTP, with chokidar live-reload. The dash uses this
+        for canvas iframes via a server-side proxy. Agents that generate visual content (charts, reports) write
+        to <code>{root || '~/.openclaw/canvas/'}</code> and the iframe loads them automatically.
+      </p>
+
+      {/* enabled */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 0',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enable canvas host</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Spin up the HTTP server. Required for the dash canvas to load files via URL (the recommended path).
+          </div>
+        </div>
+        <div
+          onClick={() => {
+            setEnabled((v) => !v);
+            setDirty(true);
+          }}
+          style={{
+            width: 36,
+            height: 20,
+            borderRadius: 10,
+            cursor: 'pointer',
+            background: enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+            position: 'relative',
+            flexShrink: 0,
+            transition: 'background 0.2s',
+          }}
+        >
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: '#fff',
+              position: 'absolute',
+              top: 2,
+              left: enabled ? 18 : 2,
+              transition: 'left 0.2s',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* root */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 0',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Root directory</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Absolute path of the directory served. Default: <code>~/.openclaw/canvas/</code>.
+          </div>
+        </div>
+        <input
+          type="text"
+          value={root}
+          onChange={(e) => {
+            setRoot(e.target.value);
+            setDirty(true);
+          }}
+          placeholder="~/.openclaw/canvas/"
+          style={{
+            padding: '6px 10px',
+            fontSize: '0.75rem',
+            width: 280,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text)',
+            fontFamily: 'var(--font-mono)',
+            outline: 'none',
+          }}
+        />
+      </div>
+
+      {/* port */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 0',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>HTTP port</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Default: <code>18793</code>. Make sure no other service uses this port.
+          </div>
+        </div>
+        <input
+          type="number"
+          value={port}
+          onChange={(e) => {
+            setPort(parseInt(e.target.value, 10) || 18793);
+            setDirty(true);
+          }}
+          min={1}
+          max={65535}
+          style={{
+            padding: '6px 10px',
+            fontSize: '0.75rem',
+            width: 100,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text)',
+            fontFamily: 'var(--font-mono)',
+            outline: 'none',
+          }}
+        />
+      </div>
+
+      {/* liveReload */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 0',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Live reload</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+            Watch the root directory and notify clients when files change (chokidar, 75ms debounce).
+          </div>
+        </div>
+        <div
+          onClick={() => {
+            setLiveReload((v) => !v);
+            setDirty(true);
+          }}
+          style={{
+            width: 36,
+            height: 20,
+            borderRadius: 10,
+            cursor: 'pointer',
+            background: liveReload ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+            position: 'relative',
+            flexShrink: 0,
+            transition: 'background 0.2s',
+          }}
+        >
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: '#fff',
+              position: 'absolute',
+              top: 2,
+              left: liveReload ? 18 : 2,
+              transition: 'left 0.2s',
+            }}
+          />
+        </div>
+      </div>
+    </SettingsBlock>
   );
 }

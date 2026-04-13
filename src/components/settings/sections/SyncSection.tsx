@@ -21,6 +21,8 @@ import { SaveBar } from '../SaveBar';
 import { ConnectorCard } from '../ConnectorCard';
 import { AddIntegrationModal } from '../AddIntegrationModal';
 import { EditConnectorModal } from '../EditConnectorModal';
+import { SettingsBlock } from '../shared/SettingsBlock';
+import { ChannelObserversSection } from './ChannelObserversSection';
 
 const INTERVAL_OPTIONS = [
   { value: '5', label: '5 minutes' },
@@ -165,6 +167,8 @@ export function SyncSection() {
         />
       </SettingSection>
 
+      <ChannelObserversBlock />
+
       <SaveBar visible={!!dirty.sync} saving={saving} onSave={handleSave} onDiscard={() => resetSection('sync')} />
 
       <AddIntegrationModal
@@ -179,5 +183,24 @@ export function SyncSection() {
         onSaved={loadConnectors}
       />
     </>
+  );
+}
+
+// ── Fused block: Channel Observers (was its own /settings/observers
+// section before Ola 9 reorg). Lives here because both belong to the
+// "sync with external services" domain.
+function ChannelObserversBlock() {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <SettingsBlock
+      title="Channel Observers"
+      description="Bridges read-only que importan mensajes de canales"
+      expanded={expanded}
+      onToggle={() => setExpanded((v) => !v)}
+    >
+      <div style={{ marginTop: 4 }}>
+        <ChannelObserversSection />
+      </div>
+    </SettingsBlock>
   );
 }

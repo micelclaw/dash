@@ -13,11 +13,13 @@
 // ─── Voice Settings Section ─────────────────────────────────────────
 // Settings → Voice: STT engine, TTS voice, input mode, service status.
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Mic, Volume2, Loader2, CheckCircle, XCircle, Power, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { useServiceState } from '@/hooks/use-service-status';
+import { useServicesStore } from '@/stores/services.store';
 import { PIPER_VOICES, LANGUAGE_NAMES } from '@/data/piper-voices';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
@@ -25,17 +27,6 @@ import { SettingToggle } from '../SettingToggle';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const API = `${BASE_URL}/api/v1`;
-
-interface ServiceStatus {
-  available: boolean;
-  host: string;
-  port: number;
-}
-
-interface VoiceStatus {
-  stt: ServiceStatus;
-  tts: ServiceStatus;
-}
 
 const LANGUAGE_OPTIONS = [
   { value: 'auto', label: 'Auto detect' },
@@ -101,22 +92,28 @@ function StatusDot({ available }: { available: boolean }) {
 }
 
 export function VoiceSection() {
-  const [status, setStatus] = useState<VoiceStatus>({
-    stt: { available: false, host: '127.0.0.1', port: 10300 },
-    tts: { available: false, host: '127.0.0.1', port: 10200 },
-  });
+  // Lifecycle state from store (updated via WS events globally in Shell)
+  const sttState = useServiceState('wyoming-whisper');
+  const ttsState = useServiceState('wyoming-piper');
+  const sttAvailable = sttState === 'running';
+  const ttsAvailable = ttsState === 'running';
+  const fetchServices = useServicesStore((s) => s.fetchServices);
+  const storeStartService = useServicesStore((s) => s.startService);
+  const storeStopService = useServicesStore((s) => s.stopService);
+
+  // Local "request in flight" state — provides immediate feedback before WS events arrive
+  const [startingSTT, setStartingSTT] = useState(false);
+  const [startingTTS, setStartingTTS] = useState(false);
+  const [stoppingSTT, setStoppingSTT] = useState(false);
+  const [stoppingTTS, setStoppingTTS] = useState(false);
+
   const [activeVoice, setActiveVoice] = useState('es_ES-davefx-medium');
   const [testingSTT, setTestingSTT] = useState(false);
   const [testingTTS, setTestingTTS] = useState(false);
   const [speed, setSpeed] = useState(1.0);
   const [model, setModel] = useState('base-int8');
   const [language, setLanguage] = useState('auto');
-  const [startingSTT, setStartingSTT] = useState(false);
-  const [startingTTS, setStartingTTS] = useState(false);
-  const [stoppingSTT, setStoppingSTT] = useState(false);
-  const [stoppingTTS, setStoppingTTS] = useState(false);
   const [savingConfig, setSavingConfig] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const getToken = useCallback(() => useAuthStore.getState().tokens?.accessToken ?? '', []);
   const voiceSettings = useSettingsStore((s) => s.settings?.voice);
   const setLocalValue = useSettingsStore((s) => s.setLocalValue);
@@ -127,6 +124,16 @@ export function VoiceSection() {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
   }, []);
+
+  // Clear local "in-flight" flags when store state catches up
+  useEffect(() => {
+    if (sttState === 'running' || sttState === 'failed') setStartingSTT(false);
+    if (sttState === 'stopped' || sttState === 'failed') setStoppingSTT(false);
+  }, [sttState]);
+  useEffect(() => {
+    if (ttsState === 'running' || ttsState === 'failed') setStartingTTS(false);
+    if (ttsState === 'stopped' || ttsState === 'failed') setStoppingTTS(false);
+  }, [ttsState]);
 
   const voiceOptions = useMemo(() => {
     const grouped = new Map<string, typeof PIPER_VOICES>();
@@ -158,15 +165,11 @@ export function VoiceSection() {
     return options;
   }, []);
 
-  // Fetch status + config on mount
+  // Fetch config + ensure services store is populated on mount
   useEffect(() => {
+    fetchServices();
+
     const headers = { Authorization: `Bearer ${getToken()}` };
-
-    fetchWithTimeout(`${API}/voice/status`, { headers })
-      .then((r) => r.json())
-      .then((json) => { if (json.data) setStatus(json.data); })
-      .catch(() => { /* keep defaults */ });
-
     fetchWithTimeout(`${API}/voice/config`, { headers })
       .then((r) => r.json())
       .then((json) => {
@@ -177,26 +180,7 @@ export function VoiceSection() {
         }
       })
       .catch(() => { /* keep defaults */ });
-  }, [getToken, fetchWithTimeout]);
-
-  // Cleanup abort controller on unmount
-  useEffect(() => {
-    return () => { abortRef.current?.abort(); };
-  }, []);
-
-  const refreshStatus = useCallback(async (): Promise<VoiceStatus | null> => {
-    try {
-      const headers = { Authorization: `Bearer ${getToken()}` };
-      // TCP checks in backend can take up to 3s each when services are transitioning
-      const res = await fetchWithTimeout(`${API}/voice/status`, { headers }, 15000);
-      const json = await res.json();
-      if (json.data) {
-        setStatus(json.data);
-        return json.data as VoiceStatus;
-      }
-    } catch { /* keep previous state */ }
-    return null;
-  }, [getToken, fetchWithTimeout]);
+  }, [getToken, fetchWithTimeout, fetchServices]);
 
   const handleSaveConfig = useCallback(async (field: string, value: string) => {
     setSavingConfig(field);
@@ -219,91 +203,45 @@ export function VoiceSection() {
         if (json.data.model) setModel(json.data.model);
         if (json.data.language) setLanguage(json.data.language);
       }
-      toast.success('Voice config updated — containers restarting');
-      // Poll a few times to detect when services come back
-      setTimeout(() => refreshStatus(), 5000);
-      setTimeout(() => refreshStatus(), 15000);
-      setTimeout(() => refreshStatus(), 30000);
+      toast.success('Voice config updated');
+      // No polling needed — lifecycle WS events update the store automatically
     } catch (err) {
       toast.error(`Failed to update ${field}: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
     setSavingConfig(null);
-  }, [getToken, fetchWithTimeout, refreshStatus]);
+  }, [getToken, fetchWithTimeout]);
 
   const handleStartService = useCallback(async (service: 'stt' | 'tts') => {
     const name = service === 'stt' ? 'wyoming-whisper' : 'wyoming-piper';
     const label = service === 'stt' ? 'Whisper (STT)' : 'Piper (TTS)';
-    const setter = service === 'stt' ? setStartingSTT : setStartingTTS;
+    const setStarting = service === 'stt' ? setStartingSTT : setStartingTTS;
 
-    // Cancel any previous poll
-    abortRef.current?.abort();
-    const abort = new AbortController();
-    abortRef.current = abort;
-
-    setter(true);
+    setStarting(true);
     try {
-      // The POST /services/:name/start now waits for TCP availability on the backend.
-      // It only returns 200 when the Wyoming service is actually accepting connections.
-      // Timeout 120s — Whisper model download on first run can take a while.
-      const res = await fetchWithTimeout(`${API}/services/${name}/start`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }, 120000);
-
-      if (abort.signal.aborted) return;
-
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.error?.message || `HTTP ${res.status}`);
-      }
-
-      // Backend confirmed service is TCP-ready — update optimistically + refresh
-      setStatus((prev) => ({
-        ...prev,
-        [service]: { ...prev[service], available: true },
-      }));
+      // Store does optimistic update (state → 'starting') + POST + fetchServices on completion
+      await storeStartService(name);
       toast.success(`${label} is running`);
-      refreshStatus().catch(() => {});
     } catch (err) {
-      if (abort.signal.aborted) return;
       toast.error(`Failed to start ${label}: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
-    setter(false);
-  }, [getToken, fetchWithTimeout, refreshStatus]);
+    setStarting(false);
+  }, [storeStartService]);
 
   const handleStopService = useCallback(async (service: 'stt' | 'tts') => {
     const name = service === 'stt' ? 'wyoming-whisper' : 'wyoming-piper';
     const label = service === 'stt' ? 'Whisper (STT)' : 'Piper (TTS)';
-    const setter = service === 'stt' ? setStoppingSTT : setStoppingTTS;
-    setter(true);
+    const setStopping = service === 'stt' ? setStoppingSTT : setStoppingTTS;
+
+    setStopping(true);
     try {
-      // docker stop can take ~10s (SIGTERM + grace period), use 30s timeout
-      const res = await fetchWithTimeout(`${API}/services/${name}/stop`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}` },
-      }, 30000);
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.error?.message || `HTTP ${res.status}`);
-      }
+      // Store does POST + fetchServices on completion
+      await storeStopService(name);
       toast.success(`${label} stopped`);
-      // Optimistically update status immediately
-      setStatus((prev) => ({
-        ...prev,
-        [service]: { ...prev[service], available: false },
-      }));
-      // Refresh from backend after a delay so TCP has time to go down
-      setTimeout(() => refreshStatus().catch(() => {}), 3000);
     } catch (err) {
-      // Ignore abort errors (component unmount or navigation)
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setter(false);
-        return;
-      }
       toast.error(`Failed to stop ${label}: ${err instanceof Error ? err.message : 'unknown error'}`);
     }
-    setter(false);
-  }, [getToken, fetchWithTimeout, refreshStatus]);
+    setStopping(false);
+  }, [storeStopService]);
 
   const handleTestSTT = useCallback(async () => {
     setTestingSTT(true);
@@ -363,60 +301,67 @@ export function VoiceSection() {
 
   const renderStatusRow = (
     service: 'stt' | 'tts',
-    available: boolean,
-    starting: boolean,
-    stopping: boolean,
-  ) => (
-    <div style={{ borderBottom: '1px solid var(--border)', padding: '8px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Status</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {starting ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--amber)' }}>
-              <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-              Starting...
-            </span>
-          ) : (
-            <StatusDot available={available} />
-          )}
-          {!available && !starting && (
-            <button
-              onClick={() => handleStartService(service)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '2px 8px', fontSize: '0.7rem', fontFamily: 'var(--font-sans)',
-                background: 'var(--success)', color: '#fff', border: 'none',
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-              }}
-            >
-              <Power size={10} />
-              Start
-            </button>
-          )}
-          {available && !stopping && (
-            <button
-              onClick={() => handleStopService(service)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                padding: '2px 8px', fontSize: '0.7rem', fontFamily: 'var(--font-sans)',
-                background: 'var(--surface-hover)', color: 'var(--text-dim)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-              }}
-            >
-              <Square size={10} />
-              Stop
-            </button>
-          )}
-          {stopping && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
-              Stopping...
-            </span>
-          )}
+    state: string | null,
+    isStarting: boolean,
+    isStopping: boolean,
+  ) => {
+    // Combine store state (from WS) with local in-flight state for immediate feedback
+    const available = state === 'running';
+    const starting = state === 'starting' || isStarting;
+    const stopping = state === 'draining' || isStopping;
+    const busy = starting || stopping;
+
+    return (
+      <div style={{ borderBottom: '1px solid var(--border)', padding: '8px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Status</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {starting ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--amber)' }}>
+                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                Starting...
+              </span>
+            ) : stopping ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                Stopping...
+              </span>
+            ) : (
+              <StatusDot available={available} />
+            )}
+            {!available && !busy && (
+              <button
+                onClick={() => handleStartService(service)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 8px', fontSize: '0.7rem', fontFamily: 'var(--font-sans)',
+                  background: 'var(--success)', color: '#fff', border: 'none',
+                  borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                }}
+              >
+                <Power size={10} />
+                Start
+              </button>
+            )}
+            {available && !busy && (
+              <button
+                onClick={() => handleStopService(service)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '2px 8px', fontSize: '0.7rem', fontFamily: 'var(--font-sans)',
+                  background: 'var(--surface-hover)', color: 'var(--text-dim)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                }}
+              >
+                <Square size={10} />
+                Stop
+              </button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -427,14 +372,14 @@ export function VoiceSection() {
         action={
           <button
             onClick={handleTestSTT}
-            disabled={testingSTT || !status.stt.available}
+            disabled={testingSTT || !sttAvailable}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '4px 12px', background: 'var(--surface-hover)',
               border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
               color: 'var(--text)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
-              cursor: testingSTT || !status.stt.available ? 'not-allowed' : 'pointer',
-              opacity: testingSTT || !status.stt.available ? 0.5 : 1,
+              cursor: testingSTT || !sttAvailable ? 'not-allowed' : 'pointer',
+              opacity: testingSTT || !sttAvailable ? 0.5 : 1,
             }}
           >
             <Mic size={12} />
@@ -446,21 +391,21 @@ export function VoiceSection() {
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Engine</span>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Wyoming Whisper (local)</span>
         </div>
-        {renderStatusRow('stt', status.stt.available, startingSTT, stoppingSTT)}
+        {renderStatusRow('stt', sttState, startingSTT, stoppingSTT)}
         <SettingSelect
           label="Model"
           description="Larger models are more accurate but use more RAM."
           value={model}
           options={MODEL_OPTIONS}
           onChange={(v) => { setModel(v); handleSaveConfig('model', v); }}
-          disabled={savingConfig === 'model'}
+          disabled={savingConfig === 'model' || startingSTT || sttState === 'starting'}
         />
         <SettingSelect
           label="Language"
           value={language}
           options={LANGUAGE_OPTIONS}
           onChange={(v) => { setLanguage(v); handleSaveConfig('language', v); }}
-          disabled={savingConfig === 'language'}
+          disabled={savingConfig === 'language' || startingSTT || sttState === 'starting'}
         />
       </SettingSection>
 
@@ -471,14 +416,14 @@ export function VoiceSection() {
         action={
           <button
             onClick={handleTestTTS}
-            disabled={testingTTS || !status.tts.available}
+            disabled={testingTTS || !ttsAvailable}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '4px 12px', background: 'var(--surface-hover)',
               border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
               color: 'var(--text)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
-              cursor: testingTTS || !status.tts.available ? 'not-allowed' : 'pointer',
-              opacity: testingTTS || !status.tts.available ? 0.5 : 1,
+              cursor: testingTTS || !ttsAvailable ? 'not-allowed' : 'pointer',
+              opacity: testingTTS || !ttsAvailable ? 0.5 : 1,
             }}
           >
             <Volume2 size={12} />
@@ -490,14 +435,14 @@ export function VoiceSection() {
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Engine</span>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Wyoming Piper (local)</span>
         </div>
-        {renderStatusRow('tts', status.tts.available, startingTTS, stoppingTTS)}
+        {renderStatusRow('tts', ttsState, startingTTS, stoppingTTS)}
         <SettingSelect
           label="Voice"
           description="Changing voice will restart the TTS container."
           value={activeVoice}
           options={voiceOptions}
           onChange={(v) => { setActiveVoice(v); handleSaveConfig('voice', v); }}
-          disabled={savingConfig === 'voice'}
+          disabled={savingConfig === 'voice' || startingTTS || ttsState === 'starting'}
         />
         {savingConfig === 'voice' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--amber)', padding: '8px 0' }}>

@@ -96,9 +96,13 @@ export function PhotoPipelineProgress() {
         setPendingRemaining(data.queued);
         setPendingTotal(data.queued);
         setRunning(true);
+        addLog(`Processing active — ${data.queued} queued, ${data.processed}/${data.total} processed`, 'info');
+      } else if (data.processed > 0) {
+        addLog(`Pipeline idle — ${data.processed}/${data.total} processed`, 'info');
       }
     });
-  }, [fetchStats]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Logging ────────────────────────────────────────
 
