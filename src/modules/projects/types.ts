@@ -207,6 +207,7 @@ export interface CardFilters {
   completed?: boolean;
   has_dependencies?: boolean;
   is_blocked?: boolean;
+  show_archived?: boolean;
   search?: string;
   sort?: string;
   order?: 'asc' | 'desc';

@@ -73,7 +73,7 @@ interface ProjectsState {
   collapseColumn: (boardId: string, columnId: string, collapsed: boolean) => Promise<void>;
 
   // Card actions
-  createCard: (boardId: string, data: { column_id: string; title: string; priority?: string }) => Promise<void>;
+  createCard: (boardId: string, data: { column_id: string; title: string; priority?: string; description?: string | null; color?: string | null; due_date?: string | null; start_date?: string | null; estimated_hours?: number | null; tags?: string[] | null; checklist?: unknown[] | null }) => Promise<void>;
   updateCard: (boardId: string, cardId: string, data: Record<string, unknown>) => Promise<void>;
   deleteCard: (boardId: string, cardId: string) => Promise<void>;
   moveCard: (boardId: string, cardId: string, columnId: string, position: number) => Promise<void>;

@@ -14,6 +14,7 @@ import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { PriorityBadge } from '../components/PriorityDot';
+import { useCardContextMenu } from '../hooks/use-card-context-menu';
 import type { Card, CustomFieldDef } from '../types';
 
 type SortField = 'title' | 'priority' | 'due_date' | 'column' | 'card_number' | 'created_at' | 'updated_at';
@@ -33,6 +34,7 @@ export function ListView() {
   const selectCard = useProjectsStore((s) => s.selectCard);
   const updateCard = useProjectsStore((s) => s.updateCard);
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
+  const { onCardContextMenu, contextMenuPortal } = useCardContextMenu();
   const customFieldDefs = useProjectsStore((s) => s.customFieldDefs);
 
   const visibleFieldDefs = useMemo(
@@ -49,7 +51,8 @@ export function ListView() {
   const editRef = useRef<HTMLInputElement>(null);
 
   const columnMap = useMemo(() => new Map(Object.values(columns).map((c) => [c.id, c])), [columns]);
-  const allCards = useMemo(() => Object.values(cards).filter(c => !c.archived), [cards]);
+  const showArchived = useProjectsStore((s) => s.filters.show_archived);
+  const allCards = useMemo(() => Object.values(cards).filter(c => showArchived || !c.archived), [cards, showArchived]);
 
   const sortedCards = useMemo(() => {
     const sorted = [...allCards].sort((a, b) => {
@@ -273,15 +276,17 @@ export function ListView() {
               saveEdit={saveEdit}
               handleKeyDown={handleKeyDown}
               visibleFieldDefs={visibleFieldDefs}
+              onCardCtx={onCardContextMenu}
             />
           ))}
         </tbody>
       </table>
+      {contextMenuPortal}
     </div>
   );
 }
 
-function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, labels, cardLabelIds, selectCard, editing, editValue, setEditValue, editRef, startEdit, saveEdit, handleKeyDown, visibleFieldDefs = [] }: {
+function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, labels, cardLabelIds, selectCard, editing, editValue, setEditValue, editRef, startEdit, saveEdit, handleKeyDown, visibleFieldDefs = [], onCardCtx }: {
   group: { key: string; label: string; cards: Card[] };
   showGroupHeader: boolean;
   collapsed: boolean;
@@ -298,6 +303,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
   saveEdit: () => void;
   handleKeyDown: (e: React.KeyboardEvent) => void;
   visibleFieldDefs?: CustomFieldDef[];
+  onCardCtx: (e: React.MouseEvent, card: Card) => void;
 }) {
   return (
     <>
@@ -333,6 +339,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
           <tr
             key={card.id}
             onClick={() => !editing && selectCard(card.id)}
+            onContextMenu={(e) => onCardCtx(e, card)}
             style={{ cursor: 'pointer' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.background = '')}

@@ -142,6 +142,13 @@ export function FilterBar() {
             color="var(--error)"
             onClick={() => updateFilter('is_blocked', !filters.is_blocked || undefined)}
           />
+
+          <FilterChip
+            label="Archived"
+            active={!!filters.show_archived}
+            color="var(--text-muted)"
+            onClick={() => updateFilter('show_archived', !filters.show_archived || undefined)}
+          />
         </>
       )}
 

@@ -26,7 +26,8 @@ export function DashboardView() {
   const columns = useProjectsStore((s) => s.columns);
   const selectCard = useProjectsStore((s) => s.selectCard);
 
-  const allCards = useMemo(() => Object.values(cards).filter(c => !c.archived), [cards]);
+  const showArchived = useProjectsStore((s) => s.filters.show_archived);
+  const allCards = useMemo(() => Object.values(cards).filter(c => showArchived || !c.archived), [cards, showArchived]);
   const columnMap = useMemo(() => new Map(Object.values(columns).map(c => [c.id, c])), [columns]);
 
   // ─── Cards by status (column) ──────────────────────

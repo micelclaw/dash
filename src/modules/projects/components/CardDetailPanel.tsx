@@ -65,6 +65,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
+  const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [tagInput, setTagInput] = useState('');
   const [newCheckItem, setNewCheckItem] = useState('');
@@ -91,6 +92,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
       setTitle(card.title);
       setDescription(card.description ?? '');
       setPriority(card.priority ?? 'medium');
+      setStartDate(card.start_date ? card.start_date.slice(0, 10) : '');
       setDueDate(card.due_date ? card.due_date.slice(0, 10) : '');
     }
   }, [card?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -324,28 +326,32 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
           />
         </div>
 
-        {/* Due Date */}
-        <div>
-          <label style={labelStyle}>Due Date</label>
-          <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => {
-              setDueDate(e.target.value);
-              handleSaveField('due_date', e.target.value ? new Date(e.target.value).toISOString() : null);
-            }}
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '4px 8px',
-              color: 'var(--text)',
-              fontSize: 13,
-              fontFamily: 'var(--font-sans)',
-              outline: 'none',
-              colorScheme: 'dark',
-            }}
-          />
+        {/* Dates */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                handleSaveField('start_date', e.target.value ? new Date(e.target.value).toISOString() : null);
+              }}
+              style={dateInputStyle}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Due Date</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => {
+                setDueDate(e.target.value);
+                handleSaveField('due_date', e.target.value ? new Date(e.target.value).toISOString() : null);
+              }}
+              style={dateInputStyle}
+            />
+          </div>
         </div>
 
         {/* Custom Fields / Properties */}
@@ -637,6 +643,19 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
     </div>
   );
 }
+
+const dateInputStyle: React.CSSProperties = {
+  background: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: 6,
+  padding: '4px 8px',
+  color: 'var(--text)',
+  fontSize: 13,
+  fontFamily: 'var(--font-sans)',
+  outline: 'none',
+  colorScheme: 'dark',
+  width: '100%',
+};
 
 const labelStyle: React.CSSProperties = {
   display: 'block',

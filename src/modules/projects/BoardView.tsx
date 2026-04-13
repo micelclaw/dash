@@ -24,6 +24,7 @@ import { DashboardView } from './views/DashboardView';
 import { CardDetailPanel } from './components/CardDetailPanel';
 import { BoardSettings } from './components/BoardSettings';
 import { CustomFieldManager } from './components/CustomFieldManager';
+import { ShareBoardModal } from './components/ShareBoardModal';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useKanbanKeyboard } from './hooks/use-kanban-keyboard';
 
@@ -40,6 +41,7 @@ export function Component() {
   const isMobile = useIsMobile();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const toggleShortcuts = useCallback(() => setShortcutsOpen(s => !s), []);
@@ -94,7 +96,7 @@ export function Component() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <BoardHeader
         onOpenSettings={() => setSettingsOpen(true)}
-        onOpenShare={() => {}}
+        onOpenShare={() => setShareOpen(true)}
         onOpenFields={() => setFieldsOpen(true)}
       />
 
@@ -121,6 +123,9 @@ export function Component() {
       )}
       {boardId && (
         <CustomFieldManager boardId={boardId} open={fieldsOpen} onClose={() => setFieldsOpen(false)} />
+      )}
+      {shareOpen && boardId && (
+        <ShareBoardModal boardId={boardId} onClose={() => setShareOpen(false)} />
       )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </div>

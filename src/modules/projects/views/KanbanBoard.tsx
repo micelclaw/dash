@@ -37,17 +37,19 @@ import { NewCardInput } from '../components/NewCardInput';
 import { NewColumnInput } from '../components/NewColumnInput';
 import { LayoutGrid } from 'lucide-react';
 import { COLUMN_WIDTH, COLUMN_GAP, BOARD_PADDING } from '../utils/design-tokens';
+import { useCardContextMenu } from '../hooks/use-card-context-menu';
 import type { Card, Column, BoardSettings } from '../types';
 
 // ─── Sortable Column ────────────────────────────────────
 
-function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchingIds }: {
+function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchingIds, onCardCtx }: {
   column: Column;
   cardIds: string[];
   cards: Record<string, Card>;
   boardId: string;
   boardSettings?: BoardSettings;
   matchingIds: Set<string> | null;
+  onCardCtx: (e: React.MouseEvent, card: Card) => void;
 }) {
   const {
     attributes,
@@ -112,6 +114,7 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
               card={card}
               boardSettings={boardSettings}
               dimmed={matchingIds !== null && !matchingIds.has(card.id)}
+              onCardCtx={onCardCtx}
             />
           ))}
         </div>
@@ -124,7 +127,7 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
 
 // ─── Sortable Card ──────────────────────────────────────
 
-const SortableCard = React.memo(function SortableCard({ card, boardSettings, dimmed }: { card: Card; boardSettings?: BoardSettings; dimmed?: boolean }) {
+const SortableCard = React.memo(function SortableCard({ card, boardSettings, dimmed, onCardCtx }: { card: Card; boardSettings?: BoardSettings; dimmed?: boolean; onCardCtx: (e: React.MouseEvent, card: Card) => void }) {
   const commentCount = useProjectsStore((s) => s.cardCommentCounts[card.id] ?? 0);
   const dependencyCount = useProjectsStore((s) => s.cardDependencyCounts[card.id] ?? 0);
   const linkCount = useProjectsStore((s) => s.cardLinkCounts[card.id] ?? 0);
@@ -149,7 +152,7 @@ const SortableCard = React.memo(function SortableCard({ card, boardSettings, dim
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners} onContextMenu={(e) => onCardCtx(e, card)}>
       <KanbanCard
         card={card}
         showLabelsText={boardSettings?.showLabelsText}
@@ -227,6 +230,7 @@ export function KanbanBoard() {
   const boardId = activeBoardId!;
   const { dragState, onDragStart, onDragOver, onDragEnd } = useDndKanban(boardId);
   const { matchingIds } = useCardFilters();
+  const { onCardContextMenu, contextMenuPortal } = useCardContextMenu();
 
   const orderedColumnIds = useMemo(() => {
     const colIds = boardColumnIds[boardId] ?? [];
@@ -311,6 +315,7 @@ export function KanbanBoard() {
                 boardId={boardId}
                 boardSettings={boardSettings}
                 matchingIds={matchingIds}
+                onCardCtx={onCardContextMenu}
               />
             );
           })}
@@ -329,6 +334,7 @@ export function KanbanBoard() {
         )}
       </DragOverlay>
     </DndContext>
+    {contextMenuPortal}
     </div>
   );
 }
