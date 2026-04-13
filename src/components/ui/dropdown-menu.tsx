@@ -17,11 +17,12 @@ import { cn } from '@/lib/utils';
 const DropdownMenu = DropdownMenuPrimitive.Root;
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 const DropdownMenuGroup = DropdownMenuPrimitive.Group;
+const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 
 const DropdownMenuContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, ...props }, ref) => (
+>(({ className, sideOffset = 4, style, ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
       ref={ref}
@@ -32,11 +33,14 @@ const DropdownMenuContent = React.forwardRef<
       )}
       style={{
         zIndex: 'var(--z-dropdown)',
-        background: 'var(--card)',
+        background: 'rgba(17, 17, 24, 0.82)',
         color: 'var(--text)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-lg)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        ...style,
       }}
       {...props}
     />
@@ -75,6 +79,56 @@ const DropdownMenuSeparator = React.forwardRef<
 ));
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
+const DropdownMenuSubTrigger = React.forwardRef<
+  React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>
+>(({ className, children, ...props }, ref) => (
+  <DropdownMenuPrimitive.SubTrigger
+    ref={ref}
+    className={cn(
+      'relative flex cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-sm outline-none transition-colors data-[state=open]:bg-[var(--surface-hover)]',
+      className,
+    )}
+    style={{ borderRadius: 'var(--radius-sm)' }}
+    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+    onMouseLeave={(e) => {
+      if (!e.currentTarget.matches('[data-state=open]')) e.currentTarget.style.background = 'transparent';
+    }}
+    {...props}
+  >
+    {children}
+  </DropdownMenuPrimitive.SubTrigger>
+));
+DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
+
+const DropdownMenuSubContent = React.forwardRef<
+  React.ComponentRef<typeof DropdownMenuPrimitive.SubContent>,
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
+>(({ className, style, ...props }, ref) => (
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.SubContent
+      ref={ref}
+      className={cn(
+        'min-w-[8rem] overflow-hidden p-1 animate-in fade-in-0 zoom-in-95',
+        className,
+      )}
+      style={{
+        zIndex: 'var(--z-dropdown)',
+        background: 'rgba(17, 17, 24, 0.82)',
+        color: 'var(--text)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-lg)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        ...style,
+      }}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
+));
+DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
+
 export {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -82,4 +136,7 @@ export {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 };

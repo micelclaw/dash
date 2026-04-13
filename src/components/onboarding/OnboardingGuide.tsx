@@ -135,7 +135,7 @@ export function OnboardingGuide({ open }: OnboardingGuideProps) {
         >
           <p style={descStyle}>Selecciona las skills a instalar:</p>
           <ul style={listStyle}>
-            <li><strong>ClawHub</strong> — obligatorio (skills oficiales de Micelclaw)</li>
+            <li><strong>MicelHub</strong> — obligatorio (skills oficiales de Micelclaw)</li>
             <li><strong>MCporter</strong> — solo si tienes Home Assistant</li>
           </ul>
         </Step>
