@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Plus, LogIn, LogOut, Trash2, RefreshCw,
+  Plus, LogIn, LogOut, Trash2, RefreshCw, Settings2,
   MessageCircle, Hash, Send, Phone, Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,6 +21,7 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
 import { StatusPill } from '../components/StatusPill';
 import { AddChannelDialog } from '../components/AddChannelDialog';
+import { ChannelConfigPanel } from '../components/ChannelConfigPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayChannel } from '../types';
 
@@ -54,6 +55,7 @@ export function ChannelsTab() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [refreshHover, setRefreshHover] = useState(false);
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
 
   useEffect(() => {
     if (channels.length === 0) fetchChannels();
@@ -124,175 +126,200 @@ export function ChannelsTab() {
   }
 
   return (
-    <ScrollArea style={{ height: '100%' }}>
-      <div style={{ padding: isMobile ? 12 : 20, maxWidth: 1100 }}>
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          marginBottom: 16,
-        }}>
-          <span style={{
-            fontSize: '0.8125rem', color: 'var(--text-dim)',
-            fontFamily: 'var(--font-sans)',
-          }}>
-            {channels.length} channel{channels.length !== 1 ? 's' : ''} configured
-          </span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => fetchChannels()}
-              onMouseEnter={() => setRefreshHover(true)}
-              onMouseLeave={() => setRefreshHover(false)}
-              style={{
-                background: refreshHover ? 'var(--surface-hover)' : 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 8px',
-                cursor: 'pointer',
-                color: 'var(--text-dim)',
-                transition: 'var(--transition-fast)',
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <RefreshCw size={14} />
-            </button>
-            <button
-              onClick={() => setShowAdd(true)}
-              style={{
-                background: 'var(--amber)',
-                color: '#000',
-                border: 'none',
-                borderRadius: 'var(--radius-sm)',
-                padding: '6px 14px',
-                fontSize: '0.8125rem',
-                fontWeight: 600,
-                cursor: 'pointer',
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      {/* Left: Channel list */}
+      <div style={{ flex: selectedChannel ? '0 0 50%' : '1 1 100%', overflow: 'hidden', transition: 'flex 0.2s' }}>
+        <ScrollArea style={{ height: '100%' }}>
+          <div style={{ padding: isMobile ? 12 : 20, maxWidth: selectedChannel ? undefined : 1100 }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 16,
+            }}>
+              <span style={{
+                fontSize: '0.8125rem', color: 'var(--text-dim)',
                 fontFamily: 'var(--font-sans)',
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}
-            >
-              <Plus size={14} />
-              Add Channel
-            </button>
-          </div>
-        </div>
-
-        {/* Channel list */}
-        {channels.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', padding: 60, gap: 12,
-          }}>
-            <MessageCircle size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
-            <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              No channels configured
-            </span>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {channels.map((ch) => {
-              const key = `${ch.type}-${ch.account}`;
-              const Icon = CHANNEL_ICONS[ch.type] ?? MessageCircle;
-              const channelColor = CHANNEL_COLORS[ch.type] ?? 'var(--text-dim)';
-              const isHovered = hoveredRow === key;
-
-              return (
-                <div
-                  key={key}
-                  onMouseEnter={() => setHoveredRow(key)}
-                  onMouseLeave={() => setHoveredRow(null)}
+              }}>
+                {channels.length} channel{channels.length !== 1 ? 's' : ''} configured
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => fetchChannels()}
+                  onMouseEnter={() => setRefreshHover(true)}
+                  onMouseLeave={() => setRefreshHover(false)}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 14,
-                    padding: '12px 14px',
-                    background: isHovered ? 'var(--surface-hover)' : 'var(--card)',
+                    background: refreshHover ? 'var(--surface-hover)' : 'transparent',
                     border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '6px 8px',
+                    cursor: 'pointer',
+                    color: 'var(--text-dim)',
                     transition: 'var(--transition-fast)',
-                    flexWrap: isMobile ? 'wrap' : undefined,
+                    display: 'flex', alignItems: 'center',
                   }}
                 >
-                  {/* Channel icon */}
-                  <div style={{
-                    width: 34,
-                    height: 34,
+                  <RefreshCw size={14} />
+                </button>
+                <button
+                  onClick={() => setShowAdd(true)}
+                  style={{
+                    background: 'var(--amber)',
+                    color: '#000',
+                    border: 'none',
                     borderRadius: 'var(--radius-sm)',
-                    background: `${channelColor}15`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}>
-                    <Icon size={16} style={{ color: channelColor }} />
-                  </div>
+                    padding: '6px 14px',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <Plus size={14} />
+                  Add Channel
+                </button>
+              </div>
+            </div>
 
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                    }}>
-                      <span style={{
-                        fontSize: '0.875rem', fontWeight: 500,
-                        color: 'var(--text)', fontFamily: 'var(--font-sans)',
-                        textTransform: 'capitalize',
+            {/* Channel list */}
+            {channels.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', padding: 60, gap: 12,
+              }}>
+                <MessageCircle size={40} style={{ color: 'var(--text-dim)', opacity: 0.4 }} />
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.875rem' }}>
+                  No channels configured
+                </span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textAlign: 'center', maxWidth: 300 }}>
+                  Add a channel to let your agents communicate via Telegram, Discord, WhatsApp, and more.
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {channels.map((ch) => {
+                  const key = `${ch.type}-${ch.account}`;
+                  const Icon = CHANNEL_ICONS[ch.type] ?? MessageCircle;
+                  const channelColor = CHANNEL_COLORS[ch.type] ?? 'var(--text-dim)';
+                  const isHovered = hoveredRow === key;
+                  const isSelected = selectedChannel === ch.type;
+
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => setSelectedChannel(isSelected ? null : ch.type)}
+                      onMouseEnter={() => setHoveredRow(key)}
+                      onMouseLeave={() => setHoveredRow(null)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 14,
+                        padding: '12px 14px',
+                        background: isSelected ? 'var(--surface-hover)' : isHovered ? 'var(--surface-hover)' : 'var(--card)',
+                        border: isSelected ? '1px solid var(--amber-dim)' : '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        transition: 'var(--transition-fast)',
+                        cursor: 'pointer',
+                        flexWrap: isMobile ? 'wrap' : undefined,
+                      }}
+                    >
+                      {/* Channel icon */}
+                      <div style={{
+                        width: 34, height: 34,
+                        borderRadius: 'var(--radius-sm)',
+                        background: `${channelColor}15`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
                       }}>
-                        {ch.name || ch.type}
-                      </span>
-                      <StatusPill status={ch.status} />
-                    </div>
-                    <div style={{
-                      fontSize: '0.75rem', color: 'var(--text-dim)',
-                      fontFamily: 'var(--font-sans)', marginTop: 2,
-                    }}>
-                      {ch.account && <span>{ch.account}</span>}
-                    </div>
-                  </div>
+                        <Icon size={16} style={{ color: channelColor }} />
+                      </div>
 
-                  {/* Actions */}
-                  <div style={{
-                    display: 'flex', gap: 4,
-                    ...(isMobile ? { width: '100%', justifyContent: 'flex-end', marginTop: 4 } : {}),
-                  }}>
-                    {ch.status === 'login_required' || ch.status === 'disconnected' ? (
-                      <SmallButton
-                        icon={LogIn}
-                        label="Login"
-                        onClick={() => handleLogin(ch)}
-                        loading={actionLoading === `login-${ch.type}-${ch.account}`}
-                      />
-                    ) : ch.status === 'connected' ? (
-                      <SmallButton
-                        icon={LogOut}
-                        label="Logout"
-                        onClick={() => handleLogout(ch)}
-                        loading={actionLoading === `logout-${ch.type}-${ch.account}`}
-                      />
-                    ) : null}
-                    <SmallButton
-                      icon={Trash2}
-                      label="Remove"
-                      onClick={() => handleRemove(ch)}
-                      loading={actionLoading === `remove-${ch.type}-${ch.account}`}
-                      danger
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{
+                            fontSize: '0.875rem', fontWeight: 500,
+                            color: 'var(--text)', fontFamily: 'var(--font-sans)',
+                            textTransform: 'capitalize',
+                          }}>
+                            {ch.name || ch.type}
+                          </span>
+                          <StatusPill status={ch.status} />
+                        </div>
+                        <div style={{
+                          fontSize: '0.75rem', color: 'var(--text-dim)',
+                          fontFamily: 'var(--font-sans)', marginTop: 2,
+                        }}>
+                          {ch.account && <span>{ch.account}</span>}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div
+                        style={{
+                          display: 'flex', gap: 4,
+                          ...(isMobile ? { width: '100%', justifyContent: 'flex-end', marginTop: 4 } : {}),
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <SmallButton
+                          icon={Settings2}
+                          label="Config"
+                          onClick={() => setSelectedChannel(ch.type)}
+                        />
+                        {ch.status === 'login_required' || ch.status === 'disconnected' ? (
+                          <SmallButton
+                            icon={LogIn}
+                            label="Login"
+                            onClick={() => handleLogin(ch)}
+                            loading={actionLoading === `login-${ch.type}-${ch.account}`}
+                          />
+                        ) : ch.status === 'connected' ? (
+                          <SmallButton
+                            icon={LogOut}
+                            label="Logout"
+                            onClick={() => handleLogout(ch)}
+                            loading={actionLoading === `logout-${ch.type}-${ch.account}`}
+                          />
+                        ) : null}
+                        <SmallButton
+                          icon={Trash2}
+                          label="Remove"
+                          onClick={() => handleRemove(ch)}
+                          loading={actionLoading === `remove-${ch.type}-${ch.account}`}
+                          danger
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+
+          {showAdd && (
+            <AddChannelDialog
+              onClose={() => setShowAdd(false)}
+              onAdded={() => {
+                fetchChannels();
+                setShowAdd(false);
+              }}
+            />
+          )}
+        </ScrollArea>
       </div>
 
-      {showAdd && (
-        <AddChannelDialog
-          onClose={() => setShowAdd(false)}
-          onAdded={() => {
-            fetchChannels();
-            setShowAdd(false);
-          }}
-        />
+      {/* Right: Config panel (50% when open) */}
+      {selectedChannel && (
+        <div style={{ flex: '0 0 50%', overflow: 'hidden' }}>
+          <ChannelConfigPanel
+            key={selectedChannel}
+            channelType={selectedChannel}
+            onClose={() => setSelectedChannel(null)}
+          />
+        </div>
       )}
-    </ScrollArea>
+    </div>
   );
 }
 

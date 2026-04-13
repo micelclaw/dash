@@ -18,6 +18,7 @@ import type {
   GatewayModel,
   GatewaySession,
   GatewayUsage,
+  CatalogModel,
   CronJob,
   LogEntry,
 } from '@/modules/gateway/types';
@@ -46,6 +47,9 @@ interface GatewayStore {
   sessionsError: string | null;
   cronLoading: boolean;
   cronError: string | null;
+  catalog: CatalogModel[];
+  catalogLoading: boolean;
+  catalogError: string | null;
   logsLoading: boolean;
   logsError: string | null;
 
@@ -58,6 +62,9 @@ interface GatewayStore {
   fetchSessions: () => Promise<void>;
   fetchUsage: () => Promise<void>;
   fetchCronJobs: () => Promise<void>;
+  fetchCatalog: () => Promise<void>;
+  addModel: (model: string) => Promise<void>;
+  removeModel: (model: string) => Promise<void>;
   fetchLogs: (limit?: number) => Promise<void>;
   gatewayStart: () => Promise<void>;
   gatewayStop: () => Promise<void>;
@@ -83,6 +90,9 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
   modelsError: null,
   sessionsLoading: false,
   sessionsError: null,
+  catalog: [],
+  catalogLoading: false,
+  catalogError: null,
   cronLoading: false,
   cronError: null,
   logsLoading: false,
@@ -212,6 +222,31 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
         cronLoading: false,
       });
     }
+  },
+
+  fetchCatalog: async () => {
+    set({ catalogLoading: true, catalogError: null });
+    try {
+      const result = await gw.getModelCatalog();
+      set({ catalog: result.models, catalogLoading: false });
+    } catch (err) {
+      set({
+        catalogError: err instanceof Error ? err.message : 'Failed to fetch catalog',
+        catalogLoading: false,
+      });
+    }
+  },
+
+  addModel: async (model: string) => {
+    await gw.addModel(model);
+    const store = useGatewayStore.getState();
+    await Promise.all([store.fetchModels(), store.fetchCatalog()]);
+  },
+
+  removeModel: async (model: string) => {
+    await gw.removeModel(model);
+    const store = useGatewayStore.getState();
+    await Promise.all([store.fetchModels(), store.fetchCatalog()]);
   },
 
   fetchLogs: async (limit = 200) => {

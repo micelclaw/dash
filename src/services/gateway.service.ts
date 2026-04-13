@@ -20,9 +20,12 @@ import type {
   GatewayModel,
   GatewaySession,
   GatewayUsage,
+  CatalogModel,
   CronJob,
   CronRun,
   LogEntry,
+  ModelsStatus,
+  AuthProfileEntry,
 } from '@/modules/gateway/types';
 
 // ─── Snapshot (single request for all data) ─────────────────────────
@@ -114,6 +117,45 @@ export async function logoutChannel(type: string, _account?: string): Promise<vo
   await api.post(`/gateway/channels/${type}/logout`);
 }
 
+// ─── Channel Config ────────────────────────────────────────────────
+
+export async function getChannelConfig(type: string): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: { type: string; config: Record<string, unknown> } }>(
+    `/gateway/channels/${type}/config`,
+  );
+  return res.data.config;
+}
+
+export async function updateChannelConfig(
+  type: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  await api.patch(`/gateway/channels/${type}/config`, config);
+}
+
+// ─── Messages Config (queue, streaming, TTS, reactions) ────────────
+
+export interface MessagesConfig {
+  queue: Record<string, unknown>;
+  inbound: Record<string, unknown>;
+  status_reactions: Record<string, unknown>;
+  ack_reaction: string | null;
+  ack_reaction_scope: string;
+  tts: Record<string, unknown>;
+  streaming: Record<string, unknown>;
+}
+
+export async function getMessagesConfig(): Promise<MessagesConfig> {
+  const res = await api.get<{ data: MessagesConfig }>('/gateway/messages-config');
+  return res.data;
+}
+
+export async function updateMessagesConfig(
+  config: Partial<MessagesConfig>,
+): Promise<void> {
+  await api.patch('/gateway/messages-config', config);
+}
+
 // ─── Models ─────────────────────────────────────────────────────────
 
 export async function getModels(): Promise<GatewayModel[]> {
@@ -128,17 +170,122 @@ export async function setDefaultModel(model: string): Promise<void> {
   await api.post('/gateway/models/default', { model });
 }
 
+export async function getModelCatalog(): Promise<{ count: number; models: CatalogModel[] }> {
+  const res = await api.get<{ data: { count: number; models: CatalogModel[] } }>('/gateway/models/catalog');
+  const d = res.data;
+  if (d && typeof d === 'object' && 'models' in d) return d as { count: number; models: CatalogModel[] };
+  return { count: 0, models: [] };
+}
+
+export async function addModel(model: string): Promise<void> {
+  await api.post('/gateway/models/add', { model });
+}
+
+export async function removeModel(model: string): Promise<void> {
+  await api.post('/gateway/models/remove', { model });
+}
+
+export async function setDefaultImageModel(model: string): Promise<void> {
+  await api.post('/gateway/models/default-image', { model });
+}
+
+export async function getModelsStatus(probe = false): Promise<ModelsStatus> {
+  const res = await api.get<{ data: ModelsStatus }>('/gateway/models/status', probe ? { probe: 'true' } : undefined);
+  return res.data;
+}
+
+// ─── Aliases ────────────────────────────────────────────────────────
+
+export async function getAliases(): Promise<Record<string, string>> {
+  const res = await api.get<{ data: Record<string, string> }>('/gateway/models/aliases');
+  return res.data ?? {};
+}
+
+export async function addAlias(alias: string, model: string): Promise<void> {
+  await api.post('/gateway/models/aliases', { alias, model });
+}
+
+export async function removeAlias(alias: string): Promise<void> {
+  await api.delete(`/gateway/models/aliases/${encodeURIComponent(alias)}`);
+}
+
+// ─── Fallbacks ──────────────────────────────────────────────────────
+
+export async function getFallbacks(): Promise<string[]> {
+  const res = await api.get<{ data: string[] }>('/gateway/models/fallbacks');
+  return res.data ?? [];
+}
+
+export async function addFallback(model: string): Promise<void> {
+  await api.post('/gateway/models/fallbacks', { model });
+}
+
+export async function removeFallback(model: string): Promise<void> {
+  await api.delete(`/gateway/models/fallbacks/${encodeURIComponent(model)}`);
+}
+
+export async function clearFallbacks(): Promise<void> {
+  await api.delete('/gateway/models/fallbacks');
+}
+
+// ─── Image fallbacks ────────────────────────────────────────────────
+
+export async function getImageFallbacks(): Promise<string[]> {
+  const res = await api.get<{ data: string[] }>('/gateway/models/image-fallbacks');
+  return res.data ?? [];
+}
+
+export async function addImageFallback(model: string): Promise<void> {
+  await api.post('/gateway/models/image-fallbacks', { model });
+}
+
+export async function removeImageFallback(model: string): Promise<void> {
+  await api.delete(`/gateway/models/image-fallbacks/${encodeURIComponent(model)}`);
+}
+
+export async function clearImageFallbacks(): Promise<void> {
+  await api.delete('/gateway/models/image-fallbacks');
+}
+
+// ─── Auth profiles ──────────────────────────────────────────────────
+
+export async function getAuthProfiles(): Promise<AuthProfileEntry[]> {
+  const res = await api.get<{ data: AuthProfileEntry[] }>('/gateway/models/auth/profiles');
+  return res.data ?? [];
+}
+
+export async function setAuthToken(input: {
+  provider: string;
+  token: string;
+  profile_id?: string;
+  expires_in_ms?: number;
+}): Promise<{ profile_id: string }> {
+  const res = await api.post<{ data: { ok: boolean; profile_id: string } }>(
+    '/gateway/models/auth/token',
+    input,
+  );
+  return { profile_id: res.data.profile_id };
+}
+
+export async function removeAuthProfile(profileId: string): Promise<void> {
+  await api.delete(`/gateway/models/auth/profiles/${encodeURIComponent(profileId)}`);
+}
+
 // ─── Sessions ───────────────────────────────────────────────────────
 
 export async function getSessions(verbose = false): Promise<GatewaySession[]> {
-  const res = await api.get<{ data: GatewaySession[] | { sessions: GatewaySession[] } }>(
-    '/gateway/sessions',
-    { verbose: verbose ? 'true' : undefined },
-  );
-  const d = res.data;
-  if (Array.isArray(d)) return d;
-  if (d && typeof d === 'object' && 'sessions' in d) return (d as { sessions: GatewaySession[] }).sessions;
-  return [];
+  try {
+    const res = await api.get<{ data: GatewaySession[] | { sessions: GatewaySession[] } }>(
+      '/gateway/sessions',
+      { verbose: verbose ? 'true' : undefined },
+    );
+    const d = res.data;
+    if (Array.isArray(d)) return d;
+    if (d && typeof d === 'object' && 'sessions' in d) return (d as { sessions: GatewaySession[] }).sessions;
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 // ─── Usage ──────────────────────────────────────────────────────────
@@ -234,4 +381,566 @@ export async function getLogs(limit = 200): Promise<LogEntry[]> {
   if (Array.isArray(d)) return d;
   if (d && typeof d === 'object' && 'entries' in d) return (d as { entries: LogEntry[] }).entries;
   return [];
+}
+
+// ─── Sandbox Config ────────────────────────────────────────────────
+
+export interface SandboxConfig {
+  mode: string;
+  scope: string;
+  workspace_access: string;
+  docker: Record<string, unknown>;
+  browser: Record<string, unknown>;
+  prune: { idle_hours: number; max_age_days: number };
+}
+
+export async function getSandboxConfig(): Promise<SandboxConfig> {
+  const res = await api.get<{ data: SandboxConfig }>('/gateway/sandbox-config');
+  return res.data;
+}
+
+export async function updateSandboxConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/sandbox-config', config);
+}
+
+// ─── Browser Config ────────────────────────────────────────────────
+
+export interface BrowserConfig {
+  enabled: boolean;
+  headless: boolean;
+  evaluate_enabled: boolean;
+  default_profile: string;
+  ssrf_policy: Record<string, unknown>;
+  profiles: Record<string, Record<string, unknown>>;
+  extra_args: string[];
+}
+
+export async function getBrowserConfig(): Promise<BrowserConfig> {
+  const res = await api.get<{ data: BrowserConfig }>('/gateway/browser-config');
+  return res.data;
+}
+
+export async function updateBrowserConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/browser-config', config);
+}
+
+// ─── Gateway Auth Config ───────────────────────────────────────────
+
+export interface GatewayAuthConfig {
+  mode: string;
+  has_token: boolean;
+  has_password: boolean;
+  allow_tailscale: boolean;
+  rate_limit: Record<string, unknown> | null;
+  port: number;
+  bind: string;
+  tls: Record<string, unknown>;
+  tailscale: Record<string, unknown>;
+  reload: Record<string, unknown>;
+}
+
+export async function getAuthConfig(): Promise<GatewayAuthConfig> {
+  const res = await api.get<{ data: GatewayAuthConfig }>('/gateway/auth-config');
+  return res.data;
+}
+
+export async function updateAuthConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/auth-config', config);
+}
+
+// ─── Device Management ─────────────────────────────────────────────
+
+export interface PendingDevice {
+  request_id: string;
+  device_id: string;
+  platform: string;
+  client_id: string;
+  role: string;
+  scopes: string[];
+  created_at_ms: number;
+  display_name?: string;
+}
+
+export interface PairedDevice {
+  device_id: string;
+  platform: string;
+  client_id: string;
+  client_mode: string;
+  role: string;
+  roles: string[];
+  scopes: string[];
+  approved_scopes: string[];
+  display_name?: string;
+  tokens: Record<string, {
+    role: string;
+    scopes: string[];
+    created_at_ms: number;
+    rotated_at_ms?: number;
+    last_used_at_ms?: number;
+  }>;
+  created_at_ms: number;
+  approved_at_ms: number;
+}
+
+export interface DevicesResponse {
+  pending: PendingDevice[];
+  paired: PairedDevice[];
+}
+
+export async function getDevices(): Promise<DevicesResponse> {
+  const res = await api.get<{ data: DevicesResponse }>('/gateway/devices');
+  return res.data;
+}
+
+export async function approveDevice(requestId: string): Promise<unknown> {
+  const res = await api.post<{ data: unknown }>('/gateway/devices/approve', { requestId });
+  return res.data;
+}
+
+export async function rejectDevice(requestId: string): Promise<void> {
+  await api.post('/gateway/devices/reject', { requestId });
+}
+
+export async function removeDevice(deviceId: string): Promise<void> {
+  await api.delete(`/gateway/devices/${deviceId}`);
+}
+
+export interface RotateTokenResult {
+  device_id: string;
+  role: string;
+  token: string; // Actual secret — show only once!
+  scopes: string[];
+  created_at_ms: number;
+  rotated_at_ms: number;
+}
+
+export async function rotateDeviceToken(
+  deviceId: string,
+  role: string,
+  scopes?: string[],
+): Promise<RotateTokenResult> {
+  const res = await api.post<{ data: RotateTokenResult }>(
+    `/gateway/devices/${deviceId}/rotate`,
+    { role, ...(scopes ? { scopes } : {}) },
+  );
+  return res.data;
+}
+
+export async function revokeDeviceToken(deviceId: string, role: string): Promise<void> {
+  await api.post(`/gateway/devices/${deviceId}/revoke`, { role });
+}
+
+// ─── Approvals Forwarding Config ───────────────────────────────────
+
+export interface ApprovalsConfig {
+  enabled: boolean;
+  mode: string;
+  agent_filter: string[] | null;
+  session_filter: string[] | null;
+  targets: Array<{ channel: string; to: string; account_id?: string }>;
+}
+
+export async function getApprovalsConfig(): Promise<ApprovalsConfig> {
+  const res = await api.get<{ data: ApprovalsConfig }>('/gateway/approvals-config');
+  return res.data;
+}
+
+export async function updateApprovalsConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/approvals-config', config);
+}
+
+// ─── Memory Config ─────────────────────────────────────────────────
+
+export async function getMemoryConfig(): Promise<{ memory_search: Record<string, unknown>; memory: Record<string, unknown> }> {
+  const res = await api.get<{ data: { memory_search: Record<string, unknown>; memory: Record<string, unknown> } }>('/gateway/memory-config');
+  return res.data;
+}
+
+export async function updateMemoryConfig(config: { memorySearch?: Record<string, unknown>; memory?: Record<string, unknown> }): Promise<void> {
+  await api.patch('/gateway/memory-config', config);
+}
+
+// ─── Session Config ────────────────────────────────────────────────
+
+export async function getSessionConfig(): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: Record<string, unknown> }>('/gateway/session-config');
+  return res.data;
+}
+
+export async function updateSessionConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/session-config', config);
+}
+
+// ─── Cron Config (advanced) ────────────────────────────────────────
+
+export async function getCronConfig(): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: Record<string, unknown> }>('/gateway/cron-config');
+  return res.data;
+}
+
+export async function updateCronConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/cron-config', config);
+}
+
+// ─── Hooks Config ──────────────────────────────────────────────────
+
+export async function getHooksConfig(): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: Record<string, unknown> }>('/gateway/hooks-config');
+  return res.data;
+}
+
+export async function updateHooksConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/hooks-config', config);
+}
+
+// ─── Heartbeat Config ──────────────────────────────────────────────
+
+export interface HeartbeatConfig {
+  global: Record<string, unknown>;
+  per_agent: Record<string, Record<string, unknown>>;
+}
+
+export async function getHeartbeatConfig(): Promise<HeartbeatConfig> {
+  const res = await api.get<{ data: HeartbeatConfig }>('/gateway/heartbeat-config');
+  return res.data;
+}
+
+export async function updateHeartbeatConfig(config: {
+  global?: Record<string, unknown>;
+  agentId?: string;
+  agentHeartbeat?: Record<string, unknown>;
+}): Promise<void> {
+  await api.patch('/gateway/heartbeat-config', config);
+}
+
+// ─── Bundled Skills ────────────────────────────────────────────────
+
+export interface BundledSkill {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  source: string;
+  enabled: boolean;
+  has_api_key: boolean;
+  has_env: boolean;
+}
+
+export async function getBundledSkills(): Promise<BundledSkill[]> {
+  const res = await api.get<{ data: BundledSkill[] }>('/gateway/bundled-skills');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getSkillsConfig(): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: Record<string, unknown> }>('/gateway/skills-config');
+  return res.data;
+}
+
+export async function updateSkillsConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/skills-config', config);
+}
+
+// ─── Model Providers Config ────────────────────────────────────────
+
+export interface ProvidersConfig {
+  mode: string;
+  providers: Record<string, Record<string, unknown>>;
+  auth: {
+    profiles: Record<string, unknown>;
+    order: Record<string, unknown>;
+    cooldowns: Record<string, unknown>;
+  };
+}
+
+export async function getProvidersConfig(): Promise<ProvidersConfig> {
+  const res = await api.get<{ data: ProvidersConfig }>('/gateway/providers-config');
+  return res.data;
+}
+
+export async function updateProvidersConfig(config: { models?: Record<string, unknown>; auth?: Record<string, unknown> }): Promise<void> {
+  await api.patch('/gateway/providers-config', config);
+}
+
+// ─── Commands Config ───────────────────────────────────────────────
+
+export async function getCommandsConfig(): Promise<Record<string, unknown>> {
+  const res = await api.get<{ data: Record<string, unknown> }>('/gateway/commands-config');
+  return res.data;
+}
+
+export async function updateCommandsConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/commands-config', config);
+}
+
+// ─── Raw Config Editor (Ola 7, oc7-7) — admin-only ────────────────
+
+export interface RawConfigResponse {
+  content: string;
+  hash: string;
+  path: string;
+}
+
+export interface RawConfigBackup {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+export async function getRawConfig(): Promise<RawConfigResponse> {
+  const res = await api.get<{ data: RawConfigResponse }>('/gateway/raw-config');
+  return res.data;
+}
+
+export async function saveRawConfig(content: string, hash: string): Promise<{ ok: boolean; new_hash: string; backup: string }> {
+  const res = await api.put<{ data: { ok: boolean; new_hash: string; backup: string } }>('/gateway/raw-config', { content, hash });
+  return res.data;
+}
+
+export async function listRawConfigBackups(): Promise<RawConfigBackup[]> {
+  const res = await api.get<{ data: RawConfigBackup[] }>('/gateway/raw-config/backups');
+  return res.data;
+}
+
+// ─── Secrets Config (Ola 7, oc7-6.2) — admin-only ──────────────────
+
+export interface EnvProvider {
+  source: 'env';
+  allowlist?: string[];
+}
+
+export interface FileProvider {
+  source: 'file';
+  path: string;
+  mode?: 'singleValue' | 'json';
+  timeout_ms?: number;
+  max_bytes?: number;
+}
+
+export interface ExecProvider {
+  source: 'exec';
+  command: string;
+  args?: string[];
+  timeout_ms?: number;
+  max_output_bytes?: number;
+  json_only?: boolean;
+  env?: Record<string, string>;
+  trusted_dirs?: string[];
+  allow_insecure_path?: boolean;
+  allow_symlink_command?: boolean;
+}
+
+export type SecretProvider = EnvProvider | FileProvider | ExecProvider;
+
+export interface SecretsConfig {
+  providers?: Record<string, SecretProvider>;
+  defaults?: {
+    env?: string;
+    file?: string;
+    exec?: string;
+  };
+}
+
+export interface SecretsTestResult {
+  ok: boolean;
+  length?: number;
+  error?: string;
+  duration_ms: number;
+}
+
+export async function getSecretsConfig(): Promise<SecretsConfig> {
+  const res = await api.get<{ data: SecretsConfig }>('/gateway/secrets-config');
+  return res.data;
+}
+
+export async function updateSecretsConfig(config: SecretsConfig): Promise<void> {
+  await api.patch('/gateway/secrets-config', config);
+}
+
+export async function testSecretProvider(provider: string, id: string): Promise<SecretsTestResult> {
+  const res = await api.post<{ data: SecretsTestResult }>('/gateway/secrets/test', { provider, id });
+  return res.data;
+}
+
+// ─── Environment Config (Ola 7) ────────────────────────────────────
+
+export interface EnvConfig {
+  shell_env?: {
+    enabled?: boolean;
+    timeout_ms?: number;
+  };
+  vars?: Record<string, string>;
+}
+
+export async function getEnvConfig(): Promise<EnvConfig> {
+  const res = await api.get<{ data: EnvConfig }>('/gateway/env-config');
+  return res.data;
+}
+
+export async function updateEnvConfig(config: EnvConfig): Promise<void> {
+  await api.patch('/gateway/env-config', config);
+}
+
+// ─── Canvas Host Config (Ola 7) ────────────────────────────────────
+
+export interface CanvasHostConfig {
+  enabled?: boolean;
+  root?: string;
+  port?: number;
+  live_reload?: boolean;
+}
+
+export async function getCanvasConfig(): Promise<CanvasHostConfig> {
+  const res = await api.get<{ data: CanvasHostConfig }>('/gateway/canvas-config');
+  return res.data;
+}
+
+export async function updateCanvasConfig(config: CanvasHostConfig): Promise<void> {
+  await api.patch('/gateway/canvas-config', config);
+}
+
+// ─── Discovery Config (Ola 7) ──────────────────────────────────────
+
+export interface DiscoveryConfig {
+  mdns?: {
+    mode?: 'off' | 'minimal' | 'full';
+  };
+  wide_area?: {
+    enabled?: boolean;
+    domain?: string;
+  };
+}
+
+export async function getDiscoveryConfig(): Promise<DiscoveryConfig> {
+  const res = await api.get<{ data: DiscoveryConfig }>('/gateway/discovery-config');
+  return res.data;
+}
+
+export async function updateDiscoveryConfig(config: DiscoveryConfig): Promise<void> {
+  await api.patch('/gateway/discovery-config', config);
+}
+
+// ─── UI Branding Config (Ola 7) ────────────────────────────────────
+
+export interface UiConfig {
+  seam_color?: string;
+  assistant?: {
+    name?: string;
+    avatar?: string;
+  };
+}
+
+export async function getUiConfig(): Promise<UiConfig> {
+  const res = await api.get<{ data: UiConfig }>('/gateway/ui-config');
+  return res.data;
+}
+
+export async function updateUiConfig(config: UiConfig): Promise<void> {
+  await api.patch('/gateway/ui-config', config);
+}
+
+// ─── Telemetry / OTel Config (Ola 7) ───────────────────────────────
+
+export interface OtelConfig {
+  enabled?: boolean;
+  endpoint?: string;
+  protocol?: string;
+  headers?: Record<string, string>;
+  service_name?: string;
+  traces?: boolean;
+  metrics?: boolean;
+  logs?: boolean;
+  sample_rate?: number;
+  flush_interval_ms?: number;
+}
+
+export interface TelemetryConfigResponse {
+  otel: OtelConfig;
+  plugin_enabled: boolean;
+}
+
+export async function getTelemetryConfig(): Promise<TelemetryConfigResponse> {
+  const res = await api.get<{ data: TelemetryConfigResponse }>('/gateway/telemetry-config');
+  return res.data;
+}
+
+export async function updateTelemetryConfig(config: OtelConfig): Promise<void> {
+  await api.patch('/gateway/telemetry-config', config);
+}
+
+export async function enableDiagnosticsOtelPlugin(): Promise<void> {
+  await api.post('/gateway/plugins/diagnostics-otel/enable', {});
+}
+
+// ─── Logging Config (Ola 7) ────────────────────────────────────────
+
+export interface LoggingConfig {
+  level?: string;
+  console_level?: string;
+  console_style?: string;
+  file?: string;
+  max_file_bytes?: number;
+  redact_sensitive?: string;
+  redact_patterns?: string[];
+}
+
+export async function getLoggingConfig(): Promise<LoggingConfig> {
+  const res = await api.get<{ data: LoggingConfig }>('/gateway/logging-config');
+  return res.data;
+}
+
+export async function updateLoggingConfig(config: LoggingConfig): Promise<void> {
+  await api.patch('/gateway/logging-config', config);
+}
+
+// ─── Skills Status (single source for all apps) ───────────────────
+
+export interface SkillStatus {
+  name: string;
+  description: string;
+  source: string;
+  emoji: string;
+  eligible: boolean;
+  disabled: boolean;
+  always: boolean;
+  skill_key: string;
+  requirements: {
+    bins: string[];
+    any_bins: string[];
+    env: string[];
+    config: string[];
+    os: string[];
+  };
+  missing: {
+    bins: string[];
+    any_bins: string[];
+    env: string[];
+    config: string[];
+    os: string[];
+  };
+  install: Array<{ id: string; kind: string; label: string; bins: string[] }>;
+}
+
+export async function getSkillsStatus(): Promise<SkillStatus[]> {
+  const res = await api.get<{ data: SkillStatus[] }>('/gateway/skills-status');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function installAppDeps(
+  skillId: string,
+  installId?: string,
+): Promise<{ ok: boolean; message: string; skipped?: boolean }> {
+  const res = await api.post<{ data: { ok: boolean; message: string; skipped?: boolean } }>(
+    `/gateway/install-app-deps/${skillId}`,
+    { installId },
+    { timeout: 310000 }, // 5 min + 10s buffer
+  );
+  return res.data;
+}
+
+export async function updateSkillConfig(
+  skillKey: string,
+  config: { enabled?: boolean; apiKey?: string },
+): Promise<void> {
+  await api.post('/gateway/skills-update', { skillKey, ...config });
 }

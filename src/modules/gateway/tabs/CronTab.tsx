@@ -11,8 +11,9 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
-  Plus, Play, Trash2, RefreshCw, Clock, Power,
+  Plus, Play, Trash2, RefreshCw, Clock, Power, Settings2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -141,6 +142,7 @@ export function CronTab() {
             >
               <RefreshCw size={14} />
             </button>
+            <CronSettingsButton />
             <button
               onClick={() => setShowEditor(true)}
               style={{
@@ -287,6 +289,31 @@ export function CronTab() {
         />
       )}
     </ScrollArea>
+  );
+}
+
+function CronSettingsButton() {
+  const navigate = useNavigate();
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      onClick={() => navigate('/settings/cron-config')}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Cron global settings (retry, alerts, concurrency)"
+      style={{
+        background: hover ? 'var(--surface-hover)' : 'transparent',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '6px 8px',
+        cursor: 'pointer',
+        color: 'var(--text-dim)',
+        transition: 'var(--transition-fast)',
+        display: 'flex', alignItems: 'center',
+      }}
+    >
+      <Settings2 size={14} />
+    </button>
   );
 }
 

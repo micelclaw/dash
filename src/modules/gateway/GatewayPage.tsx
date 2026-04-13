@@ -12,7 +12,6 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import { Radio } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { OverviewTab } from './tabs/OverviewTab';
@@ -21,6 +20,8 @@ import { ModelsTab } from './tabs/ModelsTab';
 import { SessionsTab } from './tabs/SessionsTab';
 import { CronTab } from './tabs/CronTab';
 import { LogsTab } from './tabs/LogsTab';
+import { DevicesTab } from './tabs/DevicesTab';
+import { HeartbeatTab } from './tabs/HeartbeatTab';
 import type { GatewayTab } from './types';
 
 const TABS: { key: GatewayTab; label: string }[] = [
@@ -30,6 +31,8 @@ const TABS: { key: GatewayTab; label: string }[] = [
   { key: 'sessions', label: 'Sessions' },
   { key: 'cron', label: 'Cron' },
   { key: 'logs', label: 'Logs' },
+  { key: 'devices', label: 'Devices' },
+  { key: 'heartbeat', label: 'Heartbeat' },
 ];
 
 export function Component() {
@@ -84,20 +87,8 @@ export function Component() {
         flexShrink: 0,
         ...(isMobile ? { flexWrap: 'wrap' as const, gap: 8 } : {}),
       }}>
-        {/* Left: title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Radio size={20} style={{ color: 'var(--mod-gateway)' }} />
-          <h1 style={{
-            fontSize: '1rem',
-            fontWeight: 600,
-            color: 'var(--text)',
-            margin: 0,
-          }}>
-            Gateway
-          </h1>
-        </div>
-
-        {/* Center: tabs */}
+        {/* Tabs (the page-level title is rendered by Shell.tsx — no need
+            to duplicate it here) */}
         <div style={{
           display: 'flex',
           gap: isMobile ? 2 : 4,
@@ -155,6 +146,8 @@ export function Component() {
         {activeTab === 'sessions' && <SessionsTab />}
         {activeTab === 'cron' && <CronTab />}
         {activeTab === 'logs' && <LogsTab />}
+        {activeTab === 'devices' && <DevicesTab />}
+        {activeTab === 'heartbeat' && <HeartbeatTab />}
       </div>
     </div>
   );

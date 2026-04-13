@@ -15,9 +15,10 @@ import {
   Radio, RotateCw, Play, Square,
   Cable, MessageSquare, Bot,
   Stethoscope, ShieldCheck, ExternalLink,
-  RefreshCw, DollarSign,
+  RefreshCw, DollarSign, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { api } from '@/services/api';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { StatusPill } from '../components/StatusPill';
@@ -29,20 +30,25 @@ export function OverviewTab() {
   const isMobile = useIsMobile();
   const {
     status, health, usage,
-    fetchStatus, fetchUsage,
+    fetchSnapshot, fetchUsage,
     gatewayStart, gatewayStop, gatewayRestart,
   } = useGatewayStore();
 
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [refreshHover, setRefreshHover] = useState(false);
+  const [doctorOutput, setDoctorOutput] = useState<string | null>(null);
+  const [doctorLoading, setDoctorLoading] = useState(false);
+  const [doctorHasFixes, setDoctorHasFixes] = useState(false);
+  const [auditResult, setAuditResult] = useState<{ summary: { critical: number; warn: number; info: number }; findings: Array<{ check_id: string; severity: string; title: string; detail: string; remediation?: string }> } | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
 
-  // Poll status every 15s
+  // Poll status every 15s using snapshot (fast, cached)
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchStatus();
+      fetchSnapshot();
     }, 15_000);
     return () => clearInterval(interval);
-  }, [fetchStatus]);
+  }, [fetchSnapshot]);
 
   // Fetch usage on mount
   useEffect(() => {
@@ -58,7 +64,7 @@ export function OverviewTab() {
 
       toast.success(`Gateway ${action === 'restart' ? 'restarted' : action === 'start' ? 'started' : 'stopped'}`);
       // Wait a moment then refresh status
-      setTimeout(() => fetchStatus(), 2000);
+      setTimeout(() => fetchSnapshot(), 2000);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `Failed to ${action} gateway`);
     } finally {
@@ -136,7 +142,7 @@ export function OverviewTab() {
             {/* Right: action buttons */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button
-                onClick={() => fetchStatus()}
+                onClick={() => fetchSnapshot()}
                 onMouseEnter={() => setRefreshHover(true)}
                 onMouseLeave={() => setRefreshHover(false)}
                 style={{
@@ -268,11 +274,134 @@ export function OverviewTab() {
             gap: 8,
             flexWrap: 'wrap',
           }}>
-            <QuickAction icon={Stethoscope} label="Run Doctor" />
-            <QuickAction icon={ShieldCheck} label="Security Audit" />
-            <QuickAction icon={ExternalLink} label="Open Dashboard" />
+            <QuickActionBtn icon={Stethoscope} label="Run Doctor" loading={doctorLoading} onClick={async () => {
+              setDoctorLoading(true);
+              setDoctorOutput(null);
+              setAuditResult(null);
+              try {
+                const res = await api.post<{ data: { output: string; has_fixes: boolean } }>('/gateway/doctor');
+                const d = (res as any).data ?? res;
+                setDoctorOutput(d.output);
+                setDoctorHasFixes(d.has_fixes);
+              } catch { toast.error('Failed to run doctor'); }
+              finally { setDoctorLoading(false); }
+            }} />
+            <QuickActionBtn icon={ShieldCheck} label="Security Audit" loading={auditLoading} onClick={async () => {
+              setAuditLoading(true);
+              setAuditResult(null);
+              setDoctorOutput(null);
+              try {
+                const res = await api.get<{ data: { summary: any; findings: any[] } }>('/gateway/security-audit');
+                setAuditResult((res as any).data ?? res);
+              } catch { toast.error('Failed to run security audit'); }
+              finally { setAuditLoading(false); }
+            }} />
+            <QuickActionBtn icon={ExternalLink} label="Open Dashboard" onClick={() => {
+              window.open(`http://127.0.0.1:${status?.port ?? 18789}/`, '_blank');
+            }} />
           </div>
         </div>
+
+        {/* Doctor output panel */}
+        {doctorOutput && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 6,
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Doctor Diagnostic
+              </span>
+              {doctorHasFixes && (
+                <button
+                  onClick={async () => {
+                    setDoctorLoading(true);
+                    try {
+                      const res = await api.post<{ data: { output: string; has_fixes: boolean } }>('/gateway/doctor', undefined, { timeout: 60000 } as any);
+                      const d = (res as any).data ?? res;
+                      setDoctorOutput(d.output);
+                      setDoctorHasFixes(d.has_fixes);
+                      toast.success('Fixes applied');
+                    } catch { toast.error('Failed to apply fixes'); }
+                    finally { setDoctorLoading(false); }
+                  }}
+                  style={{
+                    padding: '4px 10px', fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
+                    background: 'var(--amber)', color: '#000', border: 'none',
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  Apply Fixes
+                </button>
+              )}
+            </div>
+            <div style={{
+              background: '#0d0d0d', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)', padding: '10px 14px',
+              maxHeight: 320, overflowY: 'auto', overflowX: 'auto',
+              fontFamily: 'var(--font-mono)', fontSize: '0.625rem',
+              lineHeight: 1.5, color: 'var(--text-dim)', whiteSpace: 'pre-wrap',
+            }}>
+              {doctorOutput}
+            </div>
+          </div>
+        )}
+
+        {/* Security Audit results */}
+        {auditResult && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 6,
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Security Audit — {auditResult.summary.critical} critical · {auditResult.summary.warn} warnings · {auditResult.summary.info} info
+              </span>
+              {auditResult.findings.length > 0 && (
+                <button
+                  onClick={async () => {
+                    setAuditLoading(true);
+                    try {
+                      const res = await api.post<{ data: any }>('/gateway/security-audit/fix');
+                      setAuditResult((res as any).data ?? res);
+                      toast.success('Safe fixes applied');
+                    } catch { toast.error('Failed to apply fixes'); }
+                    finally { setAuditLoading(false); }
+                  }}
+                  style={{
+                    padding: '4px 10px', fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
+                    background: 'var(--amber)', color: '#000', border: 'none',
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600,
+                  }}
+                >
+                  Apply Safe Fixes
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {auditResult.findings.map((f, i) => (
+                <div key={i} style={{
+                  padding: '8px 12px', background: 'var(--surface)',
+                  borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem',
+                  fontFamily: 'var(--font-sans)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: f.severity === 'critical' ? '#f43f5e' : f.severity === 'warn' ? '#f97316' : '#3b82f6',
+                    }} />
+                    <span style={{ color: 'var(--text)', fontWeight: 500 }}>{f.title}</span>
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginLeft: 'auto', textTransform: 'uppercase' }}>{f.severity}</span>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4, whiteSpace: 'pre-wrap' }}>{f.detail}</div>
+                  {f.remediation && (
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--amber)', marginTop: 4 }}>Fix: {f.remediation}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </ScrollArea>
   );
@@ -318,14 +447,15 @@ function ActionButton({ icon: Icon, label, onClick, loading, color }: {
   );
 }
 
-function QuickAction({ icon: Icon, label }: { icon: typeof Play; label: string }) {
+function QuickActionBtn({ icon: Icon, label, onClick, loading }: { icon: typeof Play; label: string; onClick: () => void; loading?: boolean }) {
   const [hovered, setHovered] = useState(false);
 
   return (
     <button
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => toast.info(`${label} — coming soon`)}
+      onClick={onClick}
+      disabled={loading}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -336,13 +466,14 @@ function QuickAction({ icon: Icon, label }: { icon: typeof Play; label: string }
         borderRadius: 'var(--radius-sm)',
         padding: '8px 14px',
         fontSize: '0.8125rem',
-        cursor: 'pointer',
+        cursor: loading ? 'wait' : 'pointer',
         transition: 'var(--transition-fast)',
         fontFamily: 'var(--font-sans)',
+        opacity: loading ? 0.7 : 1,
       }}
     >
-      <Icon size={14} />
-      {label}
+      {loading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Icon size={14} />}
+      {loading ? `${label}...` : label}
     </button>
   );
 }

@@ -89,6 +89,58 @@ export interface GatewayModel {
   status: 'available' | 'no_auth' | 'expired' | 'error' | string;
 }
 
+export interface CatalogModel {
+  key: string;
+  name: string;
+  provider: string;
+  context_window: number | null;
+  input_type: string;
+  available: boolean;
+  configured: boolean;
+  is_default: boolean;
+  local: boolean;
+}
+
+// ─── Models: status (CLI: openclaw models status --json) ────────────
+
+export interface ModelsStatus {
+  configPath: string;
+  agentDir: string;
+  defaultModel: string | null;
+  resolvedDefault: string | null;
+  fallbacks: string[];
+  imageModel: string | null;
+  imageFallbacks: string[];
+  aliases: Record<string, string>;
+  allowed: string[];
+  auth: {
+    storePath: string;
+    providersWithOAuth: string[];
+    missingProvidersInUse: string[];
+    providers: Array<{
+      provider: string;
+      effective: { kind: string; detail: string };
+      profiles: {
+        count: number;
+        oauth: number;
+        token: number;
+        apiKey: number;
+        labels: string[];
+      };
+    }>;
+  };
+}
+
+// ─── Auth profiles (credentials per provider) ──────────────────────
+
+export interface AuthProfileEntry {
+  profile_id: string;
+  provider: string;
+  type: string;
+  token_masked: string;
+  expires?: number;
+}
+
 // ─── Sessions ───────────────────────────────────────────────────────
 
 export interface GatewaySession {
@@ -150,4 +202,4 @@ export interface LogEntry {
 
 // ─── Tabs ───────────────────────────────────────────────────────────
 
-export type GatewayTab = 'overview' | 'channels' | 'models' | 'sessions' | 'cron' | 'logs';
+export type GatewayTab = 'overview' | 'channels' | 'models' | 'sessions' | 'cron' | 'logs' | 'devices' | 'heartbeat';

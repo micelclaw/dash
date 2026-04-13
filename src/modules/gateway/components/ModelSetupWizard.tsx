@@ -1,0 +1,511 @@
+/**
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * All rights reserved.
+ */
+
+import { useState } from 'react';
+import { X, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
+import * as gwService from '@/services/gateway.service';
+import type { CatalogModel } from '../types';
+
+interface ModelSetupWizardProps {
+  model: CatalogModel;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+// Provider-specific copy: where to get an API key. Hardcoded because the
+// CLI catalog doesn't surface this info per provider, but the list is
+// short and easy to maintain.
+const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPrefix?: string; description: string }> = {
+  anthropic: {
+    label: 'Anthropic',
+    signupUrl: 'https://console.anthropic.com/settings/keys',
+    tokenPrefix: 'sk-ant-',
+    description: 'Get an API key from the Anthropic console. Pay-as-you-go billing.',
+  },
+  openai: {
+    label: 'OpenAI',
+    signupUrl: 'https://platform.openai.com/api-keys',
+    tokenPrefix: 'sk-',
+    description: 'Create an API key in your OpenAI dashboard. Pay-as-you-go billing.',
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    signupUrl: 'https://openrouter.ai/keys',
+    tokenPrefix: 'sk-or-',
+    description: 'Aggregator that lets you use models from many providers with a single key.',
+  },
+  groq: {
+    label: 'Groq',
+    signupUrl: 'https://console.groq.com/keys',
+    tokenPrefix: 'gsk_',
+    description: 'Very fast inference for open-weight models. Free tier available.',
+  },
+  xai: {
+    label: 'xAI',
+    signupUrl: 'https://console.x.ai/',
+    tokenPrefix: 'xai-',
+    description: 'Grok models from xAI.',
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    signupUrl: 'https://platform.deepseek.com/api_keys',
+    tokenPrefix: 'sk-',
+    description: 'DeepSeek\u2019s native API. Cheap reasoning models.',
+  },
+  mistral: {
+    label: 'Mistral',
+    signupUrl: 'https://console.mistral.ai/api-keys',
+    tokenPrefix: '',
+    description: 'Mistral AI models.',
+  },
+  google: {
+    label: 'Google AI Studio',
+    signupUrl: 'https://aistudio.google.com/apikey',
+    tokenPrefix: 'AIza',
+    description: 'Gemini models via Google AI Studio.',
+  },
+  cohere: {
+    label: 'Cohere',
+    signupUrl: 'https://dashboard.cohere.com/api-keys',
+    tokenPrefix: '',
+    description: 'Cohere\u2019s text and embedding models.',
+  },
+};
+
+const CUSTOM_PROVIDER_PREFIX = 'custom-api-';
+
+export function ModelSetupWizard({ model, onClose, onSuccess }: ModelSetupWizardProps) {
+  const isCustomProvider = model.provider.startsWith(CUSTOM_PROVIDER_PREFIX);
+
+  if (isCustomProvider) {
+    return <CustomProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
+  }
+  return <StandardProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
+}
+
+// ─── Standard provider form (Anthropic, OpenAI, etc.) ──────────────
+
+function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps) {
+  const info = PROVIDER_INFO[model.provider] ?? {
+    label: model.provider,
+    description: `Configure an API key for ${model.provider}.`,
+  };
+  const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [addingModel, setAddingModel] = useState(false);
+
+  const canSave = token.trim().length >= 8;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      // 1. Save the token via the new auth endpoint
+      await gwService.setAuthToken({ provider: model.provider, token: token.trim() });
+      toast.success(`${info.label} credentials saved`);
+
+      // 2. If the model wasn't already configured, add it now
+      if (!model.configured) {
+        setAddingModel(true);
+        await gwService.addModel(model.key);
+        toast.success(`${model.name || model.key} added to your models`);
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to configure provider';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+      setAddingModel(false);
+    }
+  };
+
+  return (
+    <ModalShell title={`Configure ${info.label}`} onClose={onClose}>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
+        {info.description}
+      </p>
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>
+        Needed for: <strong style={{ color: 'var(--text)' }}>{model.name || model.key}</strong>
+      </p>
+
+      {info.signupUrl && (
+        <div style={{ marginBottom: 16 }}>
+          <a
+            href={info.signupUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: '0.75rem',
+              color: 'var(--amber)',
+              textDecoration: 'none',
+              padding: '6px 10px',
+              border: '1px solid var(--amber)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            Get an API key from {info.label} <ExternalLink size={12} />
+          </a>
+        </div>
+      )}
+
+      <label style={{
+        display: 'block',
+        fontSize: '0.75rem',
+        color: 'var(--text-dim)',
+        marginBottom: 6,
+        fontFamily: 'var(--font-sans)',
+      }}>
+        Paste your API key:
+      </label>
+
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input
+          type={showToken ? 'text' : 'password'}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={info.tokenPrefix ? `${info.tokenPrefix}...` : 'paste here'}
+          autoFocus
+          style={{
+            width: '100%',
+            background: 'var(--bg)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '10px 36px 10px 12px',
+            color: 'var(--text)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-mono)',
+            outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowToken(!showToken)}
+          style={{
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-dim)',
+            display: 'flex',
+            padding: 4,
+          }}
+        >
+          {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+
+      <p style={{
+        fontSize: '0.6875rem',
+        color: 'var(--text-dim)',
+        background: 'var(--surface)',
+        padding: '8px 10px',
+        borderRadius: 'var(--radius-sm)',
+        border: '1px solid var(--border)',
+        marginBottom: 16,
+        lineHeight: 1.4,
+      }}>
+        🔒 This key is stored locally in <code style={{ fontFamily: 'var(--font-mono)' }}>~/.openclaw/agents/main/agent/auth-profiles.json</code> and never sent anywhere except {info.label} when you make a model call.
+      </p>
+
+      <ButtonRow
+        cancelLabel="Cancel"
+        confirmLabel={addingModel ? 'Adding model...' : saving ? 'Saving...' : 'Save & Add'}
+        onCancel={onClose}
+        onConfirm={handleSave}
+        confirmDisabled={!canSave || saving}
+        loading={saving}
+      />
+    </ModalShell>
+  );
+}
+
+// ─── Custom provider form (custom-api-*) ────────────────────────────
+
+function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps) {
+  // For custom providers we need: provider id (already set), base URL, API key, API format
+  // The provider ID comes from model.provider, e.g. "custom-api-deepseek-com"
+  // For new providers, the user can edit the ID — but for adding a model from
+  // an existing custom provider, we just need the API key.
+  const [providerId, setProviderId] = useState(model.provider);
+  const [baseUrl, setBaseUrl] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [apiFormat, setApiFormat] = useState('openai-completions');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const canSave = providerId.trim() && baseUrl.trim() && apiKey.trim().length >= 8;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      // Custom providers go through PATCH /gateway/providers-config
+      // (writes models.providers[id] in openclaw.json directly)
+      await gwService.updateProvidersConfig({
+        models: {
+          providers: {
+            [providerId]: {
+              baseUrl,
+              apiKey,
+              api: apiFormat,
+              models: [],
+            },
+          },
+        },
+      });
+      toast.success(`Custom provider ${providerId} configured`);
+
+      // Then add the model itself
+      if (!model.configured) {
+        await gwService.addModel(model.key);
+        toast.success(`${model.name || model.key} added`);
+      }
+
+      onSuccess();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to configure custom provider';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Set up custom provider" onClose={onClose}>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
+        Configure an OpenAI-compatible API endpoint. Works with self-hosted LLMs (LiteLLM, vLLM, Ollama-compat) and providers like DeepSeek that expose an OpenAI-style API.
+      </p>
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 12 }}>
+        Adding: <strong style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{model.name || model.key}</strong>
+      </p>
+
+      <Field label="Provider ID">
+        <input
+          value={providerId}
+          onChange={(e) => setProviderId(e.target.value)}
+          placeholder="custom-api-mycompany-com"
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label="API Base URL">
+        <input
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="https://api.example.com/v1"
+          style={inputStyle}
+        />
+      </Field>
+
+      <Field label="API Key">
+        <div style={{ position: 'relative' }}>
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder="sk-..."
+            style={{ ...inputStyle, paddingRight: 36 }}
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(!showKey)}
+            style={{
+              position: 'absolute',
+              right: 8,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-dim)',
+              display: 'flex',
+              padding: 4,
+            }}
+          >
+            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+      </Field>
+
+      <Field label="API Format">
+        <select
+          value={apiFormat}
+          onChange={(e) => setApiFormat(e.target.value)}
+          style={inputStyle}
+        >
+          <option value="openai-completions">OpenAI Completions (most compatible)</option>
+          <option value="anthropic-messages">Anthropic Messages</option>
+          <option value="ollama">Ollama</option>
+          <option value="google-generative-ai">Google Generative AI</option>
+        </select>
+      </Field>
+
+      <ButtonRow
+        cancelLabel="Cancel"
+        confirmLabel={saving ? 'Saving...' : 'Save & Add'}
+        onCancel={onClose}
+        onConfirm={handleSave}
+        confirmDisabled={!canSave || saving}
+        loading={saving}
+      />
+    </ModalShell>
+  );
+}
+
+// ─── Shared bits ────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  background: 'var(--bg)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '10px 12px',
+  color: 'var(--text)',
+  fontSize: '0.8125rem',
+  fontFamily: 'var(--font-mono)',
+  outline: 'none',
+};
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{
+        display: 'block',
+        fontSize: '0.75rem',
+        color: 'var(--text-dim)',
+        marginBottom: 6,
+        fontFamily: 'var(--font-sans)',
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ButtonRow({
+  cancelLabel, confirmLabel, onCancel, onConfirm, confirmDisabled, loading,
+}: {
+  cancelLabel: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmDisabled?: boolean;
+  loading?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+      <button
+        onClick={onCancel}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '8px 16px',
+          color: 'var(--text-dim)',
+          fontSize: '0.75rem',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-sans)',
+        }}
+      >
+        {cancelLabel}
+      </button>
+      <button
+        onClick={onConfirm}
+        disabled={confirmDisabled}
+        style={{
+          background: confirmDisabled ? 'var(--surface-hover)' : 'var(--amber)',
+          color: confirmDisabled ? 'var(--text-dim)' : '#000',
+          border: 'none',
+          borderRadius: 'var(--radius-sm)',
+          padding: '8px 18px',
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          cursor: confirmDisabled ? 'not-allowed' : 'pointer',
+          fontFamily: 'var(--font-sans)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}
+      >
+        {loading && <Loader2 size={12} className="spin" />}
+        {confirmLabel}
+      </button>
+    </div>
+  );
+}
+
+function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0, 0, 0, 0.6)',
+        backdropFilter: 'blur(4px)',
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 480,
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+          padding: 24,
+        }}
+      >
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+        }}>
+          <h2 style={{
+            margin: 0,
+            fontSize: '1rem',
+            fontWeight: 600,
+            color: 'var(--text)',
+            fontFamily: 'var(--font-display)',
+          }}>{title}</h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-dim)',
+              padding: 4,
+              display: 'flex',
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
