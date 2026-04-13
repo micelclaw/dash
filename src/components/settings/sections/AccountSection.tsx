@@ -42,7 +42,7 @@ interface PasswordCheck { label: string; met: boolean }
 
 function checkPassword(pw: string): PasswordCheck[] {
   return [
-    { label: 'At least 8 characters', met: pw.length >= 8 },
+    { label: 'At least 12 characters', met: pw.length >= 12 },
     { label: 'One uppercase letter', met: /[A-Z]/.test(pw) },
     { label: 'One number', met: /[0-9]/.test(pw) },
     { label: 'One symbol (!@#$%...)', met: /[^A-Za-z0-9]/.test(pw) },

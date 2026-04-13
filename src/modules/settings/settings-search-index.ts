@@ -32,7 +32,7 @@ export interface SettingsSearchEntry {
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── Cuenta ──
   { sectionId: 'account', groupId: 'account', label: 'Account', tags: ['cuenta', 'profile', 'perfil', 'email', 'password', 'contraseña'] },
-  { sectionId: 'agent-tokens', groupId: 'account', label: 'Agent Tokens', tags: ['tokens', 'agentes', 'session'] },
+  { sectionId: 'agent-tokens', groupId: 'dev', label: 'Agent Tokens', tags: ['tokens', 'agentes', 'session', 'api', 'keys', 'developer'] },
   { sectionId: 'permissions', groupId: 'account', label: 'Permissions', tags: ['permisos', 'roles', 'access'] },
   { sectionId: 'license', groupId: 'account', label: 'License', tags: ['licencia', 'plan', 'subscription', 'tier'] },
   { sectionId: 'approvals-history', groupId: 'account', label: 'Approvals History', tags: ['historial', 'aprobaciones', 'audit'] },

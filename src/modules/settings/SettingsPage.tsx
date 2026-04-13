@@ -17,7 +17,7 @@ import {
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
-  Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench,
+  Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -109,6 +109,7 @@ const GROUP_COLORS = {
   system: '#fb923c',        // orange-400
   security: '#f87171',      // red-400
   admin: '#facc15',         // yellow-400
+  dev: '#94a3b8',           // slate-400 — muted, not a user-facing group
 };
 
 function buildGroups(isAdmin: boolean): SidebarGroup[] {
@@ -118,10 +119,9 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       label: 'Account',
       icon: UserCircle,
       color: GROUP_COLORS.account,
-      description: 'Your profile, agent tokens, permissions, license and approvals history.',
+      description: 'Your profile, permissions, license and approvals history.',
       sections: [
         { id: 'account', label: 'Account', icon: UserCircle },
-        { id: 'agent-tokens', label: 'Agent Tokens', icon: Key },
         { id: 'permissions', label: 'Permissions', icon: Shield },
         { id: 'license', label: 'License', icon: CreditCard },
         { id: 'approvals-history', label: 'Approvals History', icon: History },
@@ -225,6 +225,22 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'observability', label: 'Observability', icon: Eye },
         { id: 'secrets', label: 'Secrets', icon: Lock },
         { id: 'raw', label: 'Raw JSON', icon: Terminal },
+      ],
+    });
+  }
+  // Dev group — only visible in development builds (not shipped in
+  // production). Contains internal/debugging tools that would confuse
+  // end-users. Gated by Vite's import.meta.env.DEV (true when running
+  // `pnpm dev`, false after `pnpm build`).
+  if (import.meta.env.DEV) {
+    groups.push({
+      id: 'dev',
+      label: 'Dev',
+      icon: Code,
+      color: GROUP_COLORS.dev,
+      description: 'Developer tools. Not visible in production builds.',
+      sections: [
+        { id: 'agent-tokens', label: 'Agent Tokens', icon: Key },
       ],
     });
   }

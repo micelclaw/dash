@@ -280,6 +280,17 @@ export function ModelsTab() {
     const key = `${selectedProvider}/${modelId}`;
     setMutatingModel(key);
     try {
+      // Register the model in the provider's config with sensible defaults
+      // so OpenClaw knows its maxTokens (important for reasoning models)
+      await gwService.updateProvidersConfig({
+        models: {
+          providers: {
+            [selectedProvider!]: {
+              models: [{ id: modelId, name: modelId, maxTokens: 8192 }],
+            },
+          },
+        },
+      });
       await addModel(key);
       toast.success(`Added ${modelId}`);
     } catch (err) {
