@@ -81,6 +81,45 @@ export async function uninstallApp(
   return res.data;
 }
 
+export async function suggestForkName(name: string): Promise<string> {
+  const res = await api.get<{ data: { suggested_name: string } }>(`/apps/${name}/suggest-fork-name`);
+  return res.data.suggested_name;
+}
+
+export async function forkApp(name: string, newName: string): Promise<{ name: string; forked_from: string }> {
+  const res = await api.post<{ data: { name: string; forked_from: string } }>(`/apps/${name}/fork`, { new_name: newName });
+  return res.data;
+}
+
+export async function deleteApp(name: string): Promise<void> {
+  await api.delete(`/apps/${name}`);
+}
+
+// ─── Adapted app file editing ────────────────────────────────────
+
+export interface AppFile {
+  name: string;
+  path: string;
+  size: number;
+  type: 'file' | 'dir';
+}
+
+export async function getAppFiles(name: string): Promise<AppFile[]> {
+  const res = await api.get<{ data: AppFile[] }>(`/apps/${name}/files`);
+  return res.data;
+}
+
+export async function getAppFileContent(name: string, filepath: string): Promise<string> {
+  const res = await api.get<{ data: { content: string } }>(`/apps/${name}/files/${filepath}`);
+  return res.data.content;
+}
+
+export async function saveAppFile(name: string, filepath: string, content: string): Promise<void> {
+  await api.put(`/apps/${name}/files/${filepath}`, { content });
+}
+
+// ─── Scanning & export ──────────────────────────────────────────
+
 export async function scanApp(name: string): Promise<ScanResult> {
   const res = await api.get<ApiResponse<ScanResult>>(`/apps/${name}/scan`);
   return res.data;

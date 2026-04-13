@@ -14,7 +14,7 @@
 
 export type AppLevel = 1 | 2 | 3;
 export type AppStatus = 'active' | 'disabled' | 'archived' | 'error' | 'pending_migration';
-export type AppSource = 'local' | 'clawhub' | 'adapted';
+export type AppSource = 'local' | 'micelhub' | 'adapted' | 'openclaw' | 'registry';
 
 export interface AppManifest {
   name: string;
@@ -24,8 +24,10 @@ export interface AppManifest {
   skill: string;
   description?: string;
   author?: string;
-  tier_required: 'free' | 'pro';
+  icon?: string;
+  tier_required: 'free' | 'plus' | 'pro';
   permissions: string[];
+  tags?: string[];
   ui?: {
     settings?: string;
     widget?: string;
@@ -63,6 +65,7 @@ export interface InstalledApp {
   source: AppSource;
   install_path: string | null;
   manifest: AppManifest;
+  forked_from: string | null;
   installed_by: string | null;
   installed_at: string;
   updated_at: string;
@@ -89,10 +92,10 @@ export interface ScanResult {
 }
 
 export interface InstallPayload {
-  source: 'local' | 'clawhub';
+  source: 'local' | 'micelhub' | 'registry';
   name: string;
   package_path?: string;
-  clawhub_id?: string;
+  registry_id?: string;
 }
 
 export interface InstallResult {

@@ -12,7 +12,7 @@
 
 export interface Notification {
   id: string;
-  type: 'sync' | 'agent_action' | 'system' | 'email' | 'digest' | 'approval' | 'change' | 'calendar' | 'contacts';
+  type: 'sync' | 'agent_action' | 'system' | 'email' | 'digest' | 'approval' | 'change' | 'calendar' | 'contacts' | 'messages';
   title: string;
   body?: string;
   read: boolean;

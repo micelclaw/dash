@@ -46,13 +46,16 @@
   --mod-projects: #f97316;
   --mod-vpn: #7c3aed;
   --mod-portainer: #13bef9;
-  --mod-clawhub: #a78bfa;
+  --mod-micelhub: #a78bfa;
   --mod-feeds: #f97316;
   --mod-finance: #22c55e;
   --mod-observers: #8b5cf6;
   --mod-office: #e11d48;
   --mod-multimedia: #a855f7;
   --mod-proxy: #3b82f6;
+  --mod-flows: #f43f5e;
+  --mod-flows-dim: rgba(244, 63, 94, 0.15);
+  --mod-flows-hover: #e11d48;
   --mod-terminal: #22c55e;
   --mod-gateway: #0ea5e9;
 
@@ -153,6 +156,36 @@ pre code.hljs {
   font-size: 0.8125rem;
   border-radius: var(--radius-lg);
   padding: 1rem;
+  overflow-x: auto;
+}
+
+/* AppDetail markdown content — prevent horizontal overflow */
+/* Radix ScrollArea wraps children in a div with display:table which causes overflow */
+.app-detail-scroll [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+.app-detail-content {
+  padding: 16px;
+}
+.app-detail-md {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
+}
+.app-detail-md pre {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.app-detail-md p,
+.app-detail-md li,
+.app-detail-md td,
+.app-detail-md th,
+.app-detail-md blockquote,
+.app-detail-md h1,
+.app-detail-md h2,
+.app-detail-md h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Selection */

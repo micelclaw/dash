@@ -1799,7 +1799,7 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
   if (method === 'GET' && route === '/apps') {
     return {
       data: [
-        { id: 'app-1', app_name: 'claw-finance', version: '1.2.0', app_level: 2, status: 'active', source: 'clawhub', semantic_scopes: [] },
+        { id: 'app-1', app_name: 'claw-finance', version: '1.2.0', app_level: 2, status: 'active', source: 'micelhub', semantic_scopes: [] },
       ],
       meta: { total: 1, by_level: { L1: 0, L2: 1, L3: 0 } },
     };
@@ -1828,8 +1828,215 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
     };
   }
 
+  // ── Flows (MicelFlow) — ORDER MATTERS: specific routes FIRST, generic /:id LAST ──
+
+  // List + create
+  if (method === 'GET' && route === '/flows') {
+    return { data: MOCK_FLOWS };
+  }
+  if (method === 'POST' && route === '/flows') {
+    const input = body as Record<string, unknown>;
+    const newFlow = {
+      id: `flow-new-${++mockFlowIdCounter}`,
+      ...input,
+      is_template: false,
+      enabled: true,
+      last_run_at: null,
+      last_status: null,
+      run_count: 0,
+      success_count: 0,
+      error_count: 0,
+      version: 1,
+      version_history: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    MOCK_FLOWS.push(newFlow as any);
+    return { data: newFlow };
+  }
+
+  // Specific routes (must match BEFORE /flows/:id catch-all)
+  if (method === 'GET' && route === '/flows/templates/built-in') {
+    return { data: MOCK_BUILT_IN_TEMPLATES };
+  }
+  if (method === 'GET' && route === '/flows/templates') {
+    return { data: [] };
+  }
+  if (method === 'GET' && route === '/flows/step-types') {
+    return { data: MOCK_STEP_TYPES };
+  }
+  if (method === 'GET' && route === '/flows/pending') {
+    return { data: [] };
+  }
+  if (method === 'GET' && route === '/flows/stats/global') {
+    return { data: { total_runs: 85, successful_runs: 78, items_processed: { emails: 1280, notes: 4 }, tokens_used: 45000, cost_usd_estimate: 0.32, estimated_hours_saved: 8.5 } };
+  }
+  if (method === 'POST' && route === '/flows/import') {
+    return { data: { id: `flow-imported-${Date.now()}`, ...(body as Record<string, unknown>), created_at: new Date().toISOString() } };
+  }
+
+  // Flow run operations (must match BEFORE /flows/:id)
+  const flowApproveMatch = route.match(/^\/flows\/[\w-]+\/runs\/[\w-]+\/approve$/);
+  if (method === 'POST' && flowApproveMatch) {
+    return { data: { status: 'completed' } };
+  }
+  const flowRejectMatch = route.match(/^\/flows\/[\w-]+\/runs\/[\w-]+\/reject$/);
+  if (method === 'POST' && flowRejectMatch) {
+    return { data: { status: 'cancelled' } };
+  }
+
+  const flowToggleMatch = route.match(/^\/flows\/([\w-]+)\/toggle$/);
+  if (method === 'PATCH' && flowToggleMatch) {
+    const flow = MOCK_FLOWS.find(f => f.id === flowToggleMatch[1]);
+    if (flow) flow.enabled = !flow.enabled;
+    return { data: flow };
+  }
+
+  const flowUndoMatch = route.match(/^\/flows\/([\w-]+)\/undo$/);
+  if (method === 'POST' && flowUndoMatch) {
+    const flow = MOCK_FLOWS.find(f => f.id === flowUndoMatch[1]);
+    return { data: flow };
+  }
+
+  const flowRunMatch = route.match(/^\/flows\/([\w-]+)\/run$/);
+  if (method === 'POST' && flowRunMatch) {
+    return { data: { run_id: `run-${Date.now()}`, status: 'running' } };
+  }
+
+  const flowTestMatch = route.match(/^\/flows\/([\w-]+)\/test$/);
+  if (method === 'POST' && flowTestMatch) {
+    return { data: { steps: [{ step_id: 's1', status: 'ok', output_summary: 'Test passed', duration_ms: 50 }], total_duration_ms: 50, total_tokens: 0, cost_estimate: 0 } };
+  }
+
+  const flowRunsMatch = route.match(/^\/flows\/([\w-]+)\/runs/);
+  if (method === 'GET' && flowRunsMatch) {
+    return { data: MOCK_FLOW_RUNS };
+  }
+
+  const flowStatsMatch = route.match(/^\/flows\/([\w-]+)\/stats$/);
+  if (method === 'GET' && flowStatsMatch) {
+    return { data: { total_runs: 28, success_runs: 26, error_runs: 2, avg_duration_ms: 2100, total_tokens: 12400, total_cost: 0.09 } };
+  }
+
+  const flowExportMatch = route.match(/^\/flows\/([\w-]+)\/export$/);
+  if (method === 'GET' && flowExportMatch) {
+    const flow = MOCK_FLOWS.find(f => f.id === flowExportMatch[1]);
+    return { data: flow ?? {} };
+  }
+
+  const flowSaveTemplateMatch = route.match(/^\/flows\/([\w-]+)\/save-template$/);
+  if (method === 'POST' && flowSaveTemplateMatch) {
+    return { data: { id: `tpl-${Date.now()}`, is_template: true } };
+  }
+
+  // Generic /flows/:id (LAST — catch-all)
+  const flowGetMatch = route.match(/^\/flows\/([\w-]+)$/);
+  if (method === 'GET' && flowGetMatch) {
+    const flow = MOCK_FLOWS.find(f => f.id === flowGetMatch[1]);
+    return { data: flow ?? null };
+  }
+  if (method === 'PATCH' && flowGetMatch) {
+    const flow = MOCK_FLOWS.find(f => f.id === flowGetMatch[1]);
+    if (flow) Object.assign(flow, body as Record<string, unknown>, { version: flow.version + 1, updated_at: new Date().toISOString() });
+    return { data: flow };
+  }
+  if (method === 'DELETE' && flowGetMatch) {
+    return { data: { deleted: true } };
+  }
+
   return { data: null };
 }
+
+// ── Flows mock data ──
+
+let mockFlowIdCounter = 0;
+
+const MOCK_FLOWS: Array<Record<string, unknown>> = [
+  {
+    id: 'flow-existing-1',
+    name: 'Morning Briefing',
+    description: 'Daily morning summary',
+    icon: 'Sun',
+    color: '#f59e0b',
+    category: 'productivity',
+    is_template: false,
+    template_source: 'built-in:morning-briefing',
+    trigger_type: 'cron',
+    trigger_config: { expression: '0 8 * * *' },
+    steps: [
+      { id: 's1', type: 'calendar.upcoming', label: "Today's events", config: { hours: 12 } },
+      { id: 's2', type: 'ai.draft', label: 'Generate briefing', config: { prompt: 'Morning summary' } },
+      { id: 's3', type: 'notify.dash', label: 'Show briefing', config: { title: 'Morning Briefing', body: 'Ready' } },
+    ],
+    enabled: true,
+    last_run_at: new Date(Date.now() - 3600_000).toISOString(),
+    last_status: 'completed',
+    run_count: 28,
+    success_count: 26,
+    error_count: 2,
+    version: 3,
+    timeout_ms: 300000,
+    version_history: [],
+    created_at: new Date(Date.now() - 86400_000 * 14).toISOString(),
+    updated_at: new Date(Date.now() - 86400_000).toISOString(),
+  },
+];
+
+const MOCK_FLOW_RUNS = [
+  { id: 'run-1', flow_id: 'flow-existing-1', status: 'completed', trigger_source: 'cron', steps_completed: 3, steps_total: 3, step_results: [], tokens_used: 450, cost_usd_estimate: '0.003', duration_ms: 2100, started_at: new Date(Date.now() - 3600_000).toISOString(), completed_at: new Date(Date.now() - 3597_900).toISOString(), error: null },
+];
+
+const MOCK_BUILT_IN_TEMPLATES = [
+  {
+    id: 'inbox-triage', name: 'Inbox Triage', description: 'Classify emails by urgency with AI', icon: 'Mail', color: '#22c55e', category: 'productivity',
+    trigger_type: 'cron', trigger_config: { expression: '0 9 * * 1-5' },
+    steps: [
+      { id: 's1', type: 'email.list', label: 'Get emails', config: { account: 'all', status: 'unread', limit: 50 } },
+      { id: 's2', type: 'ai.classify', label: 'Classify', config: { categories: ['Urgent', 'Normal', 'Spam'] } },
+    ],
+    wizard: { steps: [
+      { id: 'email', title: 'Email setup', fields: [
+        { id: 'account', question: 'Which email account?', type: 'select', options: [{ value: 'all', label: 'All accounts' }], default: 'all', mapsTo: 'steps[0].config.account' },
+      ]},
+      { id: 'schedule', title: 'Schedule', fields: [
+        { id: 'when', question: 'When should it run?', type: 'select', options: [
+          { value: '0 9 * * 1-5', label: 'Weekdays at 9:00 AM' },
+          { value: '0 9 * * *', label: 'Every day at 9:00 AM' },
+          { value: 'manual', label: 'Only when I ask' },
+        ], default: '0 9 * * 1-5', mapsTo: 'trigger_config.expression' },
+      ]},
+    ]},
+  },
+  {
+    id: 'weekly-review', name: 'Weekly Review', description: 'Summarize your week into a diary entry', icon: 'BookOpen', color: '#14b8a6', category: 'productivity',
+    trigger_type: 'cron', trigger_config: { expression: '0 10 * * 0' },
+    steps: [{ id: 's1', type: 'search.semantic', label: 'Get activity', config: { query: 'this week', limit: 20 } }],
+    wizard: { steps: [] },
+  },
+  {
+    id: 'focus-mode', name: 'Focus Mode', description: 'Activate focus lighting', icon: 'Zap', color: '#06b6d4', category: 'home',
+    trigger_type: 'sensor', trigger_config: { entity_id: 'binary_sensor.office', state: 'on' },
+    steps: [{ id: 's1', type: 'home.scene', label: 'Focus', config: { scene: 'focus' } }],
+    wizard: { steps: [
+      { id: 'ha', title: 'Home Assistant', fields: [
+        { id: 'presence', question: 'Presence sensor', type: 'text', default: 'binary_sensor.office', mapsTo: 'trigger_config.entity_id' },
+      ]},
+    ]},
+  },
+];
+
+const MOCK_STEP_TYPES = [
+  { id: 'email.list', label: 'Get emails', category: 'email', icon: 'Mail', description: 'Get filtered emails', output_type: 'Email[]', side_effect: 'read', params: [{ id: 'account', label: 'Account', type: 'select', options: [{ value: 'all', label: 'All' }], default: 'all' }, { id: 'limit', label: 'Max', type: 'number', default: 50 }] },
+  { id: 'notes.search', label: 'Search notes', category: 'notes', icon: 'StickyNote', description: 'Search notes', output_type: 'Note[]', side_effect: 'read', params: [{ id: 'query', label: 'Query', type: 'text' }] },
+  { id: 'ai.classify', label: 'Classify', category: 'ai', icon: 'Brain', description: 'Classify items', output_type: 'ClassifiedItem[]', input_type: 'any', side_effect: 'ai', params: [{ id: 'categories', label: 'Categories', type: 'tag_input', default: ['A', 'B'] }] },
+  { id: 'ai.draft', label: 'Generate draft', category: 'ai', icon: 'PenLine', description: 'Draft text', output_type: 'string', input_type: 'any', side_effect: 'ai', params: [{ id: 'prompt', label: 'Instructions', type: 'text', required: true }] },
+  { id: 'ai.summarize', label: 'Summarize', category: 'ai', icon: 'Sparkles', description: 'Summarize', output_type: 'string', input_type: 'any', side_effect: 'ai', params: [{ id: 'max_length', label: 'Length', type: 'select', options: [{ value: 'short', label: 'Short' }, { value: 'medium', label: 'Medium' }], default: 'medium' }] },
+  { id: 'notify.dash', label: 'Dashboard notification', category: 'notification', icon: 'Bell', description: 'Send notification', output_type: '{ sent: true }', side_effect: 'notification', params: [{ id: 'title', label: 'Title', type: 'text', required: true }, { id: 'body', label: 'Message', type: 'text', required: true }] },
+  { id: 'control.approval', label: 'Checkpoint', category: 'control', icon: 'ShieldCheck', description: 'Ask approval', output_type: '{ approved: boolean }', side_effect: 'control', params: [{ id: 'prompt', label: 'Question', type: 'text', required: true }] },
+  { id: 'calendar.upcoming', label: 'Upcoming events', category: 'calendar', icon: 'Calendar', description: 'Get events', output_type: 'Event[]', side_effect: 'read', params: [{ id: 'hours', label: 'Hours', type: 'number', default: 24 }] },
+  { id: 'home.scene', label: 'Activate scene', category: 'home', icon: 'Palette', description: 'HA scene', output_type: '{ activated: true }', side_effect: 'write', params: [{ id: 'scene', label: 'Scene', type: 'text', required: true }] },
+  { id: 'search.semantic', label: 'Semantic search', category: 'search', icon: 'Search', description: 'Search', output_type: 'SearchResult[]', side_effect: 'read', params: [{ id: 'query', label: 'Query', type: 'text', required: true }] },
+];
 
 // ── Exported helpers ──
 
