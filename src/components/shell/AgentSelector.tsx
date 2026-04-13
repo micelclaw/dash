@@ -76,8 +76,8 @@ export function AgentSelector({ compact }: AgentSelectorProps) {
 
   const handleSelectAgent = (agentName: string) => {
     if (agentName !== selectedAgent) {
-      startNewConversation();
       selectAgent(agentName);
+      startNewConversation();
     }
   };
 

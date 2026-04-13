@@ -30,7 +30,7 @@ export function ChatPanel() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [convMessages.length, streamingMessage?.tokens]);
+  }, [convMessages.length, streamingMessage?.tokens, streamingMessage?.thinking]);
 
   // Build streaming message for display
   const streamingMsg: Message | null =
@@ -73,7 +73,15 @@ export function ChatPanel() {
       {convMessages.map((msg) => (
         <ChatMessage key={msg.id} message={msg} />
       ))}
-      {streamingMsg && <ChatMessage message={streamingMsg} isStreaming />}
+      {streamingMsg && (
+        <ChatMessage
+          message={streamingMsg}
+          isStreaming
+          thinkingText={streamingMessage?.thinking}
+          isThinking={streamingMessage?.isThinking}
+          tools={streamingMessage?.tools}
+        />
+      )}
     </div>
   );
 }

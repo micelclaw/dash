@@ -22,37 +22,50 @@ import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const dayMs = 86_400_000;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
+  const startOfWeek = new Date(startOfToday.getTime() - 86_400_000 * ((startOfToday.getDay() + 6) % 7));
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  if (diff < dayMs) {
-    return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const time = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
+  if (date >= startOfToday) return time;
+  if (date >= startOfYesterday) return `Yesterday ${time}`;
+  if (date >= startOfWeek) {
+    const weekday = date.toLocaleDateString('en-GB', { weekday: 'short' });
+    return `${weekday} ${time}`;
   }
-  if (diff < dayMs * 2) return 'Yesterday';
-  if (diff < dayMs * 7) return 'This Week';
-  return date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  if (date >= startOfMonth) return date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function groupByDate<T extends { id: string; created_at: string }>(conversations: T[]) {
   const now = new Date();
-  const dayMs = 86_400_000;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
+  const startOfWeek = new Date(startOfToday.getTime() - 86_400_000 * ((startOfToday.getDay() + 6) % 7));
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
   const groups: { label: string; items: typeof conversations }[] = [];
   const today: typeof conversations = [];
   const yesterday: typeof conversations = [];
   const thisWeek: typeof conversations = [];
+  const thisMonth: typeof conversations = [];
   const older: typeof conversations = [];
 
   for (const conv of conversations) {
-    const diff = now.getTime() - new Date(conv.created_at).getTime();
-    if (diff < dayMs) today.push(conv);
-    else if (diff < dayMs * 2) yesterday.push(conv);
-    else if (diff < dayMs * 7) thisWeek.push(conv);
+    const date = new Date(conv.created_at);
+    if (date >= startOfToday) today.push(conv);
+    else if (date >= startOfYesterday) yesterday.push(conv);
+    else if (date >= startOfWeek) thisWeek.push(conv);
+    else if (date >= startOfMonth) thisMonth.push(conv);
     else older.push(conv);
   }
 
   if (today.length) groups.push({ label: 'Today', items: today });
   if (yesterday.length) groups.push({ label: 'Yesterday', items: yesterday });
   if (thisWeek.length) groups.push({ label: 'This Week', items: thisWeek });
+  if (thisMonth.length) groups.push({ label: 'This Month', items: thisMonth });
   if (older.length) groups.push({ label: 'Older', items: older });
 
   return groups;

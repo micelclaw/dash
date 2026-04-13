@@ -11,7 +11,7 @@
  */
 
 import { useNavigate } from 'react-router';
-import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck, Zap, Calendar, Users } from 'lucide-react';
+import { RefreshCw, Bot, Mail, BarChart3, AlertTriangle, ShieldCheck, Zap, Calendar, Users, MessageCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Notification } from '@/types/notifications';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -27,6 +27,7 @@ const TYPE_ICONS: Record<Notification['type'], LucideIcon> = {
   system: AlertTriangle,
   approval: ShieldCheck,
   change: Zap,
+  messages: MessageCircle,
 };
 
 const TYPE_COLORS: Record<Notification['type'], string> = {
@@ -39,6 +40,7 @@ const TYPE_COLORS: Record<Notification['type'], string> = {
   system: 'var(--warning)',
   approval: 'var(--error)',
   change: 'var(--success)',
+  messages: 'var(--mod-chat)',
 };
 
 function timeAgo(ts: string): string {

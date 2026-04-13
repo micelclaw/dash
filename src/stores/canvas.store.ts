@@ -13,11 +13,27 @@
 import { create } from 'zustand';
 
 // ─── Canvas State ───────────────────────────────────────────────────
+//
+// Ola 7 (oc7-5.1g): dual-mode. Existing inline `html` / `a2ui` types
+// keep working unchanged. A new `url` type points the iframe at our
+// /canvas-host/* proxy (which talks to OpenClaw's native canvasHost).
+//
+// Backward compatibility: callers that produce inline html keep using
+// {type: 'html', content}. The chat-bridge auto-push and large
+// /canvas/push payloads now produce {type: 'url', url, path?}.
+
+export type CanvasContentType = 'html' | 'a2ui' | 'url';
 
 export interface CanvasState {
-  type: 'html' | 'a2ui' | null;
+  type: CanvasContentType | null;
+  /** Inline HTML/A2UI content. Set when type === 'html' or 'a2ui'. */
   content: string | null;
+  /** Proxy URL (e.g. `/canvas-host/abc12345/conv-1/chart.html`). Set when type === 'url'. */
+  url?: string | null;
+  /** Optional path (the canvasHost relative path) — used by live-reload to scope cache-busts. */
   path?: string;
+  /** Cache-bust counter incremented on canvas.reload events to force iframe reload. */
+  reloadKey?: number;
   hasContent: boolean;
 }
 
@@ -54,6 +70,10 @@ interface CanvasStore {
 
   // Canvas actions
   setCanvasContent: (convId: string, type: 'html' | 'a2ui', content: string, path?: string) => void;
+  /** Ola 7: set canvas to a URL (served by /canvas-host/* proxy). */
+  setCanvasUrl: (convId: string, url: string, path?: string) => void;
+  /** Ola 7: bump reloadKey on the active canvas to force iframe re-render. */
+  reloadCanvas: (convId: string) => void;
   clearCanvas: (convId: string) => void;
   setCanvasSnapshot: (convId: string, base64?: string) => void;
 
@@ -73,7 +93,7 @@ interface CanvasStore {
   getActiveBrowserSession: () => BrowserSessionState | undefined;
 }
 
-const emptyCanvas: CanvasState = { type: null, content: null, hasContent: false };
+const emptyCanvas: CanvasState = { type: null, content: null, url: null, hasContent: false, reloadKey: 0 };
 
 export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   canvasStates: new Map(),
@@ -83,8 +103,32 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   setCanvasContent: (convId, type, content, path) => {
     set((s) => {
       const updated = new Map(s.canvasStates);
-      updated.set(convId, { type, content, path, hasContent: true });
+      updated.set(convId, { type, content, url: null, path, hasContent: true, reloadKey: 0 });
       return { canvasStates: updated, activeMode: 'canvas' };
+    });
+  },
+
+  setCanvasUrl: (convId, url, path) => {
+    set((s) => {
+      const updated = new Map(s.canvasStates);
+      // Reset reloadKey to 0 when switching to a new URL so the iframe
+      // reloads cleanly. Subsequent canvas.reload events bump it.
+      updated.set(convId, { type: 'url', content: null, url, path, hasContent: true, reloadKey: 0 });
+      return { canvasStates: updated, activeMode: 'canvas' };
+    });
+  },
+
+  reloadCanvas: (convId) => {
+    set((s) => {
+      const updated = new Map(s.canvasStates);
+      const existing = updated.get(convId);
+      // Only meaningful for url-mode canvases. Inline html/a2ui have no
+      // server-side file to reload.
+      if (existing && existing.type === 'url') {
+        updated.set(convId, { ...existing, reloadKey: (existing.reloadKey ?? 0) + 1 });
+        return { canvasStates: updated };
+      }
+      return s;
     });
   },
 

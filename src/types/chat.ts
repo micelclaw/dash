@@ -37,6 +37,7 @@ export interface Message {
   agent?: string;
   model?: string;
   tokens_used?: number;
+  error_type?: string;
   timestamp: string;
   approval?: MessageApproval;
   attachments?: ChatAttachment[];
@@ -63,7 +64,19 @@ export interface Agent {
 
 export type ChatState = 1 | 2 | 3;
 
+export interface ToolExecution {
+  id: string;
+  tool: string;
+  status: 'running' | 'completed';
+  summary: string;
+  input?: string;
+  output?: string;
+}
+
 export interface StreamingState {
   conversationId: string;
   tokens: string;
+  thinking: string;
+  isThinking: boolean;
+  tools: ToolExecution[];
 }

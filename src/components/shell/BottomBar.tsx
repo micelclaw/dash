@@ -31,6 +31,7 @@ export function BottomBar() {
   const bubbleMessage = useChatStore((s) => s.bubbleMessage);
   const setBubbleMessage = useChatStore((s) => s.setBubbleMessage);
   const appendStreamToken = useChatStore((s) => s.appendStreamToken);
+  const addToolEvent = useChatStore((s) => s.addToolEvent);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
   const navigate = useNavigate();
@@ -45,10 +46,19 @@ export function BottomBar() {
 
     switch (streamEvent.event) {
       case 'chat.stream.start':
-        setStreamingMessage({ conversationId: convId, tokens: '' });
+        setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
         break;
       case 'chat.stream.token':
         appendStreamToken(convId, data.token as string);
+        break;
+      case 'chat.stream.thinking':
+        appendStreamToken(convId, data.token as string, 'thinking');
+        break;
+      case 'chat.stream.tool':
+        addToolEvent(convId, data as any);
+        break;
+      case 'chat.stream.gateway_down':
+        finalizeStream(convId, '', '__gateway_down__', 0);
         break;
       case 'chat.stream.done':
         finalizeStream(
@@ -56,6 +66,7 @@ export function BottomBar() {
           data.full_text as string,
           data.model as string | undefined,
           data.tokens_used as number | undefined,
+          data.error_type as string | undefined,
         );
         break;
     }

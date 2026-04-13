@@ -35,8 +35,10 @@ interface ChatStore {
   addMessage: (message: Message) => void;
   setStreamingMessage: (state: StreamingState | null) => void;
   setBubbleMessage: (message: Message | null) => void;
-  appendStreamToken: (conversationId: string, token: string) => void;
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number) => void;
+  appendStreamToken: (conversationId: string, token: string, type?: 'thinking' | 'text') => void;
+  addToolEvent: (conversationId: string, event: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }) => void;
+  cancelStream: () => void;
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
   updateApprovalStatus: (approvalId: string, status: 'approved' | 'rejected' | 'expired') => void;
@@ -55,8 +57,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   agents: [],
 
   sendMessage: (text: string, context?: Record<string, unknown>, attachments?: ChatAttachment[]) => {
-    const { activeConversationId, selectedAgent, messages, chatState } = get();
+    // Block sending while a stream is active
+    if (get().streamingMessage) return;
+
+    const { activeConversationId, selectedAgent, messages, chatState, conversations } = get();
     const convId = activeConversationId ?? crypto.randomUUID();
+
+    // Resolve the correct agent: conversation's agent takes priority over selector
+    const activeConv = activeConversationId
+      ? conversations.find(c => c.id === activeConversationId)
+      : null;
+    const agent = activeConv?.agent ?? selectedAgent;
 
     // Auto-expand chat panel when sending from collapsed state (any module)
     if (chatState === 1) {
@@ -67,7 +78,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       set({ activeConversationId: convId });
       const conv: Conversation = {
         id: convId,
-        agent: selectedAgent,
+        agent,
         first_message: text,
         message_count: 0,
         created_at: new Date().toISOString(),
@@ -101,7 +112,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       simulateMockStreaming(convId, text, get, set);
     } else {
       useWebSocketStore.getState().send('chat.send', {
-        agent: selectedAgent,
+        agent,
         message: text,
         conversation_id: convId,
         context: context ?? null,
@@ -114,7 +125,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
   selectAgent: (name: string) => set({ selectedAgent: name }),
 
-  selectConversation: (id: string) => set({ activeConversationId: id }),
+  selectConversation: (id: string) => {
+    const conv = get().conversations.find(c => c.id === id);
+    set({
+      activeConversationId: id,
+      selectedAgent: conv?.agent ?? get().selectedAgent,
+    });
+  },
 
   startNewConversation: () => set({ activeConversationId: null }),
 
@@ -135,14 +152,36 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
   setBubbleMessage: (bubbleMessage: Message | null) => set({ bubbleMessage }),
 
-  appendStreamToken: (conversationId: string, token: string) => {
+  appendStreamToken: (conversationId: string, token: string, type?: 'thinking' | 'text') => {
+    set((state) => {
+      const current = state.streamingMessage ?? { conversationId, tokens: '', thinking: '', isThinking: false, tools: [] };
+      if (type === 'thinking') {
+        return { streamingMessage: { ...current, conversationId, thinking: current.thinking + token, isThinking: true } };
+      }
+      // Regular text token — mark thinking as done
+      return { streamingMessage: { ...current, conversationId, tokens: current.tokens + token, isThinking: false } };
+    });
+  },
+
+  addToolEvent: (conversationId: string, event) => {
     set((state) => {
       const current = state.streamingMessage;
-      if (current && current.conversationId === conversationId) {
-        return { streamingMessage: { ...current, tokens: current.tokens + token } };
+      if (!current || current.conversationId !== conversationId) return {};
+      const tools = [...current.tools];
+      const existing = tools.findIndex(t => t.id === event.id);
+      if (existing >= 0) {
+        tools[existing] = { ...tools[existing], ...event };
+      } else {
+        tools.push(event as any);
       }
-      return { streamingMessage: { conversationId, tokens: token } };
+      return { streamingMessage: { ...current, tools } };
     });
+  },
+
+  cancelStream: () => {
+    const sm = get().streamingMessage;
+    if (!sm) return;
+    useWebSocketStore.getState().send('chat.cancel', { conversation_id: sm.conversationId });
   },
 
   deleteConversation: (id: string) => {
@@ -253,15 +292,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number) => {
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string) => {
+    const conv = get().conversations.find(c => c.id === conversationId);
     const assistantMsg: Message = {
       id: crypto.randomUUID(),
       conversation_id: conversationId,
       role: 'assistant',
       content: fullText,
-      agent: get().selectedAgent,
+      agent: conv?.agent ?? get().selectedAgent,
       model,
       tokens_used: tokensUsed,
+      error_type: errorType,
       timestamp: new Date().toISOString(),
     };
 
@@ -306,7 +347,7 @@ function simulateMockStreaming(
 
   // Start streaming after a small delay
   setTimeout(() => {
-    set(() => ({ streamingMessage: { conversationId: convId, tokens: '' } }));
+    set(() => ({ streamingMessage: { conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] } }));
 
     let i = 0;
     const interval = setInterval(() => {

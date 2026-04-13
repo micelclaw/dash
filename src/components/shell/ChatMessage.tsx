@@ -15,25 +15,82 @@ import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Layout, FileText, Image as ImageIcon, File } from 'lucide-react';
+import { Layout, FileText, Image as ImageIcon, File, Terminal, Check, Loader2, ChevronDown, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
 import type { Message, MessageApproval, ChatAttachment } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useCanvasStore } from '@/stores/canvas.store';
+import { startGateway } from '@/services/gateway.service';
+
+function ToolBlock({ tool }: { tool: { id: string; tool: string; status: string; summary: string; input?: string; output?: string } }) {
+  const [expanded, setExpanded] = useState(false);
+  const isRunning = tool.status === 'running';
+  return (
+    <div style={{
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)',
+    }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          padding: '6px 8px', background: 'none', border: 'none',
+          color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
+          textAlign: 'left',
+        }}
+      >
+        {isRunning
+          ? <Loader2 size={12} style={{ color: 'var(--amber)', animation: 'spin 1s linear infinite' }} />
+          : <Check size={12} style={{ color: 'var(--success, #22c55e)' }} />
+        }
+        <Terminal size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {tool.summary || tool.tool}
+        </span>
+        {(tool.input || tool.output) && (
+          expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+        )}
+      </button>
+      {expanded && (tool.input || tool.output) && (
+        <div style={{
+          padding: '4px 8px 6px', borderTop: '1px solid var(--border)',
+          maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+          color: 'var(--text-muted)', fontSize: '0.6875rem', lineHeight: 1.4,
+        }}>
+          {tool.input && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text-dim)' }}>Input:</strong> {tool.input}</div>}
+          {tool.output && <div><strong style={{ color: 'var(--text-dim)' }}>Output:</strong> {tool.output}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ChatMessageProps {
   message: Message;
   isStreaming?: boolean;
+  thinkingText?: string;
+  isThinking?: boolean;
+  tools?: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }[];
 }
 
-export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ message, isStreaming, thinkingText, isThinking, tools }: ChatMessageProps) {
   const navigate = useNavigate();
   const isUser = message.role === 'user';
 
   // Render approval card if this message carries an approval
   if (message.approval) {
     return <ApprovalCard approval={message.approval} />;
+  }
+
+  // Render gateway-down card when the gateway is unreachable
+  if (message.model === '__gateway_down__') {
+    return <GatewayDownCard />;
+  }
+
+  // Render error card for API errors (overloaded, rate limit, timeout, etc.)
+  if (message.model === 'error') {
+    return <ApiErrorCard message={message} />;
   }
 
   const handleLinkClick = useCallback(
@@ -261,12 +318,38 @@ export function ChatMessage({ message, isStreaming }: ChatMessageProps) {
                 )}
               </div>
             )}
-            {isStreaming && !message.content && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 0' }}>
-                <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Thinking</span>
-                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0s' }}>.</span>
-                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.2s' }}>.</span>
-                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.4s' }}>.</span>
+            {/* Tool executions (minimized, expandable) */}
+            {isStreaming && tools && tools.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+                {tools.map(t => (
+                  <ToolBlock key={t.id} tool={t} />
+                ))}
+              </div>
+            )}
+            {isStreaming && (!message.content || isThinking) && (
+              <div style={{ padding: '2px 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Thinking</span>
+                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0s' }}>.</span>
+                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.2s' }}>.</span>
+                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.4s' }}>.</span>
+                </div>
+                {thinkingText && (
+                  <div style={{
+                    fontSize: '0.6875rem',
+                    lineHeight: 1.4,
+                    color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono, monospace)',
+                    maxHeight: 80,
+                    overflow: 'hidden',
+                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                    marginTop: 4,
+                    opacity: 0.7,
+                  }}>
+                    {thinkingText.slice(-300)}
+                  </div>
+                )}
               </div>
             )}
             {isStreaming && message.content && (
@@ -470,6 +553,217 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
                 Reject
               </button>
             </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GatewayDownCard() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<'idle' | 'started' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleStart = async () => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      await startGateway();
+      setResult('started');
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? 'Error al iniciar el Gateway');
+      setResult('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '4px 0' }}>
+      <div
+        style={{
+          maxWidth: '85%',
+          padding: '12px 16px',
+          background: 'var(--card)',
+          borderRadius: '12px 12px 12px 4px',
+          border: '1px solid var(--amber)',
+          fontSize: '0.875rem',
+          lineHeight: 1.5,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <AlertTriangle size={18} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+          <span style={{ fontWeight: 600, color: 'var(--amber)' }}>Gateway detenido</span>
+        </div>
+
+        {result === 'idle' && (
+          <>
+            <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', marginBottom: 10 }}>
+              El Gateway no está corriendo. ¿Quieres iniciarlo?
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleStart}
+                disabled={loading}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: 'var(--amber)',
+                  color: '#000',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: loading ? 'wait' : 'pointer',
+                  opacity: loading ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                {loading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
+                {loading ? 'Iniciando...' : 'Sí'}
+              </button>
+              <button
+                onClick={() => setResult('error')}
+                disabled={loading}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'transparent',
+                  color: 'var(--text-dim)',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                }}
+              >
+                No
+              </button>
+            </div>
+          </>
+        )}
+
+        {result === 'started' && (
+          <div style={{ color: '#22c55e', fontSize: '0.8125rem' }}>
+            Gateway iniciado. Envía tu mensaje de nuevo.
+          </div>
+        )}
+
+        {result === 'error' && !errorMsg && (
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
+            Mensaje descartado.
+          </div>
+        )}
+
+        {errorMsg && (
+          <div style={{ color: '#ef4444', fontSize: '0.8125rem' }}>
+            {errorMsg}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const ERROR_INFO: Record<string, { title: string; description: string; hint: string }> = {
+  overloaded: {
+    title: 'Servicio de IA saturado',
+    description: 'Los servidores de IA estan temporalmente sobrecargados.',
+    hint: 'Reintenta en unos segundos o prueba con un modelo mas rapido.',
+  },
+  rate_limit: {
+    title: 'Limite de peticiones',
+    description: 'Se ha superado el limite de peticiones a la API.',
+    hint: 'Espera unos segundos antes de reintentar.',
+  },
+  timeout: {
+    title: 'Tiempo de espera agotado',
+    description: 'El agente no respondio a tiempo.',
+    hint: 'Reintenta con un mensaje mas corto o verifica la conexion.',
+  },
+  network: {
+    title: 'Error de conexion',
+    description: 'No se pudo conectar con el Gateway.',
+    hint: 'Verifica que el Gateway este corriendo.',
+  },
+  auth: {
+    title: 'Error de autenticacion',
+    description: 'No se pudo autenticar con el servicio de IA.',
+    hint: 'Verifica la configuracion de la API key.',
+  },
+  unknown: {
+    title: 'Error inesperado',
+    description: 'Algo salio mal al procesar tu mensaje.',
+    hint: 'Reintenta o consulta los logs para mas detalles.',
+  },
+};
+
+function ApiErrorCard({ message }: { message: Message }) {
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const messages = useChatStore((s) => s.messages);
+  const [retried, setRetried] = useState(false);
+
+  const info = ERROR_INFO[message.error_type ?? 'unknown'] ?? ERROR_INFO.unknown;
+
+  const handleRetry = () => {
+    // Find the last user message in this conversation
+    const convMessages = messages.get(message.conversation_id) ?? [];
+    const lastUserMsg = [...convMessages].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) {
+      setRetried(true);
+      sendMessage(lastUserMsg.content, undefined, lastUserMsg.attachments);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'flex-start', padding: '4px 0' }}>
+      <div
+        style={{
+          maxWidth: '85%',
+          padding: '12px 16px',
+          background: 'var(--card)',
+          borderRadius: '12px 12px 12px 4px',
+          border: '1px solid #ef4444',
+          fontSize: '0.875rem',
+          lineHeight: 1.5,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
+          <span style={{ fontWeight: 600, color: '#ef4444' }}>{info.title}</span>
+        </div>
+
+        <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', marginBottom: 4 }}>
+          {info.description}
+        </div>
+        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 10 }}>
+          {info.hint}
+        </div>
+
+        {!retried ? (
+          <button
+            onClick={handleRetry}
+            style={{
+              padding: '6px 16px',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: 'var(--amber)',
+              color: '#000',
+              fontWeight: 600,
+              fontSize: '0.8125rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <RefreshCw size={14} />
+            Reintentar
+          </button>
+        ) : (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+            Mensaje reenviado.
           </div>
         )}
       </div>

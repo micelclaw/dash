@@ -47,6 +47,7 @@ import { DownloadDialog } from '@/components/player/DownloadDialog';
 import { usePlayerStore } from '@/stores/player.store';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { useExtractionStore } from '@/stores/extraction.store';
+import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 
 export function Shell() {
@@ -76,11 +77,15 @@ export function Shell() {
   const prevConfiguredRef = useRef<boolean | null>(null);
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
+  const loadConfigSchema = useOpenclawSchemaStore((s) => s.loadConfigSchema);
 
   useEffect(() => {
     fetchSnapshot();
     fetchSettings();
-  }, [fetchSnapshot, fetchSettings]);
+    // Ola 7: load OpenClaw config schema once at boot. Used by the Raw JSON
+    // editor (/settings/raw) for client-side validation. Failures are silent.
+    loadConfigSchema();
+  }, [fetchSnapshot, fetchSettings, loadConfigSchema]);
 
   // Poll every 10s while unconfigured to detect onboarding completion
   useEffect(() => {
@@ -228,6 +233,7 @@ export function Shell() {
   const changeEvent = useWebSocket('change.*');
   const mediaEvent = useWebSocket('media.download.*');
   const sensorEvent = useWebSocket('sensor.*');
+  const workflowEvent = useWebSocket('workflow.*');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -242,6 +248,7 @@ export function Shell() {
           : undefined;
         const domainTypeMap: Record<string, Notification['type']> = {
           emails: 'email', events: 'calendar', contacts: 'contacts',
+          messages: 'messages',
         };
         const notifType: Notification['type'] = (primaryDomain && domainTypeMap[primaryDomain]) || 'sync';
 
@@ -250,10 +257,19 @@ export function Shell() {
         const domainRouteMap: Record<string, string> = {
           emails: '/mail', events: '/calendar', contacts: '/contacts',
           notes: '/notes', files: '/drive', diary_entries: '/diary',
+          messages: '/messages',
         };
-        const action = singleRecord
-          ? { label: 'View', route: `${domainRouteMap[singleRecord.domain] ?? '/'}?id=${singleRecord.id}` }
-          : undefined;
+        let action: { label: string; route: string } | undefined;
+        if (singleRecord) {
+          if (singleRecord.domain === 'messages') {
+            const provider = (syncEvent.data.provider as string) ?? '';
+            action = { label: 'View', route: `/messages?platform=${provider.toLowerCase()}` };
+          } else {
+            action = { label: 'View', route: `${domainRouteMap[singleRecord.domain] ?? '/'}?id=${singleRecord.id}` };
+          }
+        } else if (primaryDomain && domainRouteMap[primaryDomain]) {
+          action = { label: 'View', route: domainRouteMap[primaryDomain]! };
+        }
 
         addNotification({
           type: notifType,
@@ -283,6 +299,13 @@ export function Shell() {
 
   useEffect(() => {
     if (!agentEvent) return;
+
+    // agent.model_changed is handled inside use-agent-detail.ts (it
+    // refetches the open detail in this tab). No user-facing
+    // notification — the user is the one who triggered it.
+    if (agentEvent.event === 'agent.model_changed') return;
+
+    // agent.message → user-facing notification
     const agent = agentEvent.data.agent as string;
     const summary = agentEvent.data.summary as string;
     const route = agentEvent.data.route as string | undefined;
@@ -516,6 +539,35 @@ export function Shell() {
       toast.error('Home Assistant disconnected');
     }
   }, [sensorEvent, addNotification]);
+
+  // ── Workflow events ──
+  useEffect(() => {
+    if (!workflowEvent) return;
+    import('@/stores/flows.store').then(({ useFlowsStore }) => {
+      const flowsState = useFlowsStore.getState();
+
+      if (workflowEvent.event === 'workflow.completed') {
+        const name = workflowEvent.data.flow_name as string;
+        toast.success(`Flow "${name}" completed`);
+        flowsState.onWorkflowCompleted(workflowEvent.data as Record<string, unknown>);
+      } else if (workflowEvent.event === 'workflow.failed') {
+        const name = workflowEvent.data.flow_name as string;
+        const error = workflowEvent.data.error as string;
+        toast.error(`Flow "${name}" failed: ${error}`);
+        flowsState.onWorkflowFailed(workflowEvent.data as Record<string, unknown>);
+      } else if (workflowEvent.event === 'workflow.needs_approval') {
+        const name = workflowEvent.data.flow_name as string;
+        addNotification({
+          type: 'approval',
+          title: `Flow "${name}" needs approval`,
+          action: { label: 'Review', route: '/flows' },
+        });
+        flowsState.onWorkflowNeedsApproval(workflowEvent.data as Record<string, unknown>);
+      } else if (workflowEvent.event === 'workflow.started') {
+        flowsState.onWorkflowStarted(workflowEvent.data as Record<string, unknown>);
+      }
+    });
+  }, [workflowEvent, addNotification]);
 
   return (
     <TooltipProvider>

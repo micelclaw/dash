@@ -18,8 +18,10 @@ import { useModuleContext } from '@/hooks/use-module-context';
 import { useVoice } from '@/hooks/use-voice';
 import { useVoiceStream } from '@/hooks/use-voice-stream';
 import { AgentSelector } from './AgentSelector';
+import { SlashCommandMenu } from './SlashCommandMenu';
 import { VoiceButton } from '@/components/voice/VoiceButton';
 import { SpeakingIndicator } from '@/components/voice/SpeakingIndicator';
+import { ThinkingLevelIndicator } from './ThinkingLevelIndicator';
 import { api } from '@/services/api';
 import type { ChatAttachment } from '@/types/chat';
 
@@ -39,6 +41,9 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastInputWasVoiceRef = useRef(false);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const cancelStream = useChatStore((s) => s.cancelStream);
+  const isProcessing = !!streamingMessage;
   const moduleContext = useModuleContext();
   const voice = useVoice();
   const voiceStream = useVoiceStream();
@@ -229,7 +234,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     <div
       style={{
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'center',
         gap: 8,
         padding: '8px 16px',
         background: 'var(--surface)',
@@ -238,6 +243,14 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       }}
     >
       <AgentSelector compact={compactAgent} />
+
+      <SlashCommandMenu onSelect={(cmd) => {
+        sendMessage(cmd, {
+          module: moduleContext.moduleId,
+          active_item: moduleContext.activeItem,
+          editor_context: moduleContext.editorContext,
+        });
+      }} />
 
       <div
         style={{
@@ -298,10 +311,11 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-          placeholder="Ask anything..."
+          onChange={(e) => !isProcessing && setText(e.target.value)}
+          onKeyDown={isProcessing ? undefined : handleKeyDown}
+          onInput={isProcessing ? undefined : handleInput}
+          readOnly={isProcessing}
+          placeholder={isProcessing ? 'Processing...' : 'Ask anything...'}
           rows={1}
           style={{
             width: '100%',
@@ -367,15 +381,34 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           color: pendingFiles.length > 0 ? 'var(--amber)' : 'var(--text-muted)',
           padding: 4,
           display: 'flex',
+          alignItems: 'center',
           borderRadius: 'var(--radius-sm)',
           opacity: uploading ? 0.5 : 1,
         }}
       >
-        <Paperclip size={16} />
+        <Paperclip size={18} />
       </button>
 
+      {/* Thinking level indicator */}
+      <ThinkingLevelIndicator />
+
+      {/* Status indicator: red (processing, clickable to cancel) / green (ready) */}
+      <div
+        onClick={isProcessing ? cancelStream : undefined}
+        title={isProcessing ? 'Click to cancel' : 'Ready'}
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+          flexShrink: 0,
+          background: isProcessing ? '#ef4444' : '#22c55e',
+          cursor: isProcessing ? 'pointer' : 'default',
+          transition: 'background 0.2s',
+        }}
+      />
+
       {/* Send button */}
-      {(text.trim() || pendingFiles.length > 0) && (
+      {(text.trim() || pendingFiles.length > 0) && !isProcessing && (
         <button
           onClick={handleSend}
           style={{

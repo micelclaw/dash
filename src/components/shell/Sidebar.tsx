@@ -1,18 +1,11 @@
 /**
- * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
  * All rights reserved.
- *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Pin, PinOff } from 'lucide-react';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { MODULES } from '@/config/modules';
 import { SidebarItem } from './SidebarItem';
@@ -28,12 +21,86 @@ interface SidebarProps {
   forceExpanded?: boolean;
 }
 
+const AUTO_COLLAPSE_DELAY = 3000; // 3s before auto-collapse
+const HOVER_COLLAPSE_DELAY = 2000; // 2s after mouse leaves before re-collapsing
+
 export function Sidebar({ forceExpanded }: SidebarProps) {
   const storeCollapsed = useSidebarStore((s) => s.collapsed);
   const toggle = useSidebarStore((s) => s.toggle);
+  const pinned = useSidebarStore((s) => s.pinned);
+  const togglePin = useSidebarStore((s) => s.togglePin);
+  const hoverExpanded = useSidebarStore((s) => s.hoverExpanded);
+  const setHoverExpanded = useSidebarStore((s) => s.setHoverExpanded);
+  const setCollapsed = useSidebarStore((s) => s.setCollapsed);
   const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const navigate = useNavigate();
   const collapsed = forceExpanded ? false : storeCollapsed;
+
+  const autoCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverCollapseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Auto-collapse after delay when unpinned and expanded
+  useEffect(() => {
+    if (forceExpanded || pinned || collapsed) return;
+    // Don't auto-collapse if hover-expanded (user is interacting)
+    if (hoverExpanded) return;
+
+    autoCollapseTimer.current = setTimeout(() => {
+      setCollapsed(true);
+    }, AUTO_COLLAPSE_DELAY);
+
+    return () => {
+      if (autoCollapseTimer.current) clearTimeout(autoCollapseTimer.current);
+    };
+  }, [forceExpanded, pinned, collapsed, hoverExpanded, setCollapsed]);
+
+  // Hover-expand: mouse enters sidebar area when collapsed + unpinned
+  const handleMouseEnter = useCallback(() => {
+    if (pinned || forceExpanded) return;
+    if (hoverCollapseTimer.current) {
+      clearTimeout(hoverCollapseTimer.current);
+      hoverCollapseTimer.current = null;
+    }
+    if (collapsed) {
+      setHoverExpanded(true);
+    }
+  }, [pinned, forceExpanded, collapsed, setHoverExpanded]);
+
+  // Hover-collapse: mouse leaves sidebar, start countdown to re-collapse
+  const handleMouseLeave = useCallback(() => {
+    if (pinned || forceExpanded || !hoverExpanded) return;
+    hoverCollapseTimer.current = setTimeout(() => {
+      setHoverExpanded(false);
+    }, HOVER_COLLAPSE_DELAY);
+  }, [pinned, forceExpanded, hoverExpanded, setHoverExpanded]);
+
+  // Click anywhere outside sidebar → instant collapse (when unpinned + expanded)
+  useEffect(() => {
+    if (forceExpanded || pinned || collapsed) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (sidebarRef.current?.contains(e.target as Node)) return;
+      // Cancel pending auto-collapse timer and collapse immediately
+      if (autoCollapseTimer.current) clearTimeout(autoCollapseTimer.current);
+      if (hoverExpanded) {
+        setHoverExpanded(false);
+      } else {
+        setCollapsed(true);
+      }
+    };
+
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [forceExpanded, pinned, collapsed, hoverExpanded, setCollapsed, setHoverExpanded]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (autoCollapseTimer.current) clearTimeout(autoCollapseTimer.current);
+      if (hoverCollapseTimer.current) clearTimeout(hoverCollapseTimer.current);
+    };
+  }, []);
 
   const { ungrouped, groups } = useMemo(() => {
     const ungrouped = MODULES.filter((m) => !m.group);
@@ -48,6 +115,9 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
 
   return (
     <div
+      ref={sidebarRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       style={{
         width: collapsed ? 56 : 240,
         minWidth: collapsed ? 56 : 240,
@@ -58,9 +128,11 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
         borderRight: '1px solid var(--border)',
         transition: 'width var(--transition-slow), min-width var(--transition-slow)',
         overflow: 'hidden',
+        // Ensure sidebar is above content when hover-expanded
+        ...(hoverExpanded ? { position: 'absolute' as const, zIndex: 50, boxShadow: 'var(--shadow-lg)' } : {}),
       }}
     >
-      {/* Logo + toggle */}
+      {/* Logo + toggle + pin */}
       <div
         style={{
           display: 'flex',
@@ -95,32 +167,36 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
           )}
         </button>
 
-        {/* Sidebar toggle button */}
-        {!forceExpanded && (
-          collapsed ? (
+        {/* Sidebar controls: pin + collapse toggle */}
+        {!forceExpanded && !collapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            {/* Pin button */}
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
                 <button
-                  onClick={toggle}
+                  onClick={togglePin}
                   style={{
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: 'var(--text-muted)',
+                    color: pinned ? 'var(--amber)' : 'var(--text-muted)',
                     padding: 4,
                     display: 'flex',
                     borderRadius: 'var(--radius-sm)',
                     transition: 'color var(--transition-fast)',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                  onMouseEnter={(e) => { if (!pinned) e.currentTarget.style.color = 'var(--text)'; }}
+                  onMouseLeave={(e) => { if (!pinned) e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
-                  <PanelLeftOpen size={16} />
+                  {pinned ? <Pin size={14} /> : <PinOff size={14} />}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">Expand sidebar (⌘B)</TooltipContent>
+              <TooltipContent side="right">
+                {pinned ? 'Unpin sidebar (auto-collapse)' : 'Pin sidebar (stay open)'}
+              </TooltipContent>
             </Tooltip>
-          ) : (
+
+            {/* Collapse button */}
             <button
               onClick={toggle}
               style={{
@@ -140,7 +216,33 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
             >
               <PanelLeftClose size={16} />
             </button>
-          )
+          </div>
+        )}
+
+        {/* Collapsed: expand button only */}
+        {!forceExpanded && collapsed && (
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={toggle}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: 4,
+                  display: 'flex',
+                  borderRadius: 'var(--radius-sm)',
+                  transition: 'color var(--transition-fast)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+              >
+                <PanelLeftOpen size={16} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Expand sidebar (⌘B)</TooltipContent>
+          </Tooltip>
         )}
       </div>
 

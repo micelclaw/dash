@@ -34,6 +34,7 @@ export function Component() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const setChatState = useChatStore((s) => s.setChatState);
   const appendStreamToken = useChatStore((s) => s.appendStreamToken);
+  const addToolEvent = useChatStore((s) => s.addToolEvent);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
   const navigate = useNavigate();
@@ -63,10 +64,19 @@ export function Component() {
 
     switch (streamEvent.event) {
       case 'chat.stream.start':
-        setStreamingMessage({ conversationId: convId, tokens: '' });
+        setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
         break;
       case 'chat.stream.token':
         appendStreamToken(convId, data.token as string);
+        break;
+      case 'chat.stream.thinking':
+        appendStreamToken(convId, data.token as string, 'thinking');
+        break;
+      case 'chat.stream.tool':
+        addToolEvent(convId, data as any);
+        break;
+      case 'chat.stream.gateway_down':
+        finalizeStream(convId, '', '__gateway_down__', 0);
         break;
       case 'chat.stream.done':
         finalizeStream(
@@ -74,14 +84,17 @@ export function Component() {
           data.full_text as string,
           data.model as string | undefined,
           data.tokens_used as number | undefined,
+          data.error_type as string | undefined,
         );
         // Dispatch event for TTS auto-play (ChatInput listens)
-        window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
-          detail: { text: data.full_text as string },
-        }));
+        if (data.model !== 'error') {
+          window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
+            detail: { text: data.full_text as string },
+          }));
+        }
         break;
     }
-  }, [streamEvent, appendStreamToken, finalizeStream, setStreamingMessage]);
+  }, [streamEvent, appendStreamToken, addToolEvent, finalizeStream, setStreamingMessage]);
 
   // Listen for dash.navigate events
   const navEvent = useWebSocket('dash.navigate');

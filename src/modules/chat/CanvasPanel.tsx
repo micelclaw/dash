@@ -150,7 +150,7 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
             onDownload={downloadScreenshot}
           />
         ) : isCanvasMode ? (
-          <CanvasIframe type={canvas!.type!} content={canvas!.content!} />
+          <CanvasIframe canvas={canvas!} />
         ) : (
           <EmptyState />
         )}
@@ -160,14 +160,37 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
 }
 
 // ─── Canvas Iframe ──────────────────────────────────────────────────
+//
+// Ola 7 (oc7-5.1g): dual-mode renderer.
+//   - type='html'  → srcDoc inline (existing behavior)
+//   - type='a2ui'  → placeholder pre tag (existing behavior)
+//   - type='url'   → src points at our /canvas-host/* proxy. Cache-bust
+//                    via reloadKey when canvas.reload event fires.
 
-function CanvasIframe({ type, content }: { type: 'html' | 'a2ui'; content: string }) {
-  if (type === 'a2ui') {
+import type { CanvasState } from '@/stores/canvas.store';
+
+function CanvasIframe({ canvas }: { canvas: CanvasState }) {
+  if (canvas.type === 'url' && canvas.url) {
+    // Cache-bust via reloadKey query param. The iframe re-fetches whenever
+    // OpenClaw's chokidar fires a `reload` and we bump reloadKey in the store.
+    const sep = canvas.url.includes('?') ? '&' : '?';
+    const src = `${canvas.url}${sep}_r=${canvas.reloadKey ?? 0}`;
+    return (
+      <iframe
+        src={src}
+        title="Canvas"
+        sandbox="allow-scripts allow-same-origin"
+        style={{ flex: 1, border: 'none', background: '#fff' }}
+      />
+    );
+  }
+
+  if (canvas.type === 'a2ui' && canvas.content) {
     // A2UI: iframe pointing to Gateway renderer, postMessage JSONL
     // Fallback: render raw content as HTML for now
     return (
       <iframe
-        srcDoc={wrapHtml('<pre style="padding:16px;color:#ccc;font-size:12px">' + escapeHtml(content) + '</pre>')}
+        srcDoc={wrapHtml('<pre style="padding:16px;color:#ccc;font-size:12px">' + escapeHtml(canvas.content) + '</pre>')}
         title="A2UI Canvas"
         sandbox="allow-scripts"
         style={{ flex: 1, border: 'none', background: '#fff' }}
@@ -175,10 +198,10 @@ function CanvasIframe({ type, content }: { type: 'html' | 'a2ui'; content: strin
     );
   }
 
-  // HTML canvas — sandboxed iframe
+  // HTML canvas (inline) — sandboxed iframe with srcDoc
   return (
     <iframe
-      srcDoc={content}
+      srcDoc={canvas.content ?? ''}
       title="Canvas"
       sandbox="allow-scripts"
       style={{ flex: 1, border: 'none', background: '#fff' }}
