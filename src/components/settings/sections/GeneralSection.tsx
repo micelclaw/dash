@@ -44,19 +44,53 @@ const SEARCH_MODES = [
   { value: 'semantic', label: 'Always Semantic (Pro)' },
 ];
 
-function getTimezoneOptions(): Array<{ value: string; label: string }> {
+/**
+ * Compute the current UTC offset of an IANA timezone using Intl.
+ * Returns the offset in minutes (signed) and a pretty label like
+ * `UTC+2` / `UTC-5` / `UTC+5:30`. Honors DST as of "now".
+ */
+function getTimezoneOffset(tz: string): { mins: number; label: string } {
   try {
-    const zones = (Intl as any).supportedValuesOf('timeZone') as string[];
-    return zones.map((tz: string) => ({ value: tz, label: tz.replace(/_/g, ' ') }));
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset',
+    });
+    const parts = fmt.formatToParts(new Date());
+    const offsetPart = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
+    // offsetPart looks like "GMT", "GMT+2", "GMT-5", "GMT+5:30"
+    const m = /GMT([+-])(\d{1,2})(?::(\d{2}))?/.exec(offsetPart);
+    if (!m || !m[1] || !m[2]) return { mins: 0, label: 'UTC' };
+    const signChar = m[1];
+    const sign = signChar === '+' ? 1 : -1;
+    const h = parseInt(m[2], 10);
+    const mm = m[3] ? parseInt(m[3], 10) : 0;
+    const totalMins = sign * (h * 60 + mm);
+    const minStr = mm > 0 ? `:${String(mm).padStart(2, '0')}` : '';
+    return { mins: totalMins, label: `UTC${signChar}${h}${minStr}` };
   } catch {
-    return [
-      { value: 'UTC', label: 'UTC' },
-      { value: 'America/New_York', label: 'America/New York' },
-      { value: 'Europe/London', label: 'Europe/London' },
-      { value: 'Europe/Madrid', label: 'Europe/Madrid' },
-      { value: 'Asia/Tokyo', label: 'Asia/Tokyo' },
-    ];
+    return { mins: 0, label: 'UTC' };
   }
+}
+
+// Computed once per page load — there are ~400 IANA zones, so we
+// avoid recomputing on every render. The offsets themselves are
+// DST-aware as of the moment the page loaded; refreshing the page
+// re-evaluates them, which is good enough for a settings dropdown.
+let TIMEZONE_OPTIONS_CACHE: Array<{ value: string; label: string }> | null = null;
+
+function getTimezoneOptions(): Array<{ value: string; label: string }> {
+  if (TIMEZONE_OPTIONS_CACHE) return TIMEZONE_OPTIONS_CACHE;
+  let zones: string[];
+  try {
+    zones = (Intl as any).supportedValuesOf('timeZone') as string[];
+  } catch {
+    zones = ['UTC', 'America/New_York', 'Europe/London', 'Europe/Madrid', 'Asia/Tokyo'];
+  }
+  TIMEZONE_OPTIONS_CACHE = zones.map((tz) => {
+    const { label: offset } = getTimezoneOffset(tz);
+    return { value: tz, label: `(${offset}) ${tz.replace(/_/g, ' ')}` };
+  });
+  return TIMEZONE_OPTIONS_CACHE;
 }
 
 function formatPreview(dateFormat: string, timeFormat: string): string {

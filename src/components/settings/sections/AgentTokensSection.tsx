@@ -225,7 +225,15 @@ export function AgentTokensSection() {
                 <div className="flex items-center gap-2 mt-0.5">
                   <div className="flex gap-1 flex-wrap">
                     {token.scopes.map(s => (
-                      <span key={s} className="px-1.5 py-0.5 text-[10px] rounded bg-[var(--accent)]/10 text-[var(--accent)] font-medium">
+                      <span
+                        key={s}
+                        className="px-1.5 py-0.5 text-[10px] rounded font-medium"
+                        style={{
+                          background: 'color-mix(in srgb, var(--amber) 18%, transparent)',
+                          color: 'var(--amber)',
+                          border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
+                        }}
+                      >
                         {s}
                       </span>
                     ))}

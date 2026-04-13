@@ -19,11 +19,23 @@ export interface User {
   display_name: string;
   role: UserRole;
   tier: Tier;
+  /** ISO timestamp of the last password change. Optional for back-compat with old sessions. */
+  password_changed_at?: string;
 }
 
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  /**
+   * Database id of the row in `refresh_tokens`. Sent to the dash by
+   * `/auth/login`, `/auth/login-2fa` and `/auth/refresh`. Used by the
+   * Active Sessions UI to mark "this device" and to scope
+   * `revoke-others` correctly.
+   *
+   * Optional because old persisted sessions (pre-Account-enhancements)
+   * don't have it; the dash falls back gracefully.
+   */
+  refreshTokenId?: string;
 }
 
 export interface AuthState {

@@ -50,6 +50,9 @@ export function LoginPage() {
   const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
   const [vw, setVw] = useState(() => window.innerWidth);
   const login = useAuthStore((s) => s.login);
+  const login2fa = useAuthStore((s) => s.login2fa);
+  const cancelPending2fa = useAuthStore((s) => s.cancelPending2fa);
+  const pending2fa = useAuthStore((s) => s.pending2fa);
   const setAuth = useAuthStore((s) => s.setAuth);
   const navigate = useNavigate();
 
@@ -105,8 +108,15 @@ export function LoginPage() {
       if (useMock) {
         const user = getMockUser();
         setAuth(user, { accessToken: 'mock-token', refreshToken: 'mock-refresh' });
-      } else {
-        await login(email, password);
+        sessionStorage.removeItem('claw-explicit-logout');
+        navigate('/', { replace: true });
+        return;
+      }
+      const result = await login(email, password);
+      // 2FA gate: do NOT navigate. Component re-renders with the
+      // pending2fa state set, switching to the TwoFactorStep view.
+      if ('needs2fa' in result) {
+        return;
       }
       sessionStorage.removeItem('claw-explicit-logout');
       navigate('/', { replace: true });
@@ -115,6 +125,26 @@ export function LoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handle2faSubmit(code: string) {
+    setError('');
+    setLoading(true);
+    try {
+      await login2fa(code);
+      sessionStorage.removeItem('claw-explicit-logout');
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handle2faCancel() {
+    cancelPending2fa();
+    setError('');
+    setPassword('');
   }
 
   if (checkingAutoLogin) {
@@ -155,6 +185,16 @@ export function LoginPage() {
           paddingBottom: isMobile ? 0 : isNarrow ? 100 : 200,
         }}
       >
+        {pending2fa ? (
+          <TwoFactorStep
+            email={pending2fa.email}
+            error={error}
+            loading={loading}
+            onSubmit={handle2faSubmit}
+            onCancel={handle2faCancel}
+            isMobile={isMobile}
+          />
+        ) : (
         <form
           onSubmit={handleSubmit}
           style={{
@@ -331,9 +371,176 @@ export function LoginPage() {
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
+        )}
 
         <ForgotPasswordModal open={showForgot} onClose={() => setShowForgot(false)} />
       </div>
     </div>
+  );
+}
+
+// ─── Two-Factor second-step form ─────────────────────────────────
+//
+// Rendered after a successful password verification when the user has
+// 2FA enabled. The user pastes a 6-digit code from their authenticator
+// app (or a backup code in XXXXX-XXXXX format) and submits.
+//
+// The code input has `autoComplete="one-time-code"` so password
+// managers offer to fill TOTP codes automatically. We auto-submit on
+// the 6th digit (numeric) for a quick UX, but only if the value is
+// purely numeric — backup codes have a hyphen and are submitted
+// manually with the button.
+
+interface TwoFactorStepProps {
+  email: string;
+  error: string;
+  loading: boolean;
+  onSubmit: (code: string) => void;
+  onCancel: () => void;
+  isMobile: boolean;
+}
+
+function TwoFactorStep({ email, error, loading, onSubmit, onCancel, isMobile }: TwoFactorStepProps) {
+  const [code, setCode] = useState('');
+
+  function handleChange(value: string) {
+    setCode(value);
+    // Auto-submit when a clean 6-digit numeric code is entered.
+    if (/^\d{6}$/.test(value) && !loading) {
+      onSubmit(value);
+    }
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    onSubmit(code.trim());
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      style={{
+        width: '100%',
+        maxWidth: isMobile ? 'none' : 430,
+        padding: isMobile ? '32px 20px' : 57,
+        background: 'transparent',
+        backdropFilter: 'blur(5px)',
+        WebkitBackdropFilter: 'blur(5px)',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <h1
+          style={{
+            fontSize: '1.75rem',
+            fontWeight: 900,
+            color: 'var(--text)',
+            fontFamily: "'Orbitron', sans-serif",
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+          }}
+        >
+          Micelclaw
+        </h1>
+        <p style={{ fontSize: '1rem', color: 'var(--text-muted)', marginTop: 4 }}>
+          Two-factor authentication
+        </p>
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 8 }}>
+          Signed in as <strong style={{ color: 'var(--text-dim)' }}>{email}</strong>
+        </p>
+      </div>
+
+      {error && (
+        <div
+          style={{
+            padding: '8px 12px',
+            marginBottom: 16,
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(244, 63, 94, 0.1)',
+            color: 'var(--error)',
+            fontSize: '0.8125rem',
+          }}
+        >
+          {error}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 16 }}>
+        <label
+          htmlFor="totp-code"
+          style={{ display: 'block', fontSize: '0.9375rem', color: 'var(--text-muted)', marginBottom: 6 }}
+        >
+          Verification code
+        </label>
+        <input
+          id="totp-code"
+          type="text"
+          inputMode="text"
+          autoComplete="one-time-code"
+          autoFocus
+          value={code}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="123456 or backup-code"
+          style={{
+            width: '100%',
+            height: 36,
+            padding: '0 10px',
+            background: 'var(--card)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text)',
+            fontSize: '1.125rem',
+            letterSpacing: '0.1em',
+            fontFamily: 'var(--font-mono)',
+            outline: 'none',
+            boxSizing: 'border-box',
+            textAlign: 'center',
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
+          onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
+        />
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6, textAlign: 'center' }}>
+          Enter the code from your authenticator app, or a backup code if you don't have access to it.
+        </p>
+      </div>
+
+      <button
+        type="submit"
+        disabled={loading || !code.trim()}
+        style={{
+          width: '100%',
+          height: 36,
+          background: loading || !code.trim() ? 'var(--text-muted)' : 'var(--amber)',
+          color: '#06060a',
+          border: 'none',
+          borderRadius: 'var(--radius-md)',
+          fontSize: '1rem',
+          fontWeight: 600,
+          cursor: loading || !code.trim() ? 'not-allowed' : 'pointer',
+          marginBottom: 8,
+        }}
+      >
+        {loading ? 'Verifying...' : 'Verify'}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={loading}
+        style={{
+          width: '100%',
+          height: 32,
+          background: 'transparent',
+          color: 'var(--text-muted)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: '0.875rem',
+          cursor: loading ? 'not-allowed' : 'pointer',
+        }}
+      >
+        Back
+      </button>
+    </form>
   );
 }
