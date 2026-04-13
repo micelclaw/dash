@@ -15,7 +15,7 @@ import { api } from '@/services/api';
 
 interface Contact {
   id: string;
-  displayName: string;
+  display_name: string;
   email?: string;
   company?: string;
 }
@@ -165,11 +165,11 @@ export function ContactLinkDialog({
                 alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.75rem', fontWeight: 600, color: '#000', flexShrink: 0,
               }}>
-                {c.displayName.charAt(0).toUpperCase()}
+                {(c.display_name || '?').charAt(0).toUpperCase()}
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
-                  {c.displayName}
+                  {c.display_name}
                 </div>
                 {(c.email || c.company) && (
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

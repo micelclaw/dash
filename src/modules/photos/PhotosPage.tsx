@@ -23,6 +23,7 @@ import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSettingsStore } from '@/stores/settings.store';
 import { PhotosToolbar } from './PhotosToolbar';
 import { PhotosTimeline } from './PhotosTimeline';
 import { PhotosAlbums } from './PhotosAlbums';
@@ -353,7 +354,8 @@ export function Component() {
       } else {
         clearNonPending();
       }
-      fetchPhotos(true);
+      // Delay refetch slightly to ensure all markProcessed DB writes are visible
+      setTimeout(() => fetchPhotos(true), 500);
     });
     const unsub3 = wsClient.on('photo.worker.abort', () => {
       clearAllProcessing();
@@ -375,7 +377,12 @@ export function Component() {
     const unsub7 = wsClient.on('photo.worker.thumbnails_ready', () => {
       fetchPhotos(true);
     });
-    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
+    const unsub8 = wsClient.on('photo.worker.error', (e) => {
+      const { message } = e.data as { error: string; message: string };
+      toast.error(message);
+      clearAllProcessing();
+    });
+    return () => { unsub0(); unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); unsub8(); };
   }, [wsClient, setFilesPending, setFilePhase, clearNonPending, clearAllProcessing, clearFile, setProcessingPaused, fetchPhotos]);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -542,6 +549,22 @@ export function Component() {
   }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
 
   const handleBatchProcess = useCallback(async () => {
+    // Guard: check model is selected and downloaded before calling API
+    const settings = useSettingsStore.getState().settings;
+    const modelId = settings?.ai?.local_models?.multimodal_model;
+    if (!modelId) {
+      toast.error('No multimodal model selected. Go to Settings → AI & Intelligence to configure one.');
+      return;
+    }
+    try {
+      const modelsRes = await api.get<{ data: { id: string; downloaded: boolean }[] }>('/photos/models/multimodal');
+      const model = modelsRes.data.find((m: { id: string }) => m.id === modelId);
+      if (!model || !(model as { downloaded: boolean }).downloaded) {
+        toast.error(`Model "${modelId}" is not downloaded. Pull it from Settings → AI & Intelligence.`);
+        return;
+      }
+    } catch { /* if check fails, let backend handle it */ }
+
     const ids = [...activeSelection.selectedIds];
     setFilesPending(ids);
     try {

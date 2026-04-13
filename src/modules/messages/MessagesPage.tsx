@@ -14,6 +14,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { ChannelSidebar } from './ChannelSidebar';
 import { MessageThread } from './MessageThread';
@@ -36,6 +37,20 @@ export function Component() {
   const { messages, loading: msgsLoading, hasMore, loadMore, refetch: refetchMessages, appendMessage } = useChannelMessages(selectedChannelId);
   const { send, sending } = useSendMessage();
   const sendingRef = useRef(false);
+  const syncCompleted = useWebSocket('sync.completed');
+
+  // Real-time: refetch when a sync completes that includes message changes
+  useEffect(() => {
+    if (!syncCompleted) return;
+    const breakdown = syncCompleted.data?.domain_breakdown as
+      Record<string, { created?: number; updated?: number }> | undefined;
+    if (!breakdown?.messages) return;
+    const { created = 0, updated = 0 } = breakdown.messages;
+    if (created === 0 && updated === 0) return;
+
+    refetchChannels();
+    if (selectedChannelId && !sendingRef.current) refetchMessages();
+  }, [syncCompleted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-select first channel if none selected
   useEffect(() => {
@@ -45,8 +60,7 @@ export function Component() {
     }
   }, [channels, selectedChannelId]);
 
-  // Poll for new messages every 5s (simple real-time until WS events)
-  // Skip message refetch while a send is in-flight to preserve optimistic message
+  // Fallback poll every 5s — primary updates come via sync.completed WS event
   useEffect(() => {
     const interval = setInterval(() => {
       refetchChannels();

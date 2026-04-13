@@ -43,7 +43,7 @@ export function MessageThread({
   onLoadMore, onSend, sending,
 }: MessageThreadProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const prevCountRef = useRef(0);
+  const lastMsgIdRef = useRef<string | null>(null);
   const platformConfig = PLATFORMS[platform];
 
   // Group messages by date
@@ -62,16 +62,17 @@ export function MessageThread({
     return groups;
   }, [messages]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom when the last message changes (new message arrived)
   useEffect(() => {
-    if (messages.length > prevCountRef.current) {
+    const lastId = messages.length > 0 ? messages[messages.length - 1]!.id : null;
+    if (lastId && lastId !== lastMsgIdRef.current) {
       const el = scrollRef.current;
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
     }
-    prevCountRef.current = messages.length;
-  }, [messages.length]);
+    lastMsgIdRef.current = lastId;
+  }, [messages]);
 
   // Initial scroll to bottom
   useEffect(() => {

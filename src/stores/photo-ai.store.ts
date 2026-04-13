@@ -216,10 +216,11 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   },
 
   linkFaceToContact: async (clusterId: string, contactId: string | null) => {
-    await api.patch(`/photos/faces/${clusterId}`, { contact_id: contactId });
+    const res = await api.patch<{ data: FaceCluster }>(`/photos/faces/${clusterId}`, { contact_id: contactId });
+    const updated = (res as any).data ?? res;
     const clusters = get().faceClusters;
     if (clusters) {
-      set({ faceClusters: clusters.map((c) => (c.id === clusterId ? { ...c, linked_contact_id: contactId } : c)) });
+      set({ faceClusters: clusters.map((c) => (c.id === clusterId ? { ...c, ...updated, linked_contact_id: contactId } : c)) });
     }
   },
 

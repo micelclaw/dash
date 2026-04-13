@@ -10,17 +10,21 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ChevronLeft, Mail, Phone, MapPin, FileText, Tag,
-  Globe, Edit3, Trash2, PhoneCall,
+  Globe, Edit3, Trash2, PhoneCall, Camera, Upload, FolderOpen,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityContactPanel } from '@/components/shared/GraphProximityContactPanel';
+import { AvatarCropModal } from '@/components/shared/AvatarCropModal';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useMailState } from '@/modules/mail/hooks/use-mail-state';
+import { useAuthStore } from '@/stores/auth.store';
 import type { Contact } from './types';
 import type { LinkedRecord } from '@/types/links';
 
@@ -29,6 +33,7 @@ interface ContactDetailProps {
   onEdit: () => void;
   onDelete: () => void;
   onBack?: () => void;
+  onContactUpdated?: (updated?: Contact) => void;
   linkedRecords: LinkedRecord[];
   linkedRecordsLoading: boolean;
 }
@@ -113,12 +118,83 @@ const actionButtonStyle: React.CSSProperties = {
 };
 
 export function ContactDetail({
-  contact, onEdit, onDelete, onBack, linkedRecords, linkedRecordsLoading,
+  contact, onEdit, onDelete, onBack, onContactUpdated, linkedRecords, linkedRecordsLoading,
 }: ContactDetailProps) {
   useCoNavigation('contact', contact.id);
   const navigate = useNavigate();
   const [deleteHover, setDeleteHover] = useState(false);
+  const [avatarErr, setAvatarErr] = useState(false);
+  const [avatarMenu, setAvatarMenu] = useState(false);
+  const [cloudSearch, setCloudSearch] = useState<string | null>(null);
+  const [cloudResults, setCloudResults] = useState<Array<{ id: string; filename: string }>>([]);
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cloudDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const token = useAuthStore(s => s.tokens?.accessToken);
   const initials = getInitials(contact.display_name);
+
+  const buildAvatarUrl = (path: string) =>
+    path.startsWith('/api/') ? `${path}${path.includes('?') ? '&' : '?'}token=${token}` : `/api/v1/contacts/${contact.id}/avatar?token=${token}`;
+  const avatarSrc = contact.avatar_path && !avatarErr ? buildAvatarUrl(contact.avatar_path) : null;
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+    setAvatarMenu(false);
+  }, []);
+
+  const handleCloudSearch = useCallback((q: string) => {
+    setCloudSearch(q);
+    clearTimeout(cloudDebounceRef.current);
+    if (!q.trim()) { setCloudResults([]); return; }
+    cloudDebounceRef.current = setTimeout(async () => {
+      setCloudLoading(true);
+      try {
+        const res = await api.get<{ data: Array<{ id: string; filename: string }> }>('/files', {
+          search: q, mime_type: 'image/', limit: 8,
+        });
+        setCloudResults(res.data ?? []);
+      } catch { setCloudResults([]); }
+      finally { setCloudLoading(false); }
+    }, 300);
+  }, []);
+
+  const handleCloudPick = useCallback(async (fileId: string) => {
+    setAvatarMenu(false);
+    setCloudSearch(null);
+    setCloudResults([]);
+    // Fetch the image as data URL for the crop modal
+    try {
+      const imgUrl = `/api/v1/files/${fileId}/preview?token=${token}&width=512`;
+      const resp = await fetch(imgUrl);
+      const blob = await resp.blob();
+      const reader = new FileReader();
+      reader.onload = () => setCropSrc(reader.result as string);
+      reader.readAsDataURL(blob);
+    } catch {
+      toast.error('Failed to load image');
+    }
+  }, [token]);
+
+  const handleCropConfirm = useCallback(async (blob: Blob) => {
+    setCropSrc(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, 'avatar.webp');
+      const res = await api.upload<{ data: Contact }>(`/contacts/${contact.id}/avatar`, formData);
+      const updated = (res as any).data ?? res;
+      setAvatarErr(false);
+      onContactUpdated?.(updated);
+      toast.success('Avatar updated');
+    } catch {
+      toast.error('Failed to upload avatar');
+    }
+  }, [contact.id, onContactUpdated]);
   const primaryEmail = contact.emails?.find(e => e.primary)?.address || contact.emails?.[0]?.address;
   const primaryPhone = contact.phones?.find(p => p.primary)?.number || contact.phones?.[0]?.number;
 
@@ -155,22 +231,163 @@ export function ContactDetail({
 
       {/* Header */}
       <div style={{ padding: '24px 24px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{
-          width: 64,
-          height: 64,
-          borderRadius: '50%',
-          background: 'var(--amber-dim)',
-          color: 'var(--amber)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.25rem',
-          fontWeight: 600,
-          flexShrink: 0,
-          letterSpacing: '0.02em',
-        }}>
-          {initials}
+        {/* Clickable avatar */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <div
+            style={{ cursor: 'pointer', position: 'relative' }}
+            onClick={() => setAvatarMenu(prev => !prev)}
+          >
+            {avatarSrc ? (
+              <img
+                src={avatarSrc}
+                alt=""
+                onError={() => setAvatarErr(true)}
+                style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: 'var(--amber-dim)', color: 'var(--amber)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.25rem', fontWeight: 600, letterSpacing: '0.02em',
+              }}>
+                {initials}
+              </div>
+            )}
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.4)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+              opacity: avatarMenu ? 1 : 0,
+              transition: 'opacity 0.15s',
+            }}>
+              <Camera size={20} style={{ color: '#fff' }} />
+            </div>
+          </div>
+
+          {/* Dropdown menu — closes on backdrop click, not on mouse leave */}
+          {avatarMenu && (
+            <>
+              <div
+                onClick={() => { setAvatarMenu(false); setCloudSearch(null); setCloudResults([]); }}
+                style={{ position: 'fixed', inset: 0, zIndex: 9 }}
+              />
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                background: 'rgba(17,17,24,0.92)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
+                backdropFilter: 'blur(8px)', padding: '4px 0', minWidth: 220,
+                zIndex: 10,
+              }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); setAvatarMenu(false); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '8px 12px', background: 'transparent', border: 'none',
+                    color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Upload size={14} /> Upload from device
+                </button>
+                {contact.avatar_path && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setAvatarMenu(false);
+                      try {
+                        await api.patch(`/contacts/${contact.id}`, { avatar_path: null });
+                        onContactUpdated?.();
+                        toast.success('Avatar removed');
+                      } catch { toast.error('Failed to remove avatar'); }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '8px 12px', background: 'transparent', border: 'none',
+                      color: 'var(--error)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Trash2 size={14} /> Remove avatar
+                  </button>
+                )}
+                <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                <div style={{ padding: '4px 12px 8px' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 6,
+                  }}>
+                    <FolderOpen size={12} /> Choose from Cloud
+                  </div>
+                  <input
+                    value={cloudSearch ?? ''}
+                    onChange={e => handleCloudSearch(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    placeholder="Search images..."
+                    autoFocus
+                    style={{
+                      width: '100%', padding: '6px 8px', fontSize: '0.75rem',
+                      background: 'var(--surface)', border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                      fontFamily: 'var(--font-sans)', outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  {cloudLoading && (
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', padding: '6px 0' }}>Searching...</div>
+                  )}
+                  {cloudResults.length > 0 && (
+                    <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 4 }}>
+                      {cloudResults.map(f => (
+                        <button
+                          key={f.id}
+                          onClick={(e) => { e.stopPropagation(); handleCloudPick(f.id); }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                            padding: '5px 4px', background: 'transparent', border: 'none',
+                            color: 'var(--text)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
+                            cursor: 'pointer', textAlign: 'left', borderRadius: 'var(--radius-sm)',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <img
+                            src={`/api/v1/files/${f.id}/preview?token=${token}&width=32`}
+                            alt=""
+                            style={{ width: 24, height: 24, borderRadius: 'var(--radius-sm)', objectFit: 'cover', flexShrink: 0 }}
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {f.filename}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
         </div>
+
+        {/* Crop modal */}
+        <AvatarCropModal
+          open={!!cropSrc}
+          imageSrc={cropSrc ?? ''}
+          onConfirm={handleCropConfirm}
+          onClose={() => setCropSrc(null)}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: '1.25rem',

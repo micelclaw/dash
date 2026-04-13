@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/services/api';
 import type { ApiListResponse } from '@/types/api';
 import type { Message } from '../types';
@@ -21,27 +21,47 @@ export function useChannelMessages(channelId: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const initialLoadDone = useRef(false);
 
-  const fetch = useCallback(async () => {
+  const fetch = useCallback(async (isPolling = false) => {
     if (!channelId) { setMessages([]); return; }
-    setLoading(true);
+
+    // Cancel any in-flight request — only the latest fetch wins
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Only show loading spinner on initial load, not on polling/refetch
+    if (!isPolling && !initialLoadDone.current) setLoading(true);
+
     try {
       const res = await api.get<ApiListResponse<Message>>('/messages', {
         channel_id: channelId,
         sort: 'sent_at',
-        order: 'asc',
+        order: 'desc',
         limit: String(PAGE_SIZE),
       });
-      setMessages(res.data);
+
+      // If this request was aborted, a newer one is in flight — discard
+      if (controller.signal.aborted) return;
+
+      setMessages(res.data.reverse());
       setTotal(res.meta?.total ?? res.data.length);
-    } catch {
-      // ignore
+      initialLoadDone.current = true;
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted) return;
+      console.warn('[messages] fetch failed:', err?.message ?? err);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [channelId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    initialLoadDone.current = false;
+    fetch();
+    return () => { abortRef.current?.abort(); };
+  }, [fetch]);
 
   const hasMore = messages.length < total;
 
@@ -51,11 +71,11 @@ export function useChannelMessages(channelId: string | null) {
       const res = await api.get<ApiListResponse<Message>>('/messages', {
         channel_id: channelId,
         sort: 'sent_at',
-        order: 'asc',
+        order: 'desc',
         limit: String(PAGE_SIZE),
         offset: String(messages.length),
       });
-      setMessages(prev => [...res.data, ...prev]);
+      setMessages(prev => [...res.data.reverse(), ...prev]);
     } catch {
       // ignore
     }
@@ -67,5 +87,8 @@ export function useChannelMessages(channelId: string | null) {
     setTotal(prev => prev + 1);
   }, []);
 
-  return { messages, loading, hasMore, loadMore, refetch: fetch, appendMessage };
+  // Refetch wrapper that marks as polling (no loading spinner)
+  const refetch = useCallback(() => fetch(true), [fetch]);
+
+  return { messages, loading, hasMore, loadMore, refetch, appendMessage };
 }

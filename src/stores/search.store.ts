@@ -45,6 +45,8 @@ interface SearchState {
   resetWeights: () => void;
   setSortBy: (s: SortBy) => void;
   setSelectedResult: (r: SearchResult | null) => void;
+  /** Remove results by composite keys ("domain-record_id") after deletion */
+  removeResults: (keys: Set<string>) => void;
   clear: () => void;
 }
 
@@ -145,6 +147,15 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
   },
   setSortBy: (sortBy) => set({ sortBy }),
   setSelectedResult: (r) => set({ selectedResult: r }),
+  removeResults: (keys) => {
+    const { results, total } = get();
+    const filtered = results.filter(r => !keys.has(`${r.domain}-${r.record_id}`));
+    set({
+      results: filtered,
+      total: Math.max(0, total - (results.length - filtered.length)),
+      selectedResult: null,
+    });
+  },
   clear: () => set({
     query: '', results: [], total: 0, error: null, searchType: null,
     queryTimeMs: null, selectedResult: null,

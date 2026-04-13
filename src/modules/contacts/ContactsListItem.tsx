@@ -10,8 +10,10 @@
  * https://micelclaw.com
  */
 
+import { useState } from 'react';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
+import { useAuthStore } from '@/stores/auth.store';
 import type { Contact } from './types';
 
 interface ContactsListItemProps {
@@ -40,6 +42,11 @@ function getSubtitle(contact: Contact): string | null {
 export function ContactsListItem({ contact, selected, onClick, onDelete }: ContactsListItemProps) {
   const initials = getInitials(contact.display_name);
   const subtitle = getSubtitle(contact);
+  const [avatarErr, setAvatarErr] = useState(false);
+  const token = useAuthStore(s => s.tokens?.accessToken);
+  const avatarSrc = contact.avatar_path && !avatarErr
+    ? (contact.avatar_path.startsWith('/api/') ? `${contact.avatar_path}${contact.avatar_path.includes('?') ? '&' : '?'}token=${token}` : contact.avatar_path)
+    : null;
 
   return (
     <EntityContextMenu
@@ -65,23 +72,35 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
           onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
         >
           {/* Avatar */}
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: 'var(--amber-dim)',
-            color: 'var(--amber)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.6875rem',
-            fontWeight: 600,
-            fontFamily: 'var(--font-sans)',
-            flexShrink: 0,
-            letterSpacing: '0.02em',
-          }}>
-            {initials}
-          </div>
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt=""
+              onError={() => setAvatarErr(true)}
+              style={{
+                width: 32, height: 32, borderRadius: '50%',
+                objectFit: 'cover', flexShrink: 0,
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'var(--amber-dim)',
+              color: 'var(--amber)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              fontFamily: 'var(--font-sans)',
+              flexShrink: 0,
+              letterSpacing: '0.02em',
+            }}>
+              {initials}
+            </div>
+          )}
 
           {/* Text */}
           <div style={{ flex: 1, minWidth: 0 }}>

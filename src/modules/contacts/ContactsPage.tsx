@@ -164,6 +164,7 @@ export function Component() {
           onEdit={() => setEditMode(true)}
           onDelete={() => handleDelete(selectedId)}
           onBack={() => { setSelectedId(null); setSearchParams({}, { replace: true }); }}
+          onContactUpdated={() => fetchContacts()}
           linkedRecords={linkedRecords}
           linkedRecordsLoading={linkedRecordsLoading}
         />
@@ -226,6 +227,7 @@ export function Component() {
         contact={selectedContact}
         onEdit={() => setEditMode(true)}
         onDelete={() => handleDelete(selectedContact.id)}
+        onContactUpdated={() => fetchContacts()}
         linkedRecords={linkedRecords}
         linkedRecordsLoading={linkedRecordsLoading}
       />
