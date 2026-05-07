@@ -14,7 +14,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import type { ConnectorInfo as SyncConnectorInfo } from '@/services/sync.service';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
@@ -32,16 +33,7 @@ const INTERVAL_OPTIONS = [
   { value: '120', label: '120 minutes' },
 ];
 
-interface ConnectorInfo {
-  id: string;
-  connector_type: string;
-  name: string;
-  display_name: string | null;
-  domains: string[];
-  status: string;
-  last_sync_at: string | null;
-  errors_count: number;
-}
+type ConnectorInfo = SyncConnectorInfo;
 
 export function SyncSection() {
   const settings = useSettingsStore((s) => s.settings);
@@ -64,9 +56,9 @@ export function SyncSection() {
       return;
     }
     try {
-      const res = await api.get<{ data: ConnectorInfo[] }>('/sync/connectors');
       // Filter out channel observers — they are shown in ChannelObserversSection
-      setConnectors((res.data ?? []).filter(c => !c.connector_type.endsWith('-observer')));
+      const list = await syncSvc.listConnectors();
+      setConnectors(list.filter((c) => !c.connector_type.endsWith('-observer')));
     } catch {
       setConnectors([]);
     }
@@ -80,7 +72,7 @@ export function SyncSection() {
     setSaving(true);
     try {
       await updateSection('sync', settings.sync as unknown as Record<string, unknown>);
-      toast.success('Settings saved');
+      toast.success('Sync saved');
     } catch {
       toast.error('Failed to save settings');
     }
@@ -194,7 +186,7 @@ function ChannelObserversBlock() {
   return (
     <SettingsBlock
       title="Channel Observers"
-      description="Bridges read-only que importan mensajes de canales"
+      description="Read-only bridges — your agents see incoming messages from external channels (RSS, Slack, etc.) without being able to reply."
       expanded={expanded}
       onToggle={() => setExpanded((v) => !v)}
     >

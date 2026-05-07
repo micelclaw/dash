@@ -14,6 +14,8 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useSecurityStore } from '@/stores/security.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { describeError } from '@/lib/api-errors';
+import { useSensitiveInputs } from '@/hooks/use-sensitive-inputs';
 import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
 import { SettingInput } from '../SettingInput';
@@ -28,6 +30,12 @@ const LEVEL_OPTIONS = [
   { value: '3', label: '3 - Secure' },
 ];
 
+// In this section 401 specifically means "wrong password" (the
+// confirmation step for PIN setup / removal), not "session expired".
+const SECURITY_ERROR_OVERRIDES = {
+  status: { 401: 'Wrong password' },
+};
+
 export function SecuritySection() {
   const config = useSecurityStore((s) => s.config);
   const fetchConfig = useSecurityStore((s) => s.fetchConfig);
@@ -41,12 +49,19 @@ export function SecuritySection() {
   const canEdit = (requiredRole: string) => (ROLE_RANK[userRole] ?? 0) >= (ROLE_RANK[requiredRole] ?? 999);
 
   const [showPinSetup, setShowPinSetup] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [pinConfirm, setPinConfirm] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
   const [showRemovePin, setShowRemovePin] = useState(false);
-  const [removePassword, setRemovePassword] = useState('');
   const [showShellConfirm, setShowShellConfirm] = useState(false);
+
+  // Sensitive inputs (PIN + password fields). The hook handles
+  // wiping on unmount automatically — no manual cleanup useEffect.
+  const sensitive = useSensitiveInputs([
+    'pin', 'pinConfirm', 'password', 'removePassword',
+  ] as const);
+  const { values, set, wipe } = sensitive;
+  const pinInput = values.pin;
+  const pinConfirm = values.pinConfirm;
+  const passwordInput = values.password;
+  const removePassword = values.removePassword;
 
   useEffect(() => {
     fetchConfig();
@@ -63,8 +78,8 @@ export function SecuritySection() {
         approval_levels: { ...config.approval_levels, [operation]: level },
       });
       toast.success('Approval level updated');
-    } catch {
-      toast.error('Failed to update');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update approval level'));
     }
   };
 
@@ -85,11 +100,12 @@ export function SecuritySection() {
       await setupPin(pinInput, passwordInput);
       toast.success('PIN configured');
       setShowPinSetup(false);
-      setPinInput('');
-      setPinConfirm('');
-      setPasswordInput('');
-    } catch {
-      toast.error('Failed to set PIN — check your password');
+      wipe();
+    } catch (err) {
+      // Wipe inputs even on failure so the PIN/password don't sit in
+      // memory while the user reads the error. They'll have to retype.
+      wipe();
+      toast.error(describeError(err, 'Failed to set PIN — check your password', SECURITY_ERROR_OVERRIDES));
     }
   };
 
@@ -102,9 +118,10 @@ export function SecuritySection() {
       await removePin(removePassword);
       toast.success('PIN removed');
       setShowRemovePin(false);
-      setRemovePassword('');
-    } catch {
-      toast.error('Failed to remove PIN — check your password');
+      set('removePassword', '');
+    } catch (err) {
+      set('removePassword', '');
+      toast.error(describeError(err, 'Failed to remove PIN — check your password', SECURITY_ERROR_OVERRIDES));
     }
   };
 
@@ -118,8 +135,8 @@ export function SecuritySection() {
     try {
       await updateConfig({ unrestricted_shell: false });
       toast.success('Unrestricted shell disabled');
-    } catch {
-      toast.error('Failed to update');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to disable unrestricted shell'));
     }
   };
 
@@ -128,8 +145,8 @@ export function SecuritySection() {
       await updateConfig({ unrestricted_shell: true });
       toast.success('Unrestricted shell enabled');
       setShowShellConfirm(false);
-    } catch {
-      toast.error('Failed to update');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to enable unrestricted shell'));
     }
   };
 
@@ -139,8 +156,8 @@ export function SecuritySection() {
       await updateConfig({
         approval_timeouts: { ...config.approval_timeouts, [key]: n },
       });
-    } catch {
-      toast.error('Failed to update');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update timeout'));
     }
   };
 
@@ -240,7 +257,7 @@ export function SecuritySection() {
                 pattern="[0-9]*"
                 placeholder="Enter PIN (4-6 digits)"
                 value={pinInput}
-                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => set('pin', e.target.value.replace(/\D/g, '').slice(0, 6))}
                 style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none', letterSpacing: 4 }}
               />
               <input
@@ -249,19 +266,18 @@ export function SecuritySection() {
                 pattern="[0-9]*"
                 placeholder="Confirm PIN"
                 value={pinConfirm}
-                onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => set('pinConfirm', e.target.value.replace(/\D/g, '').slice(0, 6))}
                 style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none', letterSpacing: 4 }}
               />
               <input
                 type="password"
                 placeholder="Current password"
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
+                {...sensitive.bind('password')}
                 style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none' }}
               />
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={handleSetupPin} style={{ height: 30, padding: '0 16px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Save</button>
-                <button onClick={() => { setShowPinSetup(false); setPinInput(''); setPinConfirm(''); setPasswordInput(''); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => { setShowPinSetup(false); wipe(); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           </div>
@@ -275,13 +291,12 @@ export function SecuritySection() {
               <input
                 type="password"
                 placeholder="Current password"
-                value={removePassword}
-                onChange={(e) => setRemovePassword(e.target.value)}
+                {...sensitive.bind('removePassword')}
                 style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none' }}
               />
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={handleRemovePin} style={{ height: 30, padding: '0 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Remove PIN</button>
-                <button onClick={() => { setShowRemovePin(false); setRemovePassword(''); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => { setShowRemovePin(false); set('removePassword', ''); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           </div>
@@ -356,7 +371,7 @@ function ApprovalsForwardingBlock() {
   return (
     <SettingsBlock
       title="Approvals forwarding"
-      description="Reenviar a canales externos"
+      description="Forward to external channels"
       expanded={expanded}
       onToggle={() => setExpanded((v) => !v)}
     >

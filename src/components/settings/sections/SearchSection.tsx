@@ -16,9 +16,10 @@ import {
   Eye, EyeOff, CheckCircle, XCircle, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as browserSecuritySvc from '@/services/browser-security.service';
 import { useApiKeyStore } from '@/stores/apikey.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSettingsStore } from '@/stores/settings.store';
 
 
 // ─── Types ───────────────────────────────────────────────
@@ -167,6 +168,75 @@ function ListEditor({
           <Plus size={12} />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Default Search Mode ─────────────────────────────────
+//
+// Lives in the `general.default_search_mode` settings field for
+// historical reasons (it was originally in GeneralSection). We save
+// inline on change instead of marking the general section dirty so
+// it doesn't surface a SaveBar in the unrelated General section.
+
+const SEARCH_MODES = [
+  { value: 'auto', label: 'Auto (recommended)' },
+  { value: 'fulltext', label: 'Always Keywords' },
+  { value: 'semantic', label: 'Always Semantic (Pro)' },
+];
+
+function DefaultSearchModeRow() {
+  const settings = useSettingsStore((s) => s.settings);
+  const updateSection = useSettingsStore((s) => s.updateSection);
+  const tier = useAuthStore((s) => s.user?.tier ?? 'free');
+  const isPro = tier === 'pro';
+
+  if (!settings) return null;
+  const current = settings.general?.default_search_mode ?? 'auto';
+
+  const handleChange = async (v: string) => {
+    // Free users picking 'semantic' get a toast and the value is rejected
+    // before hitting the backend. Without this they'd see "saved" but the
+    // actual search behavior would silently fall back to keywords.
+    if (v === 'semantic' && !isPro) {
+      toast.error('Semantic-only mode requires Pro. Upgrade to enable it.');
+      return;
+    }
+    try {
+      const next = { ...settings.general, default_search_mode: v };
+      await updateSection('general', next as unknown as Record<string, unknown>);
+      toast.success('Search mode saved');
+    } catch {
+      toast.error('Failed to save');
+    }
+  };
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <SettingRow
+        label="Default Search Mode"
+        description="Auto: keywords for Free tier, semantic for Pro. Override here if you prefer one over the other."
+      >
+        <select
+          value={current}
+          onChange={(e) => handleChange(e.target.value)}
+          style={{
+            padding: '6px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+            cursor: 'pointer',
+            minWidth: 200,
+          }}
+        >
+          {SEARCH_MODES.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </SettingRow>
     </div>
   );
 }
@@ -322,16 +392,14 @@ function BrowserSecurityConfig() {
 
   const fetchConfig = async () => {
     try {
-      const res = await api.get<{ data: BrowserSecurityConfig }>('/settings/browser-security');
-      setConfig(res.data);
+      setConfig(await browserSecuritySvc.getBrowserSecurity());
     } catch { /* use defaults */ }
     setLoading(false);
   };
 
   const patchConfig = async (update: Partial<BrowserSecurityConfig>) => {
     try {
-      const res = await api.patch<{ data: BrowserSecurityConfig }>('/settings/browser-security', update);
-      setConfig(res.data);
+      setConfig(await browserSecuritySvc.updateBrowserSecurity(update));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to update');
     }
@@ -453,6 +521,7 @@ export function SearchSection() {
         Search & Web
       </div>
 
+      <DefaultSearchModeRow />
       <WebSearchConfig />
       <BrowserSecurityConfig />
     </div>

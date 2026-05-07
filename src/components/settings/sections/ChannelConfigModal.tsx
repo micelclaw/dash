@@ -13,7 +13,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { X, Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
 
 interface ChannelConfigModalProps {
   connectorId: string;
@@ -56,14 +56,10 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
     setLoading(true);
     try {
       // Signal needs a longer timeout — the CLI container may need to start first
-      const timeout = connectorType === 'signal-observer' ? 120_000 : undefined;
-      const res = await api.get<{ data: { channels: ChannelInfo[]; selected: string[] } }>(
-        `/sync/connectors/${connectorId}/channels`,
-        undefined,
-        timeout ? { timeout } : undefined,
-      );
-      setChannels(res.data.channels ?? []);
-      setSelected(new Set(res.data.selected ?? []));
+      const timeoutMs = connectorType === 'signal-observer' ? 120_000 : undefined;
+      const data = await syncSvc.getConnectorChannels(connectorId, { timeoutMs });
+      setChannels(data.channels ?? []);
+      setSelected(new Set(data.selected ?? []));
     } catch (err: any) {
       toast.error(err?.message || 'Failed to load channels');
     } finally {
@@ -78,7 +74,7 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
         .filter(ch => selected.has(ch.id))
         .map(ch => ({ id: ch.id, name: ch.name, type: ch.type }));
 
-      await api.patch(`/sync/connectors/${connectorId}/channels`, {
+      await syncSvc.updateConnectorChannels(connectorId, {
         observed_channels: observedChannels,
         direction_filter: directionFilter,
         content_filter: contentFilter,

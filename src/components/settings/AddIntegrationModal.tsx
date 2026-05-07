@@ -13,7 +13,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Mail, Calendar, Users, Loader2, Check, Container } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import * as messagingCli from '@/services/messaging-cli.service';
 import { DavForm } from './DavForm';
 import { ImapForm } from './ImapForm';
 
@@ -206,7 +207,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       if (event.data?.type === 'oauth_callback') {
         // Exchange code for tokens via our authenticated API
         try {
-          await api.post('/sync/oauth/callback', {
+          await syncSvc.oauthCallback({
             provider: event.data.provider,
             code: event.data.code,
             state: event.data.state,
@@ -242,19 +243,17 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       // Start OAuth popup flow
       try {
         setStep('oauth-pending');
-        const res = await api.get<{ data: { authorize_url: string; state: string } }>(
-          `/sync/oauth/authorize/${service.provider}?scopes=${encodeURIComponent(service.scopes!)}`,
-        );
+        const oauth = await syncSvc.getOAuthAuthorizeUrl(service.provider ?? '', service.scopes ?? '');
 
         // Stash provider in localStorage for the callback page
         localStorage.setItem('claw_oauth_pending', JSON.stringify({
           provider: service.provider,
-          state: res.data.state,
+          state: oauth.state,
         }));
 
         // Open popup
         const popup = window.open(
-          res.data.authorize_url,
+          oauth.authorize_url,
           'claw_oauth',
           'width=500,height=700,scrollbars=yes,resizable=yes',
         );
@@ -485,7 +484,7 @@ function DiscordBotForm({ onComplete, onCancel }: { onComplete: () => void; onCa
 
     setSaving(true);
     try {
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: 'discord-observer',
         config: { bot_token: botToken, guild_id: guildId },
       });
@@ -584,7 +583,7 @@ function TelegramBotForm({ onComplete, onCancel }: { onComplete: () => void; onC
 
     setSaving(true);
     try {
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: 'telegram-observer',
         config: { bot_token: botToken },
       });
@@ -673,14 +672,14 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get<{ data: { running: boolean; url: string | null } }>('/signal-cli/status');
-        if (res.data?.running && res.data.url) {
-          setApiUrl(res.data.url);
+        const status = await messagingCli.getSignalStatus();
+        if (status.running && status.url) {
+          setApiUrl(status.url);
           setDeployStatus('ready');
           // Check if already linked
-          const accs = await api.get<{ data: string[] }>('/signal-cli/accounts');
-          if (accs.data?.length > 0) {
-            setPhoneNumber(accs.data[0] ?? '');
+          const accs = await messagingCli.listSignalAccounts();
+          if (accs.length > 0) {
+            setPhoneNumber(accs[0] ?? '');
             setStep('ready');
           } else {
             setStep('phone');
@@ -697,9 +696,9 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
     setDeploying(true);
     setDeployStatus('deploying');
     try {
-      const res = await api.post<{ data: { running: boolean; url: string | null } }>('/signal-cli/start');
-      if (res.data?.running && res.data.url) {
-        setApiUrl(res.data.url);
+      const status = await messagingCli.startSignal();
+      if (status.running && status.url) {
+        setApiUrl(status.url);
         setDeployStatus('ready');
         toast.success('Signal CLI REST API is running');
         setStep('phone');
@@ -721,16 +720,14 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
     setLinkError(null);
     setQrImage(null);
     try {
-      const res = await api.post<{ data: { qr_uri: string } }>('/signal-cli/link');
-      setQrImage(res.data.qr_uri);
+      const linkResult = await messagingCli.linkSignal();
+      setQrImage(linkResult.qr_uri);
       setStep('linking');
       // Poll for link completion every 5 seconds (don't hammer signal-cli during linking)
       linkPollRef.current = setInterval(async () => {
         try {
-          const check = await api.post<{ data: { linked: boolean } }>('/signal-cli/link-check', {
-            phone_number: phoneNumber,
-          });
-          if (check.data?.linked) {
+          const check = await messagingCli.checkSignalLink(phoneNumber);
+          if (check.linked) {
             if (linkPollRef.current) clearInterval(linkPollRef.current);
             setStep('ready');
             toast.success('Signal account linked!');
@@ -751,7 +748,7 @@ function SignalForm({ onComplete, onCancel }: { onComplete: () => void; onCancel
     if (!apiUrl || !phoneNumber) return;
     setSaving(true);
     try {
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: 'signal-observer',
         config: { api_url: apiUrl, phone_number: phoneNumber },
       });
@@ -1073,9 +1070,9 @@ function SimplexForm({ onComplete, onCancel }: { onComplete: () => void; onCance
   useEffect(() => {
     (async () => {
       try {
-        const res = await api.get<{ data: { running: boolean; url: string | null } }>('/simplex-chat/status');
-        if (res.data?.running && res.data.url) {
-          setApiUrl(res.data.url);
+        const status = await messagingCli.getSimplexStatus();
+        if (status.running && status.url) {
+          setApiUrl(status.url);
           setDeployStatus('ready');
           setStep('ready');
         }
@@ -1089,9 +1086,9 @@ function SimplexForm({ onComplete, onCancel }: { onComplete: () => void; onCance
     setDeploying(true);
     setDeployStatus('deploying');
     try {
-      const res = await api.post<{ data: { running: boolean; url: string | null } }>('/simplex-chat/start');
-      if (res.data?.running && res.data.url) {
-        setApiUrl(res.data.url);
+      const status = await messagingCli.startSimplex();
+      if (status.running && status.url) {
+        setApiUrl(status.url);
         setDeployStatus('ready');
         toast.success('SimpleX Chat is running');
         setStep('ready');
@@ -1111,7 +1108,7 @@ function SimplexForm({ onComplete, onCancel }: { onComplete: () => void; onCance
     if (!apiUrl) return;
     setSaving(true);
     try {
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: 'simplex-observer',
         config: { api_url: apiUrl },
       });
@@ -1299,7 +1296,7 @@ function SessionForm({ onComplete, onCancel }: { onComplete: () => void; onCance
 
     setSaving(true);
     try {
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: 'session-observer',
         config: {
           session_id: sessionId,

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as photosSvc from '@/services/photos.service';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -53,8 +53,7 @@ export function MultimodalModelSection() {
 
   const fetchModels = useCallback(async () => {
     try {
-      const res = await api.get<{ data: MultimodalModelStatus[] }>('/photos/models/multimodal');
-      setModels(res.data);
+      setModels(await photosSvc.listMultimodalModels());
     } catch { /* silent */ }
   }, []);
 

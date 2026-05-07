@@ -171,7 +171,14 @@ export function VoiceSection() {
 
     const headers = { Authorization: `Bearer ${getToken()}` };
     fetchWithTimeout(`${API}/voice/config`, { headers })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          // Surface non-2xx so the user knows something is off instead
+          // of silently keeping defaults that don't match the backend.
+          throw new Error(`Voice config endpoint returned ${r.status}`);
+        }
+        return r.json();
+      })
       .then((json) => {
         if (json.data) {
           if (json.data.voice) setActiveVoice(json.data.voice);
@@ -179,7 +186,12 @@ export function VoiceSection() {
           if (json.data.language) setLanguage(json.data.language);
         }
       })
-      .catch(() => { /* keep defaults */ });
+      .catch((err) => {
+        // Distinguish "endpoint not reachable" (network/timeout) from
+        // "endpoint returned an error" so the toast is actionable.
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        toast.error(`Could not load voice config: ${msg}`);
+      });
   }, [getToken, fetchWithTimeout, fetchServices]);
 
   const handleSaveConfig = useCallback(async (field: string, value: string) => {
@@ -203,7 +215,7 @@ export function VoiceSection() {
         if (json.data.model) setModel(json.data.model);
         if (json.data.language) setLanguage(json.data.language);
       }
-      toast.success('Voice config updated');
+      toast.success('Voice saved');
       // No polling needed — lifecycle WS events update the store automatically
     } catch (err) {
       toast.error(`Failed to update ${field}: ${err instanceof Error ? err.message : 'unknown error'}`);
@@ -284,7 +296,8 @@ export function VoiceSection() {
           Authorization: `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: 'Hola, soy tu asistente de voz.' }),
+        // Test phrase — matches the dash UI language (English).
+        body: JSON.stringify({ text: 'Hi, this is your voice assistant speaking.' }),
       });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

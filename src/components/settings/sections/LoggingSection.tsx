@@ -20,10 +20,12 @@
 // (decision D2=B). Save is disabled if any pattern is invalid.
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Info, VolumeX, Activity, Bug, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { Info, VolumeX, Activity, Bug, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import type { LoggingConfig } from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
 
 // ─── Presets (D1=A) ──────────────────────────────────────────────────
 
@@ -108,8 +110,8 @@ export function LoggingSection() {
       setPatterns(initialPatterns);
       setPatternErrors(initialPatterns.map((p) => validateRegex(p)));
       setDirty(false);
-    } catch {
-      toast.error('Failed to load logging config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load logging config'));
     } finally {
       setLoading(false);
     }
@@ -165,18 +167,21 @@ export function LoggingSection() {
         redact_sensitive: redactSensitive,
         redact_patterns: patterns,
       });
-      toast.success('Logging config updated');
+      toast.success('Logging saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update logging config');
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      toast.error(e?.message ?? 'Failed to update logging config');
+      // The most common cause of a backend reject (with the form
+      // having passed local validation) is a regex the JS engine
+      // accepts but Go's regexp doesn't (e.g. lookbehind, named
+      // groups). Refetch the canonical state so the dirty marker
+      // reflects what's actually persisted.
+      await fetchConfig();
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-  }
 
   // Detect active preset
   const currentPreset = PRESETS.find(
@@ -187,37 +192,16 @@ export function LoggingSection() {
   );
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Logging</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Configure how OpenClaw writes its own logs (level, file, console style, redaction).
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving || hasInvalidPattern}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '6px 14px',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            background: dirty && !hasInvalidPattern ? 'var(--amber)' : 'var(--surface)',
-            border: dirty && !hasInvalidPattern ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty && !hasInvalidPattern ? '#000' : 'var(--text-muted)',
-            cursor: dirty && !hasInvalidPattern ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Logging"
+      description="Configure how OpenClaw writes its own logs (level, file, console style, redaction)."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveDisabledReason={hasInvalidPattern ? 'Fix invalid regex patterns before saving' : null}
+      appliesAt="gateway-restart"
+    >
       {/* Info box */}
       <div
         style={{
@@ -489,7 +473,7 @@ export function LoggingSection() {
           </button>
         </div>
       </div>
-    </div>
+    </SectionShell>
   );
 }
 

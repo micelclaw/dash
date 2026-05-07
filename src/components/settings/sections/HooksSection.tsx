@@ -1,19 +1,44 @@
 /**
  * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
  * All rights reserved.
+ *
+ * ─── Idempotency contract (B7) ─────────────────────────────────────
+ * May be mounted twice simultaneously: standalone at `/settings/hooks`
+ * and as a `<SettingsBlock>` inside Automation (`/settings/automation`).
+ * Each instance fetches and saves independently — no module-level
+ * state, no shared refs. Lift to a store only if cross-instance sync
+ * becomes a real requirement.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Save, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
+import { SettingsBlock } from '../shared/SettingsBlock';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import type { AvailableHook } from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
 
-const BUNDLED_HOOKS = [
-  { id: 'session-memory', name: 'Session Memory', desc: 'Save conversation snapshots to memory when you /new (reset session)' },
-  { id: 'boot-md', name: 'Boot Script', desc: 'Run BOOT.md instructions when the Gateway starts' },
-  { id: 'command-logger', name: 'Command Logger', desc: 'Audit log of all commands to ~/.openclaw/logs/commands.log' },
-  { id: 'bootstrap-extra-files', name: 'Bootstrap Extra Files', desc: 'Inject extra workspace files into agent bootstrap' },
+// Fallback only — the canonical list lives at
+// GET /gateway/hooks-config/available-hooks. We keep a local copy so
+// the section still renders if the discovery endpoint fails (offline,
+// older Core).
+const FALLBACK_BUNDLED_HOOKS: AvailableHook[] = [
+  { id: 'session-memory', name: 'Session Memory', description: 'Save conversation snapshots to memory when you /new (reset session)' },
+  { id: 'boot-md', name: 'Boot Script', description: 'Run BOOT.md instructions when the Gateway starts' },
+  { id: 'command-logger', name: 'Command Logger', description: 'Audit log of all commands to ~/.openclaw/logs/commands.log' },
+  { id: 'bootstrap-extra-files', name: 'Bootstrap Extra Files', description: 'Inject extra workspace files into agent bootstrap' },
 ];
+
+// Backend masks the token as bullets in GET /gateway/hooks-config so
+// it never reaches the dash in plain text. Detect any pure-bullet
+// string and treat it as "user did not change the token" — saving it
+// back would rewrite the real secret with bullets.
+const TOKEN_MASK_REGEX = /^[•*]+$/;
+function isMaskedToken(s: string): boolean {
+  return s.length > 0 && TOKEN_MASK_REGEX.test(s);
+}
 
 const MAPPING_ACTIONS = [
   { value: 'wake', label: 'Wake (system event to main session)' },
@@ -40,19 +65,8 @@ interface WebhookMapping {
   deliver: boolean;
 }
 
-function Section({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
-  return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 12 }}>
-      <button onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '10px 14px', background: 'var(--surface)', border: 'none', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}{title}
-      </button>
-      {expanded && <div style={{ padding: '8px 16px 16px', borderTop: '1px solid var(--border)' }}>{children}</div>}
-    </div>
-  );
-}
-
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (<div onClick={() => onChange(!value)} style={{ width: 36, height: 20, borderRadius: 10, cursor: 'pointer', background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}><div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: value ? 18 : 2, transition: 'left 0.2s' }} /></div>);
+  return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
 export function HooksSection() {
@@ -66,11 +80,16 @@ export function HooksSection() {
   const [internalEnabled, setInternalEnabled] = useState(true);
   const [hookEntries, setHookEntries] = useState<Record<string, { enabled: boolean }>>({});
   const [mappings, setMappings] = useState<WebhookMapping[]>([]);
+  const [bundledHooks, setBundledHooks] = useState<AvailableHook[]>(FALLBACK_BUNDLED_HOOKS);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await gwService.getHooksConfig();
+      const [data, available] = await Promise.all([
+        gwService.getHooksConfig(),
+        gwService.getAvailableHooks().catch(() => FALLBACK_BUNDLED_HOOKS),
+      ]);
+      setBundledHooks(available.length > 0 ? available : FALLBACK_BUNDLED_HOOKS);
       setHooksEnabled((data.enabled ?? true) as boolean);
       setHookToken((data.token ?? '') as string);
       const internal = (data.internal ?? {}) as Record<string, unknown>;
@@ -92,11 +111,19 @@ export function HooksSection() {
         deliver: (m.deliver ?? true) as boolean,
       })));
       setDirty(false);
-    } catch { toast.error('Failed to load hooks config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to load hooks config')); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
+
+  // Mappings without a `path` are silently dropped on save — surface
+  // that count to the user via the Save button label and a hint at
+  // the bottom of the mapping list.
+  const droppedMappingsCount = useMemo(
+    () => mappings.filter((m) => !m.path.trim()).length,
+    [mappings],
+  );
 
   const toggleHookEntry = (id: string) => {
     setHookEntries(prev => ({ ...prev, [id]: { enabled: !(prev[id]?.enabled ?? true) } }));
@@ -115,7 +142,9 @@ export function HooksSection() {
 
   const updateMapping = (idx: number, field: keyof WebhookMapping, value: unknown) => {
     const updated = [...mappings];
-    (updated[idx] as Record<string, unknown>)[field] = value;
+    const target = updated[idx];
+    if (!target) return;
+    (target as unknown as Record<string, unknown>)[field] = value;
     setMappings(updated);
     setDirty(true);
   };
@@ -123,15 +152,18 @@ export function HooksSection() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const validMappings = mappings.filter((m) => m.path.trim());
       await gwService.updateHooksConfig({
         enabled: hooksEnabled,
-        ...(hookToken && hookToken !== '••••••••' ? { token: hookToken } : {}),
+        // Don't send the token back if it's still the masked placeholder
+        // — that would overwrite the real secret in openclaw.json with bullets.
+        ...(hookToken && !isMaskedToken(hookToken) ? { token: hookToken } : {}),
         internal: {
           enabled: internalEnabled,
           entries: hookEntries,
         },
-        mappings: mappings.filter(m => m.path).map(m => ({
-          match: { path: m.path },
+        mappings: validMappings.map((m) => ({
+          match: { path: m.path.trim() },
           action: m.action,
           messageTemplate: m.messageTemplate,
           deliver: m.deliver,
@@ -139,28 +171,29 @@ export function HooksSection() {
           ...(m.to ? { to: m.to } : {}),
         })),
       });
-      toast.success('Hooks config updated');
+      if (droppedMappingsCount > 0) {
+        toast.success(
+          `Hooks saved · skipped ${droppedMappingsCount} mapping${droppedMappingsCount === 1 ? '' : 's'} without a path`,
+        );
+        // Trim the empty rows so the UI matches what was actually saved.
+        setMappings(validMappings);
+      } else {
+        toast.success('Hooks saved');
+      }
       setDirty(false);
-    } catch { toast.error('Failed to update hooks config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to update hooks config')); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Hooks & Webhooks</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Event-driven automation: internal hooks (session save, boot scripts) and external webhooks (GitHub, Gmail, custom).
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600, background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)', cursor: dirty ? 'pointer' : 'default', opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)' }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Hooks & Webhooks"
+      description="Event-driven automation: internal hooks (session save, boot scripts) and external webhooks (GitHub, Gmail, custom)."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
       {/* Global enable */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
         <div>
@@ -174,40 +207,90 @@ export function HooksSection() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0', marginBottom: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Webhook token</div>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Shared secret for authenticating incoming webhooks (Bearer header)</div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              {isMaskedToken(hookToken)
+                ? 'Token is set. Type a new value to replace it; leave the dots alone to keep the current token.'
+                : 'Shared secret for authenticating incoming webhooks (Bearer header)'}
+            </div>
           </div>
-          <input type="text" value={hookToken} onChange={e => { setHookToken(e.target.value); setDirty(true); }} placeholder="secret-token" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} />
+          <input
+            type="text"
+            value={hookToken}
+            onChange={e => { setHookToken(e.target.value); setDirty(true); }}
+            onFocus={(e) => {
+              // If the field still holds the masked placeholder, clear
+              // it on focus so the user starts from an empty input
+              // rather than appending to bullets.
+              if (isMaskedToken(e.target.value)) {
+                setHookToken('');
+                setDirty(true);
+              }
+            }}
+            placeholder="secret-token"
+            style={{
+              padding: '4px 8px', fontSize: '0.75rem', width: 200,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+              fontFamily: 'var(--font-mono, monospace)',
+            }}
+          />
         </div>
       )}
 
       {/* Internal hooks */}
-      <Section title="Internal Hooks" expanded={sections.internal!} onToggle={() => setSections(p => ({ ...p, internal: !p.internal }))}>
+      <SettingsBlock title="Internal Hooks" expanded={sections.internal!} onToggle={() => setSections(p => ({ ...p, internal: !p.internal }))}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Internal hooks enabled</span>
           <Toggle value={internalEnabled} onChange={v => { setInternalEnabled(v); setDirty(true); }} />
         </div>
-        {BUNDLED_HOOKS.map(hook => (
+        {bundledHooks.map(hook => (
           <div key={hook.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
             <div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>{hook.name}</div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{hook.desc}</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{hook.description}</div>
             </div>
             <Toggle value={hookEntries[hook.id]?.enabled ?? true} onChange={() => toggleHookEntry(hook.id)} />
           </div>
         ))}
-      </Section>
+      </SettingsBlock>
 
       {/* Webhook mappings */}
-      <Section title={`Webhook Mappings (${mappings.length})`} expanded={sections.webhooks!} onToggle={() => setSections(p => ({ ...p, webhooks: !p.webhooks }))}>
+      <SettingsBlock title={`Webhook Mappings (${mappings.length})`} expanded={sections.webhooks!} onToggle={() => setSections(p => ({ ...p, webhooks: !p.webhooks }))}>
         <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '0 0 12px' }}>
           Map incoming HTTP requests to agent actions. POST /hooks/&lt;path&gt; → agent processes the payload.
         </p>
-        {mappings.map((m, idx) => (
-          <div key={m.id} style={{ padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 8 }}>
+        {mappings.map((m, idx) => {
+          const pathEmpty = !m.path.trim();
+          return (
+          <div key={m.id} style={{
+            padding: '10px 12px',
+            background: 'var(--surface)',
+            border: `1px solid ${pathEmpty ? 'rgba(245,158,11,0.4)' : 'var(--border)'}`,
+            borderRadius: 'var(--radius-sm)', marginBottom: 8,
+          }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Path</label>
-                <input type="text" value={m.path} onChange={e => updateMapping(idx, 'path', e.target.value)} placeholder="github" style={{ width: '100%', padding: '3px 6px', fontSize: '0.75rem', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} />
+                <label style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  Path
+                  {pathEmpty && (
+                    <span style={{ color: 'var(--amber)', textTransform: 'none', fontSize: '0.625rem' }}>
+                      · required, will be skipped on save
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={m.path}
+                  onChange={e => updateMapping(idx, 'path', e.target.value)}
+                  placeholder="github"
+                  style={{
+                    width: '100%', padding: '3px 6px', fontSize: '0.75rem',
+                    background: 'var(--bg)',
+                    border: `1px solid ${pathEmpty ? 'var(--amber)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)',
+                  }}
+                />
               </div>
               <div style={{ width: 160 }}>
                 <label style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Action</label>
@@ -234,11 +317,28 @@ export function HooksSection() {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
+        {droppedMappingsCount > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 10px', marginBottom: 8,
+            background: 'rgba(245,158,11,0.06)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.6875rem', color: 'var(--text-dim)',
+            fontFamily: 'var(--font-sans)',
+          }}>
+            <span style={{ color: 'var(--amber)', fontWeight: 600 }}>!</span>
+            {droppedMappingsCount === 1
+              ? '1 mapping has no path and will be skipped on save.'
+              : `${droppedMappingsCount} mappings have no path and will be skipped on save.`}
+          </div>
+        )}
         <button onClick={addMapping} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', fontSize: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
           <Plus size={12} /> Add webhook mapping
         </button>
-      </Section>
-    </div>
+      </SettingsBlock>
+    </SectionShell>
   );
 }

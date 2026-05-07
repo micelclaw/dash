@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Brain, Trash2, RefreshCw, Clock, Tag, MessageSquare, Pen, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as preferencesSvc from '@/services/preferences.service';
 import { SettingSection } from '../SettingSection';
 
 interface LearnedPreference {
@@ -74,8 +74,7 @@ export function PreferencesSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: LearnedPreference[] }>('/preferences');
-      setPreferences(res.data ?? []);
+      setPreferences(await preferencesSvc.listPreferences());
     } catch {
       // pro tier — may not be available
     }
@@ -89,7 +88,7 @@ export function PreferencesSection() {
     const toastId = toast.loading('Generando comentarios AI...');
 
     try {
-      await api.post('/preferences/regenerate-comments', {});
+      await preferencesSvc.regenerateComments();
     } catch {
       toast.error('No se pudieron regenerar los comentarios', { id: toastId });
       setRegenerating(false);
@@ -104,8 +103,7 @@ export function PreferencesSection() {
     const poll = setInterval(async () => {
       polls++;
       try {
-        const res = await api.get<{ data: LearnedPreference[] }>('/preferences');
-        const updated = res.data ?? [];
+        const updated = await preferencesSvc.listPreferences();
         setPreferences(updated);
 
         // Count how many NEW comments appeared
@@ -131,7 +129,7 @@ export function PreferencesSection() {
   const handleForget = async (id: string) => {
     setDeleting(id);
     try {
-      await api.delete(`/preferences/${id}`);
+      await preferencesSvc.deletePreference(id);
       setPreferences(prev => prev.filter(p => p.id !== id));
       toast.success('Preference forgotten');
     } catch {

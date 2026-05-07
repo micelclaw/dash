@@ -13,25 +13,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Key, Plus, Trash2, Copy, Check, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as agentsAdmin from '@/services/agents-admin.service';
+import type { AgentToken } from '@/services/agents-admin.service';
 import { SettingSection } from '../SettingSection';
 
-interface AgentToken {
-  id: string;
-  name: string;
-  scopes: string[];
-  agent_id: string | null;
-  expires_at: string | null;
-  created_at: string;
-  last_used_at: string | null;
-}
-
-interface CreateTokenResponse {
-  id: string;
-  name: string;
-  scopes: string[];
-  token: string;
-}
+// AgentToken type imported from agents-admin.service.ts above.
 
 export function AgentTokensSection() {
   const [tokens, setTokens] = useState<AgentToken[]>([]);
@@ -47,8 +33,7 @@ export function AgentTokensSection() {
 
   const loadTokens = useCallback(async () => {
     try {
-      const res = await api.get<{ data: AgentToken[] }>('/agent-tokens');
-      setTokens(res.data ?? []);
+      setTokens(await agentsAdmin.listTokens());
     } catch {
       toast.error('Failed to load agent tokens');
     }
@@ -61,11 +46,11 @@ export function AgentTokensSection() {
     if (!newName.trim()) { toast.error('Name is required'); return; }
     setCreating(true);
     try {
-      const res = await api.post<{ data: CreateTokenResponse }>('/agent-tokens', {
+      const created = await agentsAdmin.createToken({
         name: newName.trim(),
         scopes: newScopes.split(',').map(s => s.trim()).filter(Boolean),
       });
-      setNewToken(res.data.token);
+      setNewToken(created.token);
       setNewName('');
       setNewScopes('read');
       loadTokens();
@@ -77,7 +62,7 @@ export function AgentTokensSection() {
 
   const handleDelete = async (id: string) => {
     try {
-      await api.delete(`/agent-tokens/${id}`);
+      await agentsAdmin.deleteToken(id);
       toast.success('Token revoked');
       setTokens(prev => prev.filter(t => t.id !== id));
     } catch {
@@ -96,7 +81,7 @@ export function AgentTokensSection() {
   const handleEditSave = async (id: string) => {
     if (!editName.trim()) return;
     try {
-      await api.patch(`/agent-tokens/${id}`, { name: editName.trim() });
+      await agentsAdmin.updateToken(id, { name: editName.trim() });
       setTokens(prev => prev.map(t => t.id === id ? { ...t, name: editName.trim() } : t));
       setEditingId(null);
       toast.success('Token updated');

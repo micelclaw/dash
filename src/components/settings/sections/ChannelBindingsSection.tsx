@@ -4,15 +4,34 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, ChevronDown, ChevronRight } from 'lucide-react';
+import { SettingsBlock } from '../shared/SettingsBlock';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
 
 const QUEUE_MODES = [
-  { value: 'collect', label: 'Collect', desc: 'Accumulate messages, deliver together after agent finishes' },
-  { value: 'steer', label: 'Steer', desc: 'Inject into current run (cancels pending tools)' },
-  { value: 'followup', label: 'Follow-up', desc: 'Queue for next agent turn' },
-  { value: 'interrupt', label: 'Interrupt', desc: 'Abort current run, process new message' },
+  {
+    value: 'collect',
+    label: 'Collect',
+    desc: 'Wait for the agent to finish, then deliver everything as one batch. Best for: thoughtful replies, no interruptions.',
+  },
+  {
+    value: 'steer',
+    label: 'Steer',
+    desc: 'Inject the new message into the current run mid-thought (cancels pending tools). Best for: course-correcting an agent that\'s going off track.',
+  },
+  {
+    value: 'followup',
+    label: 'Follow-up',
+    desc: 'Queue messages and start a new turn after the current one finishes. Best for: rapid back-and-forth conversation.',
+  },
+  {
+    value: 'interrupt',
+    label: 'Interrupt',
+    desc: 'Stop the agent immediately and process the new message. Best for: urgent overrides ("stop, do X instead").',
+  },
 ];
 
 const TYPING_MODES = [
@@ -129,56 +148,8 @@ function ToggleRow({ label, desc, value, onChange }: {
           <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{label}</span>
           {desc && <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>}
         </div>
-        <div
-          onClick={() => onChange(!value)}
-          style={{
-            width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-            background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-            position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-          }}
-        >
-          <div style={{
-            width: 16, height: 16, borderRadius: '50%', background: '#fff',
-            position: 'absolute', top: 2, left: value ? 18 : 2, transition: 'left 0.2s',
-          }} />
-        </div>
+        <ToggleSwitch checked={value} onChange={onChange} ariaLabel={label} />
       </div>
-    </div>
-  );
-}
-
-function Section({ title, desc, expanded, onToggle, children }: {
-  title: string;
-  desc?: string;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div style={{
-      border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-      overflow: 'hidden', marginBottom: 12,
-    }}>
-      <button
-        onClick={onToggle}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-          padding: '12px 14px', background: 'var(--surface)', border: 'none',
-          cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600,
-          color: 'var(--text)', fontFamily: 'var(--font-sans)', textAlign: 'left',
-        }}
-      >
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <div>
-          {title}
-          {desc && <div style={{ fontSize: '0.6875rem', fontWeight: 400, color: 'var(--text-dim)', marginTop: 2 }}>{desc}</div>}
-        </div>
-      </button>
-      {expanded && (
-        <div style={{ padding: '4px 16px 16px', borderTop: '1px solid var(--border)' }}>
-          {children}
-        </div>
-      )}
     </div>
   );
 }
@@ -274,11 +245,11 @@ export function ChannelBindingsSection() {
         inbound: {
           debounceMs: inboundDebounce,
         },
-        statusReactions: {
+        status_reactions: {
           enabled: reactionsEnabled,
         },
-        ackReaction: ackReaction || null,
-        ackReactionScope: ackReactionScope,
+        ack_reaction: ackReaction || null,
+        ack_reaction_scope: ackReactionScope,
         tts: {
           auto: ttsAuto,
           provider: ttsProvider,
@@ -290,57 +261,28 @@ export function ChannelBindingsSection() {
           typingIntervalSeconds: typingInterval,
         },
       });
-      toast.success('Channel bindings config updated');
+      toast.success('Channel Bindings saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update channel bindings'));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-  }
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 20,
-      }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-            Channel Bindings
-          </h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Configure how your agents communicate via messaging platforms. Per-channel settings are in Gateway &rarr; Channels.
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-            background: dirty ? 'var(--amber)' : 'var(--surface)',
-            border: dirty ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty ? '#000' : 'var(--text-muted)',
-            cursor: dirty ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Channel Bindings"
+      description="Configure how your agents communicate via messaging platforms. Per-channel settings are in Gateway → Channels."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
       {/* Message Queue */}
-      <Section
+      <SettingsBlock
         title="Message Queue"
-        desc="What happens when messages arrive while the agent is busy"
+        description="What happens when messages arrive while the agent is busy"
         expanded={sections.queue!}
         onToggle={() => toggleSection('queue')}
       >
@@ -348,34 +290,34 @@ export function ChannelBindingsSection() {
         <NumberRow label="Queue debounce" desc="Wait before starting followup turn" value={queueDebounce} min={0} max={10000} suffix="ms" onChange={markDirty(setQueueDebounce)} />
         <NumberRow label="Queue cap" desc="Max messages in queue per session" value={queueCap} min={1} max={100} onChange={markDirty(setQueueCap)} />
         <NumberRow label="Inbound debounce" desc="Group rapid messages from same sender" value={inboundDebounce} min={0} max={10000} suffix="ms" onChange={markDirty(setInboundDebounce)} />
-      </Section>
+      </SettingsBlock>
 
       {/* Streaming & Typing */}
-      <Section
+      <SettingsBlock
         title="Streaming & Typing"
-        desc="How responses are displayed in messaging platforms"
+        description="How responses are displayed in messaging platforms"
         expanded={sections.streaming!}
         onToggle={() => toggleSection('streaming')}
       >
         <SelectRow
-          label="Block streaming"
-          desc="Send response in blocks vs all at once"
+          label="Stream replies"
+          desc="When ON, the agent sends each paragraph/block as soon as it's written (feels live). When OFF, the user waits and gets the full reply at once."
           value={blockStreaming}
           options={[
-            { value: 'off', label: 'Off (send complete reply)' },
-            { value: 'on', label: 'On (send blocks as they complete)' },
+            { value: 'on', label: 'On — send blocks as they complete (recommended)' },
+            { value: 'off', label: 'Off — send the full reply when done' },
           ]}
           onChange={markDirty(setBlockStreaming)}
         />
         <SelectRow label="Human delay" desc="Pause between blocks to feel natural" value={humanDelay} options={HUMAN_DELAY_MODES} onChange={markDirty(setHumanDelay)} />
         <SelectRow label="Typing indicator" desc="When to show typing indicator" value={typingMode} options={TYPING_MODES} onChange={markDirty(setTypingMode)} />
         <NumberRow label="Typing refresh interval" value={typingInterval} min={1} max={30} suffix="sec" onChange={markDirty(setTypingInterval)} />
-      </Section>
+      </SettingsBlock>
 
       {/* Status Reactions & Ack */}
-      <Section
+      <SettingsBlock
         title="Reactions"
-        desc="Emoji reactions while the agent works"
+        description="Emoji reactions while the agent works"
         expanded={sections.reactions!}
         onToggle={() => toggleSection('reactions')}
       >
@@ -389,26 +331,50 @@ export function ChannelBindingsSection() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div style={{ flex: 1 }}>
               <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Ack reaction emoji</span>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Emoji sent immediately when a message is received</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                Emoji reaction sent immediately when a message is received (acknowledgement). Leave empty to disable. Single emoji only — no text.
+              </div>
             </div>
-            <input
-              type="text" value={ackReaction} placeholder="e.g. 👀"
-              onChange={e => { setAckReaction(e.target.value); setDirty(true); }}
-              style={{
-                padding: '4px 8px', fontSize: '0.875rem', width: 50, textAlign: 'center',
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-              }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="text"
+                value={ackReaction}
+                placeholder="👀"
+                maxLength={4}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // Strip whitespace and any plain ASCII text — only keep
+                  // characters outside the basic Latin range (likely emoji).
+                  // Imperfect (some emojis use multi-codepoint ZWJ sequences)
+                  // but catches the common "user typed a word by mistake" case.
+                  const cleaned = v.replace(/[\s\x00-\x7F]/g, '');
+                  setAckReaction(cleaned);
+                  setDirty(true);
+                }}
+                style={{
+                  padding: '4px 8px', fontSize: '0.875rem', width: 50, textAlign: 'center',
+                  background: 'var(--surface)',
+                  border: `1px solid ${
+                    !ackReaction || /[^\x00-\x7F]/.test(ackReaction) ? 'var(--border)' : '#ef4444'
+                  }`,
+                  borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                }}
+              />
+              {ackReaction && /^[\x00-\x7F]+$/.test(ackReaction) && (
+                <span style={{ fontSize: '0.625rem', color: '#ef4444' }} title="Not an emoji — try 👀, 👍, ✅, etc.">
+                  !
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <SelectRow label="Ack reaction scope" value={ackReactionScope} options={ACK_REACTION_SCOPES} onChange={markDirty(setAckReactionScope)} />
-      </Section>
+      </SettingsBlock>
 
       {/* TTS */}
-      <Section
+      <SettingsBlock
         title="Bot TTS (Text-to-Speech)"
-        desc="Let agents send audio responses in messaging platforms"
+        description="Let agents send audio responses in messaging platforms"
         expanded={sections.tts!}
         onToggle={() => toggleSection('tts')}
       >
@@ -429,7 +395,7 @@ export function ChannelBindingsSection() {
             Requires ElevenLabs API key. Supports custom voices and multilingual models. Configure key in environment.
           </div>
         )}
-      </Section>
-    </div>
+      </SettingsBlock>
+    </SectionShell>
   );
 }

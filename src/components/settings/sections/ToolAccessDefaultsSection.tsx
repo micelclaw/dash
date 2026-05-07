@@ -4,9 +4,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as agentsAdmin from '@/services/agents-admin.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
   read: 'Read file contents from the agent workspace',
@@ -63,13 +66,7 @@ const PROFILES = [
   { value: 'full', label: 'Full', desc: 'All 26 tools enabled' },
 ];
 
-interface ToolAccessResponse {
-  data: {
-    global: { profile: string | null; allow: string[] | null; also_allow: string[] | null; deny: string[] | null };
-    agent: Record<string, unknown>;
-    openclaw_agent_id: string;
-  };
-}
+// Tool access response shape lives in agents-admin.service.ts now.
 
 export function ToolAccessDefaultsSection() {
   const [loading, setLoading] = useState(true);
@@ -87,17 +84,18 @@ export function ToolAccessDefaultsSection() {
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const agents = await api.get<{ data: Array<{ id: string }> }>('/managed-agents');
-      if (agents.data.length > 0) {
-        setFirstAgentId(agents.data[0].id);
-        const res = await api.get<ToolAccessResponse>(`/managed-agents/${agents.data[0].id}/tool-access`);
-        setProfile(res.data.global.profile ?? 'coding');
-        setAlsoAllow(new Set(res.data.global.also_allow ?? res.data.global.allow ?? []));
-        setDeny(new Set(res.data.global.deny ?? []));
+      const agents = await agentsAdmin.listManagedAgents();
+      const first = agents[0];
+      if (first?.id) {
+        setFirstAgentId(first.id);
+        const data = await agentsAdmin.getToolAccess(first.id);
+        setProfile(data.global.profile ?? 'coding');
+        setAlsoAllow(new Set(data.global.also_allow ?? data.global.allow ?? []));
+        setDeny(new Set(data.global.deny ?? []));
       }
       setDirty(false);
-    } catch {
-      toast.error('Failed to load tool access defaults');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load tool access defaults'));
     } finally {
       setLoading(false);
     }
@@ -151,7 +149,7 @@ export function ToolAccessDefaultsSection() {
     if (!firstAgentId) return;
     setSaving(true);
     try {
-      await api.patch(`/managed-agents/${firstAgentId}/tool-access`, {
+      await agentsAdmin.updateToolAccess(firstAgentId, {
         scope: 'global',
         profile,
         allow: alsoAllow.size > 0 ? [...alsoAllow] : null,
@@ -159,8 +157,8 @@ export function ToolAccessDefaultsSection() {
       });
       toast.success('Global tool access defaults updated');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update tool access defaults');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update tool access defaults'));
     } finally {
       setSaving(false);
     }
@@ -169,41 +167,35 @@ export function ToolAccessDefaultsSection() {
   const enabledCount = ALL_TOOLS.filter(t => isToolEnabled(t)).length;
   const hasOverrides = alsoAllow.size > 0 || deny.size > 0;
 
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
+  // Loading state is rendered by SectionShell. The "no agents" state
+  // is a separate empty-state — bypass the shell entirely.
+  if (!loading && !firstAgentId) {
+    return (
+      <div style={{ padding: 20, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+        No agents available yet. Create an agent first under <strong>Agents</strong>.
+      </div>
+    );
   }
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>
-            Tool Access Defaults
-          </h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Default tool profile for all agents. Agents set to "Inherit" use this profile.
-            {hasOverrides && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>+ custom overrides</span>}
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-            background: dirty ? 'var(--amber)' : 'var(--surface)',
-            border: dirty ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty ? '#000' : 'var(--text-muted)',
-            cursor: dirty ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
+    <SectionShell
+      title="Tool Access Defaults"
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
+      <p style={{ margin: '-12px 0 20px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }}>
+        Global default applied to every agent set to <strong>Inherit</strong> mode.
+        Agents with their own preset (Minimal/Coding/Messaging/Full) ignore this.{' '}
+        <Link
+          to="/agents"
+          style={{ color: 'var(--amber)', textDecoration: 'none', whiteSpace: 'nowrap' }}
         >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
+          Per-agent overrides <ExternalLink size={10} style={{ display: 'inline', verticalAlign: 'baseline' }} />
+        </Link>
+        {hasOverrides && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>· custom overrides active</span>}
+      </p>
 
       {/* Profile selector */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
@@ -290,6 +282,6 @@ export function ToolAccessDefaultsSection() {
           </button>
         )}
       </div>
-    </div>
+    </SectionShell>
   );
 }

@@ -12,17 +12,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { KeyRound, RefreshCw } from 'lucide-react';
-import { api } from '@/services/api';
+import * as apiKeysSvc from '@/services/api-keys.service';
+import type { ApiKey } from '@/services/api-keys.service';
 import { SettingSection } from '../SettingSection';
-
-interface ApiKey {
-  id: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  last_used_at: string | null;
-  created_at: string;
-}
 
 export function MyApiKeysSection() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -31,8 +23,7 @@ export function MyApiKeysSection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: ApiKey[] }>('/api-keys/mine');
-      setKeys(res.data ?? []);
+      setKeys(await apiKeysSvc.listMyApiKeys());
     } catch {
       // endpoint may not be available
     }

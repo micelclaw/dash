@@ -25,20 +25,59 @@
 // the same hash. If the file changed in between, the server returns 409
 // and the user has to refresh.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Save, RefreshCw, AlertTriangle, History, ArrowLeft, X } from 'lucide-react';
+import { Save, RefreshCw, AlertTriangle, History, ArrowLeft, X, Power } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
+import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { toast } from 'sonner';
+import Ajv, { type ErrorObject } from 'ajv';
+import addFormats from 'ajv-formats';
 import { useAuthStore } from '@/stores/auth.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import * as gwService from '@/services/gateway.service';
 import type { RawConfigBackup } from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { TypeToConfirmModal } from '@/components/settings/shared/TypeToConfirmModal';
+import { RetryBanner } from '@/components/settings/shared/RetryBanner';
 import { clawEditorTheme, clawHighlightStyle } from '@/modules/micelhub/editor-theme';
 
 const SESSION_FLAG = 'oc7-raw-warning-acknowledged';
+
+// ─── AJV singleton ───────────────────────────────────────────────────
+// Shared across instances to amortize compile cost. `strict: false`
+// because OpenClaw schemas use a few keywords AJV rejects in strict
+// mode (`example`, custom annotations).
+const ajv = new Ajv({ strict: false, allErrors: true, allowUnionTypes: true });
+addFormats(ajv);
+
+interface SchemaValidationResult {
+  ok: boolean;
+  errors: ErrorObject[];
+}
+
+function describeAjvError(err: ErrorObject): string {
+  const path = err.instancePath || '(root)';
+  return `${path} — ${err.message ?? 'invalid'}`;
+}
+
+// Per-section overrides for the shared describeError helper. The raw
+// config save has its own rate-limit copy ("3 per minute") because
+// that's the configPatch-specific rate limit documented in CLAUDE.md.
+const RAW_CONFIG_ERROR_OVERRIDES = {
+  status: {
+    409: 'Config changed externally — refresh and reapply your edit.',
+    429: 'Save rate-limited (3 per minute). Wait and try again.',
+  },
+  code: {
+    INVALID_JSON: 'Backend rejected the JSON — check syntax.',
+    HASH_MISMATCH: 'Config changed externally — refresh and reapply your edit.',
+    RAW_CONFIG_WRITE_FAILED: 'Disk write failed — check Gateway permissions.',
+    RATE_LIMIT: 'Save rate-limited (3 per minute). Wait and try again.',
+  },
+};
 
 export default function RawConfigPage() {
   const navigate = useNavigate();
@@ -46,6 +85,9 @@ export default function RawConfigPage() {
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
   const schema = useOpenclawSchemaStore((s) => s.schema);
+  const schemaError = useOpenclawSchemaStore((s) => s.error);
+  const schemaLoading = useOpenclawSchemaStore((s) => s.loading);
+  const reloadConfigSchema = useOpenclawSchemaStore((s) => s.reloadConfigSchema);
 
   const [showWarning, setShowWarning] = useState(false);
   const [warningAcknowledged, setWarningAcknowledged] = useState(false);
@@ -58,9 +100,41 @@ export default function RawConfigPage() {
   const [hash, setHash] = useState('');
   const [path, setPath] = useState('');
   const [parseError, setParseError] = useState<string | null>(null);
+  const [schemaErrors, setSchemaErrors] = useState<ErrorObject[]>([]);
   const [showBackups, setShowBackups] = useState(false);
   const [backups, setBackups] = useState<RawConfigBackup[]>([]);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const seedRef = useRef(false);
+
+  // Compile the schema once per schema instance. Returns a validator
+  // function or null if the schema isn't loaded / failed compile.
+  const validate = useMemo(() => {
+    if (!schema) return null;
+    try {
+      return ajv.compile(schema);
+    } catch (err) {
+      // Bad schema is a backend bug, not a user one — log and fail open.
+      // eslint-disable-next-line no-console
+      console.warn('[raw-config] schema failed to compile:', err);
+      return null;
+    }
+  }, [schema]);
+
+  const validateAgainstSchema = useCallback(
+    (text: string): SchemaValidationResult => {
+      if (!validate) return { ok: true, errors: [] };
+      try {
+        const parsed = JSON.parse(text);
+        const ok = validate(parsed) as boolean;
+        return { ok, errors: ok ? [] : (validate.errors ?? []) };
+      } catch {
+        // JSON syntax errors are surfaced separately via parseError;
+        // skip schema check until syntax is valid.
+        return { ok: true, errors: [] };
+      }
+    },
+    [validate],
+  );
 
   // ─── Warning interstitial (first time per session) ────────────────
   useEffect(() => {
@@ -103,46 +177,58 @@ export default function RawConfigPage() {
     if (warningAcknowledged) fetchConfig();
   }, [warningAcknowledged, fetchConfig]);
 
-  // ─── Live JSON validation ─────────────────────────────────────────
+  // ─── Live JSON + schema validation ────────────────────────────────
   useEffect(() => {
     if (!seedRef.current) return;
     if (!content.trim()) {
       setParseError('File is empty');
+      setSchemaErrors([]);
       return;
     }
     try {
       JSON.parse(content);
       setParseError(null);
+      // Schema validation only runs when JSON is syntactically valid.
+      const result = validateAgainstSchema(content);
+      setSchemaErrors(result.errors);
     } catch (err) {
       setParseError(err instanceof Error ? err.message : 'Invalid JSON');
+      setSchemaErrors([]);
     }
-  }, [content]);
+  }, [content, validateAgainstSchema]);
 
   // ─── Save ─────────────────────────────────────────────────────────
   const dirty = content !== originalContent;
+  const schemaInvalid = schemaErrors.length > 0;
+  // Without a schema we cannot validate, so block save until the admin
+  // either reloads it or accepts the risk via the backend round-trip.
+  const schemaUnavailable = !schemaLoading && !schema && !!schemaError;
+  const saveBlocked = !!parseError || schemaInvalid || schemaUnavailable;
+
+  const requestSave = () => {
+    if (parseError) { toast.error('Fix the JSON syntax error before saving'); return; }
+    if (schemaInvalid) { toast.error(`Fix ${schemaErrors.length} schema error${schemaErrors.length === 1 ? '' : 's'} before saving`); return; }
+    if (schemaUnavailable) { toast.error('Schema not loaded — cannot validate. Retry the schema first.'); return; }
+    setShowSaveConfirm(true);
+  };
 
   const handleSave = async () => {
-    if (parseError) {
-      toast.error('Fix the JSON syntax error before saving');
-      return;
-    }
     setSaving(true);
     try {
       const result = await gwService.saveRawConfig(content, hash);
       setHash(result.new_hash);
       setOriginalContent(content);
       toast.success(`Saved. Backup: ${result.backup.split('/').pop()}`);
+      setShowSaveConfirm(false);
     } catch (err) {
-      const status = (err as { status?: number })?.status;
-      const msg = (err as { message?: string })?.message;
-      if (status === 409) {
-        toast.error('Config changed externally — refresh required');
-      } else {
-        toast.error(msg ?? 'Save failed');
-      }
+      toast.error(describeError(err, 'Save failed', RAW_CONFIG_ERROR_OVERRIDES));
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleRetrySchema = async () => {
+    await reloadConfigSchema();
   };
 
   const handleRefresh = () => {
@@ -261,7 +347,14 @@ export default function RawConfigPage() {
     );
   }
 
-  const extensions: Extension[] = [json(), clawEditorTheme, clawHighlightStyle];
+  const extensions: Extension[] = [
+    json(),
+    clawEditorTheme,
+    clawHighlightStyle,
+    // Lock editor while a save is in flight so the user can't edit
+    // content that's about to be overwritten by the server response.
+    EditorView.editable.of(!saving),
+  ];
 
   return (
     <div
@@ -302,8 +395,17 @@ export default function RawConfigPage() {
           <RefreshCw size={14} />
         </button>
         <button
-          onClick={handleSave}
-          disabled={!dirty || saving || !!parseError}
+          onClick={requestSave}
+          disabled={!dirty || saving || saveBlocked}
+          title={
+            saveBlocked
+              ? parseError
+                ? 'Fix syntax error first'
+                : schemaInvalid
+                ? `Fix ${schemaErrors.length} schema error${schemaErrors.length === 1 ? '' : 's'} first`
+                : 'Schema not loaded — retry the schema first'
+              : undefined
+          }
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -311,11 +413,11 @@ export default function RawConfigPage() {
             padding: '6px 14px',
             fontSize: '0.8125rem',
             fontWeight: 600,
-            background: dirty && !parseError ? 'var(--amber)' : 'var(--surface)',
-            border: dirty && !parseError ? 'none' : '1px solid var(--border)',
+            background: dirty && !saveBlocked ? 'var(--amber)' : 'var(--surface)',
+            border: dirty && !saveBlocked ? 'none' : '1px solid var(--border)',
             borderRadius: 'var(--radius-sm)',
-            color: dirty && !parseError ? '#000' : 'var(--text-muted)',
-            cursor: dirty && !parseError ? 'pointer' : 'default',
+            color: dirty && !saveBlocked ? '#000' : 'var(--text-muted)',
+            cursor: (dirty && !saveBlocked) ? 'pointer' : 'not-allowed',
             opacity: saving ? 0.7 : 1,
             fontFamily: 'var(--font-sans)',
           }}
@@ -323,6 +425,20 @@ export default function RawConfigPage() {
           <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
         </button>
       </div>
+
+      {/* Schema-load error banner — admin must retry or the editor
+          can't validate before save. */}
+      {schemaUnavailable && (
+        <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
+          <RetryBanner
+            severity="error"
+            title="Schema unavailable"
+            message={`${schemaError ?? 'failed to load'} — Save is disabled until the schema reloads.`}
+            onRetry={handleRetrySchema}
+            loading={schemaLoading}
+          />
+        </div>
+      )}
 
       {/* Editor */}
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -355,23 +471,35 @@ export default function RawConfigPage() {
         />
       </div>
 
-      {/* Footer with parse error / status */}
+      {/* Footer with parse / schema / status */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 12,
           padding: '8px 16px',
           borderTop: '1px solid var(--border)',
           fontSize: '0.6875rem',
           fontFamily: 'var(--font-mono)',
           flexShrink: 0,
-          background: parseError ? '#ef444415' : 'var(--surface)',
-          color: parseError ? '#ef4444' : 'var(--text-muted)',
+          background: parseError ? '#ef444415' : schemaInvalid ? '#f59e0b15' : 'var(--surface)',
+          color: parseError ? '#ef4444' : schemaInvalid ? '#f59e0b' : 'var(--text-muted)',
         }}
       >
         {parseError ? (
           <span>⚠ {parseError}</span>
+        ) : schemaInvalid ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+            <span style={{ fontWeight: 600 }}>
+              ⚠ {schemaErrors.length} schema error{schemaErrors.length === 1 ? '' : 's'}
+            </span>
+            {schemaErrors.slice(0, 3).map((e, i) => (
+              <span key={i} style={{ opacity: 0.85 }}>· {describeAjvError(e)}</span>
+            ))}
+            {schemaErrors.length > 3 && (
+              <span style={{ opacity: 0.6 }}>… and {schemaErrors.length - 3} more</span>
+            )}
+          </div>
         ) : (
           <span>
             {dirty ? '● Unsaved changes' : '✓ Synced'}
@@ -381,6 +509,32 @@ export default function RawConfigPage() {
           </span>
         )}
       </div>
+
+      {/* Type-to-confirm save modal — editing the entire openclaw.json
+          is irreversible from the UI (rollback only via shell + backup
+          file), so we gate it behind an explicit ack. */}
+      <TypeToConfirmModal
+        open={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={handleSave}
+        title="Overwrite openclaw.json?"
+        description={
+          <>
+            This rewrites your entire OpenClaw config. A backup will be created in
+            {' '}<code style={{
+              padding: '1px 4px', background: 'var(--surface)', borderRadius: 4,
+              fontFamily: 'var(--font-mono, monospace)',
+            }}>~/.openclaw/backups/</code>
+            {' '}but the running Gateway will reload immediately and any error in the new
+            config can break the system until you restore from the shell.
+          </>
+        }
+        requireWord="SAVE"
+        confirmLabel="Overwrite"
+        runningLabel="Saving…"
+        running={saving}
+        confirmIcon={Power}
+      />
 
       {/* Backups modal */}
       {showBackups && (

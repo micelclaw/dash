@@ -181,6 +181,21 @@ export async function addModel(model: string): Promise<void> {
   await api.post('/gateway/models/add', { model });
 }
 
+// Add model + register it in models.providers[id].models[] in a single
+// configPatch (saves 1 write of the 3-per-60s rate limit). Used for
+// discovered models from custom providers (LM Studio, vLLM, etc.).
+export async function addModelWithConfig(params: {
+  model: string;
+  provider_id: string;
+  model_id: string;
+  name?: string;
+  max_tokens?: number;
+  context_window?: number;
+  input?: string[];
+}): Promise<void> {
+  await api.post('/gateway/models/add-with-config', params);
+}
+
 export async function removeModel(model: string): Promise<void> {
   await api.post('/gateway/models/remove', { model });
 }
@@ -593,6 +608,17 @@ export async function updateHooksConfig(config: Record<string, unknown>): Promis
   await api.patch('/gateway/hooks-config', config);
 }
 
+export interface AvailableHook {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export async function getAvailableHooks(): Promise<AvailableHook[]> {
+  const res = await api.get<{ data: AvailableHook[] }>('/gateway/hooks-config/available-hooks');
+  return res.data ?? [];
+}
+
 // ─── Heartbeat Config ──────────────────────────────────────────────
 
 export interface HeartbeatConfig {
@@ -777,7 +803,7 @@ export async function getSecretsConfig(): Promise<SecretsConfig> {
 }
 
 export async function updateSecretsConfig(config: SecretsConfig): Promise<void> {
-  await api.patch('/gateway/secrets-config', config);
+  await api.patch<{ data: { ok: boolean } }>('/gateway/secrets-config', config);
 }
 
 export async function testSecretProvider(provider: string, id: string): Promise<SecretsTestResult> {

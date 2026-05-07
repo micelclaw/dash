@@ -26,7 +26,7 @@
 //   endpoints enforce requireAdmin).
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Plus, Trash2, Pencil, FlaskConical, Shield, FileText, Terminal, AlertTriangle, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, FlaskConical, Shield, FileText, Terminal, AlertTriangle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import type {
@@ -35,6 +35,9 @@ import type {
   FileProvider,
   ExecProvider,
 } from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -84,12 +87,11 @@ export function SecretsSection() {
       setDirty(false);
     } catch (err) {
       // 403 = non-admin (section should not even be reachable, but defend anyway)
-      const status = (err as { status?: number })?.status;
-      if (status === 403) {
-        toast.error('Admin role required');
-      } else {
-        toast.error('Failed to load secrets config');
-      }
+      toast.error(
+        describeError(err, 'Failed to load secrets config', {
+          status: { 403: 'Admin role required' },
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -99,14 +101,27 @@ export function SecretsSection() {
     fetchConfig();
   }, [fetchConfig]);
 
+  // Reject save if any FileProvider has a non-absolute path. Catches
+  // typos before they hit the runtime resolver where they fail
+  // silently from the dash's POV.
+  const hasInvalidFilePath = Object.values(providers).some((p) => {
+    if (p.source !== 'file') return false;
+    const path = (p as FileProvider).path ?? '';
+    return path.length > 0 && !path.startsWith('/') && !path.startsWith('~/');
+  });
+
   const handleSave = async () => {
+    if (hasInvalidFilePath) {
+      toast.error('One file provider has an invalid path — must start with / or ~/');
+      return;
+    }
     setSaving(true);
     try {
       await gwService.updateSecretsConfig({ providers });
-      toast.success('Secrets config updated');
+      toast.success('Secrets saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update secrets config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update secrets config'));
     } finally {
       setSaving(false);
     }
@@ -174,44 +189,18 @@ export function SecretsSection() {
     setDirty(true);
   };
 
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-  }
-
   const providerList = Object.entries(providers);
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Secrets</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Provider-based secret resolution. Reference values from env, files, or external commands without writing
-            them to disk.
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '6px 14px',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            background: dirty ? 'var(--amber)' : 'var(--surface)',
-            border: dirty ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty ? '#000' : 'var(--text-muted)',
-            cursor: dirty ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
+    <SectionShell
+      title="Secrets"
+      description="Provider-based secret resolution. Reference values from env, files, or external commands without writing them to disk."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveDisabledReason={hasInvalidFilePath ? 'Fix the invalid file path before saving' : null}
+    >
 
       {/* Add buttons */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
@@ -264,7 +253,7 @@ export function SecretsSection() {
           onClose={() => setTestModal(null)}
         />
       )}
-    </div>
+    </SectionShell>
   );
 }
 
@@ -416,16 +405,36 @@ function FileProviderEditor({
   provider: FileProvider;
   onUpdate: (updates: Partial<SecretProvider>) => void;
 }) {
+  // Path must be absolute (Unix /... or starting with ~/ for the user
+  // home). The runtime resolver fails on relative paths, but with no
+  // surface error in the dash — flag at config time instead.
+  const pathInvalid =
+    provider.path.length > 0 &&
+    !provider.path.startsWith('/') &&
+    !provider.path.startsWith('~/');
+
   return (
     <div>
-      <FieldRow label="File path" desc="Absolute path to the file holding the secret(s).">
-        <input
-          type="text"
-          value={provider.path}
-          onChange={(e) => onUpdate({ path: e.target.value } as Partial<SecretProvider>)}
-          placeholder="/etc/openclaw/secrets.json"
-          style={{ ...inputStyle(), width: 320, fontFamily: 'var(--font-mono)' }}
-        />
+      <FieldRow label="File path" desc="Absolute path to the file holding the secret(s). Use /... or ~/...">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <input
+            type="text"
+            value={provider.path}
+            onChange={(e) => onUpdate({ path: e.target.value } as Partial<SecretProvider>)}
+            placeholder="/etc/openclaw/secrets.json"
+            style={{
+              ...inputStyle(),
+              width: 320,
+              fontFamily: 'var(--font-mono)',
+              borderColor: pathInvalid ? '#ef4444' : 'var(--border)',
+            }}
+          />
+          {pathInvalid && (
+            <span style={{ fontSize: '0.6875rem', color: '#ef4444', fontFamily: 'var(--font-sans)' }}>
+              ! Use an absolute path (/...) or ~/...
+            </span>
+          )}
+        </div>
       </FieldRow>
       <FieldRow label="Mode" desc="`singleValue`: file content is the secret. `json`: file is JSON, id is a JSON path.">
         <select
@@ -807,34 +816,7 @@ function AddButton({
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      onClick={() => onChange(!value)}
-      style={{
-        width: 36,
-        height: 20,
-        borderRadius: 10,
-        cursor: 'pointer',
-        background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-        position: 'relative',
-        flexShrink: 0,
-        transition: 'background 0.2s',
-      }}
-    >
-      <div
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: '50%',
-          background: '#fff',
-          position: 'absolute',
-          top: 2,
-          left: value ? 18 : 2,
-          transition: 'left 0.2s',
-        }}
-      />
-    </div>
-  );
+  return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
 function inputStyle() {

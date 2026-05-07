@@ -23,20 +23,54 @@
 // instead of plain values in openclaw.json.
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
 import {
   KeyValueListEditor,
   entriesToRecord,
   recordToEntries,
   type KeyValueEntry,
 } from '@/components/settings/shared/KeyValueListEditor';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 const ENV_KEY_REGEX = /^[A-Z_][A-Z0-9_]*$/;
 
+// System-managed variables that the Gateway and child processes need
+// at runtime. Overriding these from openclaw.json is a foot-gun:
+// `PATH=""` breaks every CLI tool, `HOME=/tmp` corrupts agent
+// workspaces, `LD_PRELOAD=...` is a privilege-escalation vector.
+// Reject hard at the dash layer.
+const RESERVED_ENV_KEYS = new Set([
+  'PATH',
+  'HOME',
+  'SHELL',
+  'USER',
+  'LOGNAME',
+  'PWD',
+  'OLDPWD',
+  'LD_LIBRARY_PATH',
+  'LD_PRELOAD',
+  'NODE_OPTIONS',
+  'TZ',
+]);
+
+// Keywords in the env var name that strongly suggest the value is
+// sensitive — render the input as a password to keep it out of
+// shoulder-surfing range and DevTools snapshots.
+const SECRET_KEY_PATTERN = /(KEY|TOKEN|SECRET|PASSWORD|PASS|CREDENTIAL|PRIVATE|API_?KEY)/i;
+
+function isSecretEnvKey(key: string): boolean {
+  return SECRET_KEY_PATTERN.test(key);
+}
+
 function validateEnvKey(key: string): string | null {
   if (!key.trim()) return null; // empty key just means "ignore this row" — handled in entriesToRecord
+  if (RESERVED_ENV_KEYS.has(key)) {
+    return `${key} is a system variable — overriding it can break the Gateway. Use the shellEnv inheritance instead.`;
+  }
   if (!ENV_KEY_REGEX.test(key)) {
     return 'Use UPPER_SNAKE_CASE (letters, digits, underscores; cannot start with a digit)';
   }
@@ -60,8 +94,8 @@ export function EnvSection() {
       setShellEnvTimeoutMs(data.shell_env?.timeout_ms ?? 5000);
       setVarEntries(recordToEntries(data.vars));
       setDirty(false);
-    } catch {
-      toast.error('Failed to load env config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load env config'));
     } finally {
       setLoading(false);
     }
@@ -84,51 +118,26 @@ export function EnvSection() {
         shell_env: { enabled: shellEnvEnabled, timeout_ms: shellEnvTimeoutMs },
         vars: entriesToRecord(varEntries),
       });
-      toast.success('Env config updated');
+      toast.success('Environment saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update env config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update env config'));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-  }
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Environment</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Global environment variables injected into every OpenClaw child process (tools, plugins, agents).
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving || hasInvalidKey}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '6px 14px',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            background: dirty && !hasInvalidKey ? 'var(--amber)' : 'var(--surface)',
-            border: dirty && !hasInvalidKey ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty && !hasInvalidKey ? '#000' : 'var(--text-muted)',
-            cursor: dirty && !hasInvalidKey ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Environment"
+      description="Global environment variables injected into every OpenClaw child process (tools, plugins, agents)."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveDisabledReason={hasInvalidKey ? 'Fix invalid env keys before saving' : null}
+      appliesAt="gateway-restart"
+    >
       {/* Warning */}
       <div
         style={{
@@ -167,35 +176,11 @@ export function EnvSection() {
             global environment. Useful when CLIs are installed via nvm, asdf, brew shellenv, etc.
           </div>
         </div>
-        <div
-          onClick={() => {
-            setShellEnvEnabled((v) => !v);
-            setDirty(true);
-          }}
-          style={{
-            width: 36,
-            height: 20,
-            borderRadius: 10,
-            cursor: 'pointer',
-            background: shellEnvEnabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-            position: 'relative',
-            flexShrink: 0,
-            transition: 'background 0.2s',
-          }}
-        >
-          <div
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: '50%',
-              background: '#fff',
-              position: 'absolute',
-              top: 2,
-              left: shellEnvEnabled ? 18 : 2,
-              transition: 'left 0.2s',
-            }}
-          />
-        </div>
+        <ToggleSwitch
+          checked={shellEnvEnabled}
+          onChange={(v) => { setShellEnvEnabled(v); setDirty(true); }}
+          ariaLabel="Inherit shell environment"
+        />
       </div>
 
       {shellEnvEnabled && (
@@ -254,8 +239,7 @@ export function EnvSection() {
           Variables
         </h4>
         <p style={{ margin: '0 0 10px', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Each row sets one environment variable. Keys must be UPPER_SNAKE_CASE. Empty rows are ignored. Changes
-          take effect after the Gateway is restarted.
+          Each row sets one environment variable. Keys must be UPPER_SNAKE_CASE. Empty rows are ignored.
         </p>
 
         <KeyValueListEditor
@@ -265,12 +249,13 @@ export function EnvSection() {
             setDirty(true);
           }}
           validateKey={validateEnvKey}
+          valueIsSecretByKey={isSecretEnvKey}
           keyPlaceholder="MY_VAR"
           valuePlaceholder="value"
           keyWidth={220}
           addLabel="Add variable"
         />
       </div>
-    </div>
+    </SectionShell>
   );
 }

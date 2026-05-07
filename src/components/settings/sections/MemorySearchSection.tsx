@@ -4,9 +4,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SettingsBlock } from '../shared/SettingsBlock';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 const PROVIDERS = [
   { value: 'ollama', label: 'Ollama (local, free)' },
@@ -22,24 +25,6 @@ const BACKENDS = [
   { value: 'qmd', label: 'QMD sidecar (separate process, advanced)' },
 ];
 
-function Section({ title, expanded, onToggle, children }: {
-  title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode;
-}) {
-  return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: 12 }}>
-      <button onClick={onToggle} style={{
-        display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '10px 14px',
-        background: 'var(--surface)', border: 'none', cursor: 'pointer', fontSize: '0.8125rem',
-        fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)', textAlign: 'left',
-      }}>
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        {title}
-      </button>
-      {expanded && <div style={{ padding: '8px 16px 16px', borderTop: '1px solid var(--border)' }}>{children}</div>}
-    </div>
-  );
-}
-
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0' }}>
@@ -53,15 +38,7 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div onClick={() => onChange(!value)} style={{
-      width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-      background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-      position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-    }}>
-      <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: value ? 18 : 2, transition: 'left 0.2s' }} />
-    </div>
-  );
+  return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
 export function MemorySearchSection() {
@@ -125,7 +102,7 @@ export function MemorySearchSection() {
       setBackend((mem.backend ?? 'builtin') as string);
       setCitations((mem.citations ?? 'auto') as string);
       setDirty(false);
-    } catch { toast.error('Failed to load memory config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to load memory config')); }
     finally { setLoading(false); }
   }, []);
 
@@ -152,13 +129,12 @@ export function MemorySearchSection() {
         },
         memory: { backend, citations },
       });
-      toast.success('Memory config updated');
+      toast.success('Memory saved');
       setDirty(false);
-    } catch { toast.error('Failed to update memory config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to update memory config')); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
 
   const Sel = ({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) => (
     <select value={value} onChange={e => onChange(e.target.value)} style={{
@@ -178,57 +154,49 @@ export function MemorySearchSection() {
   );
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Memory Search</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            How agents search their persistent memory (MEMORY.md + daily notes).
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-          background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)', cursor: dirty ? 'pointer' : 'default',
-          opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)',
-        }}><Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}</button>
-      </div>
-
+    <SectionShell
+      title="Memory Search"
+      description="How agents search their persistent memory (MEMORY.md + daily notes)."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
       <Row label="Memory search enabled" desc="Allow agents to search their memory files"><Toggle value={enabled} onChange={d(setEnabled)} /></Row>
       <Row label="Embedding provider" desc="Service that generates vector embeddings for semantic search"><Sel value={provider} options={PROVIDERS} onChange={d(setProvider)} /></Row>
 
-      <Section title="Search Quality" expanded={sections.search!} onToggle={() => setSections(p => ({ ...p, search: !p.search }))}>
-        <Row label="Max results" desc="Number of memory snippets returned per search"><Num value={maxResults} min={1} max={30} onChange={d(setMaxResults)} /></Row>
-        <Row label="Min score threshold" desc="Minimum relevance score (0-1). Lower = more results, less relevant"><Num value={minScore} min={0} max={1} onChange={d(setMinScore)} /></Row>
-        <Row label="Hybrid search" desc="Combine vector similarity + keyword matching"><Toggle value={hybridEnabled} onChange={d(setHybridEnabled)} /></Row>
+      <SettingsBlock title="Search Quality" expanded={sections.search!} onToggle={() => setSections(p => ({ ...p, search: !p.search }))}>
+        <Row label="Max results" desc="How many memory snippets the agent gets back per search. More = richer context but slower."><Num value={maxResults} min={1} max={30} onChange={d(setMaxResults)} /></Row>
+        <Row label="Min relevance" desc="Drop snippets below this score (0–1). Lower lets through more, including weaker matches. Try 0.1 for broad recall, 0.3 for stricter."><Num value={minScore} min={0} max={1} onChange={d(setMinScore)} /></Row>
+        <Row label="Hybrid search" desc="Combines semantic similarity (meaning) with keyword matching. Catches both 'laptop battery' and exact tag matches. Recommended."><Toggle value={hybridEnabled} onChange={d(setHybridEnabled)} /></Row>
         {hybridEnabled && <>
-          <Row label="Vector weight" desc="How much weight to give semantic similarity (0-1)"><Num value={vectorWeight} min={0} max={1} onChange={d(setVectorWeight)} /></Row>
-          <Row label="Text weight" desc="How much weight to give keyword matching (0-1)"><Num value={textWeight} min={0} max={1} onChange={d(setTextWeight)} /></Row>
+          <Row label="Semantic weight" desc="Importance of meaning-based matches. 0.7 = mostly semantic, 0.3 = mostly keyword. Should sum with text weight to 1.0."><Num value={vectorWeight} min={0} max={1} onChange={d(setVectorWeight)} /></Row>
+          <Row label="Keyword weight" desc="Importance of exact-word matches. Higher helps when the user uses specific terms or jargon."><Num value={textWeight} min={0} max={1} onChange={d(setTextWeight)} /></Row>
         </>}
-        <Row label="Temporal decay" desc="Penalize older notes (recent info ranks higher)"><Toggle value={temporalDecay} onChange={d(setTemporalDecay)} /></Row>
-        {temporalDecay && <Row label="Half-life (days)" desc="Days until a note's score drops to 50%"><Num value={halfLifeDays} min={1} max={365} onChange={d(setHalfLifeDays)} /></Row>}
-        <Row label="MMR diversity" desc="Avoid redundant near-duplicate results"><Toggle value={mmrEnabled} onChange={d(setMmrEnabled)} /></Row>
-        {mmrEnabled && <Row label="MMR lambda" desc="0=max diversity, 1=pure relevance"><Num value={mmrLambda} min={0} max={1} onChange={d(setMmrLambda)} /></Row>}
-        <Row label="Chunk size (tokens)" desc="Size of each indexed fragment"><Num value={chunkTokens} min={100} max={2000} onChange={d(setChunkTokens)} /></Row>
-        <Row label="Chunk overlap (tokens)" desc="Overlap between consecutive chunks"><Num value={chunkOverlap} min={0} max={500} onChange={d(setChunkOverlap)} /></Row>
-      </Section>
+        <Row label="Prefer recent" desc="Recent notes rank higher than old ones. Useful for journaling / daily notes where freshness matters."><Toggle value={temporalDecay} onChange={d(setTemporalDecay)} /></Row>
+        {temporalDecay && <Row label="Half-life (days)" desc="A note this many days old is worth half what it was when fresh. 30 = strong decay, 365 = barely any."><Num value={halfLifeDays} min={1} max={365} onChange={d(setHalfLifeDays)} /></Row>}
+        <Row label="Avoid duplicates" desc="Skip near-identical results so the agent doesn't see the same idea five times. Useful for big memory archives."><Toggle value={mmrEnabled} onChange={d(setMmrEnabled)} /></Row>
+        {mmrEnabled && <Row label="Diversity vs relevance" desc="0 = maximum diversity (variety wins). 1 = ignore diversity (relevance wins). 0.7 is a balanced default."><Num value={mmrLambda} min={0} max={1} onChange={d(setMmrLambda)} /></Row>}
+        <Row label="Chunk size (tokens)" desc="How large each piece of memory is when indexed. Smaller (200) = more precise matches, larger (800) = more context per match."><Num value={chunkTokens} min={100} max={2000} onChange={d(setChunkTokens)} /></Row>
+        <Row label="Chunk overlap (tokens)" desc="How much consecutive chunks share. Prevents losing info that falls on chunk boundaries. Usually 10–20% of chunk size."><Num value={chunkOverlap} min={0} max={500} onChange={d(setChunkOverlap)} /></Row>
+      </SettingsBlock>
 
-      <Section title="Indexing & Sync" expanded={sections.sync!} onToggle={() => setSections(p => ({ ...p, sync: !p.sync }))}>
+      <SettingsBlock title="Indexing & Sync" expanded={sections.sync!} onToggle={() => setSections(p => ({ ...p, sync: !p.sync }))}>
         <Row label="Sync on session start" desc="Re-index when a new chat session begins"><Toggle value={syncOnStart} onChange={d(setSyncOnStart)} /></Row>
         <Row label="File watcher" desc="Auto-index when memory files change"><Toggle value={syncWatch} onChange={d(setSyncWatch)} /></Row>
         <Row label="Sync before every search" desc="Guarantee fresh results (slower)"><Toggle value={syncOnSearch} onChange={d(setSyncOnSearch)} /></Row>
         <Row label="Background sync interval (min)" desc="Periodic re-index interval. 0 = disabled"><Num value={syncInterval} min={0} max={1440} onChange={d(setSyncInterval)} /></Row>
         <Row label="Embedding cache" desc="Cache embeddings to avoid re-computing unchanged chunks"><Toggle value={cacheEnabled} onChange={d(setCacheEnabled)} /></Row>
-      </Section>
+      </SettingsBlock>
 
-      <Section title="Backend" expanded={sections.backend!} onToggle={() => setSections(p => ({ ...p, backend: !p.backend }))}>
+      <SettingsBlock title="Backend" expanded={sections.backend!} onToggle={() => setSections(p => ({ ...p, backend: !p.backend }))}>
         <Row label="Memory backend" desc="Search engine backend"><Sel value={backend} options={BACKENDS} onChange={d(setBackend)} /></Row>
         <Row label="Citations" desc="Show source file + line in search results">
           <Sel value={citations} options={[
             { value: 'auto', label: 'Auto' }, { value: 'on', label: 'Always' }, { value: 'off', label: 'Never' },
           ]} onChange={d(setCitations)} />
         </Row>
-      </Section>
-    </div>
+      </SettingsBlock>
+    </SectionShell>
   );
 }

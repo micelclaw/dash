@@ -13,7 +13,8 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, CheckCircle2, XCircle, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import * as emailAccountsSvc from '@/services/email-accounts.service';
 
 interface EditConnectorModalProps {
   connectorId: string | null;
@@ -75,16 +76,14 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
 
     (async () => {
       try {
-        const res = await api.get<{ data: ConnectorDetail & { account_id?: string } }>(`/sync/connectors/${connectorId}`);
-        const c = res.data;
+        const c = await syncSvc.getConnector<ConnectorDetail & { account_id?: string }>(connectorId);
         setConnector(c);
         setDisplayName(c.display_name ?? c.name);
         setInterval(c.config.sync_interval_minutes ?? 15);
 
         if (c.connector_type === 'imap-generic' && c.account_id) {
           // Fetch linked email account
-          const accRes = await api.get<{ data: EmailAccountDetail }>(`/email-accounts/${c.account_id}`);
-          const acc = accRes.data;
+          const acc = (await emailAccountsSvc.getEmailAccount(c.account_id)) as unknown as EmailAccountDetail;
           setEmailAccount(acc);
           setEmailAddress(acc.email_address);
           setImapHost(acc.imap_host);
@@ -112,12 +111,13 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   }, [connectorId]);
 
   const handleSave = async () => {
+    if (!connectorId) return;
     setError('');
     setSaving(true);
     try {
       if (connector?.connector_type === 'imap-generic' && emailAccount) {
         // Update email account
-        await api.patch(`/email-accounts/${emailAccount.id}`, {
+        await emailAccountsSvc.updateEmailAccount(emailAccount.id, {
           name: displayName,
           email_address: emailAddress,
           imap_host: imapHost,
@@ -129,7 +129,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           ...(password ? { password } : {}),
         });
         // Also update connector config
-        await api.patch(`/sync/connectors/${connectorId}/config`, {
+        await syncSvc.updateConnectorConfig(connectorId, {
           display_name: displayName,
           sync_interval_minutes: interval,
           max_initial_messages: maxMessages,
@@ -138,14 +138,14 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
         });
       } else if (isOAuth) {
         // OAuth connectors (Gmail, Google Calendar, etc.)
-        await api.patch(`/sync/connectors/${connectorId}/config`, {
+        await syncSvc.updateConnectorConfig(connectorId, {
           display_name: displayName,
           sync_interval_minutes: interval,
           max_initial_messages: maxMessages,
         });
       } else {
         // CalDAV/CardDAV
-        await api.patch(`/sync/connectors/${connectorId}/config`, {
+        await syncSvc.updateConnectorConfig(connectorId, {
           display_name: displayName,
           server_url: serverUrl,
           username,
@@ -168,8 +168,8 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     if (!emailAccount) return;
     setTestResult('testing');
     try {
-      const res = await api.post<{ data: { success: boolean } }>(`/email-accounts/${emailAccount.id}/test`);
-      setTestResult(res.data?.success ? 'success' : 'failed');
+      const result = await emailAccountsSvc.testEmailAccount(emailAccount.id);
+      setTestResult(result.success ? 'success' : 'failed');
     } catch {
       setTestResult('failed');
     }
@@ -179,8 +179,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     if (!emailAccount) return;
     setFoldersLoading(true);
     try {
-      const res = await api.get<{ data: string[] }>(`/email-accounts/${emailAccount.id}/folders`);
-      setFolders(res.data ?? []);
+      setFolders(await emailAccountsSvc.listEmailFolders(emailAccount.id));
     } catch {
       toast.error('Failed to load folders');
     }

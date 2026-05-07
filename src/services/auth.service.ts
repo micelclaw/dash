@@ -102,3 +102,51 @@ export async function regenerateBackupCodes(currentPassword: string): Promise<{ 
   );
   return res.data;
 }
+
+// ─── Password ─────────────────────────────────────────────────────
+
+export async function changePassword(params: {
+  current_password: string;
+  new_password: string;
+}): Promise<void> {
+  await api.post('/auth/change-password', params);
+}
+
+export async function changeEmail(params: {
+  current_password: string;
+  new_email: string;
+}): Promise<{ email: string; display_name: string }> {
+  const res = await api.post<{ data: { email: string; display_name: string } }>(
+    '/auth/change-email',
+    params,
+  );
+  return res.data;
+}
+
+// ─── Profile ──────────────────────────────────────────────────────
+
+export interface UpdateProfilePayload {
+  display_name?: string;
+  avatar_path?: string | null;
+}
+
+export interface MeResponse {
+  avatar_path: string | null;
+  password_changed_at: string | null;
+}
+
+/** Read the current user's profile (extra fields not in the auth store). */
+export async function getMe(): Promise<MeResponse> {
+  const res = await api.get<{ data: MeResponse }>('/auth/me');
+  return res.data;
+}
+
+export async function updateProfile(
+  body: UpdateProfilePayload,
+): Promise<{ display_name: string; avatar_path: string | null }> {
+  const res = await api.patch<{ data: { display_name: string; avatar_path: string | null } }>(
+    '/auth/me',
+    body,
+  );
+  return res.data;
+}

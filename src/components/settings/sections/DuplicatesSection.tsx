@@ -11,32 +11,34 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Copy, X, RefreshCw } from 'lucide-react';
+import { Copy, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import type { DuplicatePair } from '@/services/sync.service';
 import { SettingSection } from '../SettingSection';
 
-interface DuplicatePair {
-  recordA: { id: string; domain: string; title: string; subtitle?: string };
-  recordB: { id: string; domain: string; title: string; subtitle?: string };
-  similarity: number;
-  domain: string;
-}
+type LoadState = 'loading' | 'ok' | 'error';
 
 export function DuplicatesSection() {
   const [pairs, setPairs] = useState<DuplicatePair[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [dismissing, setDismissing] = useState<string | null>(null);
 
   const loadDuplicates = useCallback(async () => {
-    setLoading(true);
+    setLoadState('loading');
+    setErrorMessage('');
     try {
-      const res = await api.get<{ data: DuplicatePair[] }>('/sync/duplicates');
-      setPairs(res.data ?? []);
-    } catch {
-      // endpoint may not return data yet
+      setPairs(await syncSvc.listDuplicates());
+      setLoadState('ok');
+    } catch (err) {
+      // Distinguish a real failure from "endpoint returned []".
+      // Without this, a 500/timeout looked identical to "no duplicates".
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setErrorMessage(msg);
+      setLoadState('error');
+      toast.error(`Failed to load duplicates: ${msg}`);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { loadDuplicates(); }, [loadDuplicates]);
@@ -45,12 +47,14 @@ export function DuplicatesSection() {
     const key = `${pair.recordA.id}-${pair.recordB.id}`;
     setDismissing(key);
     try {
-      await api.post('/sync/duplicates/dismiss', {
+      await syncSvc.dismissDuplicate({
         record_a_id: pair.recordA.id,
         record_b_id: pair.recordB.id,
         domain: pair.domain,
       });
-      setPairs(prev => prev.filter(p => !(p.recordA.id === pair.recordA.id && p.recordB.id === pair.recordB.id)));
+      setPairs((prev) =>
+        prev.filter((p) => !(p.recordA.id === pair.recordA.id && p.recordB.id === pair.recordB.id)),
+      );
       toast.success('Duplicate dismissed');
     } catch {
       toast.error('Failed to dismiss duplicate');
@@ -63,44 +67,135 @@ export function DuplicatesSection() {
       title="Duplicates"
       description="Fuzzy duplicate records detected during sync."
       action={
-        <button onClick={loadDuplicates} className="p-1.5 rounded hover:bg-[var(--surface-hover)]" title="Refresh">
-          <RefreshCw size={14} className={`text-[var(--text-muted)] ${loading ? 'animate-spin' : ''}`} />
+        <button
+          onClick={loadDuplicates}
+          title="Refresh"
+          style={{
+            padding: 6,
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+        >
+          <RefreshCw
+            size={14}
+            style={{
+              color: 'var(--text-muted)',
+              animation: loadState === 'loading' ? 'spin 1s linear infinite' : undefined,
+            }}
+          />
         </button>
       }
     >
-      {loading ? null : pairs.length === 0 ? (
-        <div className="text-center py-8 text-sm text-[var(--text-muted)]">
-          <Copy size={24} className="mx-auto mb-2 opacity-40" />
+      {loadState === 'loading' && (
+        <div style={{ textAlign: 'center', padding: '32px 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+          Loading duplicates...
+        </div>
+      )}
+
+      {loadState === 'error' && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '12px 14px',
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 'var(--radius-md)',
+            color: '#ef4444', fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 500 }}>Could not load duplicates</div>
+            {errorMessage && (
+              <div style={{ marginTop: 2, fontSize: '0.6875rem', opacity: 0.85 }}>
+                {errorMessage}
+              </div>
+            )}
+            <button
+              onClick={loadDuplicates}
+              style={{
+                marginTop: 8, padding: '4px 10px',
+                background: 'transparent',
+                border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: 'var(--radius-sm)',
+                color: '#ef4444', fontSize: '0.75rem',
+                fontFamily: 'var(--font-sans)', cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loadState === 'ok' && pairs.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+          <Copy size={24} style={{ display: 'block', margin: '0 auto 8px', opacity: 0.4 }} />
           No duplicates detected
         </div>
-      ) : (
-        <div className="space-y-2">
+      )}
+
+      {loadState === 'ok' && pairs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {pairs.map((pair) => {
             const key = `${pair.recordA.id}-${pair.recordB.id}`;
             return (
-              <div key={key} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <div className="flex items-start justify-between mb-2">
-                  <span className="px-1.5 py-0.5 text-[10px] rounded bg-amber-500/10 text-amber-400 font-medium">
+              <div
+                key={key}
+                style={{
+                  padding: 12,
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span
+                    style={{
+                      padding: '2px 6px',
+                      fontSize: '0.625rem', fontWeight: 500,
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'color-mix(in srgb, var(--amber) 15%, transparent)',
+                      color: 'var(--amber)',
+                    }}
+                  >
                     {Math.round(pair.similarity * 100)}% match · {pair.domain}
                   </span>
                   <button
                     onClick={() => handleDismiss(pair)}
                     disabled={dismissing === key}
-                    className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-muted)] hover:text-[var(--text)]"
                     title="Dismiss"
+                    style={{
+                      padding: 4,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 'var(--radius-sm)',
+                      color: 'var(--text-muted)',
+                      cursor: dismissing === key ? 'not-allowed' : 'pointer',
+                      opacity: dismissing === key ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (dismissing !== key) {
+                        e.currentTarget.style.background = 'var(--surface-hover)';
+                        e.currentTarget.style.color = 'var(--text)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                    }}
                   >
                     <X size={14} />
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="text-xs">
-                    <div className="font-medium text-[var(--text)] truncate">{pair.recordA.title}</div>
-                    {pair.recordA.subtitle && <div className="text-[var(--text-muted)] truncate">{pair.recordA.subtitle}</div>}
-                  </div>
-                  <div className="text-xs">
-                    <div className="font-medium text-[var(--text)] truncate">{pair.recordB.title}</div>
-                    {pair.recordB.subtitle && <div className="text-[var(--text-muted)] truncate">{pair.recordB.subtitle}</div>}
-                  </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <RecordCell record={pair.recordA} />
+                  <RecordCell record={pair.recordB} />
                 </div>
               </div>
             );
@@ -108,5 +203,32 @@ export function DuplicatesSection() {
         </div>
       )}
     </SettingSection>
+  );
+}
+
+function RecordCell({ record }: { record: DuplicatePair['recordA'] }) {
+  return (
+    <div style={{ fontSize: '0.75rem' }}>
+      <div
+        style={{
+          fontWeight: 500,
+          color: 'var(--text)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      >
+        {record.title}
+      </div>
+      {record.subtitle && (
+        <div
+          style={{
+            color: 'var(--text-muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            marginTop: 2,
+          }}
+        >
+          {record.subtitle}
+        </div>
+      )}
+    </div>
   );
 }

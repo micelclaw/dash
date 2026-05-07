@@ -12,18 +12,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { History, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
-import { api } from '@/services/api';
+import * as approvalsSvc from '@/services/approvals.service';
+import type { ApprovalHistoryEntry } from '@/services/approvals.service';
 import { SettingSection } from '../SettingSection';
-
-interface ApprovalHistoryEntry {
-  id: string;
-  operation: string;
-  requested_by: string;
-  decision: 'approved' | 'rejected' | 'expired';
-  resolved_by?: string;
-  created_at: string;
-  resolved_at?: string;
-}
 
 export function ApprovalsHistorySection() {
   const [entries, setEntries] = useState<ApprovalHistoryEntry[]>([]);
@@ -32,8 +23,7 @@ export function ApprovalsHistorySection() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: ApprovalHistoryEntry[] }>('/approvals/history');
-      setEntries(res.data ?? []);
+      setEntries(await approvalsSvc.listHistory());
     } catch {
       // optional
     }

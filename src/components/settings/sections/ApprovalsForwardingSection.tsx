@@ -1,12 +1,22 @@
 /**
  * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
  * All rights reserved.
+ *
+ * ─── Idempotency contract (B7) ─────────────────────────────────────
+ * May be mounted twice simultaneously: standalone at
+ * `/settings/approvals-forwarding` and as a `<SettingsBlock>` inside
+ * Security (`/settings/security`). Each instance fetches and saves
+ * independently — no module-level state, no shared refs. Lift to a
+ * store only if cross-instance sync becomes a real requirement.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 const FORWARD_MODES = [
   { value: 'session', label: 'Session channel', desc: 'Forward to the channel where the session originated' },
@@ -33,8 +43,8 @@ export function ApprovalsForwardingSection() {
       setMode(data.mode ?? 'session');
       setTargets((data.targets ?? []).map(t => ({ channel: t.channel, to: t.to })));
       setDirty(false);
-    } catch {
-      toast.error('Failed to load approvals config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load approvals config'));
     } finally {
       setLoading(false);
     }
@@ -50,10 +60,10 @@ export function ApprovalsForwardingSection() {
         mode,
         targets: targets.filter(t => t.channel && t.to),
       });
-      toast.success('Approvals forwarding updated');
+      toast.success('Approvals Forwarding saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update approvals config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update approvals config'));
     } finally {
       setSaving(false);
     }
@@ -76,40 +86,26 @@ export function ApprovalsForwardingSection() {
     setDirty(true);
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Approvals Forwarding</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Forward exec approval requests to messaging channels so you can approve from your phone.
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-          background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)',
-          cursor: dirty ? 'pointer' : 'default', opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)',
-        }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Approvals Forwarding"
+      description="Forward exec approval requests to messaging channels so you can approve from your phone."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
       {/* Enable toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enable forwarding</div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Send exec approval requests to external channels</div>
         </div>
-        <div onClick={() => { setEnabled(!enabled); setDirty(true); }} style={{
-          width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-          background: enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-          position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-        }}>
-          <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: enabled ? 18 : 2, transition: 'left 0.2s' }} />
-        </div>
+        <ToggleSwitch
+          checked={enabled}
+          onChange={(v) => { setEnabled(v); setDirty(true); }}
+          ariaLabel="Enable forwarding"
+        />
       </div>
 
       {enabled && (
@@ -198,6 +194,6 @@ export function ApprovalsForwardingSection() {
           )}
         </>
       )}
-    </div>
+    </SectionShell>
   );
 }

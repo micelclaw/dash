@@ -4,10 +4,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
 import { SettingsBlock } from '../shared/SettingsBlock';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { DevicesSection } from './DevicesSection';
 
 const AUTH_MODES = [
@@ -61,8 +63,8 @@ export function GatewayAuthSection() {
       const reload = (data.reload ?? {}) as Record<string, unknown>;
       setReloadMode((reload.mode ?? 'hybrid') as string);
       setDirty(false);
-    } catch {
-      toast.error('Failed to load gateway auth config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load gateway auth config'));
     } finally {
       setLoading(false);
     }
@@ -82,16 +84,14 @@ export function GatewayAuthSection() {
         tls: { enabled: tlsEnabled },
         reload: { mode: reloadMode },
       });
-      toast.success('Gateway config updated');
+      toast.success('Gateway saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update gateway config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update gateway config'));
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
 
   const Select = ({ label, desc, value, options, onChange }: {
     label: string; desc: string; value: string;
@@ -114,24 +114,15 @@ export function GatewayAuthSection() {
   );
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Gateway</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Authentication, network binding, TLS, and Tailscale settings. Port: {port}.
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-          background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)',
-          cursor: dirty ? 'pointer' : 'default', opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)',
-        }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Gateway"
+      description={`Authentication, network binding, TLS, and Tailscale settings. Port: ${port}. The collapsible blocks below save independently — each writes to its own config endpoint.`}
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      appliesAt="gateway-restart"
+    >
       <Select label="Auth mode" desc="How clients authenticate with the Gateway" value={authMode} options={AUTH_MODES} onChange={markDirty(setAuthMode)} />
 
       {authMode === 'none' && (
@@ -152,13 +143,7 @@ export function GatewayAuthSection() {
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>TLS / HTTPS</div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>Enable HTTPS with auto-generated or custom certificates</div>
         </div>
-        <div onClick={() => markDirty(setTlsEnabled)(!tlsEnabled)} style={{
-          width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-          background: tlsEnabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-          position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-        }}>
-          <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: tlsEnabled ? 18 : 2, transition: 'left 0.2s' }} />
-        </div>
+        <ToggleSwitch checked={tlsEnabled} onChange={markDirty(setTlsEnabled)} ariaLabel="TLS / HTTPS" />
       </div>
 
       {/* Ola 7 (oc7-4) — Network discovery (mDNS / DNS-SD) */}
@@ -166,7 +151,7 @@ export function GatewayAuthSection() {
 
       {/* Ola 9 reorg — Devices folded in here (was /settings/devices) */}
       <DevicesBlock />
-    </div>
+    </SectionShell>
   );
 }
 
@@ -225,6 +210,15 @@ function NetworkDiscoveryBlock() {
   }, [expanded]);
 
   const handleSave = async () => {
+    // Pre-flight: if wide-area is enabled, domain must look like a real
+    // FQDN. Same regex used by the inline validator above.
+    if (wideAreaEnabled && wideAreaDomain.trim()) {
+      const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+      if (!domainRegex.test(wideAreaDomain.trim())) {
+        toast.error(`Invalid domain format: "${wideAreaDomain}"`);
+        return;
+      }
+    }
     setSaving(true);
     try {
       await gwService.updateDiscoveryConfig({
@@ -234,7 +228,7 @@ function NetworkDiscoveryBlock() {
           domain: wideAreaDomain || undefined,
         },
       });
-      toast.success('Discovery config updated');
+      toast.success('Discovery saved');
       setDirty(false);
     } catch {
       toast.error('Failed to update discovery config');
@@ -358,45 +352,65 @@ function NetworkDiscoveryBlock() {
       </div>
 
       {/* wideArea domain (only when enabled) */}
-      {wideAreaEnabled && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 0',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Domain</div>
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-              Domain you own with DNS-SD records configured.
+      {wideAreaEnabled && (() => {
+        // Lightweight inline validation. Backend will validate too, but
+        // catching obviously-wrong values here saves a round-trip and
+        // makes the bad-format feedback immediate instead of post-save.
+        // Accepts standard DNS labels: "example.com", "sub.example.io",
+        // "my-host.example.local". Rejects spaces, @, /, etc.
+        const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+        const isEmpty = !wideAreaDomain.trim();
+        const isValid = isEmpty || domainRegex.test(wideAreaDomain.trim());
+        return (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 0',
+              borderBottom: '1px solid var(--border)',
+            }}
+          >
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Domain</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                Domain you own with DNS-SD records configured (e.g. <code>example.com</code>).
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="text"
+                value={wideAreaDomain}
+                onChange={(e) => {
+                  setWideAreaDomain(e.target.value);
+                  setDirty(true);
+                }}
+                placeholder="example.com"
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '0.75rem',
+                  minWidth: 220,
+                  background: 'var(--surface)',
+                  border: `1px solid ${isValid ? 'var(--border)' : '#ef4444'}`,
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text)',
+                  fontFamily: 'var(--font-mono)',
+                  outline: 'none',
+                }}
+              />
+              {!isValid && (
+                <span
+                  style={{ fontSize: '0.625rem', color: '#ef4444' }}
+                  title="Invalid domain format"
+                >
+                  !
+                </span>
+              )}
             </div>
           </div>
-          <input
-            type="text"
-            value={wideAreaDomain}
-            onChange={(e) => {
-              setWideAreaDomain(e.target.value);
-              setDirty(true);
-            }}
-            placeholder="example.com"
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.75rem',
-              minWidth: 220,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text)',
-              fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-        </div>
-      )}
+        );
+      })()}
     </SettingsBlock>
   );
 }

@@ -4,9 +4,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
+import { NumericRow } from '../shared/NumericRow';
 
 const SANDBOX_MODES = [
   { value: 'off', label: 'Off', desc: 'All tools run on host (no isolation)' },
@@ -47,8 +49,8 @@ export function SandboxSection() {
       setIdleHours(data.prune?.idle_hours ?? 24);
       setMaxAgeDays(data.prune?.max_age_days ?? 7);
       setDirty(false);
-    } catch {
-      toast.error('Failed to load sandbox config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load sandbox config'));
     } finally {
       setLoading(false);
     }
@@ -65,36 +67,25 @@ export function SandboxSection() {
         mode, scope, workspaceAccess,
         prune: { idleHours, maxAgeDays },
       });
-      toast.success('Sandbox config updated');
+      toast.success('Sandbox saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update sandbox config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update sandbox config'));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Sandbox</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Run agent tools in isolated Docker containers. Per-agent overrides in Agent &rarr; Advanced.
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-          background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)',
-          cursor: dirty ? 'pointer' : 'default', opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)',
-        }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Sandbox"
+      description="Run agent tools in isolated Docker containers. Per-agent overrides in Agent → Advanced."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      appliesAt="gateway-restart"
+    >
       {/* Mode */}
       <div style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sandbox Mode</h3>
@@ -148,23 +139,21 @@ export function SandboxSection() {
 
           {/* Pruning */}
           <div style={{ marginBottom: 16, display: 'flex', gap: 16 }}>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Idle prune (hours)</span>
-              <input type="number" value={idleHours} min={1} max={168} onChange={e => markDirty(setIdleHours)(parseInt(e.target.value, 10) || 24)} style={{
-                padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right',
-                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-              }} />
-            </div>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Max age (days)</span>
-              <input type="number" value={maxAgeDays} min={1} max={30} onChange={e => markDirty(setMaxAgeDays)(parseInt(e.target.value, 10) || 7)} style={{
-                padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right',
-                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-              }} />
-            </div>
+            <NumericRow
+              label="Idle prune (hours)"
+              value={idleHours}
+              min={1} max={168}
+              onChange={markDirty(setIdleHours)}
+            />
+            <NumericRow
+              label="Max age (days)"
+              value={maxAgeDays}
+              min={1} max={30}
+              onChange={markDirty(setMaxAgeDays)}
+            />
           </div>
         </>
       )}
-    </div>
+    </SectionShell>
   );
 }

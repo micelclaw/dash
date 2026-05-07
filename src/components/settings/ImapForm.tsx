@@ -12,7 +12,8 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import * as emailAccountsSvc from '@/services/email-accounts.service';
 
 interface ImapFormProps {
   preset?: Record<string, any>;
@@ -43,7 +44,7 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
 
     try {
       // Step 1: Test IMAP connection before saving
-      const testRes = await api.post<{ data: { ok: boolean; error?: string; folders?: string[] } }>('/sync/test-connection', {
+      const testResult = await syncSvc.testConnection({
         type: 'imap',
         host: imapHost,
         port: imapPort,
@@ -52,14 +53,14 @@ export function ImapForm({ preset, serviceName, onComplete, onCancel }: ImapForm
         password,
       });
 
-      if (!testRes.data.ok) {
-        setError(testRes.data.error || 'IMAP connection failed. Check your credentials and server address.');
+      if (!testResult.ok) {
+        setError(testResult.error || 'IMAP connection failed. Check your credentials and server address.');
         setSubmitting(false);
         return;
       }
 
       // Step 2: Create email account + connector only if test passed
-      await api.post('/email-accounts', {
+      await emailAccountsSvc.createEmailAccount({
         name,
         email_address: email,
         imap_host: imapHost,

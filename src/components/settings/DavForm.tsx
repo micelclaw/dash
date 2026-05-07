@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
 
 interface DavFormProps {
   type: 'caldav' | 'carddav';
@@ -42,21 +42,21 @@ export function DavForm({ type, preset, serviceName, onComplete, onCancel }: Dav
 
     try {
       // Step 1: Test connection before saving
-      const testRes = await api.post<{ data: { ok: boolean; error?: string } }>('/sync/test-connection', {
+      const testResult = await syncSvc.testConnection({
         type,
         server_url: serverUrl,
         username,
         password,
       });
 
-      if (!testRes.data.ok) {
-        setError(testRes.data.error || 'Connection failed. Check your credentials.');
+      if (!testResult.ok) {
+        setError(testResult.error || 'Connection failed. Check your credentials.');
         setSubmitting(false);
         return;
       }
 
       // Step 2: Create connector only if test passed
-      await api.post('/sync/connectors', {
+      await syncSvc.createConnector({
         connector_type: type,
         display_name: displayName,
         config: {

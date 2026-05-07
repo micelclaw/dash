@@ -1,12 +1,49 @@
 /**
  * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
  * All rights reserved.
+ *
+ * ─── Idempotency contract (B7) ─────────────────────────────────────
+ * This component may be mounted *twice simultaneously* in the same
+ * tab: once standalone at `/settings/cron-config`, and once as a
+ * `<SettingsBlock>` inside Automation (`/settings/automation`).
+ * Both routes resolve to the same component, so:
+ *   - Each mount re-fetches its own copy of the gateway config.
+ *   - Local state (`useState`) is per-instance — no shared mutable
+ *     state across mounts. Saves race only against themselves.
+ *   - Do NOT introduce module-level state, refs, or singletons here.
+ *     If you need cross-instance sync, lift to a Zustand store.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Save } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
+
+function parseBackoff(raw: string): { ok: true; values: number[] } | { ok: false; error: string } {
+  const parts = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+  if (parts.length === 0) return { ok: false, error: 'Enter at least one delay' };
+  const values: number[] = [];
+  for (const p of parts) {
+    if (!/^\d+$/.test(p)) return { ok: false, error: `"${p}" is not a positive integer` };
+    const n = parseInt(p, 10);
+    if (n < 0) return { ok: false, error: `"${p}" must be ≥ 0` };
+    if (n > 24 * 60 * 60 * 1000) return { ok: false, error: `"${p}" exceeds 24h` };
+    values.push(n);
+  }
+  return { ok: true, values };
+}
+
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s % 1 === 0 ? s : s.toFixed(1)}s`;
+  const m = s / 60;
+  if (m < 60) return `${m % 1 === 0 ? m : m.toFixed(1)}m`;
+  const h = m / 60;
+  return `${h % 1 === 0 ? h : h.toFixed(1)}h`;
+}
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -17,8 +54,11 @@ function Row({ label, desc, children }: { label: string; desc?: string; children
   );
 }
 
+// Local thin alias — preserves the call-site `value` prop name used
+// throughout this section while delegating to the accessible shared
+// component.
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (<div onClick={() => onChange(!value)} style={{ width: 36, height: 20, borderRadius: 10, cursor: 'pointer', background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}><div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: value ? 18 : 2, transition: 'left 0.2s' }} /></div>);
+  return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
 export function CronConfigSection() {
@@ -54,17 +94,24 @@ export function CronConfigSection() {
       setSessionRetention((data.session_retention ?? '24h') as string);
       setWebhook((data.webhook ?? '') as string);
       setDirty(false);
-    } catch { toast.error('Failed to load cron config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to load cron config')); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
   const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
 
+  const backoffParsed = useMemo(() => parseBackoff(retryBackoff), [retryBackoff]);
+  const backoffInvalid = retryMax > 0 && !backoffParsed.ok;
+
   const handleSave = async () => {
+    if (retryMax > 0 && !backoffParsed.ok) {
+      toast.error(`Invalid backoff: ${backoffParsed.error}`);
+      return;
+    }
     setSaving(true);
     try {
-      const backoffArr = retryBackoff.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      const backoffArr = backoffParsed.ok ? backoffParsed.values : [30000, 60000, 300000];
       await gwService.updateCronConfig({
         maxConcurrentRuns: maxConcurrent,
         retry: { maxAttempts: retryMax, backoffMs: backoffArr, retryOn: ['rate_limit', 'overloaded', 'network', 'timeout', 'server_error'] },
@@ -73,26 +120,22 @@ export function CronConfigSection() {
         sessionRetention,
         ...(webhook ? { webhook } : {}),
       });
-      toast.success('Cron config updated');
+      toast.success('Cron saved');
       setDirty(false);
-    } catch { toast.error('Failed to update cron config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to update cron config')); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Cron Settings</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Global retry, concurrency, and failure alerting for scheduled jobs.</p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600, background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)', cursor: dirty ? 'pointer' : 'default', opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)' }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Cron Settings"
+      description="Global retry, concurrency, and failure alerting for scheduled jobs."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveDisabledReason={backoffInvalid ? 'Fix the backoff input before saving' : null}
+    >
       <Row label="Max concurrent runs" desc="How many cron jobs can execute simultaneously">
         <input type="number" value={maxConcurrent} min={1} max={10} onChange={e => d(setMaxConcurrent)(parseInt(e.target.value, 10) || 1)} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
       </Row>
@@ -103,7 +146,33 @@ export function CronConfigSection() {
 
       {retryMax > 0 && (
         <Row label="Backoff delays (ms)" desc="Comma-separated delays between retries (e.g. 30000,60000,300000)">
-          <input type="text" value={retryBackoff} onChange={e => { setRetryBackoff(e.target.value); setDirty(true); }} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <input
+              type="text"
+              value={retryBackoff}
+              onChange={e => { setRetryBackoff(e.target.value); setDirty(true); }}
+              style={{
+                padding: '4px 8px', fontSize: '0.75rem', width: 240,
+                background: 'var(--surface)',
+                border: `1px solid ${backoffInvalid ? '#ef4444' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-sm)',
+                color: 'var(--text)',
+                fontFamily: 'var(--font-mono, monospace)',
+              }}
+            />
+            <div style={{
+              fontSize: '0.6875rem',
+              color: backoffParsed.ok ? 'var(--text-muted)' : '#ef4444',
+              fontFamily: 'var(--font-sans)',
+              maxWidth: 240, textAlign: 'right',
+            }}>
+              {backoffParsed.ok
+                ? backoffParsed.values.length > 0
+                  ? `${backoffParsed.values.length} retr${backoffParsed.values.length === 1 ? 'y' : 'ies'}: ${backoffParsed.values.map(formatMs).join(' → ')}`
+                  : ''
+                : `! ${backoffParsed.error}`}
+            </div>
+          </div>
         </Row>
       )}
 
@@ -135,6 +204,6 @@ export function CronConfigSection() {
       <Row label="Webhook URL" desc="HTTP endpoint for webhook delivery mode (leave empty to disable)">
         <input type="text" value={webhook} onChange={e => { setWebhook(e.target.value); setDirty(true); }} placeholder="https://..." style={{ padding: '4px 8px', fontSize: '0.75rem', width: 250, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} />
       </Row>
-    </div>
+    </SectionShell>
   );
 }

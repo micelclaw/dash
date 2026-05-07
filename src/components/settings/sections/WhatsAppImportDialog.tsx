@@ -13,7 +13,7 @@
 import { useState, useRef } from 'react';
 import { X, Upload, CheckCircle, Loader2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
 
 interface WhatsAppImportDialogProps {
   onClose: () => void;
@@ -39,17 +39,8 @@ export function WhatsAppImportDialog({ onClose, onImported }: WhatsAppImportDial
 
   const handleFileSelect = async (selectedFile: File) => {
     setFile(selectedFile);
-
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      if (ownName) formData.append('own_name', ownName);
-
-      const res = await api.upload<{ data: PreviewResult }>(
-        '/sync/import/whatsapp?preview=true',
-        formData,
-      );
-      setPreview(res.data);
+      setPreview(await syncSvc.previewWhatsAppImport(selectedFile, ownName));
       setStep('preview');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to parse file');
@@ -61,17 +52,10 @@ export function WhatsAppImportDialog({ onClose, onImported }: WhatsAppImportDial
     setStep('importing');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (ownName) formData.append('own_name', ownName);
-
-      const res = await api.upload<{ data: { imported: number } }>(
-        '/sync/import/whatsapp?commit=true',
-        formData,
-      );
-      setImported(res.data.imported ?? 0);
+      const result = await syncSvc.commitWhatsAppImport(file, ownName);
+      setImported(result.imported ?? 0);
       setStep('done');
-      toast.success(`Imported ${res.data.imported ?? 0} messages`);
+      toast.success(`Imported ${result.imported ?? 0} messages`);
     } catch (err: any) {
       toast.error(err?.message || 'Import failed');
       setStep('preview');

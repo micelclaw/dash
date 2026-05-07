@@ -60,6 +60,9 @@ function isPasswordStrong(pw: string): boolean {
   return checkPassword(pw).every(c => c.met);
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_PLACEHOLDER = 'Min 12 chars, uppercase, number, symbol';
+
 function PasswordRequirements({ password }: { password: string }) {
   const checks = checkPassword(password);
   if (!password) return null;
@@ -183,6 +186,7 @@ function CreateUserModal({ onClose, onCreate }: {
 
   const handleSubmit = async () => {
     if (!email || !displayName || !password) { toast.error('All fields are required'); return; }
+    if (!EMAIL_REGEX.test(email)) { toast.error('Enter a valid email address'); return; }
     if (!isPasswordStrong(password)) { toast.error('Password does not meet the requirements'); return; }
     setSaving(true);
     try {
@@ -207,7 +211,7 @@ function CreateUserModal({ onClose, onCreate }: {
         </div>
         <div>
           <label style={labelStyle}>Password</label>
-          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 8 chars, uppercase, number, symbol" />
+          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={PASSWORD_PLACEHOLDER} />
           <PasswordRequirements password={password} />
         </div>
         <div>
@@ -243,6 +247,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
 
   const handleSubmit = async () => {
     if (!displayName || !email) { toast.error('Name and email are required'); return; }
+    if (!EMAIL_REGEX.test(email)) { toast.error('Enter a valid email address'); return; }
     setSaving(true);
     try {
       const payload: Record<string, string> = {};
@@ -324,7 +329,7 @@ function SetPasswordModal({ user, onClose, onSave }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
           <label style={labelStyle}>New Password</label>
-          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Min 8 chars, uppercase, number, symbol" />
+          <input style={inputStyle} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder={PASSWORD_PLACEHOLDER} />
           <PasswordRequirements password={password} />
         </div>
         <div>

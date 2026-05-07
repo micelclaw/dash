@@ -158,7 +158,7 @@ test.describe('Gateway @contract — section round-trip (9.1a)', () => {
     spy.expectCall('GET', '/gateway/commands-config');
   });
 
-  test('Commands section: clicking a preset marks dirty and saves with snake_case body', async ({ page, spy }) => {
+  test('Commands section: clicking a preset marks dirty and PATCHes commands-config', async ({ page, spy }) => {
     await gotoModule(page, '/settings/commands');
     spy.reset();
     const developerPreset = page.getByText('Developer', { exact: false }).first();
@@ -172,10 +172,8 @@ test.describe('Gateway @contract — section round-trip (9.1a)', () => {
       await page.waitForTimeout(300);
       const patchCalls = spy.findCalls('PATCH', '/gateway/commands-config');
       expect(patchCalls.length, 'Should PATCH commands-config').toBeGreaterThan(0);
-      const body = patchCalls[0]?.body as Record<string, unknown> | null;
-      if (body) {
-        expect(Object.keys(body).some((k) => /[A-Z]/.test(k)), 'Body keys must be snake_case').toBe(false);
-      }
+      // Casing of the body is asserted by the dedicated D1 passthrough
+      // contract block below — see "Passthrough endpoints (D1)".
     }
   });
 
@@ -227,6 +225,146 @@ test.describe('Gateway @contract — section round-trip (9.1a)', () => {
     const unhandled = spy.getUnhandled().filter((u) => u.path.startsWith('/gateway/providers-config'));
     // Either the call was mocked successfully OR not made yet — both OK
     expect(unhandled.length, 'No unhandled providers-config calls').toBe(0);
+  });
+});
+
+// ─── D1 — Passthrough endpoints contract ─────────────────────────────
+//
+// Sandbox / Browser / Commands / Hooks have backend handlers that
+// pass the request body straight to OpenClaw without case transform —
+// the dash sends camelCase keys here on purpose (see comments in
+// `core/src/routes/gateway.ts` for the rationale). If someone
+// "fixes" the dash to send snake_case to align with the global
+// contract, OpenClaw will silently stop honoring the keys (it expects
+// camelCase) and saves will look fine but never apply.
+//
+// These tests pin the wire format so that drift trips a CI failure
+// instead of being discovered weeks later when a user reports that
+// "Sandbox mode never changes".
+test.describe('Gateway @contract — passthrough endpoints (D1)', () => {
+  test.beforeEach(async ({ page, spy }) => {
+    await setupContractPage(page, spy, gatewayMocks);
+  });
+
+  /**
+   * Helper: assert a PATCH body uses camelCase keys for a known set of
+   * fields. We don't try to exhaustively check every possible key —
+   * just the ones we *know* must be camelCase per the OpenClaw
+   * contract. Snake_case at any of these means drift.
+   */
+  function expectCamelCaseKeys(
+    body: unknown,
+    requiredKeys: readonly string[],
+    forbiddenSnakeKeys: readonly string[],
+  ) {
+    expect(body, 'PATCH body should be an object').not.toBeNull();
+    const obj = body as Record<string, unknown>;
+    for (const key of requiredKeys) {
+      // The key may be at the top level OR inside a single-level
+      // wrapper (e.g. `prune.idleHours`). Check both.
+      const found =
+        key in obj ||
+        Object.values(obj).some(
+          (v) => v && typeof v === 'object' && key in (v as Record<string, unknown>),
+        );
+      expect(found, `Body should contain camelCase key "${key}"`).toBe(true);
+    }
+    for (const key of forbiddenSnakeKeys) {
+      expect(key in obj, `Body must NOT contain snake_case key "${key}"`).toBe(false);
+    }
+  }
+
+  test('sandbox-config PATCH preserves camelCase (workspaceAccess, idleHours, maxAgeDays)', async ({ page, spy }) => {
+    await gotoModule(page, '/settings/sandbox');
+    spy.reset();
+    // Pick the "All sessions" radio so the form goes dirty in a known way.
+    const allRadio = page.getByText('All sessions', { exact: false }).first();
+    if (!(await allRadio.isVisible({ timeout: 3000 }).catch(() => false))) {
+      test.skip();
+    }
+    await allRadio.click();
+    const saveBtn = page.locator('button').filter({ hasText: /^Save$/ }).first();
+    if (!(await saveBtn.isEnabled({ timeout: 1000 }).catch(() => false))) test.skip();
+    await saveBtn.click();
+    await page.waitForTimeout(300);
+    const patchCalls = spy.findCalls('PATCH', '/gateway/sandbox-config');
+    expect(patchCalls.length, 'Should PATCH sandbox-config').toBeGreaterThan(0);
+    expectCamelCaseKeys(
+      patchCalls[0]?.body,
+      ['workspaceAccess', 'idleHours', 'maxAgeDays'],
+      ['workspace_access', 'idle_hours', 'max_age_days'],
+    );
+  });
+
+  test('browser-config PATCH preserves camelCase (evaluateEnabled, defaultProfile, ssrfPolicy)', async ({ page, spy }) => {
+    await gotoModule(page, '/settings/browser-config');
+    spy.reset();
+    // Toggle JS evaluation to dirty the form.
+    const jsToggle = page.getByText('JavaScript evaluation', { exact: false }).first();
+    if (!(await jsToggle.isVisible({ timeout: 3000 }).catch(() => false))) test.skip();
+    // The toggle button is the role="switch" sibling of the label
+    const switchBtn = page.locator('[role="switch"]').nth(2); // headless / js / private network → js is index 2
+    if (!(await switchBtn.isVisible({ timeout: 1000 }).catch(() => false))) test.skip();
+    await switchBtn.click();
+    const saveBtn = page.locator('button').filter({ hasText: /^Save$/ }).first();
+    if (!(await saveBtn.isEnabled({ timeout: 1000 }).catch(() => false))) test.skip();
+    await saveBtn.click();
+    await page.waitForTimeout(300);
+    const patchCalls = spy.findCalls('PATCH', '/gateway/browser-config');
+    expect(patchCalls.length, 'Should PATCH browser-config').toBeGreaterThan(0);
+    expectCamelCaseKeys(
+      patchCalls[0]?.body,
+      ['evaluateEnabled', 'defaultProfile', 'ssrfPolicy'],
+      ['evaluate_enabled', 'default_profile', 'ssrf_policy'],
+    );
+  });
+
+  test('commands-config PATCH preserves camelCase (nativeSkills) when a preset is applied', async ({ page, spy }) => {
+    await gotoModule(page, '/settings/commands');
+    spy.reset();
+    const developerPreset = page.getByText('Developer', { exact: false }).first();
+    if (!(await developerPreset.isVisible({ timeout: 3000 }).catch(() => false))) test.skip();
+    await developerPreset.click();
+    const saveBtn = page.locator('button').filter({ hasText: /^Save$/ }).first();
+    if (!(await saveBtn.isEnabled({ timeout: 1000 }).catch(() => false))) test.skip();
+    await saveBtn.click();
+    await page.waitForTimeout(300);
+    const patchCalls = spy.findCalls('PATCH', '/gateway/commands-config');
+    expect(patchCalls.length, 'Should PATCH commands-config').toBeGreaterThan(0);
+    expectCamelCaseKeys(
+      patchCalls[0]?.body,
+      ['nativeSkills'],
+      ['native_skills'],
+    );
+  });
+
+  test('hooks-config PATCH preserves camelCase (messageTemplate) when a mapping is added', async ({ page, spy }) => {
+    await gotoModule(page, '/settings/hooks');
+    spy.reset();
+    // Expand Webhook Mappings block, add one mapping with a path.
+    const mappingsHeader = page.getByText(/^Webhook Mappings/i).first();
+    if (!(await mappingsHeader.isVisible({ timeout: 3000 }).catch(() => false))) test.skip();
+    await mappingsHeader.click();
+    const addBtn = page.locator('button').filter({ hasText: /Add webhook mapping/i }).first();
+    if (!(await addBtn.isVisible({ timeout: 1000 }).catch(() => false))) test.skip();
+    await addBtn.click();
+    const pathInput = page.locator('input[placeholder="github"]').first();
+    if (!(await pathInput.isVisible({ timeout: 1000 }).catch(() => false))) test.skip();
+    await pathInput.fill('contract-test-path');
+    const saveBtn = page.locator('button').filter({ hasText: /^Save$/ }).first();
+    if (!(await saveBtn.isEnabled({ timeout: 1000 }).catch(() => false))) test.skip();
+    await saveBtn.click();
+    await page.waitForTimeout(300);
+    const patchCalls = spy.findCalls('PATCH', '/gateway/hooks-config');
+    expect(patchCalls.length, 'Should PATCH hooks-config').toBeGreaterThan(0);
+    // The mapping object inside the body has `messageTemplate` (camelCase)
+    // but at the top level the body has `mappings: [...]`. Walk one level.
+    const body = patchCalls[0]?.body as Record<string, unknown> | undefined;
+    const mappings = (body?.mappings ?? []) as Array<Record<string, unknown>>;
+    expect(mappings.length, 'Body should include mappings array').toBeGreaterThan(0);
+    const mapping = mappings[0];
+    expect('messageTemplate' in (mapping ?? {}), 'Mapping should use camelCase key "messageTemplate"').toBe(true);
+    expect('message_template' in (mapping ?? {}), 'Mapping must NOT use snake_case "message_template"').toBe(false);
   });
 });
 

@@ -14,46 +14,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { RefreshCw, Plus, Trash2, Terminal, X, Loader2 } from 'lucide-react';
-import { api } from '@/services/api';
+import * as hal from '@/services/hal.service';
 import { SettingSection } from '../SettingSection';
+import { InlineLoading } from '../shared/InlineLoading';
 
 // ─── Types ──────────────────────────────────────────────
 
-interface ProxyRoute {
-  id: string;
-  path: string;
-  upstream: string;
-  description?: string;
-}
-
-interface ProxyStatus {
-  running: boolean;
-  domain?: string;
-  routes_count: number;
-}
-
-interface VpnStatus {
-  enabled: boolean;
-  interface_up: boolean;
-  peers_count: number;
-  listen_port?: number;
-}
-
-interface FirewallStatus {
-  active: boolean;
-  rules_count: number;
-  backend: string;
-}
-
-interface FirewallRule {
-  id: string;
-  port: number;
-  protocol: string;
-  direction: string;
-  action: string;
-  source?: string;
-  description?: string;
-}
+// Types are now centralised in hal.service.ts. Re-import for local use.
+type ProxyRoute = hal.ProxyRoute;
+type ProxyStatus = hal.ProxyStatus;
+type VpnStatus = hal.VpnStatus;
+type FirewallStatus = hal.FirewallStatus;
+type FirewallRule = hal.FirewallRule;
 
 // ─── Proxy Sub-section ─────────────────────────────────
 
@@ -67,24 +39,22 @@ function ProxySubSection() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<ProxyStatus | null>(null);
   const [routes, setRoutes] = useState<ProxyRoute[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [acting, setActing] = useState<'start' | 'stop' | null>(null);
   const [processLog, setProcessLog] = useState<ProcessLogData | null>(null);
   const [newRoute, setNewRoute] = useState({ path: '', upstream: '', description: '' });
   const [showAddForm, setShowAddForm] = useState(false);
 
   const fetchData = useCallback(async () => {
+    setLoadState('loading');
     try {
-      const [statusRes, routesRes] = await Promise.all([
-        api.get<{ data: ProxyStatus }>('/hal/network/proxy/status'),
-        api.get<{ data: ProxyRoute[] }>('/hal/network/proxy/routes'),
-      ]);
-      setStatus(statusRes.data);
-      setRoutes(routesRes.data);
+      const [status, routes] = await Promise.all([hal.getProxyStatus(), hal.getProxyRoutes()]);
+      setStatus(status);
+      setRoutes(routes);
+      setLoadState('ok');
     } catch {
-      // Silent — section may not be available
+      setLoadState('error');
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -94,8 +64,7 @@ function ProxySubSection() {
     setActing(action);
     setProcessLog(null);
     try {
-      const res = await api.post<{ data: { action: string; logs: string[]; success: boolean } }>(`/hal/network/proxy/${action}`);
-      const { logs, success } = res.data;
+      const { logs, success } = await hal.controlProxy(action);
       setProcessLog({ logs, success, action });
       if (success) toast.success(start ? 'Caddy started' : 'Caddy stopped');
       else toast.error(`Caddy failed to ${action}`);
@@ -110,7 +79,7 @@ function ProxySubSection() {
   const addRoute = async () => {
     if (!newRoute.path || !newRoute.upstream) return;
     try {
-      await api.post('/hal/network/proxy/routes', newRoute);
+      await hal.addProxyRoute(newRoute);
       toast.success('Proxy route added');
       setNewRoute({ path: '', upstream: '', description: '' });
       setShowAddForm(false);
@@ -122,7 +91,7 @@ function ProxySubSection() {
 
   const removeRoute = async (id: string) => {
     try {
-      await api.delete(`/hal/network/proxy/routes/${id}`);
+      await hal.deleteProxyRoute(id);
       toast.success('Route removed');
       fetchData();
     } catch {
@@ -130,10 +99,48 @@ function ProxySubSection() {
     }
   };
 
-  if (loading) {
+  if (loadState === 'loading') {
     return (
       <SettingSection title="Reverse Proxy" description="Caddy reverse proxy routes.">
-        <div style={{ padding: '16px 0', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
+        <InlineLoading />
+      </SettingSection>
+    );
+  }
+
+  if (loadState === 'error') {
+    return (
+      <SettingSection title="Reverse Proxy" description="Caddy reverse proxy routes.">
+        <div
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '12px 14px',
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 'var(--radius-md)',
+            color: '#ef4444', fontSize: '0.8125rem',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 500 }}>Could not load proxy status</div>
+            <div style={{ marginTop: 4, fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+              The HAL endpoint may not be available on this host.
+            </div>
+            <button
+              onClick={fetchData}
+              style={{
+                marginTop: 8, padding: '4px 10px',
+                background: 'transparent',
+                border: '1px solid rgba(239,68,68,0.4)',
+                borderRadius: 'var(--radius-sm)',
+                color: '#ef4444', fontSize: '0.75rem',
+                fontFamily: 'var(--font-sans)', cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       </SettingSection>
     );
   }
@@ -358,14 +365,18 @@ function SettingsLogPanel({
 function VpnSubSection() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<VpnStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
 
   const fetchData = useCallback(async () => {
+    setLoadState('loading');
     try {
-      const res = await api.get<{ data: VpnStatus }>('/hal/network/vpn/status');
-      setStatus(res.data);
-    } catch { /* silent */ }
-    setLoading(false);
+      setStatus(await hal.getVpnStatus());
+      setLoadState('ok');
+    } catch {
+      // Distinguish "endpoint failed" from "VPN inactive". Without this,
+      // a 500 looked identical to "no VPN configured" — confusing.
+      setLoadState('error');
+    }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
@@ -374,9 +385,29 @@ function VpnSubSection() {
     <SettingSection title="VPN" description="WireGuard & Tailscale VPN management.">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
-          {loading ? (
+          {loadState === 'loading' && (
             <span style={{ color: 'var(--text-muted)' }}>Loading...</span>
-          ) : (
+          )}
+          {loadState === 'error' && (
+            <>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
+              <span style={{ color: '#ef4444' }}>Could not load VPN status</span>
+              <button
+                onClick={fetchData}
+                style={{
+                  marginLeft: 4, padding: '2px 8px',
+                  background: 'transparent',
+                  border: '1px solid rgba(239,68,68,0.4)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: '#ef4444', fontSize: '0.6875rem',
+                  fontFamily: 'var(--font-sans)', cursor: 'pointer',
+                }}
+              >
+                Retry
+              </button>
+            </>
+          )}
+          {loadState === 'ok' && (
             <>
               <span style={{
                 width: 7, height: 7, borderRadius: '50%',
@@ -430,12 +461,9 @@ function FirewallSubSection() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [statusRes, rulesRes] = await Promise.all([
-        api.get<{ data: FirewallStatus }>('/hal/firewall/status'),
-        api.get<{ data: FirewallRule[] }>('/hal/firewall/rules'),
-      ]);
-      setStatus(statusRes.data);
-      setRules(rulesRes.data);
+      const [status, rules] = await Promise.all([hal.getFirewallStatus(), hal.getFirewallRules()]);
+      setStatus(status);
+      setRules(rules);
     } catch {
       // Silent
     }
@@ -447,7 +475,7 @@ function FirewallSubSection() {
   const toggleFirewall = async (enable: boolean) => {
     setActing(true);
     try {
-      await api.post(`/hal/firewall/${enable ? 'enable' : 'disable'}`);
+      await hal.setFirewallEnabled(enable);
       toast.success(enable ? 'Firewall enabled' : 'Firewall disabled');
       fetchData();
     } catch {
@@ -463,7 +491,7 @@ function FirewallSubSection() {
       return;
     }
     try {
-      await api.post('/hal/firewall/rules', {
+      await hal.addFirewallRule({
         port,
         protocol: newRule.protocol,
         direction: 'in',
@@ -482,7 +510,7 @@ function FirewallSubSection() {
 
   const removeRule = async (id: string) => {
     try {
-      await api.delete(`/hal/firewall/rules/${id}`);
+      await hal.deleteFirewallRule(id);
       toast.success('Rule removed');
       fetchData();
     } catch {
@@ -493,7 +521,7 @@ function FirewallSubSection() {
   if (loading) {
     return (
       <SettingSection title="Firewall" description="Manage firewall rules and access.">
-        <div style={{ padding: '16px 0', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
+        <InlineLoading />
       </SettingSection>
     );
   }
@@ -553,6 +581,8 @@ function FirewallSubSection() {
               <input
                 placeholder="Port"
                 type="number"
+                min={1}
+                max={65535}
                 value={newRule.port}
                 onChange={(e) => setNewRule((p) => ({ ...p, port: e.target.value }))}
                 style={{ width: 80, height: 30, padding: '0 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
@@ -622,13 +652,7 @@ function FirewallSubSection() {
 
 // ─── Firewall Services Sub-section ──────────────────────
 
-interface FirewallService {
-  name: string;
-  port: number;
-  protocol: string;
-  lan_allowed: boolean;
-  external_allowed: boolean;
-}
+type FirewallService = hal.FirewallService;
 
 function FirewallServicesSubSection() {
   const [services, setServices] = useState<FirewallService[]>([]);
@@ -638,22 +662,28 @@ function FirewallServicesSubSection() {
 
   const fetchServices = useCallback(async () => {
     try {
-      const res = await api.get<{ data: FirewallService[] }>('/hal/firewall/services');
-      setServices(res.data ?? []);
+      setServices(await hal.getFirewallServices());
     } catch {
       // endpoint may not be available
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchServices(); }, [fetchServices]);
+  useEffect(() => {
+    fetchServices();
+    // Poll every 30s so externally-added services appear without
+    // requiring a manual refresh. The interval is intentionally
+    // generous — this list rarely changes.
+    const id = setInterval(fetchServices, 30_000);
+    return () => clearInterval(id);
+  }, [fetchServices]);
 
   const toggleAccess = async (name: string, field: 'lan_allowed' | 'external_allowed', value: boolean) => {
     setUpdating(name);
     try {
       const svc = services.find(s => s.name === name);
       if (!svc) return;
-      await api.put(`/hal/firewall/services/${name}`, {
+      await hal.updateFirewallServicePolicy(name, {
         lan_allowed: field === 'lan_allowed' ? value : svc.lan_allowed,
         external_allowed: field === 'external_allowed' ? value : svc.external_allowed,
       });
@@ -670,7 +700,7 @@ function FirewallServicesSubSection() {
   if (loading) {
     return (
       <SettingSection title="Service Access" description="Control which services are accessible from LAN or externally.">
-        <div style={{ padding: '16px 0', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>
+        <InlineLoading />
       </SettingSection>
     );
   }

@@ -546,7 +546,7 @@ function AdvancedSettings() {
   const update = async (key: string, value: unknown) => {
     try {
       await patchSettings({ lifecycle: { ...lifecycle, [key]: value } });
-      toast.success('Settings saved');
+      toast.success('Services saved');
     } catch {
       toast.error('Failed to save settings');
     }

@@ -39,15 +39,19 @@ export function FeedsSection() {
   const settings = useSettingsStore(s => s.settings);
   const updateSection = useSettingsStore(s => s.updateSection);
 
-  const feedsSettings = (settings as any)?.feeds ?? {};
-  const retentionDays = feedsSettings.retention_days ?? 30;
-  const defaultView = feedsSettings.default_view ?? 'three-column';
-  const defaultSort = feedsSettings.default_sort ?? 'published_at_desc';
+  const feedsSettings = settings?.feeds ?? {
+    retention_days: 30,
+    default_view: 'three-column' as const,
+    default_sort: 'published_at_desc' as const,
+  };
+  const retentionDays = feedsSettings.retention_days;
+  const defaultView = feedsSettings.default_view;
+  const defaultSort = feedsSettings.default_sort;
 
   const update = async (key: string, value: unknown) => {
     try {
       await updateSection('feeds', { ...feedsSettings, [key]: value });
-      toast.success('Settings saved');
+      toast.success('Feeds saved');
     } catch {
       toast.error('Failed to save settings');
     }

@@ -72,16 +72,16 @@ import { EnvSection } from '@/components/settings/sections/EnvSection';
 import { SecretsSection } from '@/components/settings/sections/SecretsSection';
 import { AutomationSection } from '@/components/settings/sections/AutomationSection';
 import { ObservabilitySection } from '@/components/settings/sections/ObservabilitySection';
+import { NotFoundSection } from '@/components/settings/sections/NotFoundSection';
 import { SettingsSidebarGroup } from '@/components/settings/SettingsSidebarGroup';
 import { SettingsSidebarSearch } from '@/components/settings/SettingsSidebarSearch';
 import { SettingsLanding, type LandingGroup } from './SettingsLanding';
-import { searchSettings } from './settings-search-index';
+import { searchSettings, validateSearchIndex } from './settings-search-index';
 
 interface SidebarItem {
   id: string;
   label: string;
   icon: LucideIcon;
-  soon?: boolean;
 }
 
 interface SidebarGroup {
@@ -145,12 +145,13 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       label: 'AI & Agents',
       icon: Brain,
       color: GROUP_COLORS.aiAgents,
-      description: 'AI models, voice, tools, memory, sessions and how agents respond on channels.',
+      description: 'AI models, voice, tools, memory, sessions, learned preferences and channel behavior.',
       sections: [
         { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
         { id: 'voice', label: 'Voice', icon: Mic },
         { id: 'tool-access-defaults', label: 'Tool Access', icon: Wrench },
         { id: 'memory-search', label: 'Memory', icon: Brain },
+        { id: 'preferences', label: 'Learned Preferences', icon: Brain },
         { id: 'sessions', label: 'Sessions', icon: History },
         { id: 'channel-bindings', label: 'Channel Bindings', icon: Link2 },
       ],
@@ -160,7 +161,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       label: 'Apps',
       icon: AppWindow,
       color: GROUP_COLORS.apps,
-      description: 'Mail, calendar, photos, feeds, search, digest and learned data.',
+      description: 'Mail, calendar, photos, feeds, search, digest and duplicates.',
       sections: [
         { id: 'mail', label: 'Mail', icon: Mail },
         { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -169,7 +170,6 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'search', label: 'Search', icon: SearchIcon },
         { id: 'digest', label: 'Digest', icon: Newspaper },
         { id: 'duplicates', label: 'Duplicates', icon: Copy },
-        { id: 'preferences', label: 'Learned Preferences', icon: Brain },
       ],
     },
     {
@@ -180,7 +180,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       description: 'Sync with external services, local network and OpenClaw Gateway configuration.',
       sections: [
         { id: 'sync', label: 'Sync', icon: RefreshCw },
-        { id: 'network', label: 'Red', icon: Network },
+        { id: 'network', label: 'Network', icon: Network },
         { id: 'gateway-auth', label: 'Gateway', icon: Radio },
       ],
     },
@@ -193,7 +193,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       sections: [
         { id: 'storage', label: 'Storage', icon: HardDrive },
         { id: 'database', label: 'Database', icon: Database },
-        { id: 'energy', label: 'Energia', icon: Zap },
+        { id: 'energy', label: 'Energy', icon: Zap },
         { id: 'services', label: 'Services', icon: Server },
         { id: 'sensor-fusion', label: 'Sensor Fusion', icon: Radio },
         { id: 'automation', label: 'Automation', icon: Zap },
@@ -266,58 +266,69 @@ const SECTION_REDIRECTS: Record<string, string> = {
   // are easy to add if a section is truly removed (not just folded).
 };
 
+// Source of truth for valid section IDs. Used both by `renderSection`
+// (via a Map lookup) and by `NotFoundSection` to suggest near matches
+// when the URL doesn't resolve. Keep this list in sync when adding
+// or removing a section — that's the only registration step.
+const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
+  'account':              () => <AccountSection />,
+  'general':              () => <GeneralSection />,
+  'ai':                   () => <AISection />,
+  'voice':                () => <VoiceSection />,
+  'sync':                 () => <SyncSection />,
+  'mail':                 () => <MailSection />,
+  'photos':               () => <PhotosSection />,
+  'storage':              () => <StorageSection />,
+  'network':              () => <NetworkSection />,
+  'energy':               () => <EnergySection />,
+  'dash':                 () => <DashSection />,
+  'users':                () => <UsersSection />,
+  'database':             () => <DatabaseSection />,
+  'security':             () => <SecuritySection />,
+  'license':              () => <LicenseSection />,
+  'notifications':        () => <NotificationsSection />,
+  'calendar':             () => <CalendarSection />,
+  'shortcuts':            () => <ShortcutsSection />,
+  'search':               () => <SearchSection />,
+  'digest':               () => <DigestSection />,
+  'feeds':                () => <FeedsSection />,
+  'observers':            () => <ChannelObserversSection />,
+  'channel-bindings':     () => <ChannelBindingsSection />,
+  'tool-access-defaults': () => <ToolAccessDefaultsSection />,
+  'sandbox':              () => <SandboxSection />,
+  'browser-config':       () => <BrowserConfigSection />,
+  'gateway-auth':         () => <GatewayAuthSection />,
+  'devices':              () => <DevicesSection />,
+  'approvals-forwarding': () => <ApprovalsForwardingSection />,
+  'memory-search':        () => <MemorySearchSection />,
+  'sessions':             () => <SessionSection />,
+  'cron-config':          () => <CronConfigSection />,
+  'hooks':                () => <HooksSection />,
+  'commands':             () => <CommandsSection />,
+  'logging':              () => <LoggingSection />,
+  'telemetry':            () => <TelemetrySection />,
+  'env':                  () => <EnvSection />,
+  'secrets':              () => <SecretsSection />,
+  'services':             () => <ServicesSection />,
+  'sensor-fusion':        () => <SensorFusionSection />,
+  'permissions':          () => <PermissionsSection />,
+  'agent-tokens':         () => <AgentTokensSection />,
+  'duplicates':           () => <DuplicatesSection />,
+  'preferences':          () => <PreferencesSection />,
+  'approvals-history':    () => <ApprovalsHistorySection />,
+  'my-api-keys':          () => <MyApiKeysSection />,
+  'automation':           () => <AutomationSection />,
+  'observability':        () => <ObservabilitySection />,
+};
+
+const KNOWN_SECTION_IDS = Object.keys(SECTION_REGISTRY);
+
 function renderSection(section: string) {
-  switch (section) {
-    case 'account': return <AccountSection />;
-    case 'general': return <GeneralSection />;
-    case 'ai': return <AISection />;
-    case 'voice': return <VoiceSection />;
-    case 'sync': return <SyncSection />;
-    case 'mail': return <MailSection />;
-    case 'photos': return <PhotosSection />;
-    case 'storage': return <StorageSection />;
-    case 'network': return <NetworkSection />;
-    case 'energy': return <EnergySection />;
-    case 'dash': return <DashSection />;
-    case 'users': return <UsersSection />;
-    case 'database': return <DatabaseSection />;
-    case 'security': return <SecuritySection />;
-    case 'license': return <LicenseSection />;
-    case 'notifications': return <NotificationsSection />;
-    case 'calendar': return <CalendarSection />;
-    case 'shortcuts': return <ShortcutsSection />;
-    case 'search': return <SearchSection />;
-    case 'digest': return <DigestSection />;
-    case 'feeds': return <FeedsSection />;
-    case 'observers': return <ChannelObserversSection />;
-    case 'channel-bindings': return <ChannelBindingsSection />;
-    case 'tool-access-defaults': return <ToolAccessDefaultsSection />;
-    case 'sandbox': return <SandboxSection />;
-    case 'browser-config': return <BrowserConfigSection />;
-    case 'gateway-auth': return <GatewayAuthSection />;
-    case 'devices': return <DevicesSection />;
-    case 'approvals-forwarding': return <ApprovalsForwardingSection />;
-    case 'memory-search': return <MemorySearchSection />;
-    case 'sessions': return <SessionSection />;
-    case 'cron-config': return <CronConfigSection />;
-    case 'hooks': return <HooksSection />;
-    case 'commands': return <CommandsSection />;
-    case 'logging': return <LoggingSection />;
-    case 'telemetry': return <TelemetrySection />;
-    case 'env': return <EnvSection />;
-    case 'secrets': return <SecretsSection />;
-    case 'services': return <ServicesSection />;
-    case 'sensor-fusion': return <SensorFusionSection />;
-    case 'permissions': return <PermissionsSection />;
-    case 'agent-tokens': return <AgentTokensSection />;
-    case 'duplicates': return <DuplicatesSection />;
-    case 'preferences': return <PreferencesSection />;
-    case 'approvals-history': return <ApprovalsHistorySection />;
-    case 'my-api-keys': return <MyApiKeysSection />;
-    case 'automation': return <AutomationSection />;
-    case 'observability': return <ObservabilitySection />;
-    default: return <GeneralSection />;
-  }
+  const entry = SECTION_REGISTRY[section];
+  if (entry) return entry();
+  // Unknown ID → explicit NotFound with suggestions, instead of
+  // silently rendering General (which used to mask URL typos).
+  return <NotFoundSection requestedId={section} knownIds={KNOWN_SECTION_IDS} />;
 }
 
 // ── Sidebar group expanded state — persisted in localStorage ─────
@@ -451,13 +462,19 @@ export function Component() {
     if (!searchQuery.trim()) return [];
     const results = searchSettings(searchQuery);
     // Filter out admin-only results when not admin.
-    return isAdmin ? results : results.filter((r) => r.groupId !== 'admin');
+    return isAdmin ? results : results.filter((r) => r.entry.groupId !== 'admin');
   }, [searchQuery, isAdmin]);
 
   useEffect(() => {
     fetchSettings();
     fetchConfig();
   }, [fetchSettings, fetchConfig]);
+
+  // Dev-only: warn on console if the search index has drifted from the
+  // section registry. Keeps drift detectable without a test runner.
+  useEffect(() => {
+    if (import.meta.env.DEV) validateSearchIndex(KNOWN_SECTION_IDS);
+  }, []);
 
   if (loading && !settings) {
     return (
@@ -488,7 +505,10 @@ export function Component() {
     color: g.color,
   }));
 
-  // Mobile: simple flat dropdown grouped by category.
+  // Mobile: search input + flat dropdown grouped by category. When the
+  // search has text we replace the dropdown with a result list so the
+  // user can tap directly — typing on a long `<select optgroup>` is
+  // unusable on small screens.
   if (isMobile) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
@@ -500,42 +520,172 @@ export function Component() {
             background: 'var(--card)',
             borderBottom: '1px solid var(--border)',
             padding: '8px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
           }}
         >
-          <select
-            value={activeSection ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) navigate(`/settings/${v}`, { replace: true });
-              else navigate('/settings', { replace: true });
-            }}
-            style={{
-              width: '100%',
-              height: 36,
-              padding: '0 10px',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--text)',
-              fontSize: '0.875rem',
-              fontFamily: 'var(--font-sans)',
-              outline: 'none',
-            }}
-          >
-            <option value="">— Home —</option>
-            {GROUPS.map((g) => (
-              <optgroup key={g.id} label={g.label}>
-                {g.sections.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+          <div style={{ position: 'relative' }}>
+            <SearchIcon
+              size={14}
+              style={{
+                position: 'absolute',
+                left: 10,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+                pointerEvents: 'none',
+              }}
+            />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search settings…"
+              autoComplete="off"
+              style={{
+                width: '100%',
+                height: 36,
+                padding: '0 30px 0 32px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text)',
+                fontSize: '0.875rem',
+                fontFamily: 'var(--font-sans)',
+                outline: 'none',
+              }}
+            />
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {!searchQuery.trim() && (
+            <select
+              value={activeSection ?? ''}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v) navigate(`/settings/${v}`, { replace: true });
+                else navigate('/settings', { replace: true });
+              }}
+              style={{
+                width: '100%',
+                height: 36,
+                padding: '0 10px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text)',
+                fontSize: '0.875rem',
+                fontFamily: 'var(--font-sans)',
+                outline: 'none',
+              }}
+            >
+              <option value="">— Home —</option>
+              {GROUPS.map((g) => (
+                <optgroup key={g.id} label={g.label}>
+                  {g.sections.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
         </div>
+
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {activeSection ? renderSection(activeSection) : <SettingsLanding groups={landingGroups} />}
+          {searchQuery.trim() ? (
+            searchResults.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', padding: '12px 0' }}>
+                No results for «{searchQuery}»
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {searchResults.map((r) => {
+                  const group = GROUPS.find((g) => g.id === r.entry.groupId);
+                  const item = group?.sections.find((s) => s.id === r.entry.sectionId);
+                  const Icon = item?.icon ?? SearchIcon;
+                  const matchHint =
+                    r.match.field === 'label'
+                      ? group?.label
+                      : `${group?.label ?? ''} · matches: ${r.match.term}`;
+                  return (
+                    <button
+                      key={r.entry.sectionId}
+                      type="button"
+                      onClick={() => {
+                        navigate(`/settings/${r.entry.sectionId}`, { replace: true });
+                        setSearchQuery('');
+                      }}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 4,
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text)',
+                        fontSize: '0.875rem',
+                        fontFamily: 'var(--font-sans)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Icon size={14} />
+                        <span>{item?.label ?? r.entry.label}</span>
+                      </span>
+                      {matchHint && (
+                        <span
+                          style={{
+                            fontSize: '0.6875rem',
+                            color: r.match.field === 'label' ? 'var(--text-muted)' : 'var(--amber)',
+                            marginLeft: 22,
+                          }}
+                        >
+                          {matchHint}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          ) : activeSection ? (
+            renderSection(activeSection)
+          ) : (
+            <SettingsLanding groups={landingGroups} />
+          )}
         </div>
       </div>
     );
@@ -569,16 +719,23 @@ export function Component() {
               </div>
             ) : (
               searchResults.map((r) => {
-                const group = GROUPS.find((g) => g.id === r.groupId);
-                const item = group?.sections.find((s) => s.id === r.sectionId);
+                const group = GROUPS.find((g) => g.id === r.entry.groupId);
+                const item = group?.sections.find((s) => s.id === r.entry.sectionId);
                 const Icon = item?.icon ?? SearchIcon;
-                const isActive = activeSection === r.sectionId;
+                const isActive = activeSection === r.entry.sectionId;
+                // When the match was a tag/setting (not the section
+                // label itself), show "Group · matches: <term>" so the
+                // user understands *why* this section showed up.
+                const matchHint =
+                  r.match.field === 'label'
+                    ? group?.label
+                    : `${group?.label ?? ''} · matches: ${r.match.term}`;
                 return (
                   <button
-                    key={r.sectionId}
+                    key={r.entry.sectionId}
                     type="button"
                     onClick={() => {
-                      navigate(`/settings/${r.sectionId}`, { replace: true });
+                      navigate(`/settings/${r.entry.sectionId}`, { replace: true });
                       setSearchQuery('');
                     }}
                     style={{
@@ -607,17 +764,17 @@ export function Component() {
                   >
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Icon size={14} />
-                      <span>{item?.label ?? r.label}</span>
+                      <span>{item?.label ?? r.entry.label}</span>
                     </span>
-                    {group && (
+                    {matchHint && (
                       <span
                         style={{
                           fontSize: '0.625rem',
-                          color: 'var(--text-muted)',
+                          color: r.match.field === 'label' ? 'var(--text-muted)' : 'var(--amber)',
                           marginLeft: 22,
                         }}
                       >
-                        {group.label}
+                        {matchHint}
                       </span>
                     )}
                   </button>
@@ -702,19 +859,6 @@ export function Component() {
                     >
                       <Icon size={13} />
                       <span style={{ flex: 1 }}>{item.label}</span>
-                      {item.soon && (
-                        <span
-                          style={{
-                            fontSize: '0.625rem',
-                            padding: '1px 5px',
-                            borderRadius: 'var(--radius-sm)',
-                            background: 'var(--surface)',
-                            color: 'var(--text-muted)',
-                          }}
-                        >
-                          soon
-                        </span>
-                      )}
                     </button>
                   );
                 })}

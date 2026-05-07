@@ -4,9 +4,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, Info, Terminal, MessageSquare, Shield } from 'lucide-react';
+import { Info, Terminal, MessageSquare, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 const PRESETS = [
   {
@@ -39,13 +42,7 @@ function Toggle({ label, desc, value, onChange }: { label: string; desc: string;
         <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{label}</div>
         <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>
       </div>
-      <div onClick={() => onChange(!value)} style={{
-        width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-        background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-        position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-      }}>
-        <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: value ? 18 : 2, transition: 'left 0.2s' }} />
-      </div>
+      <ToggleSwitch checked={value} onChange={onChange} ariaLabel={label} />
     </div>
   );
 }
@@ -73,7 +70,7 @@ export function CommandsSection() {
       setDebug((data.debug ?? false) as boolean);
       setRestart((data.restart ?? true) as boolean);
       setDirty(false);
-    } catch { toast.error('Failed to load commands config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to load commands config')); }
     finally { setLoading(false); }
   }, []);
 
@@ -97,36 +94,33 @@ export function CommandsSection() {
         native, nativeSkills, bash,
         config: configCmd, debug, restart,
       });
-      toast.success('Commands config updated');
+      toast.success('Commands saved');
       setDirty(false);
-    } catch { toast.error('Failed to update commands config'); }
+    } catch (err) { toast.error(describeError(err, 'Failed to update commands config')); }
     finally { setSaving(false); }
   };
 
-  if (loading) return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-
-  const currentPreset = PRESETS.find(p =>
-    p.config.native === native && p.config.bash === bash && p.config.debug === debug
+  // Compare ALL six fields. Earlier this only checked native/bash/debug,
+  // which made the "ACTIVE" indicator silently disappear when the user
+  // toggled nativeSkills, /config or /restart in Fine-Tune.
+  const currentPreset = PRESETS.find((p) =>
+    p.config.native === native &&
+    p.config.nativeSkills === nativeSkills &&
+    p.config.bash === bash &&
+    p.config.config === configCmd &&
+    p.config.debug === debug &&
+    p.config.restart === restart
   );
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Commands</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Configure slash commands, shell access, and platform-native command menus.
-          </p>
-        </div>
-        <button onClick={handleSave} disabled={!dirty || saving} style={{
-          display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600,
-          background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)', cursor: dirty ? 'pointer' : 'default',
-          opacity: saving ? 0.7 : 1, fontFamily: 'var(--font-sans)',
-        }}>
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
+    <SectionShell
+      title="Commands"
+      description="Configure slash commands, shell access, and platform-native command menus."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+    >
 
       {/* Info box */}
       <div style={{
@@ -217,6 +211,6 @@ export function CommandsSection() {
           </div>
         </div>
       )}
-    </div>
+    </SectionShell>
   );
 }

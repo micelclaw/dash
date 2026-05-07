@@ -17,71 +17,18 @@ import {
   XCircle, Copy, Eye, EyeOff, Send, ExternalLink, Shield, Loader2, KeyRound, Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as mailSvc from '@/services/mail-server.service';
 import { useServicesStore } from '@/stores/services.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { SettingSection } from '../SettingSection';
 
-// ─── Types (mirror backend mail-server.types.ts) ─────────────────
-
-interface DnsCheck {
-  status: 'pass' | 'warning' | 'fail';
-  value: string | null;
-  expected: string | null;
-  message: string;
-}
-
-interface DnsCheckResult {
-  domain: string;
-  server_ip: string;
-  checked_at: string;
-  checks: { mx: DnsCheck; spf: DnsCheck; dkim: DnsCheck; dmarc: DnsCheck; ptr: DnsCheck; port25: DnsCheck };
-  overall: 'pass' | 'warning' | 'fail';
-  recommendations: string[];
-}
-
-interface MailServerStatus {
-  installed: boolean;
-  running: boolean;
-  hostname: string;
-  domains: string[];
-  mailboxes_count: number;
-  clamav_enabled: boolean;
-  ram_mb: number | null;
-  uptime_seconds: number | null;
-  last_dns_check: DnsCheckResult | null;
-  relay: { enabled: boolean; host: string } | null;
-  ports: { smtp_25: string; submission_587: string; imaps_993: string };
-}
-
-interface RelayConfig {
-  enabled: boolean;
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  encryption: 'tls' | 'starttls' | 'none';
-}
-
-interface RelayPreset {
-  name: string;
-  host: string;
-  port: number;
-  encryption: 'tls' | 'starttls';
-  username_template: string;
-  free_tier: string;
-}
-
-interface MailCredentials {
-  email: string;
-  imap_host: string;
-  imap_port: number;
-  smtp_host: string;
-  smtp_port: number;
-  username: string;
-  password: string;
-}
+// Types live in mail-server.service.ts. Re-import here for local use.
+type DnsCheckResult = mailSvc.DnsCheckResult;
+type MailServerStatus = mailSvc.MailServerStatus;
+type RelayConfig = mailSvc.RelayConfig;
+type RelayPreset = mailSvc.RelayPreset;
+type MailCredentials = mailSvc.MailCredentials;
 
 // ─── Styles ──────────────────────────────────────────────────────
 
@@ -270,10 +217,10 @@ export function MailServerSection() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await api.get<{ data: MailServerStatus }>('/mail/server/status');
-      setStatus(res.data);
-      if (res.data.hostname && !hostnameInput) setHostnameInput(res.data.hostname);
-      if (res.data.last_dns_check) setDnsResult(res.data.last_dns_check);
+      const s = await mailSvc.getStatus();
+      setStatus(s);
+      if (s.hostname && !hostnameInput) setHostnameInput(s.hostname);
+      if (s.last_dns_check) setDnsResult(s.last_dns_check);
     } catch {
       // Server may not have mail server routes if not configured
     } finally {
@@ -287,11 +234,9 @@ export function MailServerSection() {
     fetchServicesOnce(); // Hydrate lifecycle state so isStarting survives refresh
 
     // Fetch relay config
-    api.get<{ data: RelayConfig }>('/mail/server/relay').then((r) => setRelay(r.data)).catch(() => {});
-    api.get<{ data: Record<string, RelayPreset> }>('/mail/server/relay/presets').then((r) => {
-      setPresets(Object.values(r.data));
-    }).catch(() => {});
-    api.get<{ data: MailCredentials }>('/mail/server/credentials').then((r) => setCredentials(r.data)).catch(() => {});
+    mailSvc.getRelay().then(setRelay).catch(() => {});
+    mailSvc.getRelayPresets().then((r) => setPresets(Object.values(r))).catch(() => {});
+    mailSvc.getCredentials().then(setCredentials).catch(() => {});
   }, [fetchStatus, fetchServicesOnce]);
 
   // ─── Actions ─────────────────────────────────────────────
@@ -310,8 +255,7 @@ export function MailServerSection() {
 
     toast.info('Starting mail server — this may take a few minutes on first install...');
     try {
-      const body = setup ? { hostname: setup.hostname, email: setup.email, password: setup.password } : undefined;
-      await api.post('/mail/server/start', body);
+      await mailSvc.start(setup);
       // Route returns immediately — keep loading.start true until lifecycle
       // delivers service.starting/service.ready via WebSocket (see useEffect below)
     } catch (err: unknown) {
@@ -329,8 +273,7 @@ export function MailServerSection() {
 
     const poll = setInterval(async () => {
       try {
-        const res = await api.get<{ data: MailServerStatus }>('/mail/server/status');
-        const s = res.data;
+        const s = await mailSvc.getStatus();
 
         if (s.installed && s.running) {
           clearInterval(poll);
@@ -341,8 +284,8 @@ export function MailServerSection() {
           if (pendingFirstInstall) {
             setPendingFirstInstall(false);
             toast.success('Mail server installed successfully!');
-            api.get<{ data: { email: string; password: string } }>('/mail/server/admin-password')
-              .then((r) => setAdminCreds(r.data))
+            mailSvc.getAdminPassword()
+              .then(setAdminCreds)
               .catch(() => {});
           }
         }
@@ -355,7 +298,7 @@ export function MailServerSection() {
   const handleStop = async () => {
     setLoading((l) => ({ ...l, stop: true }));
     try {
-      await api.post('/mail/server/stop');
+      await mailSvc.stop();
       toast.success('Mail server stopped');
       await fetchStatus();
     } catch (err: unknown) {
@@ -369,7 +312,7 @@ export function MailServerSection() {
     setConfirmUninstall(false);
     setLoading((l) => ({ ...l, uninstall: true }));
     try {
-      await api.post('/mail/server/uninstall', undefined, { timeout: 60_000 });
+      await mailSvc.uninstall();
       toast.success('Mail server uninstalled');
       setStatus(null);
       setCredentials(null);
@@ -384,8 +327,7 @@ export function MailServerSection() {
   const handleDnsCheck = async () => {
     setLoading((l) => ({ ...l, dns: true }));
     try {
-      const res = await api.post<{ data: DnsCheckResult }>('/mail/server/dns-check');
-      setDnsResult(res.data);
+      setDnsResult(await mailSvc.runDnsCheck());
     } catch (err: unknown) {
       toast.error((err as Error).message || 'DNS check failed');
     } finally {
@@ -396,7 +338,7 @@ export function MailServerSection() {
   const handleSaveRelay = async () => {
     setLoading((l) => ({ ...l, relay: true }));
     try {
-      await api.put('/mail/server/relay', relay);
+      await mailSvc.updateRelay(relay);
       toast.success('Relay configuration saved');
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Failed to save relay config');
@@ -408,11 +350,11 @@ export function MailServerSection() {
   const handleTestRelay = async () => {
     setLoading((l) => ({ ...l, relayTest: true }));
     try {
-      const res = await api.post<{ data: { success: boolean; error?: string } }>('/mail/server/relay/test', { email: testEmail });
-      if (res.data.success) {
+      const result = await mailSvc.testRelay(testEmail);
+      if (result.success) {
         toast.success('Test email sent via relay');
       } else {
-        toast.error(res.data.error || 'Relay test failed');
+        toast.error(result.error || 'Relay test failed');
       }
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Relay test failed');
@@ -424,11 +366,11 @@ export function MailServerSection() {
   const handleTestEmail = async () => {
     setLoading((l) => ({ ...l, testEmail: true }));
     try {
-      const res = await api.post<{ data: { success: boolean; message_id: string | null; error: string | null } }>('/mail/server/test-email', { email: testEmail });
-      if (res.data.success) {
-        toast.success(`Test email sent (ID: ${res.data.message_id})`);
+      const result = await mailSvc.sendTestEmail(testEmail);
+      if (result.success) {
+        toast.success(`Test email sent (ID: ${result.message_id})`);
       } else {
-        toast.error(res.data.error || 'Failed to send test email');
+        toast.error(result.error || 'Failed to send test email');
       }
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Failed to send test email');
@@ -440,8 +382,7 @@ export function MailServerSection() {
   const handleForgotPassword = async () => {
     setLoadingForgotPw(true);
     try {
-      const res = await api.get<{ data: { email: string; password: string } }>('/mail/server/admin-password');
-      setForgotPasswordData(res.data);
+      setForgotPasswordData(await mailSvc.getAdminPassword());
       setShowForgotPassword(true);
     } catch {
       toast.error('Could not retrieve admin credentials');
@@ -468,7 +409,7 @@ export function MailServerSection() {
     if (!hostnameInput.trim()) return;
     setLoading((l) => ({ ...l, hostname: true }));
     try {
-      await api.put('/mail/server/hostname', { hostname: hostnameInput.trim() });
+      await mailSvc.setHostname(hostnameInput.trim());
       toast.success(`Hostname updated to ${hostnameInput.trim()}`);
       await fetchStatus();
     } catch (err: unknown) {
@@ -482,7 +423,7 @@ export function MailServerSection() {
     setLoading((l) => ({ ...l, recreate: true }));
     toast.info('Recreating mail server container — this may take a minute...');
     try {
-      await api.post('/mail/server/recreate', undefined, { timeout: 120_000 });
+      await mailSvc.recreate();
       toast.success('Mail server container recreated');
       await fetchStatus();
     } catch (err: unknown) {

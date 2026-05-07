@@ -23,14 +23,44 @@
  * own internal logic intact (their own dirty/save flows live inside).
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { CronConfigSection } from './CronConfigSection';
 import { HooksSection } from './HooksSection';
 
+const LS_KEY = 'settings.automation.expanded';
+
+interface PersistedState {
+  cron: boolean;
+  hooks: boolean;
+}
+
+function readPersisted(): PersistedState {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return { cron: true, hooks: false };
+    const parsed = JSON.parse(raw);
+    return {
+      cron: typeof parsed?.cron === 'boolean' ? parsed.cron : true,
+      hooks: typeof parsed?.hooks === 'boolean' ? parsed.hooks : false,
+    };
+  } catch {
+    return { cron: true, hooks: false };
+  }
+}
+
 export function AutomationSection() {
-  const [openCron, setOpenCron] = useState(true);
-  const [openHooks, setOpenHooks] = useState(false);
+  const initial = readPersisted();
+  const [openCron, setOpenCron] = useState(initial.cron);
+  const [openHooks, setOpenHooks] = useState(initial.hooks);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_KEY, JSON.stringify({ cron: openCron, hooks: openHooks }));
+    } catch {
+      // Quota / private mode — silently ignore, the UI still works
+    }
+  }, [openCron, openHooks]);
 
   return (
     <div>

@@ -13,8 +13,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { RefreshCw, ExternalLink } from 'lucide-react';
-import { api } from '@/services/api';
+import { RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
+import * as hal from '@/services/hal.service';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
@@ -22,6 +22,29 @@ import { SettingInput } from '../SettingInput';
 import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
 import { SettingsBlock } from '../shared/SettingsBlock';
+import { ProLockBanner, useIsPro } from '../shared/ProLockBanner';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
+
+// Ports that we know Micelclaw uses by default. Used to flag conflicts
+// in the canvas-host port input. This is a "warn, don't block" list —
+// the user can still save (they may have moved the conflicting service
+// to a different port already).
+const KNOWN_PORTS: Record<number, string> = {
+  22: 'SSH',
+  80: 'HTTP',
+  443: 'HTTPS',
+  3000: 'Vite/dev frontend',
+  5432: 'PostgreSQL',
+  6379: 'Redis',
+  7200: 'Core API',
+  8080: 'common HTTP alt',
+  8123: 'Home Assistant',
+  11434: 'Ollama',
+};
+
+function describeKnownPort(port: number): string | null {
+  return KNOWN_PORTS[port] ?? null;
+}
 
 const ROTATION_OPTIONS = [
   { value: 'smart', label: 'Smart' },
@@ -36,8 +59,8 @@ function StorageProviderSection() {
 
   const fetchProvider = useCallback(async () => {
     try {
-      const res = await api.get<{ data: { provider: string } }>('/hal/storage/capabilities');
-      setProvider(res.data.provider);
+      const { provider } = await hal.getStorageProvider();
+      setProvider(provider);
     } catch {
       // silent
     }
@@ -48,7 +71,7 @@ function StorageProviderSection() {
   const handleDetect = async () => {
     setDetecting(true);
     try {
-      await api.post('/hal/storage/detect-provider');
+      await hal.detectStorageProvider();
       await fetchProvider();
       toast.success('Provider re-detected');
     } catch {
@@ -103,6 +126,7 @@ export function StorageSection() {
   const setLocalValue = useSettingsStore((s) => s.setLocalValue);
   const updateSection = useSettingsStore((s) => s.updateSection);
   const resetSection = useSettingsStore((s) => s.resetSection);
+  const isPro = useIsPro();
   const [saving, setSaving] = useState(false);
   const [editingPatterns, setEditingPatterns] = useState(false);
   const [editingFolders, setEditingFolders] = useState(false);
@@ -116,7 +140,7 @@ export function StorageSection() {
     setSaving(true);
     try {
       await updateSection('storage', settings.storage as unknown as Record<string, unknown>);
-      toast.success('Settings saved');
+      toast.success('Storage saved');
     } catch {
       toast.error('Failed to save settings');
     }
@@ -167,10 +191,16 @@ export function StorageSection() {
       <StorageProviderSection />
 
       <SettingSection title="File Snapshots (Pro)" description="Version history for your files.">
+        {/* Pro gate: banner + `disabled={!isPro}` on every control.
+            Free users can still see the controls (so they understand
+            what they'd unlock) but can't toggle them. */}
+        <ProLockBanner description="Automatic version history for files saved in the Files app. Roll back any document to a previous state." />
+
         <SettingToggle
           label="Enabled"
           checked={s.snapshots.enabled}
           onChange={(v) => setLocalValue('storage.snapshots.enabled', v)}
+          disabled={!isPro}
         />
         <SettingInput
           label="Max Versions per File"
@@ -178,12 +208,14 @@ export function StorageSection() {
           value={String(s.snapshots.max_versions_per_file)}
           onChange={(v) => setLocalValue('storage.snapshots.max_versions_per_file', Math.max(1, parseInt(v) || 32))}
           min={1}
+          disabled={!isPro}
         />
         <SettingSelect
           label="Rotation Policy"
           value={s.snapshots.rotation_policy}
           options={ROTATION_OPTIONS}
           onChange={(v) => setLocalValue('storage.snapshots.rotation_policy', v)}
+          disabled={!isPro}
         />
 
         {/* Excluded patterns */}
@@ -198,7 +230,15 @@ export function StorageSection() {
             {!editingPatterns && (
               <button
                 onClick={openPatternEditor}
-                style={{ height: 26, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
+                disabled={!isPro}
+                style={{
+                  height: 26, padding: '0 10px',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
+                  fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
+                  cursor: isPro ? 'pointer' : 'not-allowed',
+                  opacity: isPro ? 1 : 0.5,
+                }}
               >
                 Edit list...
               </button>
@@ -238,7 +278,15 @@ export function StorageSection() {
             {!editingFolders && (
               <button
                 onClick={openFolderEditor}
-                style={{ height: 26, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
+                disabled={!isPro}
+                style={{
+                  height: 26, padding: '0 10px',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
+                  fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
+                  cursor: isPro ? 'pointer' : 'not-allowed',
+                  opacity: isPro ? 1 : 0.5,
+                }}
               >
                 Edit list...
               </button>
@@ -321,17 +369,40 @@ function CanvasHostBlock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);
 
+  // Root validation: must be an absolute path (Unix /... or Windows
+  // C:\...) or start with "~/" so OpenClaw can expand it. Empty is OK
+  // because the backend falls back to ~/.openclaw/canvas/.
+  const rootTrimmed = root.trim();
+  const rootInvalid =
+    rootTrimmed.length > 0 &&
+    !rootTrimmed.startsWith('/') &&
+    !rootTrimmed.startsWith('~/') &&
+    !/^[A-Za-z]:[\\/]/.test(rootTrimmed);
+
+  // Port range + known-port collision warning. Out-of-range is hard
+  // (block save); known-port collision is soft (warn, allow save).
+  const portOutOfRange = port < 1 || port > 65535;
+  const portWarn = describeKnownPort(port);
+
   const handleSave = async () => {
+    if (rootInvalid) {
+      toast.error('Root must be an absolute path (e.g. /home/me/canvas) or start with ~/');
+      return;
+    }
+    if (portOutOfRange) {
+      toast.error('Port must be between 1 and 65535');
+      return;
+    }
     setSaving(true);
     try {
       const config: CanvasHostConfig = {
         enabled,
-        root: root || undefined,
+        root: rootTrimmed || undefined,
         port,
         live_reload: liveReload,
       };
       await gwService.updateCanvasConfig(config);
-      toast.success('Canvas host config updated');
+      toast.success('Canvas Host saved');
       setDirty(false);
     } catch {
       toast.error('Failed to update canvas host config');
@@ -341,6 +412,7 @@ function CanvasHostBlock() {
   };
 
   const openCanvasUrl = `http://localhost:${port}/__openclaw__/canvas/`;
+  const saveBlocked = rootInvalid || portOutOfRange;
 
   return (
     <SettingsBlock
@@ -348,7 +420,7 @@ function CanvasHostBlock() {
       description="Static HTTP server for canvas files"
       expanded={expanded}
       onToggle={() => setExpanded((e) => !e)}
-      dirty={dirty}
+      dirty={dirty && !saveBlocked}
       saving={saving}
       onSave={handleSave}
       saveLabel="Save canvas host"
@@ -399,42 +471,18 @@ function CanvasHostBlock() {
             Spin up the HTTP server. Required for the dash canvas to load files via URL (the recommended path).
           </div>
         </div>
-        <div
-          onClick={() => {
-            setEnabled((v) => !v);
-            setDirty(true);
-          }}
-          style={{
-            width: 36,
-            height: 20,
-            borderRadius: 10,
-            cursor: 'pointer',
-            background: enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-            position: 'relative',
-            flexShrink: 0,
-            transition: 'background 0.2s',
-          }}
-        >
-          <div
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: '50%',
-              background: '#fff',
-              position: 'absolute',
-              top: 2,
-              left: enabled ? 18 : 2,
-              transition: 'left 0.2s',
-            }}
-          />
-        </div>
+        <ToggleSwitch
+          checked={enabled}
+          onChange={(v) => { setEnabled(v); setDirty(true); }}
+          ariaLabel="Enable canvas host"
+        />
       </div>
 
       {/* root */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 12,
           padding: '10px 0',
@@ -447,33 +495,44 @@ function CanvasHostBlock() {
             Absolute path of the directory served. Default: <code>~/.openclaw/canvas/</code>.
           </div>
         </div>
-        <input
-          type="text"
-          value={root}
-          onChange={(e) => {
-            setRoot(e.target.value);
-            setDirty(true);
-          }}
-          placeholder="~/.openclaw/canvas/"
-          style={{
-            padding: '6px 10px',
-            fontSize: '0.75rem',
-            width: 280,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--text)',
-            fontFamily: 'var(--font-mono)',
-            outline: 'none',
-          }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <input
+            type="text"
+            value={root}
+            onChange={(e) => {
+              setRoot(e.target.value);
+              setDirty(true);
+            }}
+            placeholder="~/.openclaw/canvas/"
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              width: 280,
+              background: 'var(--surface)',
+              border: `1px solid ${rootInvalid ? '#ef4444' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text)',
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+            }}
+          />
+          {rootInvalid && (
+            <div style={{
+              fontSize: '0.6875rem', color: '#ef4444',
+              fontFamily: 'var(--font-sans)',
+              maxWidth: 280, textAlign: 'right',
+            }}>
+              ! Use an absolute path (/...) or ~/...
+            </div>
+          )}
+        </div>
       </div>
 
       {/* port */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 12,
           padding: '10px 0',
@@ -486,27 +545,44 @@ function CanvasHostBlock() {
             Default: <code>18793</code>. Make sure no other service uses this port.
           </div>
         </div>
-        <input
-          type="number"
-          value={port}
-          onChange={(e) => {
-            setPort(parseInt(e.target.value, 10) || 18793);
-            setDirty(true);
-          }}
-          min={1}
-          max={65535}
-          style={{
-            padding: '6px 10px',
-            fontSize: '0.75rem',
-            width: 100,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: 'var(--text)',
-            fontFamily: 'var(--font-mono)',
-            outline: 'none',
-          }}
-        />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <input
+            type="number"
+            value={port}
+            onChange={(e) => {
+              setPort(parseInt(e.target.value, 10) || 18793);
+              setDirty(true);
+            }}
+            min={1}
+            max={65535}
+            style={{
+              padding: '6px 10px',
+              fontSize: '0.75rem',
+              width: 100,
+              background: 'var(--surface)',
+              border: `1px solid ${portOutOfRange ? '#ef4444' : portWarn ? 'var(--amber)' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text)',
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+            }}
+          />
+          {portOutOfRange ? (
+            <div style={{ fontSize: '0.6875rem', color: '#ef4444', fontFamily: 'var(--font-sans)' }}>
+              ! Out of range
+            </div>
+          ) : portWarn ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: '0.6875rem', color: 'var(--amber)',
+              fontFamily: 'var(--font-sans)',
+              maxWidth: 200, textAlign: 'right',
+            }}>
+              <AlertTriangle size={11} />
+              <span>Conflicts with {portWarn}</span>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* liveReload */}
@@ -526,35 +602,11 @@ function CanvasHostBlock() {
             Watch the root directory and notify clients when files change (chokidar, 75ms debounce).
           </div>
         </div>
-        <div
-          onClick={() => {
-            setLiveReload((v) => !v);
-            setDirty(true);
-          }}
-          style={{
-            width: 36,
-            height: 20,
-            borderRadius: 10,
-            cursor: 'pointer',
-            background: liveReload ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-            position: 'relative',
-            flexShrink: 0,
-            transition: 'background 0.2s',
-          }}
-        >
-          <div
-            style={{
-              width: 16,
-              height: 16,
-              borderRadius: '50%',
-              background: '#fff',
-              position: 'absolute',
-              top: 2,
-              left: liveReload ? 18 : 2,
-              transition: 'left 0.2s',
-            }}
-          />
-        </div>
+        <ToggleSwitch
+          checked={liveReload}
+          onChange={(v) => { setLiveReload(v); setDirty(true); }}
+          ariaLabel="Live reload"
+        />
       </div>
     </SettingsBlock>
   );

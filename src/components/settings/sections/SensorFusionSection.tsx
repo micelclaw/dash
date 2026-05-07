@@ -17,26 +17,15 @@
 // `sensor` triggers backed by the same fusion-engine.
 
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, CheckCircle, XCircle, Trash2, Plus } from 'lucide-react';
+import { CheckCircle, XCircle, Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as sfSvc from '@/services/sensor-fusion.service';
+import type { SensorZone, FusionStatus } from '@/services/sensor-fusion.service';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingInput } from '../SettingInput';
-
-// ─── Types ──────────────────────────────────────────────
-
-interface SensorZone {
-  id: string;
-  name: string;
-  haEntity: string;
-}
-
-interface FusionStatus {
-  haConnected: boolean;
-  rulesActive: number;
-  lastEvent: string | null;
-}
+import { RetryBanner } from '../shared/RetryBanner';
+import { InlineLoading } from '../shared/InlineLoading';
 
 // ─── Shared Styles ──────────────────────────────────────
 
@@ -104,6 +93,7 @@ function ZoneRow({
 
 export function SensorFusionSection() {
   const [status, setStatus] = useState<FusionStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [zones, setZones] = useState<Array<{ name: string; haEntity: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [savingZones, setSavingZones] = useState(false);
@@ -124,17 +114,31 @@ export function SensorFusionSection() {
     }
   }, [settings]);
 
+  const fetchStatus = useCallback(async () => {
+    setStatusError(null);
+    try {
+      setStatus(await sfSvc.getFusionStatus());
+    } catch (err: unknown) {
+      const e = err as { message?: string; status?: number };
+      setStatus(null);
+      setStatusError(
+        e?.status === 503
+          ? 'Sensor-fusion service unavailable'
+          : e?.message ?? 'Failed to read sensor-fusion status',
+      );
+    }
+  }, []);
+
   useEffect(() => {
     Promise.all([
-      api.get<{ data: FusionStatus }>('/sensor-fusion/status').catch(() => ({ data: { haConnected: false, rulesActive: 0, lastEvent: null } })),
-      api.get<{ data: SensorZone[] }>('/sensor-fusion/zones').catch(() => ({ data: [] })),
+      fetchStatus(),
+      sfSvc.listZones().catch(() => [] as SensorZone[]),
     ])
-      .then(([statusRes, zonesRes]) => {
-        setStatus(statusRes.data);
-        setZones(zonesRes.data.map((z) => ({ name: z.name, haEntity: z.haEntity })));
+      .then(([, zonesList]) => {
+        setZones(zonesList.map((z) => ({ name: z.name, haEntity: z.haEntity })));
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [fetchStatus]);
 
   const handleSaveZones = useCallback(async () => {
     setSavingZones(true);
@@ -142,7 +146,7 @@ export function SensorFusionSection() {
       const payload = zones
         .filter((z) => z.name.trim() && z.haEntity.trim())
         .map((z) => ({ name: z.name.trim(), ha_entity: z.haEntity.trim() }));
-      await api.put('/sensor-fusion/zones', { zones: payload });
+      await sfSvc.replaceZones(payload);
       toast.success('Zones saved');
     } catch {
       toast.error('Failed to save zones');
@@ -161,12 +165,7 @@ export function SensorFusionSection() {
   }, [haUrl, haToken, patchSettings]);
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', padding: 24 }}>
-        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-        Loading sensor fusion settings...
-      </div>
-    );
+    return <InlineLoading message="Loading sensor fusion settings..." withSpinner />;
   }
 
   return (
@@ -183,7 +182,11 @@ export function SensorFusionSection() {
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Status</span>
-          {status && <StatusDot connected={status.haConnected} />}
+          {status ? (
+            <StatusDot connected={status.haConnected} />
+          ) : statusError ? (
+            <RetryBanner severity="warn" message={statusError} onRetry={fetchStatus} layout="compact" />
+          ) : null}
         </div>
         <SettingInput label="HA URL" value={haUrl} onChange={setHaUrl} type="url" placeholder="http://homeassistant.local:8123" />
         <SettingInput label="Access Token" value={haToken} onChange={setHaToken} placeholder="Long-lived access token" />

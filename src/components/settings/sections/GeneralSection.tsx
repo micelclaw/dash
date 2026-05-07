@@ -38,10 +38,9 @@ const TIME_FORMATS = [
   { value: '12h', label: '12-hour' },
 ];
 
-const SEARCH_MODES = [
-  { value: 'auto', label: 'Auto (recommended)' },
-  { value: 'fulltext', label: 'Always Keywords' },
-  { value: 'semantic', label: 'Always Semantic (Pro)' },
+const WEEK_START_OPTIONS = [
+  { value: '1', label: 'Monday' },
+  { value: '0', label: 'Sunday' },
 ];
 
 /**
@@ -128,7 +127,7 @@ export function GeneralSection() {
     setSaving(true);
     try {
       await updateSection('general', settings.general as unknown as Record<string, unknown>);
-      toast.success('Settings saved');
+      toast.success('General saved');
     } catch {
       toast.error('Failed to save settings');
     }
@@ -162,18 +161,29 @@ export function GeneralSection() {
           options={TIME_FORMATS}
           onChange={(v) => setLocalValue('general.time_format', v)}
         />
+        <SettingSelect
+          label="Week Starts On"
+          description="First day of the week in calendar grids and weekly filters."
+          value={String(settings.calendar?.first_day_of_week ?? 1)}
+          options={WEEK_START_OPTIONS}
+          onChange={async (v) => {
+            // Lives in calendar.first_day_of_week (existing field), but
+            // we expose it here in General because it also drives
+            // weekly filters across notes/diary/etc. Save inline so it
+            // doesn't leave the unrelated Calendar section dirty.
+            try {
+              const next = { ...settings.calendar, first_day_of_week: parseInt(v, 10) as 0 | 1 };
+              await updateSection('calendar', next as unknown as Record<string, unknown>);
+              toast.success('Week start saved');
+            } catch {
+              toast.error('Failed to save');
+            }
+          }}
+        />
 
         <div style={{ padding: '8px 0', fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
           {formatPreview(g.date_format, g.time_format)}
         </div>
-
-        <SettingSelect
-          label="Default Search Mode"
-          description="Auto: Keywords for Free, Semantic for Pro"
-          value={g.default_search_mode}
-          options={SEARCH_MODES}
-          onChange={(v) => setLocalValue('general.default_search_mode', v)}
-        />
       </SettingSection>
 
       <SaveBar visible={!!dirty.general} saving={saving} onSave={handleSave} onDiscard={() => resetSection('general')} />

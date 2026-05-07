@@ -22,39 +22,14 @@
 // Preview counts come from POST /admin/scope-preview (rewritten).
 
 import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import {
-  Loader2, Shield, Eye, X,
-  StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
-  Image, Columns, Bookmark, DollarSign,
-} from 'lucide-react';
+import { Loader2, Shield, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as approvalsSvc from '@/services/approvals.service';
+import * as agentsAdmin from '@/services/agents-admin.service';
 import { SettingSection } from '../SettingSection';
-import type { LucideIcon } from 'lucide-react';
-
-// ─── Domain registry ───────────────────────────────────
-
-interface DomainDef {
-  id: string;
-  label: string;
-  icon: LucideIcon;
-  hasTagSupport: boolean;
-}
-
-const DOMAINS: DomainDef[] = [
-  { id: 'notes',     label: 'Notes',     icon: StickyNote, hasTagSupport: true  },
-  { id: 'contacts',  label: 'Contacts',  icon: Users,      hasTagSupport: true  },
-  { id: 'diary',     label: 'Diary',     icon: BookOpen,   hasTagSupport: true  },
-  { id: 'events',    label: 'Calendar',  icon: Calendar,   hasTagSupport: false },
-  { id: 'emails',    label: 'Email',     icon: Mail,       hasTagSupport: true  },
-  { id: 'files',     label: 'Files',     icon: FolderOpen, hasTagSupport: true  },
-  { id: 'photos',    label: 'Photos',    icon: Image,      hasTagSupport: false },
-  { id: 'kanban',    label: 'Projects',  icon: Columns,    hasTagSupport: true  },
-  { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark,   hasTagSupport: false },
-  { id: 'finance',   label: 'Finance',   icon: DollarSign, hasTagSupport: false },
-];
-
-const ALL_DOMAIN_IDS = DOMAINS.map((d) => d.id);
+// Domain registry is shared with DigestSection — extending it in
+// `config/domains.ts` updates both sections automatically.
+import { DATA_DOMAINS as DOMAINS, ALL_DOMAIN_IDS } from '@/config/domains';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -268,11 +243,10 @@ function ScopeEditor({
     setLoadingPreview(true);
     try {
       const perms = buildPermissions();
-      const res = await api.post<{ data: PreviewResult }>('/admin/scope-preview', {
+      setPreview(await approvalsSvc.previewScope({
         allowed_domains: perms.allowed_domains,
         tag_filter: perms.tag_filter,
-      });
-      setPreview(res.data);
+      }));
     } catch {
       toast.error('Failed to load preview');
     }
@@ -545,10 +519,10 @@ export function PermissionsSection() {
   const [editingAgent, setEditingAgent] = useState<AgentRow | null>(null);
 
   useEffect(() => {
-    api.get<{ data: Array<Record<string, unknown>> }>('/managed-agents')
-      .then((res) => {
+    agentsAdmin.listManagedAgents()
+      .then((list) => {
         setAgents(
-          (res.data ?? []).map((a) => ({
+          list.map((a) => ({
             id: a.id as string,
             name: (a.name || a.display_name || 'Agent') as string,
             display_name: (a.display_name || a.name || 'Agent') as string,
@@ -562,7 +536,7 @@ export function PermissionsSection() {
 
   const handleSaveAgent = useCallback(
     async (agentId: string, permissions: AgentPermissions) => {
-      await api.patch(`/managed-agents/${agentId}`, { permissions });
+      await agentsAdmin.updateManagedAgent(agentId, { permissions });
       setAgents((prev) =>
         prev.map((a) => (a.id === agentId ? { ...a, permissions } : a)),
       );

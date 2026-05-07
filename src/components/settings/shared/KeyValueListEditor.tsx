@@ -38,6 +38,14 @@ export interface KeyValueListEditorProps {
   valuePlaceholder?: string;
   /** Whether to show the value input as a password (for OTel headers like Authorization). */
   valueIsSecret?: boolean;
+  /**
+   * Optional per-row predicate. When `valueIsSecret` is false, this is
+   * called with each row's key to decide if that specific value should
+   * be masked. Lets EnvSection mask only secret-looking entries
+   * (`API_KEY=...`) while leaving benign ones (`TZ=Europe/Madrid`)
+   * readable.
+   */
+  valueIsSecretByKey?: (key: string) => boolean;
   /** Width of the key input column in pixels. Default 220. */
   keyWidth?: number;
   /** Label for the "add" button. Default "Add entry". */
@@ -51,6 +59,7 @@ export function KeyValueListEditor({
   keyPlaceholder = 'KEY',
   valuePlaceholder = 'value',
   valueIsSecret = false,
+  valueIsSecretByKey,
   keyWidth = 220,
   addLabel = 'Add entry',
 }: KeyValueListEditorProps) {
@@ -74,6 +83,8 @@ export function KeyValueListEditor({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {entries.map((entry, i) => {
         const error = validateKey ? validateKey(entry.key) : null;
+        const rowIsSecret =
+          valueIsSecret || (valueIsSecretByKey?.(entry.key) ?? false);
         return (
           <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -91,7 +102,7 @@ export function KeyValueListEditor({
                 }}
               />
               <input
-                type={valueIsSecret ? 'password' : 'text'}
+                type={rowIsSecret ? 'password' : 'text'}
                 value={entry.value}
                 onChange={(e) => updateValue(i, e.target.value)}
                 placeholder={valuePlaceholder}

@@ -29,12 +29,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { Smartphone, Monitor, Trash2, LogOut, ShieldCheck, Shield, Copy, Download, Check } from 'lucide-react';
-import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth.store';
 import * as authSvc from '@/services/auth.service';
 import type { ActiveSession, TwoFactorStatus, TwoFactorSetupResult } from '@/services/auth.service';
 import { SettingSection } from '../SettingSection';
 import { SettingsBlock } from '../shared/SettingsBlock';
+import { InlineLoading } from '../shared/InlineLoading';
 
 // ─── Password strength helpers (same rules as the admin endpoint) ──
 
@@ -97,12 +97,12 @@ function ProfileBlock() {
   // because nothing else in the dash renders them yet.
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ data: { avatar_path: string | null; password_changed_at: string | null } }>('/auth/me')
-      .then((res) => {
+    authSvc
+      .getMe()
+      .then((data) => {
         if (cancelled) return;
-        setAvatarPath(res.data?.avatar_path ?? '');
-        setPasswordChangedAt(res.data?.password_changed_at ?? null);
+        setAvatarPath(data?.avatar_path ?? '');
+        setPasswordChangedAt(data?.password_changed_at ?? null);
         setAvatarLoaded(true);
       })
       .catch(() => {
@@ -130,23 +130,20 @@ function ProfileBlock() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {};
+      const body: import('@/services/auth.service').UpdateProfilePayload = {};
       if (displayName !== (user?.display_name ?? '')) {
         body.display_name = displayName.trim() || undefined;
       }
       if (avatarPath !== initialAvatar) {
         body.avatar_path = avatarPath.trim() || null;
       }
-      const res = await api.patch<{ data: { display_name: string; avatar_path: string | null } }>(
-        '/auth/me',
-        body,
-      );
+      const data = await authSvc.updateProfile(body);
       // Push the new display_name back into the auth store so the
       // sidebar / chat header / etc. update immediately.
-      if (user && res.data?.display_name && res.data.display_name !== user.display_name) {
-        setUser({ ...user, display_name: res.data.display_name });
+      if (user && data?.display_name && data.display_name !== user.display_name) {
+        setUser({ ...user, display_name: data.display_name });
       }
-      setInitialAvatar(res.data?.avatar_path ?? '');
+      setInitialAvatar(data?.avatar_path ?? '');
       toast.success('Profile updated');
     } catch (err) {
       const msg = (err as Error)?.message || 'Failed to update profile';
@@ -261,7 +258,7 @@ function ChangePasswordBlock() {
     }
     setSaving(true);
     try {
-      await api.post('/auth/change-password', {
+      await authSvc.changePassword({
         current_password: current,
         new_password: next,
       });
@@ -374,12 +371,12 @@ function ChangeEmailBlock() {
     }
     setSaving(true);
     try {
-      const res = await api.post<{ data: { email: string; display_name: string } }>(
-        '/auth/change-email',
-        { current_password: currentPassword, new_email: newEmail.trim() },
-      );
-      if (user && res.data?.email) {
-        setUser({ ...user, email: res.data.email });
+      const data = await authSvc.changeEmail({
+        current_password: currentPassword,
+        new_email: newEmail.trim(),
+      });
+      if (user && data?.email) {
+        setUser({ ...user, email: data.email });
       }
       toast.success('Email updated');
       reset();
@@ -555,7 +552,7 @@ function ActiveSessionsBlock() {
       onToggle={() => setExpanded((v) => !v)}
     >
       {loading && (
-        <div className="text-center py-6 text-sm text-[var(--text-muted)]">Loading...</div>
+        <InlineLoading />
       )}
       {!loading && sessions.length === 0 && (
         <div className="text-center py-6 text-sm text-[var(--text-muted)]">No active sessions</div>
@@ -741,7 +738,7 @@ function TwoFactorBlock() {
       onToggle={() => setExpanded((v) => !v)}
     >
       {loading && (
-        <div className="text-center py-6 text-sm text-[var(--text-muted)]">Loading...</div>
+        <InlineLoading />
       )}
       {!loading && status && step.kind === 'idle' && !status.enabled && (
         <TotpDisabledView onStart={startSetup} busy={busy} />

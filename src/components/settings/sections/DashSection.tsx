@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { applyTheme, applyAccentColor } from '@/hooks/use-theme';
@@ -21,20 +21,41 @@ import { SaveBar } from '../SaveBar';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import * as gwService from '@/services/gateway.service';
 import type { UiConfig } from '@/services/gateway.service';
+import { MODULES } from '@/config/modules';
 
-const MODULES_LIST = [
-  { value: 'chat', label: 'AI Chat' },
-  { value: 'notes', label: 'Notes' },
-  { value: 'calendar', label: 'Calendar' },
-  { value: 'mail', label: 'Mail' },
-  { value: 'contacts', label: 'Contacts' },
-  { value: 'drive', label: 'Drive' },
-  { value: 'photos', label: 'Photos' },
-  { value: 'diary', label: 'Diary' },
-  { value: 'explorer', label: 'Explorer' },
-  { value: 'agents', label: 'Agents' },
-  { value: 'bookmarks', label: 'Bookmarks' },
-];
+// Settings module excluded — selecting it as default would create a
+// circular UX (you'd land where you're configuring it).
+const DEFAULT_MODULE_BLACKLIST = new Set(['settings']);
+
+/**
+ * Build the Default Module dropdown options dynamically from the
+ * registry so adding a new module to config/modules.ts doesn't
+ * require a separate edit here. Sorted alphabetically within each
+ * group, with ungrouped (top-level) modules first.
+ */
+function buildModuleOptions(): { value: string; label: string }[] {
+  const opts: { value: string; label: string }[] = [];
+  const grouped = new Map<string, typeof MODULES>();
+  const ungrouped: typeof MODULES = [];
+  for (const m of MODULES) {
+    if (DEFAULT_MODULE_BLACKLIST.has(m.id)) continue;
+    if (m.group === null || m.group === undefined) {
+      ungrouped.push(m);
+    } else {
+      const arr = grouped.get(m.group) ?? [];
+      arr.push(m);
+      grouped.set(m.group, arr);
+    }
+  }
+  // Top-level first (preserve declaration order, that's the expected nav order)
+  for (const m of ungrouped) opts.push({ value: m.id, label: m.label });
+  // Then groups, alphabetical inside each
+  for (const [group, mods] of grouped) {
+    const sorted = [...mods].sort((a, b) => a.label.localeCompare(b.label));
+    for (const m of sorted) opts.push({ value: m.id, label: `${group}: ${m.label}` });
+  }
+  return opts;
+}
 
 const ACCENT_PRESETS = [
   { color: '#d4a017', label: 'Amber' },
@@ -56,6 +77,8 @@ export function DashSection() {
   const resetSection = useSettingsStore((s) => s.resetSection);
   const [saving, setSaving] = useState(false);
 
+  const moduleOptions = useMemo(buildModuleOptions, []);
+
   if (!settings) return null;
   const d = settings.dash;
 
@@ -63,7 +86,7 @@ export function DashSection() {
     setSaving(true);
     try {
       await updateSection('dash', settings.dash as unknown as Record<string, unknown>);
-      toast.success('Settings saved');
+      toast.success('Dash saved');
     } catch {
       toast.error('Failed to save settings');
     }
@@ -165,7 +188,7 @@ export function DashSection() {
           label="Default Module"
           description="Module to show when you open Claw Dash"
           value={d.default_module}
-          options={MODULES_LIST}
+          options={moduleOptions}
           onChange={(v) => setLocalValue('dash.default_module', v)}
         />
       </SettingSection>

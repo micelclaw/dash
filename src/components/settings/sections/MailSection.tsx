@@ -36,6 +36,39 @@ const SNOOZE_RELATIVE_OPTIONS = [
   { value: 'custom', label: 'Custom' },
 ];
 
+// Shared visual styles for the snooze row inputs. The SettingInput /
+// SettingSelect components don't fit here because each row has a custom
+// 3-column layout (label + select + delete). Pulling the styles up to
+// constants keeps the JSX readable and the look consistent with the rest.
+const SNOOZE_INPUT_STYLE: React.CSSProperties = {
+  flex: 1,
+  height: 30,
+  padding: '0 8px',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--text)',
+  fontSize: '0.8125rem',
+  fontFamily: 'var(--font-sans)',
+  outline: 'none',
+};
+
+const SNOOZE_SELECT_STYLE: React.CSSProperties = {
+  height: 30,
+  padding: '0 24px 0 8px',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--text)',
+  fontSize: '0.8125rem',
+  fontFamily: 'var(--font-sans)',
+  outline: 'none',
+  appearance: 'none',
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'right 6px center',
+};
+
 export function MailSection() {
   const settings = useSettingsStore((s) => s.settings);
   const dirty = useSettingsStore((s) => s.dirty);
@@ -51,7 +84,7 @@ export function MailSection() {
     setSaving(true);
     try {
       await updateSection('mail', settings.mail as unknown as Record<string, unknown>);
-      toast.success('Settings saved');
+      toast.success('Mail saved');
     } catch {
       toast.error('Failed to save settings');
     }
@@ -103,8 +136,8 @@ export function MailSection() {
         />
 
         <SettingInput
-          label="Max Initial Sync"
-          description="Maximum emails to sync per folder on first setup"
+          label="Max emails to fetch initially"
+          description="On first sync, only download the most recent N emails per folder. Lower = faster initial sync."
           type="number"
           value={String(m.max_sync_emails_initial)}
           onChange={(v) => setLocalValue('mail.max_sync_emails_initial', Math.max(50, parseInt(v) || 500))}
@@ -127,40 +160,15 @@ export function MailSection() {
             <input
               value={opt.label}
               onChange={(e) => updateSnoozeOption(i, 'label', e.target.value)}
-              placeholder="Label"
-              style={{
-                flex: 1,
-                height: 30,
-                padding: '0 8px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text)',
-                fontSize: '0.8125rem',
-                fontFamily: 'var(--font-sans)',
-                outline: 'none',
-              }}
+              placeholder="Label (e.g. 'Tomorrow morning')"
+              style={SNOOZE_INPUT_STYLE}
               onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
               onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
             />
             <select
               value={opt.relative}
               onChange={(e) => updateSnoozeOption(i, 'relative', e.target.value)}
-              style={{
-                height: 30,
-                padding: '0 24px 0 8px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text)',
-                fontSize: '0.8125rem',
-                fontFamily: 'var(--font-sans)',
-                outline: 'none',
-                appearance: 'none',
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 6px center',
-              }}
+              style={SNOOZE_SELECT_STYLE}
             >
               {SNOOZE_RELATIVE_OPTIONS.map((s) => (
                 <option key={s.value} value={s.value}>{s.label}</option>

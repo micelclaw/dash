@@ -22,16 +22,19 @@
 //   D6=A — endpoint placeholder is `http://localhost:4318` (local OTLP)
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, AlertTriangle, Activity, Info } from 'lucide-react';
+import { AlertTriangle, Activity, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import type { OtelConfig } from '@/services/gateway.service';
+import { describeError } from '@/lib/api-errors';
 import {
   KeyValueListEditor,
   entriesToRecord,
   recordToEntries,
   type KeyValueEntry,
 } from '@/components/settings/shared/KeyValueListEditor';
+import { SectionShell } from '../shared/SectionShell';
+import { ToggleSwitch } from '../shared/ToggleSwitch';
 
 const PROTOCOLS = ['http/protobuf', 'grpc'];
 const SAMPLE_MARKS = [0.01, 0.1, 0.5, 1.0];
@@ -71,8 +74,8 @@ export function TelemetrySection() {
       setSampleRate(otel.sample_rate ?? 1.0);
       setFlushIntervalMs(otel.flush_interval_ms ?? 5000);
       setDirty(false);
-    } catch {
-      toast.error('Failed to load telemetry config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to load telemetry config'));
     } finally {
       setLoading(false);
     }
@@ -94,8 +97,8 @@ export function TelemetrySection() {
       toast.success('diagnostics-otel plugin enabled');
       // Refetch to confirm
       await fetchConfig();
-    } catch {
-      toast.error('Failed to enable plugin');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to enable plugin'));
     } finally {
       setEnabling(false);
     }
@@ -117,53 +120,28 @@ export function TelemetrySection() {
         flush_interval_ms: flushIntervalMs,
       };
       await gwService.updateTelemetryConfig(config);
-      toast.success('Telemetry config updated');
+      toast.success('Telemetry saved');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update telemetry config');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to update telemetry config'));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading...</div>;
-  }
-
   const formDisabled = !pluginEnabled;
 
   return (
-    <div style={{ maxWidth: 700 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: 'var(--text)' }}>Telemetry (OpenTelemetry)</h2>
-          <p style={{ margin: '4px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Export traces, metrics, and structured logs to an OTLP collector (Grafana Cloud, Honeycomb, Datadog, local).
-          </p>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!dirty || saving || formDisabled}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '6px 14px',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            background: dirty && !formDisabled ? 'var(--amber)' : 'var(--surface)',
-            border: dirty && !formDisabled ? 'none' : '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            color: dirty && !formDisabled ? '#000' : 'var(--text-muted)',
-            cursor: dirty && !formDisabled ? 'pointer' : 'default',
-            opacity: saving ? 0.7 : 1,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-        </button>
-      </div>
-
+    <SectionShell
+      title="Telemetry (OpenTelemetry)"
+      description="Export traces, metrics, and structured logs to an OTLP collector (Grafana Cloud, Honeycomb, Datadog, local)."
+      loading={loading}
+      dirty={dirty}
+      saving={saving}
+      onSave={handleSave}
+      saveDisabledReason={formDisabled ? 'Enable the diagnostics-otel plugin first' : null}
+      appliesAt="gateway-restart"
+    >
       {/* Plugin required banner (D3=A) */}
       {!pluginEnabled && (
         <div
@@ -399,7 +377,7 @@ export function TelemetrySection() {
           become editable and your save will be applied.
         </div>
       )}
-    </div>
+    </SectionShell>
   );
 }
 
@@ -427,34 +405,7 @@ function FieldRow({ label, desc, children }: { label: string; desc: string; chil
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      onClick={() => onChange(!value)}
-      style={{
-        width: 36,
-        height: 20,
-        borderRadius: 10,
-        cursor: 'pointer',
-        background: value ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-        position: 'relative',
-        flexShrink: 0,
-        transition: 'background 0.2s',
-      }}
-    >
-      <div
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: '50%',
-          background: '#fff',
-          position: 'absolute',
-          top: 2,
-          left: value ? 18 : 2,
-          transition: 'left 0.2s',
-        }}
-      />
-    </div>
-  );
+  return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
 function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: string[] }) {

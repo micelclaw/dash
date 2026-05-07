@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Settings, Pause, Play, Loader2, Trash2, Unlink } from 'lucide-react';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
 import { toast } from 'sonner';
 import { useWebSocket } from '@/hooks/use-websocket';
 
@@ -185,7 +185,7 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await api.post(`/sync/connectors/${connector.id}/run`);
+      await syncSvc.runConnector(connector.id);
       toast.success(`Sync started: ${label}`);
     } catch {
       toast.error('Failed to start sync');
@@ -202,11 +202,11 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
       const isSyncing = syncing || connector.status === 'syncing';
       if (connector.status === 'paused') {
         // Resume — trigger immediate sync
-        await api.post(`/sync/connectors/${connector.id}/resume`);
+        await syncSvc.resumeConnector(connector.id);
         toast.success(`Resumed: ${label}`);
       } else {
         // Pause — will also abort running sync if active
-        await api.post(`/sync/connectors/${connector.id}/pause`);
+        await syncSvc.pauseConnector(connector.id);
         if (isSyncing) {
           setSyncing(false);
           setProgress(null);
@@ -224,7 +224,7 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
   const handleDelete = async () => {
     if (!confirm(`Disconnect ${label}? This will stop syncing.`)) return;
     try {
-      await api.delete(`/sync/connectors/${connector.id}`);
+      await syncSvc.deleteConnector(connector.id);
       toast.success(`Disconnected: ${label}`);
       onRefresh();
     } catch {
@@ -242,7 +242,7 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     if (!oauthProvider) return;
     if (!confirm(`Revoke OAuth access for ${oauthProvider}? This will disconnect ALL ${oauthProvider} connectors.`)) return;
     try {
-      await api.delete(`/sync/oauth/${oauthProvider}`);
+      await syncSvc.deleteOAuthCredentials(oauthProvider);
       toast.success(`OAuth access revoked for ${oauthProvider}`);
       onRefresh();
     } catch {

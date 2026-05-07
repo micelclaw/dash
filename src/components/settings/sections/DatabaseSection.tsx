@@ -12,35 +12,23 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as databaseSvc from '@/services/database.service';
+import type { DatabaseCredentialsResponse } from '@/services/database.service';
 import { useAuthStore } from '@/stores/auth.store';
+import { describeError } from '@/lib/api-errors';
+import { useSensitiveInputs } from '@/hooks/use-sensitive-inputs';
 import { SettingSection } from '../SettingSection';
 
 const REVEAL_DURATION = 30; // seconds
 
-interface PgCredentials {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
-  database: string;
-}
-
-interface MariaDBCredentials {
-  host: string;
-  port: number;
-  root_password: string | null;
-  databases: Record<string, { user: string; password: string }>;
-}
-
-interface CredentialsResponse {
-  postgresql: PgCredentials | null;
-  mariadb: MariaDBCredentials | null;
-}
+// Types live in database.service.ts (re-imported above as
+// `DatabaseCredentialsResponse`). Local alias for brevity.
+type CredentialsResponse = DatabaseCredentialsResponse;
 
 export function DatabaseSection() {
   const userRole = useAuthStore((s) => s.user?.role);
-  const [password, setPassword] = useState('');
+  const sensitive = useSensitiveInputs(['password'] as const);
+  const password = sensitive.values.password;
   const [loading, setLoading] = useState(false);
   const [credentials, setCredentials] = useState<CredentialsResponse | null>(null);
   const [countdown, setCountdown] = useState(0);
@@ -57,12 +45,19 @@ export function DatabaseSection() {
   useEffect(() => {
     if (countdown <= 0 && credentials) {
       setCredentials(null);
-      setPassword('');
+      sensitive.wipe();
     }
-  }, [countdown, credentials]);
+  }, [countdown, credentials, sensitive]);
 
-  // Cleanup on unmount
-  useEffect(() => clearTimer, [clearTimer]);
+  // Cleanup on unmount: clear interval and let useSensitiveInputs
+  // handle wiping the password field. Credentials are also nulled
+  // out so the secret payload doesn't sit in heap.
+  useEffect(() => {
+    return () => {
+      clearTimer();
+      setCredentials(null);
+    };
+  }, [clearTimer]);
 
   if (userRole !== 'owner') {
     return (
@@ -81,8 +76,11 @@ export function DatabaseSection() {
     }
     setLoading(true);
     try {
-      const res = await api.post<CredentialsResponse>('/settings/database-credentials', { password });
-      setCredentials(res);
+      // The envelope plugin wraps responses in `{data: ...}`. The api
+      // client returns the parsed body verbatim, so we have to unwrap
+      // .data before storing — otherwise `credentials.postgresql` is
+      // undefined because the actual shape is `credentials.data.postgresql`.
+      setCredentials(await databaseSvc.revealCredentials(password));
       setCountdown(REVEAL_DURATION);
       clearTimer();
       timerRef.current = setInterval(() => {
@@ -94,9 +92,15 @@ export function DatabaseSection() {
           return prev - 1;
         });
       }, 1000);
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to retrieve credentials';
-      toast.error(msg);
+    } catch (err) {
+      // Distinguish 401 (wrong password) from 403 (not owner) from
+      // 5xx (DB or HAL down). describeError applies the per-section
+      // overrides for the "not owner" wording specific to this flow.
+      toast.error(
+        describeError(err, 'Failed to retrieve credentials', {
+          status: { 403: 'Only the system owner can view database credentials' },
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -106,7 +110,7 @@ export function DatabaseSection() {
     clearTimer();
     setCountdown(0);
     setCredentials(null);
-    setPassword('');
+    sensitive.wipe();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -126,8 +130,7 @@ export function DatabaseSection() {
           <input
             type="password"
             placeholder="Your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            {...sensitive.bind('password')}
             onKeyDown={handleKeyDown}
             autoComplete="current-password"
             style={{

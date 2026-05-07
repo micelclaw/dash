@@ -8,12 +8,20 @@
  *
  * See LICENSE in the root of this repository for full terms.
  * https://micelclaw.com
+ *
+ * ─── Idempotency contract (B7) ─────────────────────────────────────
+ * May be mounted twice simultaneously: standalone at `/settings/observers`
+ * and as a `<SettingsBlock>` inside Sync (`/settings/sync`). Each
+ * instance fetches and saves independently — no module-level state,
+ * no shared refs. Lift to a store only if cross-instance sync becomes
+ * a real requirement.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Settings, Trash2, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as syncSvc from '@/services/sync.service';
+import * as messagesSvc from '@/services/messages.service';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { SettingSection } from '../SettingSection';
 import { AddIntegrationModal } from '../AddIntegrationModal';
@@ -244,24 +252,23 @@ export function ChannelObserversSection() {
 
   const loadData = useCallback(async () => {
     try {
-      const res = await api.get<{ data: ConnectorInfo[] }>('/sync/connectors');
-      const observers = (res.data ?? []).filter(c => OBSERVER_TYPES.includes(c.connector_type));
-      setConnectors(observers);
+      const list = await syncSvc.listConnectors();
+      setConnectors(list.filter((c) => OBSERVER_TYPES.includes(c.connector_type)));
     } catch {
       // Ignore if API not available
     }
 
     try {
-      const res = await api.get<{ data: PlatformStats[] }>('/messages/platforms');
-      const wa = (res.data ?? []).find(p => p.platform === 'whatsapp');
+      const list = await messagesSvc.getPlatformStats();
+      const wa = list.find(p => p.platform === 'whatsapp');
       setWhatsappStats(wa ?? null);
     } catch {
       // Ignore
     }
 
     try {
-      const res = await api.get<{ data: ObserverPrivacy }>('/sync/observers/privacy');
-      if (res.data) setPrivacy(res.data);
+      const data = await syncSvc.getObserverPrivacy();
+      if (data) setPrivacy(data);
     } catch {
       // Ignore — use defaults
     }
@@ -283,7 +290,7 @@ export function ChannelObserversSection() {
 
   const handleSync = async (connectorId: string) => {
     try {
-      await api.post(`/sync/connectors/${connectorId}/run`);
+      await syncSvc.runConnector(connectorId);
       toast.success('Sync started');
     } catch {
       toast.error('Failed to start sync');
@@ -292,7 +299,7 @@ export function ChannelObserversSection() {
 
   const handleDisconnect = async (connectorId: string) => {
     try {
-      await api.delete(`/sync/connectors/${connectorId}`);
+      await syncSvc.deleteConnector(connectorId);
       toast.success('Disconnected');
       loadData();
     } catch {
@@ -303,7 +310,7 @@ export function ChannelObserversSection() {
   const handleSavePrivacy = async () => {
     setSavingPrivacy(true);
     try {
-      await api.patch('/sync/observers/privacy', privacy);
+      await syncSvc.updateObserverPrivacy(privacy);
       toast.success('Privacy settings saved');
       setPrivacyDirty(false);
     } catch {

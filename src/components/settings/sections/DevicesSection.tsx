@@ -1,6 +1,13 @@
 /**
  * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
  * All rights reserved.
+ *
+ * ─── Idempotency contract (B7) ─────────────────────────────────────
+ * May be mounted twice simultaneously: standalone at `/settings/devices`
+ * and as a `<SettingsBlock>` inside Gateway (`/settings/gateway-auth`).
+ * Each instance fetches and saves independently — no module-level
+ * state, no shared refs. Lift to a store only if cross-instance sync
+ * becomes a real requirement.
  */
 
 import { useState, useEffect, useCallback } from 'react';

@@ -13,7 +13,7 @@
 import { useEffect, useRef } from 'react';
 import { Brain, Pause, Play, RefreshCw, Square, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as graphSvc from '@/services/graph.service';
 import { useAuthStore } from '@/stores/auth.store';
 import { useExtractionStore, type ExtractionLogEntry } from '@/stores/extraction.store';
 
@@ -44,9 +44,8 @@ export function EntityExtractionConfig() {
   const handleReExtract = async () => {
     useExtractionStore.setState({ running: true, logs: [], processed: 0, total: 0 });
     try {
-      const res = await api.post('/graph/re-extract', {}) as any;
-      const data = res.data ?? res;
-      if (data.total_jobs === 0 || data.totalJobs === 0) {
+      const { total_jobs } = await graphSvc.reExtractAll();
+      if (total_jobs === 0) {
         useExtractionStore.setState({ running: false });
         toast.info('No records to re-index');
         useExtractionStore.getState().addLog('No records found to re-index');
@@ -63,19 +62,19 @@ export function EntityExtractionConfig() {
 
   const handlePause = async () => {
     try {
-      await api.post('/graph/extraction/pause', {});
+      await graphSvc.pauseExtraction();
     } catch { toast.error('Failed to pause'); }
   };
 
   const handleResume = async () => {
     try {
-      await api.post('/graph/extraction/resume', {});
+      await graphSvc.resumeExtraction();
     } catch { toast.error('Failed to resume'); }
   };
 
   const handleStop = async () => {
     try {
-      await api.post('/graph/extraction/stop', {});
+      await graphSvc.stopExtraction();
     } catch { toast.error('Failed to stop'); }
   };
 

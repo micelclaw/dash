@@ -13,26 +13,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Eye, Cpu, Users, Database, Terminal, RefreshCw, CheckCircle, XCircle, Clock, Download, Play, Pause, Square } from 'lucide-react';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import * as photosSvc from '@/services/photos.service';
+import type { AiStats } from '@/services/photos.service';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { SettingSection } from '../SettingSection';
 
 // ─── Types ──────────────────────────────────────────────
 
-interface AiStats {
-  total: number;
-  processed: number;
-  pending: number;
-  queued: number;
-  with_description: number;
-  skipped: number;
-  worker_paused: boolean;
-  models: {
-    multimodal: { available: boolean; id: string | null; loaded: boolean };
-    siglip: { available: boolean; size_mb: number };
-    dinov2: { available: boolean; size_mb: number };
-  };
-}
+// AiStats type re-imported from photos.service.ts above.
 
 interface LogEntry {
   time: string;
@@ -80,10 +68,10 @@ export function PhotoPipelineProgress() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const res = await api.get<{ data: AiStats }>('/photos/ai/stats');
-      setStats(res.data);
-      setPaused(res.data.worker_paused);
-      return res.data;
+      const data = await photosSvc.getAiStats();
+      setStats(data);
+      setPaused(data.worker_paused);
+      return data;
     } catch { return null; }
   }, []);
 
@@ -232,8 +220,7 @@ export function PhotoPipelineProgress() {
   const handleReprocess = async () => {
     setReprocessing(true);
     try {
-      const res = await api.post('/photos/ai/reprocess', {}) as any;
-      const data = res.data ?? res;
+      const data = await photosSvc.reprocessAll();
       toast.success(`${data.reset} photos queued for reprocessing`);
       setLogs([]);
       addLog(`Reset ${data.reset} photos — waiting for next batch...`, 'info');
@@ -251,15 +238,15 @@ export function PhotoPipelineProgress() {
       if (paused) {
         if (pendingRemaining > 0) {
           // There are photos in the queue — just resume
-          await api.post('/photos/ai/resume');
+          await photosSvc.resumePipeline();
           setPaused(false);
           addLog('Pipeline resumed', 'info');
           toast.success('Pipeline resumed');
         } else if (stats && stats.pending > 0) {
           // Queue is empty but there are unprocessed photos (skipped by abort)
           if (!confirm(`No hay fotos en cola. ¿Quieres procesar las ${stats.pending} fotos pendientes?`)) return;
-          const res = await api.post('/photos/ai/resume-all') as any;
-          const pending = res.data?.pending ?? 0;
+          const result = await photosSvc.resumeAll();
+          const pending = result.pending ?? 0;
           setPaused(false);
           setPendingRemaining(pending);
           setPendingTotal(pending);
@@ -271,7 +258,7 @@ export function PhotoPipelineProgress() {
           toast.info('No hay fotos pendientes de procesar');
         }
       } else {
-        await api.post('/photos/ai/pause');
+        await photosSvc.pausePipeline();
         setPaused(true);
         addLog('Pipeline paused', 'info');
         toast.success('Pipeline paused');
@@ -284,7 +271,7 @@ export function PhotoPipelineProgress() {
   const handleAbort = async () => {
     if (!confirm('Abort processing and clear the pending queue?')) return;
     try {
-      await api.post('/photos/ai/abort') as any;
+      await photosSvc.abortPipeline();
       setPaused(true);
       setRunning(false);
       setCurrentPhase(null);
@@ -306,7 +293,7 @@ export function PhotoPipelineProgress() {
     setDownloadPct(0);
     addLog(`Downloading ${model}...`, 'info');
     try {
-      await api.post('/photos/ai/models/download', { model });
+      await photosSvc.downloadModel(model);
     } catch {
       setDownloading(null);
       toast.error(`Failed to start download for ${model}`);
