@@ -11,9 +11,10 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { ArrowRight, ChevronRight, ChevronDown, Loader2, Trash2, Package } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { downloadAgentarExport } from '@/services/agentar.service';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
@@ -592,6 +593,24 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           >
             Browse Files <ArrowRight size={14} />
           </button>
+
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Share & distribute (Agentar export) */}
+          <ShareSection agent={agent} />
+
+          {!agent.is_chief && (
+            <>
+              <div style={{ height: 1, background: 'var(--border)' }} />
+              <DangerZone
+                agent={agent}
+                onDeleted={() => {
+                  onAgentChanged?.();
+                  onSelect('');
+                }}
+              />
+            </>
+          )}
         </>
       )}
 
@@ -601,6 +620,194 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
 
       {activeTab === 'advanced' && (
         <AgentAdvancedConfig />
+      )}
+    </div>
+  );
+}
+
+// ─── Share & distribute (Agentar export) ──────────────────────────
+
+function ShareSection({ agent }: { agent: ManagedAgent }) {
+  const [embedSkills, setEmbedSkills] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    try {
+      const blob = await downloadAgentarExport(agent.id, embedSkills);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${agent.name}.claw-agent.tar.gz`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${agent.display_name}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  }, [agent.id, agent.name, agent.display_name, embedSkills]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+        Share &amp; distribute
+      </h4>
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        Export this agent as a <code style={{ fontFamily: 'var(--font-mono)' }}>.claw-agent</code> package — manifest, identity, soul, memory templates and (optionally) bundled skills.
+      </p>
+      <label style={{
+        display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: 'var(--text-dim)',
+        cursor: 'pointer', userSelect: 'none',
+      }}>
+        <input
+          type="checkbox"
+          checked={embedSkills}
+          onChange={e => setEmbedSkills(e.target.checked)}
+          style={{ accentColor: 'var(--amber)' }}
+        />
+        Embed skills (heavier but self-contained)
+      </label>
+      <button
+        onClick={handleExport}
+        disabled={exporting}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)', color: 'var(--text)',
+          fontSize: '0.8125rem', fontWeight: 500, padding: '8px 16px',
+          cursor: exporting ? 'wait' : 'pointer', transition: 'var(--transition-fast)',
+          fontFamily: 'var(--font-sans)', width: '100%',
+        }}
+      >
+        {exporting ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Package size={14} />}
+        {exporting ? 'Preparing…' : 'Export as .claw-agent'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Danger zone (delete agent) ───────────────────────────────────
+
+function DangerZone({ agent, onDeleted }: { agent: ManagedAgent; onDeleted: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = useCallback(async () => {
+    if (typed !== agent.name) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/managed-agents/${agent.id}`);
+      toast.success(`Deleted ${agent.display_name}`);
+      onDeleted();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleting(false);
+      setOpen(false);
+      setTyped('');
+    }
+  }, [agent.id, agent.name, agent.display_name, typed, onDeleted]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--error)', margin: 0 }}>
+        Danger zone
+      </h4>
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>
+        Soft-deletes the agent and revokes its tokens. Workspace files stay on disk.
+      </p>
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          background: 'transparent', border: '1px solid var(--error)',
+          borderRadius: 'var(--radius-md)', color: 'var(--error)',
+          fontSize: '0.8125rem', fontWeight: 500, padding: '8px 16px',
+          cursor: 'pointer', transition: 'var(--transition-fast)',
+          fontFamily: 'var(--font-sans)', width: '100%',
+        }}
+      >
+        <Trash2 size={14} /> Delete agent
+      </button>
+
+      {open && (
+        <div
+          onClick={() => !deleting && setOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
+              padding: 24, maxWidth: 440, width: '90vw', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '1.0625rem', fontWeight: 600, color: 'var(--text)' }}>
+              Delete &ldquo;{agent.display_name}&rdquo;?
+            </h3>
+            <p style={{ margin: '10px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              This revokes its tokens, removes it from openclaw.json, and soft-deletes the DB row.
+              The workspace files at <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{agent.workspace_path || '~/.openclaw/workspaces/...'}</code> stay on disk for recovery.
+            </p>
+            <div style={{ marginTop: 14, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              Type <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--error)' }}>{agent.name}</code> to confirm:
+            </div>
+            <input
+              autoFocus
+              value={typed}
+              onChange={e => setTyped(e.target.value)}
+              disabled={deleting}
+              style={{
+                marginTop: 6, width: '100%', boxSizing: 'border-box',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                fontSize: '0.8125rem', fontFamily: 'var(--font-mono)',
+                padding: '8px 10px', outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => { setOpen(false); setTyped(''); }}
+                disabled={deleting}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: deleting ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={typed !== agent.name || deleting}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: typed !== agent.name || deleting ? 'not-allowed' : 'pointer',
+                  border: 'none',
+                  background: typed === agent.name && !deleting ? 'var(--error)' : 'var(--surface-hover)',
+                  color: typed === agent.name && !deleting ? '#fff' : 'var(--text-muted)',
+                  fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {deleting && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                {deleting ? 'Deleting…' : 'Delete agent'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

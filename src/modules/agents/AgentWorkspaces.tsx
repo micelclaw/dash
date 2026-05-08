@@ -11,15 +11,19 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, X, Pencil, Eye, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, X, Pencil, Eye, Save, Loader2, Plus, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { api } from '@/services/api';
+import { toast } from 'sonner';
+import { api, ApiError } from '@/services/api';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { formatFileSize } from '@/lib/file-utils';
 import type { FileRecord } from '@/types/files';
 import type { ManagedAgent } from './types';
+
+const RESERVED_FILES = new Set(['IDENTITY.md', 'TOOLS.md', 'USER.md', 'SOUL.md', 'BOOTSTRAP.md', 'AGENTS.md', 'MEMORY.md']);
+const isReserved = (filename: string) => RESERVED_FILES.has(filename);
 
 interface AgentWorkspacesProps {
   agents: ManagedAgent[];
@@ -63,7 +67,75 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startPct: number } | null>(null);
 
+  // Create + delete dialogs
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<FileRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const selectedAgent = agents.find(a => a.id === selectedId);
+
+  const reloadFiles = useCallback(async () => {
+    if (!selectedAgent) return;
+    setFilesLoading(true);
+    try {
+      const pathParam = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+      const res = await api.get<{ data: FileRecord[] }>(
+        `/managed-agents/${selectedAgent.id}/workspace${pathParam}`,
+      );
+      setFiles(res.data);
+    } catch { /* keep stale list */ } finally { setFilesLoading(false); }
+  }, [selectedAgent, currentPath]);
+
+  const handleCreateFile = useCallback(async () => {
+    if (!selectedAgent) return;
+    const trimmed = createName.trim();
+    if (!trimmed) return;
+    const fullPath = currentPath ? `${currentPath}/${trimmed}` : trimmed;
+    const filename = trimmed.split('/').pop() ?? trimmed;
+    if (isReserved(filename)) {
+      toast.error(`${filename} is managed by the provisioning service`);
+      return;
+    }
+    setCreating(true);
+    try {
+      await api.post(`/managed-agents/${selectedAgent.id}/workspace-file`, { path: fullPath, content: '' });
+      setCreateOpen(false);
+      setCreateName('');
+      await reloadFiles();
+      toast.success(`Created ${trimmed}`);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to create file';
+      toast.error(msg);
+    } finally { setCreating(false); }
+  }, [selectedAgent, createName, currentPath, reloadFiles]);
+
+  const handleDeleteFile = useCallback(async () => {
+    if (!selectedAgent || !pendingDelete) return;
+    if (isReserved(pendingDelete.filename)) {
+      toast.error(`${pendingDelete.filename} is reserved and cannot be deleted`);
+      setPendingDelete(null);
+      return;
+    }
+    setDeleting(true);
+    try {
+      await api.delete(`/managed-agents/${selectedAgent.id}/workspace-file?path=${encodeURIComponent(pendingDelete.filepath)}`);
+      // If the open file was deleted, close it
+      if (openFile?.filepath === pendingDelete.filepath) {
+        setOpenFile(null);
+        setFileContent(null);
+        setIsEditing(false);
+        setIsDirty(false);
+      }
+      setPendingDelete(null);
+      await reloadFiles();
+      toast.success(`Deleted ${pendingDelete.filename}`);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to delete file';
+      toast.error(msg);
+    } finally { setDeleting(false); }
+  }, [selectedAgent, pendingDelete, openFile, reloadFiles]);
 
   // Reset path and editor when agent changes
   useEffect(() => {
@@ -369,6 +441,31 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
           </div>
         )}
 
+        {/* New file toolbar */}
+        {selectedAgent && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
+          }}>
+            <button
+              onClick={() => { setCreateOpen(true); setCreateName(''); }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'transparent', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
+                fontSize: '0.75rem', fontWeight: 500, padding: '3px 10px',
+                cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                transition: 'var(--transition-fast)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; e.currentTarget.style.borderColor = 'var(--amber)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-dim)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
+            >
+              <Plus size={12} /> New file
+            </button>
+          </div>
+        )}
+
         {/* File list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
           {filesLoading && (
@@ -443,10 +540,151 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                     {formatRelativeTime(file.updated_at)}
                   </span>
                 )}
+                {/* Delete icon \u2014 visible on hover, hidden for reserved files & directories */}
+                {!file.is_directory && !isReserved(file.filename) && (
+                  <button
+                    onClick={e => { e.stopPropagation(); setPendingDelete(file); }}
+                    title={`Delete ${file.filename}`}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: 'var(--text-muted)', padding: 4, display: 'flex',
+                      borderRadius: 'var(--radius-sm)',
+                      opacity: isHovered ? 1 : 0,
+                      transition: 'var(--transition-fast)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = 'var(--error)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* Create file dialog */}
+        {createOpen && (
+          <div
+            onClick={() => !creating && setCreateOpen(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 100,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)', padding: 24,
+                maxWidth: 420, width: '90vw', fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
+                Create file in workspace
+              </h3>
+              <p style={{ margin: '8px 0 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Path relative to <code style={{ fontFamily: 'var(--font-mono)' }}>~/workspace{currentPath ? `/${currentPath}` : ''}</code>
+              </p>
+              <input
+                autoFocus
+                value={createName}
+                onChange={e => setCreateName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && createName.trim() && !creating) handleCreateFile(); if (e.key === 'Escape') setCreateOpen(false); }}
+                disabled={creating}
+                placeholder="memory/notes.md"
+                style={{
+                  width: '100%', boxSizing: 'border-box',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-mono)',
+                  padding: '8px 10px', outline: 'none',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  onClick={() => setCreateOpen(false)}
+                  disabled={creating}
+                  style={{
+                    padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: creating ? 'not-allowed' : 'pointer',
+                    border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+                  }}
+                >Cancel</button>
+                <button
+                  onClick={handleCreateFile}
+                  disabled={creating || !createName.trim()}
+                  style={{
+                    padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: creating || !createName.trim() ? 'not-allowed' : 'pointer',
+                    border: 'none', background: 'var(--amber)', color: '#000', fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {creating && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete confirm */}
+        {pendingDelete && (
+          <div
+            onClick={() => !deleting && setPendingDelete(null)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 100,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: 'var(--card)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-lg)', padding: 24,
+                maxWidth: 420, width: '90vw', fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
+                Delete &ldquo;{pendingDelete.filename}&rdquo;?
+              </h3>
+              <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                The file will be permanently removed from the agent's workspace.
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  onClick={() => setPendingDelete(null)}
+                  disabled={deleting}
+                  style={{
+                    padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: deleting ? 'not-allowed' : 'pointer',
+                    border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+                  }}
+                >Cancel</button>
+                <button
+                  onClick={handleDeleteFile}
+                  disabled={deleting}
+                  style={{
+                    padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                    fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: deleting ? 'not-allowed' : 'pointer',
+                    border: 'none', background: 'var(--error)', color: '#fff', fontWeight: 600,
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  {deleting && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Resizable divider ────────────────────────────── */}

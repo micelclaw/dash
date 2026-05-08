@@ -11,6 +11,7 @@
  */
 
 import { useState } from 'react';
+import { Play, Square, X, Loader2 } from 'lucide-react';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
 import type { Meeting, ManagedAgent } from '../types';
@@ -19,6 +20,9 @@ interface MeetingDetailProps {
   meeting: Meeting;
   agents: ManagedAgent[];
   onBack: () => void;
+  onStart?: () => Promise<unknown>;
+  onEnd?: () => Promise<unknown>;
+  onCancel?: () => Promise<unknown>;
 }
 
 function formatMeetingDate(dateStr: string): string {
@@ -35,8 +39,15 @@ function formatMeetingDate(dateStr: string): string {
   });
 }
 
-export function MeetingDetail({ meeting, agents, onBack }: MeetingDetailProps) {
+export function MeetingDetail({ meeting, agents, onBack, onStart, onEnd, onCancel }: MeetingDetailProps) {
   const [backHover, setBackHover] = useState(false);
+  const [busyAction, setBusyAction] = useState<'start' | 'end' | 'cancel' | null>(null);
+
+  const runAction = async (kind: 'start' | 'end' | 'cancel', fn?: () => Promise<unknown>) => {
+    if (!fn) return;
+    setBusyAction(kind);
+    try { await fn(); } finally { setBusyAction(null); }
+  };
 
   const dateStr = meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at;
 
@@ -136,6 +147,15 @@ export function MeetingDetail({ meeting, agents, onBack }: MeetingDetailProps) {
             {formatMeetingDate(dateStr)}
           </div>
 
+          {/* Controls (start/end/cancel) */}
+          <MeetingControls
+            status={meeting.status}
+            busy={busyAction}
+            onStart={() => runAction('start', onStart)}
+            onEnd={() => runAction('end', onEnd)}
+            onCancel={() => runAction('cancel', onCancel)}
+          />
+
           {/* Participant chips */}
           {participants.length > 0 && (
             <div style={{
@@ -216,6 +236,78 @@ export function MeetingDetail({ meeting, agents, onBack }: MeetingDetailProps) {
           <ActionItems items={meeting.action_items} />
         )}
       </div>
+    </div>
+  );
+}
+
+function MeetingControls({
+  status,
+  busy,
+  onStart,
+  onEnd,
+  onCancel,
+}: {
+  status: Meeting['status'];
+  busy: 'start' | 'end' | 'cancel' | null;
+  onStart: () => void;
+  onEnd: () => void;
+  onCancel: () => void;
+}) {
+  if (status === 'completed') return null;
+
+  const baseBtn: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    fontSize: '0.8125rem', fontWeight: 500,
+    padding: '6px 12px', borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--border)', background: 'var(--surface)',
+    color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+    transition: 'var(--transition-fast)',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 12 }}>
+      {status === 'scheduled' && (
+        <>
+          <button
+            onClick={onStart}
+            disabled={busy !== null}
+            style={{
+              ...baseBtn,
+              background: 'var(--success)', border: '1px solid var(--success)', color: '#fff', fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer',
+            }}
+          >
+            {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
+            Start now
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={busy !== null}
+            style={{
+              ...baseBtn,
+              border: '1px solid var(--error)', color: 'var(--error)',
+              cursor: busy ? 'wait' : 'pointer',
+            }}
+          >
+            {busy === 'cancel' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <X size={13} />}
+            Cancel meeting
+          </button>
+        </>
+      )}
+      {status === 'in_progress' && (
+        <button
+          onClick={onEnd}
+          disabled={busy !== null}
+          style={{
+            ...baseBtn,
+            background: 'var(--amber-dim)', border: '1px solid var(--amber)', color: 'var(--amber)', fontWeight: 600,
+            cursor: busy ? 'wait' : 'pointer',
+          }}
+        >
+          {busy === 'end' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Square size={13} fill="currentColor" />}
+          End meeting
+        </button>
+      )}
     </div>
   );
 }

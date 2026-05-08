@@ -72,5 +72,43 @@ export function useMeetings() {
     }
   }, [addNotification]);
 
-  return { meetings, loading, createMeeting };
+  const updateMeeting = useCallback(async (id: string, patch: Partial<Meeting>): Promise<Meeting | null> => {
+    try {
+      const res = await api.patch<{ data: Meeting }>(`/meetings/${id}`, patch);
+      setMeetings(prev => prev.map(m => (m.id === id ? res.data : m)));
+      return res.data;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to update meeting',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }, [addNotification]);
+
+  const startMeeting = useCallback((id: string) => {
+    return updateMeeting(id, { status: 'in_progress', started_at: new Date().toISOString() } as Partial<Meeting>);
+  }, [updateMeeting]);
+
+  const endMeeting = useCallback((id: string) => {
+    return updateMeeting(id, { status: 'completed', completed_at: new Date().toISOString() } as Partial<Meeting>);
+  }, [updateMeeting]);
+
+  const cancelMeeting = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await api.delete(`/meetings/${id}`);
+      setMeetings(prev => prev.filter(m => m.id !== id));
+      return true;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to cancel meeting',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
+    }
+  }, [addNotification]);
+
+  return { meetings, loading, createMeeting, startMeeting, endMeeting, cancelMeeting };
 }

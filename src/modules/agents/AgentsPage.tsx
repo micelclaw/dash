@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, Package } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useAgents } from './hooks/use-agents';
 import { AgentTree } from './AgentTree';
@@ -19,6 +19,8 @@ import { CouncilTab } from './council/CouncilTab';
 import { AgentConversations } from './AgentConversations';
 import { AgentWorkspaces } from './AgentWorkspaces';
 import { CreateAgentWizard } from './CreateAgentWizard';
+import { ImportAgentModal } from './ImportAgentModal';
+import { EventsTab } from './events/EventsTab';
 import { useChatStore } from '@/stores/chat.store';
 import type { AgentTab } from './types';
 
@@ -27,6 +29,7 @@ const TABS: { key: AgentTab; label: string }[] = [
   { key: 'council', label: 'Council' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'workspaces', label: 'Workspaces' },
+  { key: 'events', label: 'Events' },
 ];
 
 export function Component() {
@@ -35,7 +38,9 @@ export function Component() {
   const [activeTab, setActiveTab] = useState<AgentTab>('tree');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [newBtnHover, setNewBtnHover] = useState(false);
+  const [importBtnHover, setImportBtnHover] = useState(false);
   const [hoveredTab, setHoveredTab] = useState<AgentTab | null>(null);
 
   if (loading) {
@@ -170,28 +175,51 @@ export function Component() {
           })}
         </div>
 
-        {/* Right: + New button (desktop only) */}
+        {/* Right: Import + New buttons (desktop only) */}
         {!isMobile && (
-          <button
-            onClick={() => setShowCreateWizard(true)}
-            onMouseEnter={() => setNewBtnHover(true)}
-            onMouseLeave={() => setNewBtnHover(false)}
-            style={{
-              background: 'var(--amber)',
-              color: '#000',
-              border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              padding: '5px 14px',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'var(--transition-fast)',
-              fontFamily: 'var(--font-sans)',
-              opacity: newBtnHover ? 0.9 : 1,
-            }}
-          >
-            + New
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => setShowImportModal(true)}
+              onMouseEnter={() => setImportBtnHover(true)}
+              onMouseLeave={() => setImportBtnHover(false)}
+              title="Import a .claw-agent package"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: importBtnHover ? 'var(--surface-hover)' : 'transparent',
+                color: 'var(--text-dim)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '5px 12px',
+                fontSize: '0.8125rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'var(--transition-fast)',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <Package size={13} /> Import
+            </button>
+            <button
+              onClick={() => setShowCreateWizard(true)}
+              onMouseEnter={() => setNewBtnHover(true)}
+              onMouseLeave={() => setNewBtnHover(false)}
+              style={{
+                background: 'var(--amber)',
+                color: '#000',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                padding: '5px 14px',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'var(--transition-fast)',
+                fontFamily: 'var(--font-sans)',
+                opacity: newBtnHover ? 0.9 : 1,
+              }}
+            >
+              + New
+            </button>
+          </div>
         )}
       </div>
 
@@ -213,7 +241,16 @@ export function Component() {
         {activeTab === 'council' && <CouncilTab agents={agents} />}
         {activeTab === 'conversations' && <AgentConversations agents={agents} />}
         {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} initialAgentId={selectedAgentId} />}
+        {activeTab === 'events' && <EventsTab agents={agents} />}
       </div>
+
+      {/* Import modal */}
+      {showImportModal && (
+        <ImportAgentModal
+          onClose={() => setShowImportModal(false)}
+          onInstalled={() => refetch()}
+        />
+      )}
 
       {/* Create wizard modal */}
       {showCreateWizard && (

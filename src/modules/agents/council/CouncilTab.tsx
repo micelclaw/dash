@@ -22,7 +22,7 @@ interface CouncilTabProps {
 }
 
 export function CouncilTab({ agents }: CouncilTabProps) {
-  const { meetings, loading } = useMeetings();
+  const { meetings, loading, startMeeting, endMeeting, cancelMeeting } = useMeetings();
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [archiveBtnHover, setArchiveBtnHover] = useState(false);
@@ -146,6 +146,12 @@ export function CouncilTab({ agents }: CouncilTabProps) {
             meeting={selectedMeeting}
             agents={agents}
             onBack={() => setSelectedMeetingId(null)}
+            onStart={() => startMeeting(selectedMeeting.id)}
+            onEnd={() => endMeeting(selectedMeeting.id)}
+            onCancel={async () => {
+              const ok = await cancelMeeting(selectedMeeting.id);
+              if (ok) setSelectedMeetingId(null);
+            }}
           />
         ) : (
           <MeetingArchive
