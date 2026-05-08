@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useWebSocket } from '@/hooks/use-websocket';
-import type { Meeting, MeetingMessage, ActionItem } from '../../types';
+import type { Meeting, MeetingMessage, ActionItem, MeetingAdvancedOptions } from '../../types';
 
 interface CreateMeetingPayload {
   title: string;
@@ -22,6 +22,7 @@ interface CreateMeetingPayload {
   participants: string[];
   user_participates: boolean;
   scheduled_at?: string | null;
+  advanced_options?: MeetingAdvancedOptions;
 }
 
 export function useMeetings() {
@@ -162,6 +163,7 @@ export function useMeetings() {
     participants: string[];
     user_participates: boolean;
     scheduled_at: string | null;
+    advanced_options?: MeetingAdvancedOptions;
   }): Promise<Meeting | null> => {
     try {
       const res = await api.patch<{ data: Meeting }>(`/meetings/${id}`, payload);

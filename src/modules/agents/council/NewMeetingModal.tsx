@@ -86,6 +86,13 @@ export function NewMeetingModal({
   const [cancelHover, setCancelHover] = useState(false);
   const [startHover, setStartHover] = useState(false);
 
+  // ── Advanced options ─────────────────────────────────────────
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [rounds, setRounds] = useState<number>(() => existingMeeting?.advanced_options?.rounds ?? 3);
+  const [maxWords, setMaxWords] = useState<number>(() => existingMeeting?.advanced_options?.max_words ?? 80);
+  const [devilsAdvocate, setDevilsAdvocate] = useState<boolean>(() => existingMeeting?.advanced_options?.devils_advocate ?? false);
+  const [extractActionItems, setExtractActionItems] = useState<boolean>(() => existingMeeting?.advanced_options?.extract_action_items ?? true);
+
   // Find the "Francis" agent (always checked + disabled)
   const francisAgent = useMemo(
     () => agents.find(a => a.name.toLowerCase() === 'francis'),
@@ -116,6 +123,13 @@ export function NewMeetingModal({
       scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
     }
 
+    const advancedOptions = {
+      rounds,
+      max_words: maxWords,
+      devils_advocate: devilsAdvocate,
+      extract_action_items: extractActionItems,
+    };
+
     if (isEdit && existingMeeting) {
       const updated = await editMeeting(existingMeeting.id, {
         title: topic.trim(),
@@ -123,6 +137,7 @@ export function NewMeetingModal({
         participants: Array.from(selectedParticipants),
         user_participates: userParticipates,
         scheduled_at: scheduledAt,
+        advanced_options: advancedOptions,
       });
       setSubmitting(false);
       if (updated) {
@@ -138,6 +153,7 @@ export function NewMeetingModal({
       participants: Array.from(selectedParticipants),
       user_participates: userParticipates,
       scheduled_at: scheduledAt,
+      advanced_options: advancedOptions,
     });
 
     setSubmitting(false);
@@ -337,6 +353,144 @@ export function NewMeetingModal({
               </span>
             </label>
           </div>
+        </div>
+
+        {/* Advanced options (collapsible) */}
+        <div style={{
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--surface)',
+          marginBottom: 16,
+        }}>
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 14px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: 'var(--text)',
+            }}
+          >
+            <span>⚙ Advanced options</span>
+            <span style={{
+              fontSize: '0.6875rem',
+              color: 'var(--text-muted)',
+              fontWeight: 400,
+            }}>
+              {rounds} round{rounds !== 1 ? 's' : ''} · {maxWords}w
+              {devilsAdvocate ? ' · 😈' : ''}
+              {!extractActionItems ? ' · no items' : ''}
+              <span style={{ marginLeft: 8 }}>{advancedOpen ? '▴' : '▾'}</span>
+            </span>
+          </button>
+          {advancedOpen && (
+            <div style={{
+              padding: '8px 14px 14px',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}>
+              {/* Rounds */}
+              <div>
+                <label style={{ ...labelStyle, marginBottom: 4 }}>Number of rounds</label>
+                <select
+                  value={rounds}
+                  onChange={e => setRounds(parseInt(e.target.value, 10))}
+                  style={inputStyle}
+                >
+                  <option value={3}>3 — intro + 1 development + conclusion</option>
+                  <option value={4}>4 — intro + 2 development + conclusion</option>
+                  <option value={5}>5 — intro + 3 development + conclusion</option>
+                  <option value={6}>6 — intro + 4 development + conclusion</option>
+                </select>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                  Francis opens (assigning angles), agents respond, Francis moderates the development rounds choosing who speaks next, and the chief closes with a final decision.
+                </div>
+              </div>
+
+              {/* Max words */}
+              <div>
+                <label style={{ ...labelStyle, marginBottom: 4 }}>
+                  Max words per response
+                  <span style={{ float: 'right', color: 'var(--amber)', fontWeight: 700 }}>{maxWords}</span>
+                </label>
+                <input
+                  type="range"
+                  min={10}
+                  max={200}
+                  step={10}
+                  value={maxWords}
+                  onChange={e => setMaxWords(parseInt(e.target.value, 10))}
+                  style={{ width: '100%', accentColor: 'var(--amber)' }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                  <span>10</span>
+                  <span>200</span>
+                </div>
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4 }}>
+                  Francis intro and final conclusion get up to 1.5x more (capped at 200).
+                </div>
+              </div>
+
+              {/* Devil's advocate */}
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={devilsAdvocate}
+                  onChange={e => setDevilsAdvocate(e.target.checked)}
+                  style={{ accentColor: 'var(--amber)', marginTop: 2 }}
+                />
+                <span>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
+                    Devil&apos;s advocate
+                  </span>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                    One non-Francis participant (chosen at random) defends the opposite stance during development rounds — forces real tension instead of yes-men cascade.
+                  </div>
+                </span>
+              </label>
+
+              {/* Extract action items */}
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={extractActionItems}
+                  onChange={e => setExtractActionItems(e.target.checked)}
+                  style={{ accentColor: 'var(--amber)', marginTop: 2 }}
+                />
+                <span>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>
+                    Extract action items at the end
+                  </span>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                    Adds a final LLM pass that converts Francis&apos;s closing decision into structured action items. Off → no extra pass, just the debate text.
+                  </div>
+                </span>
+              </label>
+            </div>
+          )}
         </div>
 
         {/* Schedule */}

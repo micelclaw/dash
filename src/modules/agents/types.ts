@@ -104,6 +104,13 @@ export interface MeetingParticipant {
   color: string;
 }
 
+export interface MeetingAdvancedOptions {
+  rounds?: number;
+  max_words?: number;
+  devils_advocate?: boolean;
+  extract_action_items?: boolean;
+}
+
 export interface Meeting {
   id: string;
   title: string;
@@ -116,6 +123,7 @@ export interface Meeting {
   completed_at: string | null;
   messages: MeetingMessage[];
   action_items: ActionItem[];
+  advanced_options: MeetingAdvancedOptions;
   created_at: string;
 }
 
