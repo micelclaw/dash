@@ -136,18 +136,13 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
           const isHovered = hoveredId === meeting.id;
           const dateStr = meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at;
 
-          // Build unique participant info from messages
-          const participantMap = new Map<string, { name: string; avatar: string; color: string }>();
-          for (const msg of meeting.messages) {
-            if (!participantMap.has(msg.agent_id)) {
-              participantMap.set(msg.agent_id, {
-                name: msg.agent_name,
-                avatar: msg.agent_avatar,
-                color: msg.agent_color,
-              });
-            }
-          }
-          const participants = Array.from(participantMap.values());
+          // Use the enriched participants from the BE so scheduled meetings
+          // (no messages yet) still render their chips.
+          const participants = meeting.participants.map((p) => ({
+            name: p.display_name,
+            avatar: p.avatar ?? '🤖',
+            color: p.color,
+          }));
 
           return (
             <div

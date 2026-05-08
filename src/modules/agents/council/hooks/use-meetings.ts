@@ -115,6 +115,32 @@ export function useMeetings() {
     return updateMeeting(id, { status: 'completed', completed_at: new Date().toISOString() } as Partial<Meeting>);
   }, [updateMeeting]);
 
+  /**
+   * Edit a scheduled meeting's content fields. Sends UUID strings for
+   * participants (the BE accepts string[] on PATCH; the response comes
+   * back enriched with display_name/avatar/role/color).
+   */
+  const editMeeting = useCallback(async (id: string, payload: {
+    title: string;
+    description: string | null;
+    participants: string[];
+    user_participates: boolean;
+    scheduled_at: string | null;
+  }): Promise<Meeting | null> => {
+    try {
+      const res = await api.patch<{ data: Meeting }>(`/meetings/${id}`, payload);
+      setMeetings(prev => prev.map(m => (m.id === id ? res.data : m)));
+      return res.data;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to save meeting',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }, [addNotification]);
+
   const archiveMeeting = useCallback((id: string) => {
     return updateMeeting(id, { status: 'archived' } as Partial<Meeting>);
   }, [updateMeeting]);
@@ -174,6 +200,7 @@ export function useMeetings() {
     meetings,
     loading,
     createMeeting,
+    editMeeting,
     runMeeting,
     endMeeting,
     archiveMeeting,

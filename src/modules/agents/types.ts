@@ -90,11 +90,19 @@ export interface ActionItem {
   deliverable_url?: string;
 }
 
+export interface MeetingParticipant {
+  id: string;
+  display_name: string;
+  avatar: string | null;
+  role: string;
+  color: string;
+}
+
 export interface Meeting {
   id: string;
   title: string;
   description: string | null;
-  participants: string[];
+  participants: MeetingParticipant[];
   user_participates: boolean;
   status: 'scheduled' | 'in_progress' | 'completed' | 'archived';
   scheduled_at: string | null;

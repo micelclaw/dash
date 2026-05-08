@@ -11,9 +11,10 @@
  */
 
 import { useState } from 'react';
-import { Play, Square, Trash2, Archive, ArchiveRestore, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, Loader2 } from 'lucide-react';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
+import { NewMeetingModal } from './NewMeetingModal';
 import type { Meeting, ManagedAgent } from '../types';
 
 interface MeetingDetailProps {
@@ -50,6 +51,7 @@ export function MeetingDetail({
   const [backHover, setBackHover] = useState(false);
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const runAction = async (kind: ControlAction, fn?: () => Promise<unknown>) => {
     if (!fn) return;
@@ -59,31 +61,14 @@ export function MeetingDetail({
 
   const dateStr = meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at;
 
-  // Build unique participant info from messages + agents list
-  const participantMap = new Map<string, { name: string; avatar: string; color: string }>();
-  for (const msg of meeting.messages) {
-    if (!participantMap.has(msg.agent_id)) {
-      participantMap.set(msg.agent_id, {
-        name: msg.agent_name,
-        avatar: msg.agent_avatar,
-        color: msg.agent_color,
-      });
-    }
-  }
-  // Also include participants from the agents list if they match meeting.participants
-  for (const agentId of meeting.participants) {
-    if (!participantMap.has(agentId)) {
-      const agent = agents.find(a => a.id === agentId || a.name === agentId);
-      if (agent) {
-        participantMap.set(agentId, {
-          name: agent.display_name,
-          avatar: agent.avatar ?? '🤖',
-          color: agent.color,
-        });
-      }
-    }
-  }
-  const participants = Array.from(participantMap.values());
+  // The backend enriches `meeting.participants` to objects with display_name,
+  // avatar, role and color. Use them directly for the chips so scheduled
+  // meetings (which have no messages yet) still show who'll attend.
+  const participants = meeting.participants.map((p) => ({
+    name: p.display_name,
+    avatar: p.avatar ?? '🤖',
+    color: p.color,
+  }));
 
   return (
     <div style={{
@@ -155,12 +140,13 @@ export function MeetingDetail({
             {formatMeetingDate(dateStr)}
           </div>
 
-          {/* Controls (start/end/archive/delete) */}
+          {/* Controls (start/end/edit/archive/delete) */}
           <MeetingControls
             status={meeting.status}
             busy={busyAction}
             onStart={() => runAction('start', onStart)}
             onEnd={() => runAction('end', onEnd)}
+            onEdit={() => setEditOpen(true)}
             onArchive={() => runAction('archive', onArchive)}
             onUnarchive={() => runAction('unarchive', onUnarchive)}
             onRequestDelete={() => setConfirmDelete(true)}
@@ -247,6 +233,17 @@ export function MeetingDetail({
         )}
       </div>
 
+      {editOpen && (
+        <NewMeetingModal
+          open
+          agents={agents}
+          existingMeeting={meeting}
+          onClose={() => setEditOpen(false)}
+          onCreated={() => { /* not used in edit mode */ }}
+          onUpdated={() => setEditOpen(false)}
+        />
+      )}
+
       {confirmDelete && (
         <div
           onClick={() => busyAction !== 'delete' && setConfirmDelete(false)}
@@ -310,12 +307,13 @@ export function MeetingDetail({
 
 function MeetingControls({
   status, busy,
-  onStart, onEnd, onArchive, onUnarchive, onRequestDelete,
+  onStart, onEnd, onEdit, onArchive, onUnarchive, onRequestDelete,
 }: {
   status: Meeting['status'];
   busy: ControlAction | null;
   onStart: () => void;
   onEnd: () => void;
+  onEdit: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
   onRequestDelete: () => void;
@@ -332,18 +330,29 @@ function MeetingControls({
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 12 }}>
       {status === 'scheduled' && (
-        <button
-          onClick={onStart}
-          disabled={busy !== null}
-          style={{
-            ...baseBtn,
-            background: 'var(--success)', border: '1px solid var(--success)', color: '#fff', fontWeight: 600,
-            cursor: busy ? 'wait' : 'pointer',
-          }}
-        >
-          {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
-          Start now
-        </button>
+        <>
+          <button
+            onClick={onStart}
+            disabled={busy !== null}
+            style={{
+              ...baseBtn,
+              background: 'var(--success)', border: '1px solid var(--success)', color: '#fff', fontWeight: 600,
+              cursor: busy ? 'wait' : 'pointer',
+            }}
+          >
+            {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
+            Start now
+          </button>
+          <button
+            onClick={onEdit}
+            disabled={busy !== null}
+            title="Edit title, description, participants or schedule"
+            style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            <Pencil size={13} />
+            Edit
+          </button>
+        </>
       )}
       {status === 'in_progress' && (
         <button

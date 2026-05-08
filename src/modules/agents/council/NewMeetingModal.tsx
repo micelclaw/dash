@@ -20,6 +20,13 @@ interface NewMeetingModalProps {
   agents: ManagedAgent[];
   onClose: () => void;
   onCreated: (meeting: Meeting) => void;
+  // When set, the modal opens in "edit" mode: form pre-fills with this
+  // meeting's values, the submit button becomes "Save changes", and on
+  // submit it calls PATCH /meetings/:id instead of POST. Only meetings
+  // with status='scheduled' should be passed here — the backend rejects
+  // content edits on running/completed/archived meetings with 409.
+  existingMeeting?: Meeting | null;
+  onUpdated?: (meeting: Meeting) => void;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -43,23 +50,38 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
 };
 
-export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeetingModalProps) {
-  const { createMeeting } = useMeetings();
+export function NewMeetingModal({
+  open, agents, onClose, onCreated,
+  existingMeeting, onUpdated,
+}: NewMeetingModalProps) {
+  const { createMeeting, editMeeting } = useMeetings();
   const [submitting, setSubmitting] = useState(false);
+  const isEdit = !!existingMeeting;
 
-  // Form state
-  const [topic, setTopic] = useState('');
-  const [description, setDescription] = useState('');
+  // Form state — prefilled when editing, default when creating
+  const [topic, setTopic] = useState(() => existingMeeting?.title ?? '');
+  const [description, setDescription] = useState(() => existingMeeting?.description ?? '');
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(() => {
-    // Francis (first chief) always selected by default
+    if (existingMeeting) return new Set(existingMeeting.participants.map(p => p.id));
+    // Francis (first chief) always selected by default for new meetings
     const chiefs = agents.filter(a => a.is_chief);
     const francis = chiefs.find(a => a.name.toLowerCase() === 'francis');
     return new Set(francis ? [francis.id] : chiefs.length > 0 ? [chiefs[0]!.id] : []);
   });
-  const [userParticipates, setUserParticipates] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
-  const [scheduleDate, setScheduleDate] = useState('');
-  const [scheduleTime, setScheduleTime] = useState('');
+  const [userParticipates, setUserParticipates] = useState(() => existingMeeting?.user_participates ?? false);
+  const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>(() =>
+    existingMeeting?.scheduled_at ? 'later' : 'now',
+  );
+  const [scheduleDate, setScheduleDate] = useState(() => {
+    if (!existingMeeting?.scheduled_at) return '';
+    const d = new Date(existingMeeting.scheduled_at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [scheduleTime, setScheduleTime] = useState(() => {
+    if (!existingMeeting?.scheduled_at) return '';
+    const d = new Date(existingMeeting.scheduled_at);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
 
   const [cancelHover, setCancelHover] = useState(false);
   const [startHover, setStartHover] = useState(false);
@@ -92,6 +114,22 @@ export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeeting
     let scheduledAt: string | null = null;
     if (scheduleMode === 'later' && scheduleDate && scheduleTime) {
       scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+    }
+
+    if (isEdit && existingMeeting) {
+      const updated = await editMeeting(existingMeeting.id, {
+        title: topic.trim(),
+        description: description.trim() || null,
+        participants: Array.from(selectedParticipants),
+        user_participates: userParticipates,
+        scheduled_at: scheduledAt,
+      });
+      setSubmitting(false);
+      if (updated) {
+        onUpdated?.(updated);
+        onClose();
+      }
+      return;
     }
 
     const meeting = await createMeeting({
@@ -157,7 +195,7 @@ export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeeting
             fontWeight: 600,
             color: 'var(--text)',
           }}>
-            Schedule Council Meeting
+            {isEdit ? 'Edit Council Meeting' : 'Schedule Council Meeting'}
           </h2>
           <button
             onClick={onClose}
@@ -420,7 +458,11 @@ export function NewMeetingModal({ open, agents, onClose, onCreated }: NewMeeting
               opacity: canSubmit && !submitting ? 1 : 0.5,
             }}
           >
-            {submitting ? 'Starting...' : scheduleMode === 'now' ? 'Start Meeting' : 'Schedule Meeting'}
+            {submitting
+              ? (isEdit ? 'Saving...' : 'Starting...')
+              : isEdit
+                ? 'Save changes'
+                : scheduleMode === 'now' ? 'Start Meeting' : 'Schedule Meeting'}
           </button>
         </div>
       </div>
