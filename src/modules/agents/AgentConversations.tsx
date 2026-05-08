@@ -26,7 +26,8 @@ const PERIOD_OPTIONS = [
   { label: 'This month', value: 'month' },
 ] as const;
 
-function formatTokens(tokens: number): string {
+function formatTokens(tokens: number | null | undefined): string {
+  if (tokens == null) return '0';
   if (tokens >= 1_000_000) {
     return `${(tokens / 1_000_000).toFixed(1)}M`;
   }
@@ -215,8 +216,8 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
             fontSize: '0.75rem',
             color: 'var(--text-dim)',
           }}>
-            📊 {formatPeriodLabel(period)}: {stats.total_messages.toLocaleString()} messages &middot;{' '}
-            {formatTokens(stats.total_tokens)} tokens &middot; ${stats.total_cost_usd.toFixed(2)}
+            📊 {formatPeriodLabel(period)}: {(stats.total_messages ?? 0).toLocaleString()} messages &middot;{' '}
+            {formatTokens(stats.total_tokens)} tokens &middot; ${(stats.total_cost_usd ?? 0).toFixed(2)}
           </span>
         </div>
       )}

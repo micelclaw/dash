@@ -22,7 +22,11 @@ interface CouncilTabProps {
 }
 
 export function CouncilTab({ agents }: CouncilTabProps) {
-  const { meetings, loading, startMeeting, endMeeting, cancelMeeting } = useMeetings();
+  const {
+    meetings, loading,
+    runMeeting, endMeeting,
+    archiveMeeting, unarchiveMeeting, deleteMeeting,
+  } = useMeetings();
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
   const [archiveBtnHover, setArchiveBtnHover] = useState(false);
@@ -146,10 +150,12 @@ export function CouncilTab({ agents }: CouncilTabProps) {
             meeting={selectedMeeting}
             agents={agents}
             onBack={() => setSelectedMeetingId(null)}
-            onStart={() => startMeeting(selectedMeeting.id)}
+            onStart={() => runMeeting(selectedMeeting.id)}
             onEnd={() => endMeeting(selectedMeeting.id)}
-            onCancel={async () => {
-              const ok = await cancelMeeting(selectedMeeting.id);
+            onArchive={() => archiveMeeting(selectedMeeting.id)}
+            onUnarchive={() => unarchiveMeeting(selectedMeeting.id)}
+            onDelete={async () => {
+              const ok = await deleteMeeting(selectedMeeting.id);
               if (ok) setSelectedMeetingId(null);
             }}
           />

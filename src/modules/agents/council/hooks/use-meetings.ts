@@ -13,7 +13,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
 import { useNotificationStore } from '@/stores/notification.store';
-import type { Meeting } from '../../types';
+import { useWebSocket } from '@/hooks/use-websocket';
+import type { Meeting, MeetingMessage, ActionItem } from '../../types';
 
 interface CreateMeetingPayload {
   title: string;
@@ -87,15 +88,42 @@ export function useMeetings() {
     }
   }, [addNotification]);
 
-  const startMeeting = useCallback((id: string) => {
-    return updateMeeting(id, { status: 'in_progress', started_at: new Date().toISOString() } as Partial<Meeting>);
-  }, [updateMeeting]);
+  const runMeeting = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const res = await api.post<{ data: { running: boolean; id: string; started_at: string } }>(`/meetings/${id}/run`, {});
+      // Optimistic update so the UI flips to in_progress immediately
+      setMeetings(prev => prev.map(m => m.id === id
+        ? { ...m, status: 'in_progress', started_at: res.data.started_at }
+        : m));
+      addNotification({
+        type: 'system',
+        title: 'Council started',
+        body: 'Agents are debating now. Messages will appear in real time.',
+      });
+      return true;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to start council',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
+    }
+  }, [addNotification]);
 
   const endMeeting = useCallback((id: string) => {
     return updateMeeting(id, { status: 'completed', completed_at: new Date().toISOString() } as Partial<Meeting>);
   }, [updateMeeting]);
 
-  const cancelMeeting = useCallback(async (id: string): Promise<boolean> => {
+  const archiveMeeting = useCallback((id: string) => {
+    return updateMeeting(id, { status: 'archived' } as Partial<Meeting>);
+  }, [updateMeeting]);
+
+  const unarchiveMeeting = useCallback((id: string) => {
+    return updateMeeting(id, { status: 'completed' } as Partial<Meeting>);
+  }, [updateMeeting]);
+
+  const deleteMeeting = useCallback(async (id: string): Promise<boolean> => {
     try {
       await api.delete(`/meetings/${id}`);
       setMeetings(prev => prev.filter(m => m.id !== id));
@@ -103,12 +131,53 @@ export function useMeetings() {
     } catch (err) {
       addNotification({
         type: 'system',
-        title: 'Failed to cancel meeting',
+        title: 'Failed to delete meeting',
         body: err instanceof Error ? err.message : 'Unknown error',
       });
       return false;
     }
   }, [addNotification]);
 
-  return { meetings, loading, createMeeting, startMeeting, endMeeting, cancelMeeting };
+  // ── Live updates from the orchestrator ─────────────────────────────
+  // The Core meeting-orchestrator broadcasts each agent turn as it lands.
+  const messageEv = useWebSocket('meeting.message.added');
+  useEffect(() => {
+    if (!messageEv) return;
+    const data = messageEv.data as { meeting_id?: string; message?: MeetingMessage } | undefined;
+    if (!data) return;
+    const id = data.meeting_id;
+    const msg = data.message;
+    if (!id || !msg) return;
+    setMeetings(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      if (m.messages.some(x => x.id === msg.id)) return m;
+      return { ...m, messages: [...m.messages, msg] };
+    }));
+  }, [messageEv]);
+
+  const completedEv = useWebSocket('meeting.completed');
+  useEffect(() => {
+    if (!completedEv) return;
+    const data = completedEv.data as { meeting_id?: string; action_items?: ActionItem[] } | undefined;
+    if (!data) return;
+    const id = data.meeting_id;
+    const items = data.action_items ?? [];
+    if (!id) return;
+    setMeetings(prev => prev.map(m =>
+      m.id === id
+        ? { ...m, status: 'completed', completed_at: new Date().toISOString(), action_items: items }
+        : m
+    ));
+  }, [completedEv]);
+
+  return {
+    meetings,
+    loading,
+    createMeeting,
+    runMeeting,
+    endMeeting,
+    archiveMeeting,
+    unarchiveMeeting,
+    deleteMeeting,
+  };
 }

@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Play, Square, X, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Archive, ArchiveRestore, Loader2 } from 'lucide-react';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
 import type { Meeting, ManagedAgent } from '../types';
@@ -22,8 +22,12 @@ interface MeetingDetailProps {
   onBack: () => void;
   onStart?: () => Promise<unknown>;
   onEnd?: () => Promise<unknown>;
-  onCancel?: () => Promise<unknown>;
+  onArchive?: () => Promise<unknown>;
+  onUnarchive?: () => Promise<unknown>;
+  onDelete?: () => Promise<unknown>;
 }
+
+type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'delete';
 
 function formatMeetingDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -39,11 +43,15 @@ function formatMeetingDate(dateStr: string): string {
   });
 }
 
-export function MeetingDetail({ meeting, agents, onBack, onStart, onEnd, onCancel }: MeetingDetailProps) {
+export function MeetingDetail({
+  meeting, agents, onBack,
+  onStart, onEnd, onArchive, onUnarchive, onDelete,
+}: MeetingDetailProps) {
   const [backHover, setBackHover] = useState(false);
-  const [busyAction, setBusyAction] = useState<'start' | 'end' | 'cancel' | null>(null);
+  const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const runAction = async (kind: 'start' | 'end' | 'cancel', fn?: () => Promise<unknown>) => {
+  const runAction = async (kind: ControlAction, fn?: () => Promise<unknown>) => {
     if (!fn) return;
     setBusyAction(kind);
     try { await fn(); } finally { setBusyAction(null); }
@@ -147,13 +155,15 @@ export function MeetingDetail({ meeting, agents, onBack, onStart, onEnd, onCance
             {formatMeetingDate(dateStr)}
           </div>
 
-          {/* Controls (start/end/cancel) */}
+          {/* Controls (start/end/archive/delete) */}
           <MeetingControls
             status={meeting.status}
             busy={busyAction}
             onStart={() => runAction('start', onStart)}
             onEnd={() => runAction('end', onEnd)}
-            onCancel={() => runAction('cancel', onCancel)}
+            onArchive={() => runAction('archive', onArchive)}
+            onUnarchive={() => runAction('unarchive', onUnarchive)}
+            onRequestDelete={() => setConfirmDelete(true)}
           />
 
           {/* Participant chips */}
@@ -236,25 +246,80 @@ export function MeetingDetail({ meeting, agents, onBack, onStart, onEnd, onCance
           <ActionItems items={meeting.action_items} />
         )}
       </div>
+
+      {confirmDelete && (
+        <div
+          onClick={() => busyAction !== 'delete' && setConfirmDelete(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: 24,
+              maxWidth: 420, width: '90vw', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
+              {meeting.status === 'scheduled' ? `Cancel "${meeting.title}"?` : `Delete "${meeting.title}"?`}
+            </h3>
+            <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              The meeting will be soft-deleted. Action items and message history are preserved in the database but hidden from the UI.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                disabled={busyAction === 'delete'}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: busyAction === 'delete' ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+                }}
+              >
+                Keep
+              </button>
+              <button
+                onClick={async () => {
+                  setConfirmDelete(false);
+                  await runAction('delete', onDelete);
+                }}
+                disabled={busyAction === 'delete'}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: busyAction === 'delete' ? 'not-allowed' : 'pointer',
+                  border: 'none', background: 'var(--error)', color: '#fff', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {busyAction === 'delete' && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                {meeting.status === 'scheduled' ? 'Cancel meeting' : 'Delete meeting'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function MeetingControls({
-  status,
-  busy,
-  onStart,
-  onEnd,
-  onCancel,
+  status, busy,
+  onStart, onEnd, onArchive, onUnarchive, onRequestDelete,
 }: {
   status: Meeting['status'];
-  busy: 'start' | 'end' | 'cancel' | null;
+  busy: ControlAction | null;
   onStart: () => void;
   onEnd: () => void;
-  onCancel: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  onRequestDelete: () => void;
 }) {
-  if (status === 'completed') return null;
-
   const baseBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     fontSize: '0.8125rem', fontWeight: 500,
@@ -267,32 +332,18 @@ function MeetingControls({
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, marginBottom: 12 }}>
       {status === 'scheduled' && (
-        <>
-          <button
-            onClick={onStart}
-            disabled={busy !== null}
-            style={{
-              ...baseBtn,
-              background: 'var(--success)', border: '1px solid var(--success)', color: '#fff', fontWeight: 600,
-              cursor: busy ? 'wait' : 'pointer',
-            }}
-          >
-            {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
-            Start now
-          </button>
-          <button
-            onClick={onCancel}
-            disabled={busy !== null}
-            style={{
-              ...baseBtn,
-              border: '1px solid var(--error)', color: 'var(--error)',
-              cursor: busy ? 'wait' : 'pointer',
-            }}
-          >
-            {busy === 'cancel' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <X size={13} />}
-            Cancel meeting
-          </button>
-        </>
+        <button
+          onClick={onStart}
+          disabled={busy !== null}
+          style={{
+            ...baseBtn,
+            background: 'var(--success)', border: '1px solid var(--success)', color: '#fff', fontWeight: 600,
+            cursor: busy ? 'wait' : 'pointer',
+          }}
+        >
+          {busy === 'start' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} fill="currentColor" />}
+          Start now
+        </button>
       )}
       {status === 'in_progress' && (
         <button
@@ -308,6 +359,41 @@ function MeetingControls({
           End meeting
         </button>
       )}
+      {status === 'completed' && (
+        <button
+          onClick={onArchive}
+          disabled={busy !== null}
+          title="Move this meeting to the archived list"
+          style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+        >
+          {busy === 'archive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Archive size={13} />}
+          Archive
+        </button>
+      )}
+      {status === 'archived' && (
+        <button
+          onClick={onUnarchive}
+          disabled={busy !== null}
+          title="Restore this meeting to the active list"
+          style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+        >
+          {busy === 'unarchive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <ArchiveRestore size={13} />}
+          Unarchive
+        </button>
+      )}
+      {/* Delete is always available — varies the label only for scheduled */}
+      <button
+        onClick={onRequestDelete}
+        disabled={busy !== null}
+        style={{
+          ...baseBtn,
+          border: '1px solid var(--error)', color: 'var(--error)',
+          cursor: busy ? 'wait' : 'pointer',
+        }}
+      >
+        {busy === 'delete' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />}
+        {status === 'scheduled' ? 'Cancel meeting' : 'Delete'}
+      </button>
     </div>
   );
 }

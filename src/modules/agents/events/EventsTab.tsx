@@ -132,7 +132,7 @@ export function EventsTab({ agents }: EventsTabProps) {
 
   useEffect(() => {
     if (!liveEvent) return;
-    const ev = liveEvent.payload as AgentEventWsPayload | undefined;
+    const ev = liveEvent.data as AgentEventWsPayload | undefined;
     if (!ev || !ev.id) return;
     if (typeFilter !== 'all' && !ev.type.startsWith(typeFilter)) return;
     const sourceAgent = agentByNameLookup.get(ev.source);

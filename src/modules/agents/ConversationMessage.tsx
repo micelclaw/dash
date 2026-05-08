@@ -38,9 +38,11 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
     minute: '2-digit',
   });
 
-  const tokensFormatted = message.tokens_used.toLocaleString();
-  const costFormatted = `$${message.cost_usd.toFixed(3)}`;
-  const toolCount = message.tool_calls.length;
+  const tokensFormatted = message.tokens_used != null ? message.tokens_used.toLocaleString() : '—';
+  // cost_usd is a decimal column — Drizzle returns it as a string. Coerce defensively.
+  const costNum = message.cost_usd != null ? Number(message.cost_usd) : null;
+  const costFormatted = costNum != null && !Number.isNaN(costNum) ? `$${costNum.toFixed(3)}` : '—';
+  const toolCount = message.tool_calls?.length ?? 0;
 
   return (
     <div

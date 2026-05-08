@@ -37,6 +37,7 @@ function statusLabel(status: Meeting['status']): string {
     case 'scheduled': return 'Scheduled';
     case 'in_progress': return 'In Progress';
     case 'completed': return 'Completed';
+    case 'archived': return 'Archived';
   }
 }
 
@@ -45,6 +46,7 @@ function statusColor(status: Meeting['status']): string {
     case 'scheduled': return 'var(--text-dim)';
     case 'in_progress': return 'var(--amber)';
     case 'completed': return 'var(--success)';
+    case 'archived': return 'var(--text-muted)';
   }
 }
 
@@ -53,11 +55,16 @@ function statusBg(status: Meeting['status']): string {
     case 'scheduled': return 'var(--surface)';
     case 'in_progress': return 'var(--amber-dim)';
     case 'completed': return 'transparent';
+    case 'archived': return 'var(--surface)';
   }
 }
 
 export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const archivedCount = meetings.filter(m => m.status === 'archived').length;
+  const visible = showArchived ? meetings : meetings.filter(m => m.status !== 'archived');
 
   if (meetings.length === 0) {
     return (
@@ -81,7 +88,7 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
   }
 
   // Sort meetings: most recent first by created_at
-  const sorted = [...meetings].sort(
+  const sorted = [...visible].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
 
@@ -91,6 +98,35 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
       height: '100%',
       padding: '16px 20px',
     }}>
+      {/* Toggle archived */}
+      {archivedCount > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <button
+            onClick={() => setShowArchived(s => !s)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: showArchived ? 'var(--surface-hover)' : 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-dim)',
+              fontSize: '0.75rem', fontWeight: 500, padding: '4px 10px',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+              transition: 'var(--transition-fast)',
+            }}
+          >
+            {showArchived ? 'Hide' : 'Show'} archived ({archivedCount})
+          </button>
+        </div>
+      )}
+
+      {sorted.length === 0 ? (
+        <div style={{
+          padding: 32, textAlign: 'center',
+          color: 'var(--text-muted)', fontSize: '0.8125rem',
+        }}>
+          All visible meetings are archived. Click &ldquo;Show archived&rdquo; to view them.
+        </div>
+      ) : (
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -154,6 +190,7 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     marginLeft: 12,
+                    border: meeting.status === 'archived' ? '1px solid var(--border)' : 'none',
                   }}>
                     {statusLabel(meeting.status)}
                   </span>
@@ -214,6 +251,7 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

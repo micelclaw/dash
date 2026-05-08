@@ -53,9 +53,10 @@ export interface AgentConversation {
   to_agent: string;
   message: string;
   tool_calls: { tool: string; params: Record<string, unknown>; result?: string }[];
-  tokens_used: number;
-  model_used: string;
-  cost_usd: number;
+  tokens_used: number | null;
+  model_used: string | null;
+  cost_usd: number | string | null; // Drizzle returns decimal columns as strings
+
   created_at: string;
 }
 
@@ -95,7 +96,7 @@ export interface Meeting {
   description: string | null;
   participants: string[];
   user_participates: boolean;
-  status: 'scheduled' | 'in_progress' | 'completed';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'archived';
   scheduled_at: string | null;
   started_at: string | null;
   completed_at: string | null;
