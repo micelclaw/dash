@@ -53,6 +53,42 @@ export function useMeetings() {
     return () => { cancelled = true; };
   }, [addNotification]);
 
+  // ── Recovery polling ───────────────────────────────────────────────
+  // WS broadcasts can drop momentarily during a long orchestration
+  // (~10s reconnect window in the WS client) and miss a meeting.message
+  // event, leaving the dash a turn behind the DB. While ANY meeting is
+  // in_progress, refetch the list every 5s so the missed messages
+  // catch up. Polling stops once no meeting is running.
+  const hasRunning = meetings.some(m => m.status === 'in_progress');
+  useEffect(() => {
+    if (!hasRunning) return;
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get<{ data: Meeting[] }>('/meetings');
+        if (cancelled) return;
+        setMeetings(prev => {
+          // Merge fresh messages into local state without losing pending
+          // optimistic updates. For each meeting we keep the longer of
+          // the two message arrays — covers both cases (local has more
+          // because of WS, server has more because of dropped WS).
+          const byId = new Map(prev.map(m => [m.id, m]));
+          for (const fresh of res.data) {
+            const local = byId.get(fresh.id);
+            if (!local) { byId.set(fresh.id, fresh); continue; }
+            const merged: Meeting = {
+              ...fresh,
+              messages: fresh.messages.length >= local.messages.length ? fresh.messages : local.messages,
+            };
+            byId.set(fresh.id, merged);
+          }
+          return Array.from(byId.values());
+        });
+      } catch { /* swallow — next tick will retry */ }
+    }, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [hasRunning]);
+
   const createMeeting = useCallback(async (payload: CreateMeetingPayload): Promise<Meeting | null> => {
     try {
       const res = await api.post<{ data: Meeting }>('/meetings', payload);
