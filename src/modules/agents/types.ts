@@ -79,6 +79,12 @@ export interface MeetingMessage {
   agent_color: string;
   content: string;
   created_at: string;
+  /**
+   * True while the orchestrator is still streaming tokens for this turn.
+   * Set by `meeting.message.start`, cleared by `meeting.message.added`.
+   * The dash uses this to render a blinking cursor.
+   */
+  streaming?: boolean;
 }
 
 export interface ActionItem {

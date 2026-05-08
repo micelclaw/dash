@@ -82,7 +82,27 @@ export function MeetingMessage({ message }: MeetingMessageProps) {
         wordBreak: 'break-word',
       }}>
         {message.content}
+        {message.streaming && (
+          <span
+            style={{
+              display: 'inline-block',
+              width: 8,
+              height: '1em',
+              marginLeft: 2,
+              verticalAlign: 'text-bottom',
+              background: message.agent_color,
+              animation: 'meeting-cursor-blink 1s steps(2, start) infinite',
+            }}
+            aria-hidden
+          />
+        )}
       </div>
+      {/* Inject the keyframes once — cheap; CSS dedupes via @keyframes name */}
+      <style>{`
+        @keyframes meeting-cursor-blink {
+          to { visibility: hidden; }
+        }
+      `}</style>
     </div>
   );
 }

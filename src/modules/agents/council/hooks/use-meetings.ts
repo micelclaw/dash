@@ -201,19 +201,63 @@ export function useMeetings() {
   }, [addNotification]);
 
   // ── Live updates from the orchestrator ─────────────────────────────
-  // The Core meeting-orchestrator broadcasts each agent turn as it lands.
-  const messageEv = useWebSocket('meeting.message.added');
+  // The orchestrator emits three events per turn:
+  //   meeting.message.start  → append placeholder with streaming: true
+  //   meeting.message.delta  → update content as tokens stream in
+  //   meeting.message.added  → replace placeholder with persisted message
+  //                            (idempotent — same id, streaming: false)
+
+  const startEv = useWebSocket('meeting.message.start');
   useEffect(() => {
-    if (!messageEv) return;
-    const data = messageEv.data as { meeting_id?: string; message?: MeetingMessage } | undefined;
-    if (!data) return;
+    if (!startEv) return;
+    const data = startEv.data as { meeting_id?: string; message?: MeetingMessage } | undefined;
+    if (!data?.meeting_id || !data.message) return;
     const id = data.meeting_id;
-    const msg = data.message;
-    if (!id || !msg) return;
+    const msg: MeetingMessage = { ...data.message, streaming: true };
     setMeetings(prev => prev.map(m => {
       if (m.id !== id) return m;
       if (m.messages.some(x => x.id === msg.id)) return m;
       return { ...m, messages: [...m.messages, msg] };
+    }));
+  }, [startEv]);
+
+  const deltaEv = useWebSocket('meeting.message.delta');
+  useEffect(() => {
+    if (!deltaEv) return;
+    const data = deltaEv.data as { meeting_id?: string; message_id?: string; content?: string } | undefined;
+    if (!data?.meeting_id || !data.message_id || data.content === undefined) return;
+    const meetingId = data.meeting_id;
+    const messageId = data.message_id;
+    const content = data.content;
+    setMeetings(prev => prev.map(m => {
+      if (m.id !== meetingId) return m;
+      let found = false;
+      const messages = m.messages.map(x => {
+        if (x.id !== messageId) return x;
+        found = true;
+        return { ...x, content };
+      });
+      return found ? { ...m, messages } : m;
+    }));
+  }, [deltaEv]);
+
+  const messageEv = useWebSocket('meeting.message.added');
+  useEffect(() => {
+    if (!messageEv) return;
+    const data = messageEv.data as { meeting_id?: string; message?: MeetingMessage } | undefined;
+    if (!data?.meeting_id || !data.message) return;
+    const id = data.meeting_id;
+    const finalMsg: MeetingMessage = { ...data.message, streaming: false };
+    setMeetings(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      // Replace placeholder with the final persisted message (same id)
+      let found = false;
+      const messages = m.messages.map(x => {
+        if (x.id !== finalMsg.id) return x;
+        found = true;
+        return finalMsg;
+      });
+      return found ? { ...m, messages } : { ...m, messages: [...m.messages, finalMsg] };
     }));
   }, [messageEv]);
 
