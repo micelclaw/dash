@@ -79,10 +79,14 @@ export interface StepTypeDefinition {
   category: string;
   icon: string;
   description: string;
-  outputType: string;
-  inputType?: string;
-  sideEffect: string;
-  requiresService?: string;
+  // Project rule: API responses are snake_case end-to-end (transformed
+  // by core/src/plugins/case-transform.ts). These fields used to be
+  // typed as camelCase + a defensive `as any` fallback in components,
+  // which masked the contract violation. Aligned here.
+  output_type: string;
+  input_type?: string;
+  side_effect: string;
+  requires_service?: string;
   params: Array<{
     id: string;
     label: string;
@@ -125,7 +129,7 @@ interface FlowsState {
   updateFlow: (id: string, data: Record<string, unknown>) => Promise<void>;
   deleteFlow: (id: string) => Promise<void>;
   toggleFlow: (id: string) => Promise<void>;
-  runFlow: (id: string, params?: Record<string, unknown>) => Promise<{ runId: string }>;
+  runFlow: (id: string, params?: Record<string, unknown>) => Promise<{ run_id: string }>;
   approveRun: (flowId: string, runId: string) => Promise<void>;
   rejectRun: (flowId: string, runId: string, reason?: string) => Promise<void>;
   undoFlow: (id: string) => Promise<void>;
@@ -199,7 +203,7 @@ export const useFlowsStore = create<FlowsState>()((set, get) => ({
   },
 
   runFlow: async (id, params) => {
-    const res = await api.post<ApiItem<{ runId: string }>>(`/flows/${id}/run`, params ? { params } : undefined);
+    const res = await api.post<ApiItem<{ run_id: string }>>(`/flows/${id}/run`, params ? { params } : undefined);
     return res.data;
   },
 

@@ -28,10 +28,15 @@ export function RunHistory({ flowId }: RunHistoryProps) {
 
   useEffect(() => {
     setLoading(true);
-    const path = flowId ? `/flows/${flowId}/runs?limit=30` : '/flows/pending';
+    // No flowId → global history across all the user's flows.
+    // (Earlier this fell back to /flows/pending which returns only
+    // waiting_approval runs — that hid the real history from users.)
+    const path = flowId ? `/flows/${flowId}/runs?limit=30` : '/flows/runs?limit=100';
     api.get<{ data: FlowRun[] }>(path)
-      .then((res) => setRuns(res.data))
-      .catch(() => {})
+      .then((res) => setRuns(res.data ?? []))
+      .catch((err) => {
+        console.error('Failed to load run history', err);
+      })
       .finally(() => setLoading(false));
   }, [flowId]);
 

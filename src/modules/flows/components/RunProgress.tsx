@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { CheckCircle2, XCircle, Clock, Loader2, Circle } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Loader2, Circle, Play, Ban } from 'lucide-react';
 import type { FlowRun } from '@/stores/flows.store';
 
 const STEP_ICONS: Record<string, { icon: typeof CheckCircle2; color: string }> = {
@@ -33,10 +33,16 @@ export function RunProgress({ run, flowSteps, onApprove, onReject }: RunProgress
       background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8,
       padding: 16, display: 'flex', flexDirection: 'column', gap: 2,
     }}>
-      {/* Header */}
+      {/* Header — Lucide icons (was emoji literals, inconsistent with
+          the rest of the module which uses Lucide everywhere). */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-          {run.status === 'running' ? '▶ Running...' : run.status === 'waiting_approval' ? '⏳ Waiting for approval' : run.status === 'completed' ? '✅ Completed' : run.status === 'failed' ? '❌ Failed' : 'Cancelled'}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+          {run.status === 'running' && <><Play size={12} style={{ color: 'var(--info)' }} /> Running…</>}
+          {run.status === 'waiting_approval' && <><Clock size={12} style={{ color: 'var(--amber)' }} /> Waiting for approval</>}
+          {run.status === 'completed' && <><CheckCircle2 size={12} style={{ color: 'var(--success)' }} /> Completed</>}
+          {run.status === 'failed' && <><XCircle size={12} style={{ color: 'var(--error)' }} /> Failed</>}
+          {run.status === 'cancelled' && <><Ban size={12} style={{ color: 'var(--text-muted)' }} /> Cancelled</>}
+          {run.status === 'queued' && <><Clock size={12} style={{ color: 'var(--text-muted)' }} /> Queued</>}
         </span>
         {run.duration_ms != null && (
           <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>

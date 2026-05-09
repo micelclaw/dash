@@ -35,11 +35,11 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
     setTesting(true);
     setResults(null);
     try {
-      const res = await api.post<{ data: { steps: TestResult[]; totalDurationMs: number; totalTokens: number; costEstimate: number } }>(`/flows/${flowId}/test`);
+      const res = await api.post<{ data: { steps: TestResult[]; total_duration_ms: number; total_tokens: number; cost_estimate: number } }>(`/flows/${flowId}/test`);
       setResults(res.data.steps ?? []);
-      setTotalDuration(res.data.totalDurationMs ?? 0);
-      setTotalTokens(res.data.totalTokens ?? 0);
-      setTotalCost(res.data.costEstimate ?? 0);
+      setTotalDuration(res.data.total_duration_ms ?? 0);
+      setTotalTokens(res.data.total_tokens ?? 0);
+      setTotalCost(res.data.cost_estimate ?? 0);
     } catch (err) {
       toast.error(`Test failed: ${(err as Error).message}`);
     } finally {

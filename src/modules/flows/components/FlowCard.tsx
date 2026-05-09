@@ -4,9 +4,10 @@
  */
 
 import { useNavigate } from 'react-router';
-import { Workflow, Play, MoreVertical } from 'lucide-react';
+import { Workflow, Play } from 'lucide-react';
 import { useFlowsStore, type Flow } from '@/stores/flows.store';
 import { toast } from 'sonner';
+import { FlowMenu } from './FlowMenu';
 
 // ─── Sparkline ─────────────────────────────────────────────
 
@@ -72,13 +73,16 @@ export function FlowCardGrid({ flow, recentRuns }: { flow: Flow; recentRuns: Arr
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Workflow size={24} style={{ color: flow.color }} />
-        <button
-          onClick={(e) => { e.stopPropagation(); runFlow(flow.id).then(() => toast.success('Flow started')).catch((err) => toast.error(err.message)); }}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
-          title="Run now"
-        >
-          <Play size={14} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); runFlow(flow.id).then(() => toast.success('Flow started')).catch((err) => toast.error(err.message)); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
+            title="Run now"
+          >
+            <Play size={14} />
+          </button>
+          <FlowMenu flow={flow} />
+        </div>
       </div>
       <div>
         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', lineHeight: 1.3 }}>{flow.name}</div>
@@ -137,6 +141,7 @@ export function FlowCardList({ flow, recentRuns }: { flow: Flow; recentRuns: Arr
       >
         {flow.enabled ? 'On' : 'Off'}
       </button>
+      <FlowMenu flow={flow} />
     </div>
   );
 }
@@ -177,6 +182,7 @@ export function FlowCardBanner({ flow, recentRuns }: { flow: Flow; recentRuns: A
       >
         {flow.enabled ? 'On' : 'Off'}
       </button>
+      <FlowMenu flow={flow} />
     </div>
   );
 }

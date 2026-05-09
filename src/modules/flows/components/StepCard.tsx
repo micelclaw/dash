@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   X, GripVertical, ChevronDown, ChevronUp, ArrowUp, ArrowDown,
   Mail, StickyNote, Calendar, Users, Brain, Bell, Home, ShieldCheck,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { FlowStep } from '@/stores/flows.store';
 import { useFlowsStore } from '@/stores/flows.store';
+import { loadSourceOptions, type Option } from '../lib/source-options';
 
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; style?: React.CSSProperties }>> = {
   Mail, StickyNote, Calendar, Users, Brain, Bell, Home, ShieldCheck,
@@ -31,13 +32,27 @@ interface StepCardProps {
   step: FlowStep;
   index: number;
   totalSteps: number;
+  /** Steps preceding this one — used to label the inputRef + condition
+   * dropdowns with the real step id and label, not "Step N". */
+  previousSteps: FlowStep[];
+  /** Optional drag handle attributes (from @dnd-kit's useSortable). When
+   * provided the GripVertical icon becomes a real drag handle. */
+  dragHandleProps?: {
+    attributes: Record<string, unknown>;
+    listeners: Record<string, unknown>;
+  };
+  /** When the card itself is being dragged we lower the Z + outline. */
+  isDragging?: boolean;
   onUpdate: (updates: Partial<FlowStep>) => void;
   onRemove: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
 }
 
-export function StepCard({ step, index, totalSteps, onUpdate, onRemove, onMoveUp, onMoveDown }: StepCardProps) {
+export function StepCard({
+  step, index, totalSteps, previousSteps, dragHandleProps, isDragging,
+  onUpdate, onRemove, onMoveUp, onMoveDown,
+}: StepCardProps) {
   const [expanded, setExpanded] = useState(false);
   const stepTypes = useFlowsStore((s) => s.stepTypes);
   const stepDef = stepTypes.find((t) => t.id === step.type);
@@ -50,8 +65,10 @@ export function StepCard({ step, index, totalSteps, onUpdate, onRemove, onMoveUp
     <div
       style={{
         width: '100%', maxWidth: 520,
-        background: 'var(--surface)', border: '1px solid var(--border)',
+        background: 'var(--surface)', border: `1px solid ${isDragging ? 'var(--mod-flows)' : 'var(--border)'}`,
         borderLeft: `3px solid ${borderColor}`, borderRadius: 8, overflow: 'hidden',
+        boxShadow: isDragging ? '0 8px 16px rgba(0,0,0,0.25)' : undefined,
+        opacity: isDragging ? 0.95 : 1,
       }}
     >
       {/* Header (always visible) */}
@@ -62,7 +79,21 @@ export function StepCard({ step, index, totalSteps, onUpdate, onRemove, onMoveUp
           cursor: 'pointer',
         }}
       >
-        <GripVertical size={12} style={{ color: 'var(--text-muted)', cursor: 'grab', flexShrink: 0 }} />
+        <span
+          {...(dragHandleProps?.attributes ?? {})}
+          {...(dragHandleProps?.listeners ?? {})}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: 'var(--text-muted)',
+            cursor: dragHandleProps ? 'grab' : 'default',
+            flexShrink: 0, padding: 2,
+            touchAction: 'none',
+          }}
+          title={dragHandleProps ? 'Drag to reorder' : undefined}
+        >
+          <GripVertical size={12} />
+        </span>
         <IconComponent size={16} style={{ color: borderColor, flexShrink: 0 }} />
         <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {step.label || stepDef?.label || step.type}
@@ -94,75 +125,75 @@ export function StepCard({ step, index, totalSteps, onUpdate, onRemove, onMoveUp
       {/* Expanded config */}
       {expanded && stepDef && (
         <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8, borderTop: '1px solid var(--border)' }}>
-          <div style={{ height: 8 }} />
+          {/* Step description */}
+          {stepDef.description && (
+            <p style={{ margin: '8px 0 4px', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              {stepDef.description}
+            </p>
+          )}
+
+          {/* Step label inline-edit (defaults to step type label) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <label style={fieldLabelStyle}>Step name</label>
+            <input
+              value={step.label}
+              onChange={(e) => onUpdate({ label: e.target.value })}
+              placeholder={stepDef.label}
+              style={inputStyle}
+            />
+          </div>
+
           {stepDef.params.map((param) => (
-            <div key={param.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500 }}>
-                {param.label} {param.required && <span style={{ color: 'var(--error)' }}>*</span>}
-              </label>
-              {param.type === 'select' ? (
-                <select
-                  value={(step.config[param.id] as string) ?? param.default ?? ''}
-                  onChange={(e) => onUpdate({ config: { ...step.config, [param.id]: e.target.value } })}
-                  style={selectStyle}
-                >
-                  {param.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              ) : param.type === 'number' ? (
-                <input
-                  type="number"
-                  value={(step.config[param.id] as number) ?? param.default ?? ''}
-                  onChange={(e) => onUpdate({ config: { ...step.config, [param.id]: Number(e.target.value) } })}
-                  style={inputStyle}
-                />
-              ) : param.type === 'toggle' ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)' }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(step.config[param.id] ?? param.default)}
-                    onChange={(e) => onUpdate({ config: { ...step.config, [param.id]: e.target.checked } })}
-                  />
-                  {param.label}
-                </label>
-              ) : param.type === 'tag_input' ? (
-                <input
-                  value={Array.isArray(step.config[param.id]) ? (step.config[param.id] as string[]).join(', ') : (step.config[param.id] as string) ?? ''}
-                  onChange={(e) => onUpdate({ config: { ...step.config, [param.id]: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) } })}
-                  placeholder="Tag 1, Tag 2, ..."
-                  style={inputStyle}
-                />
-              ) : (
-                <input
-                  value={(step.config[param.id] as string) ?? ''}
-                  onChange={(e) => onUpdate({ config: { ...step.config, [param.id]: e.target.value } })}
-                  placeholder={param.placeholder}
-                  style={inputStyle}
-                />
-              )}
-            </div>
+            <ParamField
+              key={param.id}
+              param={param}
+              value={step.config[param.id]}
+              onChange={(val) => onUpdate({ config: { ...step.config, [param.id]: val } })}
+            />
           ))}
 
-          {/* Input ref selector */}
-          {((stepDef as any).input_type ?? stepDef.inputType) && index > 0 && (
+          {/* Input ref selector — shows the real step id + label so the
+              user knows what each option means. */}
+          {stepDef.input_type && previousSteps.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <label style={{ fontSize: 11, color: 'var(--text-dim)', fontWeight: 500 }}>Data from previous step</label>
+              <label style={fieldLabelStyle}>Data from previous step</label>
               <select
                 value={step.inputRef ?? ''}
                 onChange={(e) => onUpdate({ inputRef: e.target.value || undefined })}
                 style={selectStyle}
               >
                 <option value="">None</option>
-                {Array.from({ length: index }, (_, i) => (
-                  <option key={i} value={`$s${i + 1}`}>Step {i + 1}</option>
+                {previousSteps.map((s, i) => (
+                  <option key={s.id} value={`$${s.id}`}>
+                    {i + 1}. {s.label || s.type} — {s.id}
+                  </option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Conditional execution — runs only if the expression is truthy */}
+          {previousSteps.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <label style={fieldLabelStyle}>
+                Run only if <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span>
+              </label>
+              <input
+                value={step.condition ?? ''}
+                onChange={(e) => onUpdate({ condition: e.target.value || undefined })}
+                placeholder="$s2.approved"
+                style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+              />
+              <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                Reference an earlier step's output, e.g. <code>$s2.approved</code> or <code>$s1.count {'>'} 0</code>.
+              </p>
             </div>
           )}
 
           {/* Output indicator */}
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             Output: <span style={{ background: `${borderColor}20`, color: borderColor, padding: '1px 6px', borderRadius: 3, fontWeight: 500 }}>
-              {(stepDef as any).output_type ?? stepDef.outputType}
+              {stepDef.output_type}
             </span>
           </div>
         </div>
@@ -171,9 +202,111 @@ export function StepCard({ step, index, totalSteps, onUpdate, onRemove, onMoveUp
   );
 }
 
+// ─── ParamField ────────────────────────────────────────────────────
+// Renders a single param input. For params with `source` (e.g.
+// 'agents', 'calendars'), fetches live options from the backend so
+// the dropdown is populated with the user's actual records.
+
+interface ParamDef {
+  id: string;
+  label: string;
+  type: string;
+  options?: Array<{ value: string; label: string }>;
+  source?: string;
+  default?: unknown;
+  required?: boolean;
+  placeholder?: string;
+}
+
+function ParamField({ param, value, onChange }: {
+  param: ParamDef;
+  value: unknown;
+  onChange: (val: unknown) => void;
+}) {
+  const [dynamicOptions, setDynamicOptions] = useState<Option[] | null>(null);
+
+  useEffect(() => {
+    if (!param.source) return;
+    let cancelled = false;
+    loadSourceOptions(param.source).then((opts) => {
+      if (!cancelled) setDynamicOptions(opts);
+    });
+    return () => { cancelled = true; };
+  }, [param.source]);
+
+  if (param.type === 'toggle') {
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)' }}>
+        <input
+          type="checkbox"
+          checked={Boolean(value ?? param.default)}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        {param.label}
+      </label>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <label style={fieldLabelStyle}>
+        {param.label} {param.required && <span style={{ color: 'var(--error)' }}>*</span>}
+      </label>
+      {param.source && dynamicOptions !== null && dynamicOptions.length > 0 ? (
+        <select
+          value={(value as string) ?? (param.default as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          style={selectStyle}
+        >
+          <option value="">— pick one —</option>
+          {dynamicOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : param.type === 'select' ? (
+        <select
+          value={(value as string) ?? (param.default as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          style={selectStyle}
+        >
+          {param.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : param.type === 'number' ? (
+        <input
+          type="number"
+          value={(value as number) ?? (param.default as number) ?? ''}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={inputStyle}
+        />
+      ) : param.type === 'tag_input' ? (
+        <input
+          value={Array.isArray(value) ? (value as string[]).join(', ') : (value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value.split(',').map((s) => s.trim()).filter(Boolean))}
+          placeholder="Tag 1, Tag 2, ..."
+          style={inputStyle}
+        />
+      ) : (
+        <input
+          value={(value as string) ?? ''}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={param.placeholder ?? (param.source ? 'Type or paste id…' : '')}
+          style={inputStyle}
+        />
+      )}
+      {param.source && dynamicOptions !== null && dynamicOptions.length === 0 && (
+        <p style={{ margin: '2px 0 0', fontSize: 10, color: 'var(--text-muted)' }}>
+          No <code>{param.source}</code> available — type the id manually.
+        </p>
+      )}
+    </div>
+  );
+}
+
 const tinyBtnStyle: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer',
   color: 'var(--text-muted)', padding: 2, display: 'flex',
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  fontSize: 11, color: 'var(--text-dim)', fontWeight: 500,
 };
 
 const inputStyle: React.CSSProperties = {

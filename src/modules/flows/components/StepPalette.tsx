@@ -132,10 +132,10 @@ export function StepPalette({ onSelect, onClose }: StepPaletteProps) {
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{st.label}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{st.description}</div>
                     </div>
-                    {((st as any).side_effect ?? st.sideEffect) === 'write' && (
+                    {st.side_effect === 'write' && (
                       <span style={{ fontSize: 9, color: 'var(--warning)', background: 'rgba(249,115,22,0.1)', padding: '1px 4px', borderRadius: 3 }}>write</span>
                     )}
-                    {((st as any).side_effect ?? st.sideEffect) === 'ai' && (
+                    {st.side_effect === 'ai' && (
                       <span style={{ fontSize: 9, color: '#ec4899', background: 'rgba(236,72,153,0.1)', padding: '1px 4px', borderRadius: 3 }}>AI</span>
                     )}
                   </button>

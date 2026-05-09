@@ -14,7 +14,7 @@ interface BuiltInTemplate {
   icon: string;
   color: string;
   category: string;
-  requiresService?: string[];
+  requires_service?: string[];
   wizard: { steps: unknown[] };
 }
 
@@ -98,9 +98,9 @@ export function TemplateGallery({ onSelect }: TemplateGalleryProps) {
                     <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{t.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.4 }}>{t.description}</div>
                   </div>
-                  {((t as any).requires_service ?? t.requiresService)?.length ? (
+                  {t.requires_service?.length ? (
                     <div style={{ fontSize: 9, color: 'var(--text-muted)' }}>
-                      Requires: {((t as any).requires_service ?? t.requiresService).join(', ')}
+                      Requires: {t.requires_service.join(', ')}
                     </div>
                   ) : null}
                   <button
