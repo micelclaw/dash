@@ -179,6 +179,26 @@ export function useMeetings() {
     }
   }, [addNotification]);
 
+  /**
+   * Wipe generated content (messages + action items) and return the
+   * meeting to scheduled. The user can then edit advanced options and
+   * re-run.
+   */
+  const resetMeeting = useCallback(async (id: string): Promise<Meeting | null> => {
+    try {
+      const res = await api.post<{ data: Meeting }>(`/meetings/${id}/reset`, {});
+      setMeetings(prev => prev.map(m => (m.id === id ? res.data : m)));
+      return res.data;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to reset meeting',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }, [addNotification]);
+
   const archiveMeeting = useCallback((id: string) => {
     return updateMeeting(id, { status: 'archived' } as Partial<Meeting>);
   }, [updateMeeting]);
@@ -287,6 +307,7 @@ export function useMeetings() {
     endMeeting,
     archiveMeeting,
     unarchiveMeeting,
+    resetMeeting,
     deleteMeeting,
   };
 }

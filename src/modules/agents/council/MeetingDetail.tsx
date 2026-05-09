@@ -11,7 +11,7 @@
  */
 
 import { useState } from 'react';
-import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2 } from 'lucide-react';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
 import { NewMeetingModal } from './NewMeetingModal';
@@ -25,10 +25,11 @@ interface MeetingDetailProps {
   onEnd?: () => Promise<unknown>;
   onArchive?: () => Promise<unknown>;
   onUnarchive?: () => Promise<unknown>;
+  onReset?: () => Promise<Meeting | null>;
   onDelete?: () => Promise<unknown>;
 }
 
-type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'delete';
+type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'reset' | 'delete';
 
 function formatMeetingDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -46,17 +47,30 @@ function formatMeetingDate(dateStr: string): string {
 
 export function MeetingDetail({
   meeting, agents, onBack,
-  onStart, onEnd, onArchive, onUnarchive, onDelete,
+  onStart, onEnd, onArchive, onUnarchive, onReset, onDelete,
 }: MeetingDetailProps) {
   const [backHover, setBackHover] = useState(false);
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const runAction = async (kind: ControlAction, fn?: () => Promise<unknown>) => {
     if (!fn) return;
     setBusyAction(kind);
     try { await fn(); } finally { setBusyAction(null); }
+  };
+
+  const handleReset = async () => {
+    if (!onReset) return;
+    setConfirmReset(false);
+    setBusyAction('reset');
+    try {
+      const updated = await onReset();
+      // If the reset succeeded, the meeting is now scheduled. Open the
+      // edit modal so the user can tweak advanced options before re-running.
+      if (updated) setEditOpen(true);
+    } finally { setBusyAction(null); }
   };
 
   const dateStr = meeting.started_at ?? meeting.scheduled_at ?? meeting.created_at;
@@ -140,7 +154,7 @@ export function MeetingDetail({
             {formatMeetingDate(dateStr)}
           </div>
 
-          {/* Controls (start/end/edit/archive/delete) */}
+          {/* Controls (start/end/edit/archive/reset/delete) */}
           <MeetingControls
             status={meeting.status}
             busy={busyAction}
@@ -149,6 +163,7 @@ export function MeetingDetail({
             onEdit={() => setEditOpen(true)}
             onArchive={() => runAction('archive', onArchive)}
             onUnarchive={() => runAction('unarchive', onUnarchive)}
+            onRequestReset={() => setConfirmReset(true)}
             onRequestDelete={() => setConfirmDelete(true)}
           />
 
@@ -244,6 +259,61 @@ export function MeetingDetail({
         />
       )}
 
+      {confirmReset && (
+        <div
+          onClick={() => busyAction !== 'reset' && setConfirmReset(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--card)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: 24,
+              maxWidth: 440, width: '90vw', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
+              Reset &ldquo;{meeting.title}&rdquo;?
+            </h3>
+            <p style={{ margin: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              All messages and action items will be wiped. The meeting goes back to <strong>scheduled</strong> with the same advanced options as a starting point — you&rsquo;ll get the edit modal next so you can tweak before re-running.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button
+                onClick={() => setConfirmReset(false)}
+                disabled={busyAction === 'reset'}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: busyAction === 'reset' ? 'not-allowed' : 'pointer',
+                  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={busyAction === 'reset'}
+                style={{
+                  padding: '8px 16px', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  cursor: busyAction === 'reset' ? 'not-allowed' : 'pointer',
+                  border: 'none', background: 'var(--amber)', color: '#000', fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                {busyAction === 'reset' && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+                Reset &amp; edit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmDelete && (
         <div
           onClick={() => busyAction !== 'delete' && setConfirmDelete(false)}
@@ -307,7 +377,7 @@ export function MeetingDetail({
 
 function MeetingControls({
   status, busy,
-  onStart, onEnd, onEdit, onArchive, onUnarchive, onRequestDelete,
+  onStart, onEnd, onEdit, onArchive, onUnarchive, onRequestReset, onRequestDelete,
 }: {
   status: Meeting['status'];
   busy: ControlAction | null;
@@ -316,6 +386,7 @@ function MeetingControls({
   onEdit: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
+  onRequestReset: () => void;
   onRequestDelete: () => void;
 }) {
   const baseBtn: React.CSSProperties = {
@@ -369,26 +440,48 @@ function MeetingControls({
         </button>
       )}
       {status === 'completed' && (
-        <button
-          onClick={onArchive}
-          disabled={busy !== null}
-          title="Move this meeting to the archived list"
-          style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
-        >
-          {busy === 'archive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Archive size={13} />}
-          Archive
-        </button>
+        <>
+          <button
+            onClick={onRequestReset}
+            disabled={busy !== null}
+            title="Wipe messages and action items, return to scheduled, and edit options to re-run"
+            style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            {busy === 'reset' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={13} />}
+            Reset &amp; re-run
+          </button>
+          <button
+            onClick={onArchive}
+            disabled={busy !== null}
+            title="Move this meeting to the archived list"
+            style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            {busy === 'archive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Archive size={13} />}
+            Archive
+          </button>
+        </>
       )}
       {status === 'archived' && (
-        <button
-          onClick={onUnarchive}
-          disabled={busy !== null}
-          title="Restore this meeting to the active list"
-          style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
-        >
-          {busy === 'unarchive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <ArchiveRestore size={13} />}
-          Unarchive
-        </button>
+        <>
+          <button
+            onClick={onUnarchive}
+            disabled={busy !== null}
+            title="Restore this meeting to the active list"
+            style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            {busy === 'unarchive' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <ArchiveRestore size={13} />}
+            Unarchive
+          </button>
+          <button
+            onClick={onRequestReset}
+            disabled={busy !== null}
+            title="Wipe messages and action items, return to scheduled, and edit options to re-run"
+            style={{ ...baseBtn, cursor: busy ? 'wait' : 'pointer' }}
+          >
+            {busy === 'reset' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={13} />}
+            Reset &amp; re-run
+          </button>
+        </>
       )}
       {/* Delete is always available — varies the label only for scheduled */}
       <button

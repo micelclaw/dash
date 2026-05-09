@@ -25,7 +25,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
   const {
     meetings, loading,
     runMeeting, endMeeting,
-    archiveMeeting, unarchiveMeeting, deleteMeeting,
+    archiveMeeting, unarchiveMeeting, resetMeeting, deleteMeeting,
   } = useMeetings();
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
@@ -154,6 +154,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
             onEnd={() => endMeeting(selectedMeeting.id)}
             onArchive={() => archiveMeeting(selectedMeeting.id)}
             onUnarchive={() => unarchiveMeeting(selectedMeeting.id)}
+            onReset={() => resetMeeting(selectedMeeting.id)}
             onDelete={async () => {
               const ok = await deleteMeeting(selectedMeeting.id);
               if (ok) setSelectedMeetingId(null);
