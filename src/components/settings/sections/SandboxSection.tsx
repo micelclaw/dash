@@ -76,6 +76,13 @@ export function SandboxSection() {
     }
   };
 
+  const applyRecommended = () => {
+    setMode('non-main');
+    setScope('session');
+    setWorkspaceAccess('none');
+    setDirty(true);
+  };
+
   return (
     <SectionShell
       title="Sandbox"
@@ -86,6 +93,41 @@ export function SandboxSection() {
       onSave={handleSave}
       appliesAt="gateway-restart"
     >
+      {/* Recommended-defaults banner — appears when mode is off */}
+      {mode === 'off' && (
+        <div style={{
+          marginBottom: 16, padding: '12px 14px',
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '1px solid var(--amber-dim, rgba(245, 158, 11, 0.4))',
+          borderRadius: 'var(--radius-md)',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
+            Sandbox is off — agents run tools directly on the host
+          </div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            With sandbox off, an agent that wants to write a file does so on this machine.
+            The default-deny tool config (write/edit/apply_patch globally denied) is your
+            primary defence, but adding container isolation is a strong second layer.
+            Recommended: <code>Non-main sessions</code> + Workspace <code>None</code> —
+            gives council/channel sessions Docker isolation without slowing down the main DM.
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={applyRecommended}
+              style={{
+                padding: '6px 12px', fontSize: '0.75rem', fontWeight: 500,
+                background: 'var(--amber)', color: '#000', border: 'none',
+                borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+              }}
+            >
+              Apply recommended
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mode */}
       <div style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sandbox Mode</h3>
