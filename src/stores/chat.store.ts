@@ -181,7 +181,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   cancelStream: () => {
     const sm = get().streamingMessage;
     if (!sm) return;
+    // Tell the server to abort the in-flight Gateway RPC.
     useWebSocketStore.getState().send('chat.cancel', { conversation_id: sm.conversationId });
+    // Optimistically clear local streaming state so the user gets immediate
+    // feedback. If the server lost the WS event or already completed mid-flight,
+    // we'd otherwise sit on "Processing..." forever waiting for chat.stream.done.
+    set({ streamingMessage: null });
   },
 
   deleteConversation: (id: string) => {
