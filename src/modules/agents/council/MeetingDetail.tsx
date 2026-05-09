@@ -27,6 +27,7 @@ interface MeetingDetailProps {
   onUnarchive?: () => Promise<unknown>;
   onReset?: () => Promise<Meeting | null>;
   onDelete?: () => Promise<unknown>;
+  onCycleItemStatus?: (itemId: string, newStatus: 'pending' | 'in_progress' | 'complete') => void;
 }
 
 type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'reset' | 'delete';
@@ -47,7 +48,7 @@ function formatMeetingDate(dateStr: string): string {
 
 export function MeetingDetail({
   meeting, agents, onBack,
-  onStart, onEnd, onArchive, onUnarchive, onReset, onDelete,
+  onStart, onEnd, onArchive, onUnarchive, onReset, onDelete, onCycleItemStatus,
 }: MeetingDetailProps) {
   const [backHover, setBackHover] = useState(false);
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
@@ -244,7 +245,10 @@ export function MeetingDetail({
 
         {/* Action Items section */}
         {meeting.action_items.length > 0 && (
-          <ActionItems items={meeting.action_items} />
+          <ActionItems
+            items={meeting.action_items}
+            onCycleStatus={onCycleItemStatus}
+          />
         )}
       </div>
 

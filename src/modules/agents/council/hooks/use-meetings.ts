@@ -180,6 +180,66 @@ export function useMeetings() {
   }, [addNotification]);
 
   /**
+   * Cycle a single action item's status (pending → in_progress →
+   * complete → pending). Optimistic local update; server-side regenerates
+   * the assignee's memory block so the agent's view stays in sync.
+   */
+  const updateActionItemStatus = useCallback(async (
+    meetingId: string,
+    itemId: string,
+    status: ActionItem['status'],
+  ): Promise<ActionItem | null> => {
+    try {
+      const res = await api.patch<{ data: { id: string; status: ActionItem['status']; item: ActionItem } }>(
+        `/meetings/${meetingId}/action-items/${itemId}`,
+        { status },
+      );
+      // Update local state with the new item
+      setMeetings(prev => prev.map(m => {
+        if (m.id !== meetingId) return m;
+        return {
+          ...m,
+          action_items: m.action_items.map(it => (it.id === itemId ? res.data.item : it)),
+        };
+      }));
+      return res.data.item;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to update action item',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return null;
+    }
+  }, [addNotification]);
+
+  /**
+   * Cross-meeting query of action items assigned to a specific name
+   * (typically "user") with optional status filter. Used by the dash's
+   * global "My pending items" panel.
+   */
+  const fetchPendingItemsForName = useCallback(async (assignedTo: string): Promise<Array<ActionItem & {
+    meeting_id: string;
+    meeting_title: string;
+    meeting_completed_at: string | null;
+  }>> => {
+    try {
+      const params = new URLSearchParams({ assigned_to: assignedTo, status: 'pending' });
+      const res = await api.get<{ data: { items: Array<ActionItem & { meeting_id: string; meeting_title: string; meeting_completed_at: string | null }>; count: number } }>(
+        `/meetings/action-items?${params.toString()}`,
+      );
+      return res.data.items;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'Failed to load pending items',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return [];
+    }
+  }, [addNotification]);
+
+  /**
    * Wipe generated content (messages + action items) and return the
    * meeting to scheduled. The user can then edit advanced options and
    * re-run.
@@ -309,5 +369,7 @@ export function useMeetings() {
     unarchiveMeeting,
     resetMeeting,
     deleteMeeting,
+    updateActionItemStatus,
+    fetchPendingItemsForName,
   };
 }

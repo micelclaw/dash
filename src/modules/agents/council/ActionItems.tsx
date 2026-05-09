@@ -15,6 +15,21 @@ import type { ActionItem } from '../types';
 
 interface ActionItemsProps {
   items: ActionItem[];
+  /**
+   * If provided, the status badge becomes clickable and cycles
+   * pending → in_progress → complete → pending. Caller is responsible
+   * for the API call + optimistic update.
+   */
+  onCycleStatus?: (itemId: string, newStatus: ActionItem['status']) => void;
+}
+
+/** Cycle order for the click handler. */
+function nextStatus(current: ActionItem['status']): ActionItem['status'] {
+  switch (current) {
+    case 'pending':     return 'in_progress';
+    case 'in_progress': return 'complete';
+    case 'complete':    return 'pending';
+  }
 }
 
 function statusColor(status: ActionItem['status']): string {
@@ -49,7 +64,7 @@ function statusIcon(status: ActionItem['status']): string {
   }
 }
 
-export function ActionItems({ items }: ActionItemsProps) {
+export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     items.length > 0 ? items[0]!.id : null
   );
@@ -247,20 +262,44 @@ export function ActionItems({ items }: ActionItemsProps) {
                   }}>
                     Status:
                   </span>
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    color: statusColor(selectedItem.status),
-                    background: statusBg(selectedItem.status),
-                    padding: '2px 10px',
-                    borderRadius: 'var(--radius-full)',
-                  }}>
-                    <span>{statusIcon(selectedItem.status)}</span>
-                    {statusLabel(selectedItem.status)}
-                  </span>
+                  {onCycleStatus ? (
+                    <button
+                      onClick={() => onCycleStatus(selectedItem.id, nextStatus(selectedItem.status))}
+                      title="Click to cycle status: pending → in progress → complete → pending"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: statusColor(selectedItem.status),
+                        background: statusBg(selectedItem.status),
+                        padding: '2px 10px',
+                        borderRadius: 'var(--radius-full)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      <span>{statusIcon(selectedItem.status)}</span>
+                      {statusLabel(selectedItem.status)}
+                    </button>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: statusColor(selectedItem.status),
+                      background: statusBg(selectedItem.status),
+                      padding: '2px 10px',
+                      borderRadius: 'var(--radius-full)',
+                    }}>
+                      <span>{statusIcon(selectedItem.status)}</span>
+                      {statusLabel(selectedItem.status)}
+                    </span>
+                  )}
                 </div>
 
                 {/* Deliverable URL */}
