@@ -41,6 +41,19 @@ export function Component() {
     fetchPendingRuns();
   }, [fetchFlows, fetchPendingRuns]);
 
+  // Cross-tab sync for the viewMode preference. Without this, changing
+  // grid/list/banner in one tab doesn't propagate to others (the value
+  // is read once from localStorage at store init).
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'flows-view-mode' && e.newValue) {
+        useFlowsStore.setState({ viewMode: e.newValue as 'grid' | 'list' | 'banner' });
+      }
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
   const activeFlows = flows.filter((f) => f.enabled && !f.is_template);
   const disabledFlows = flows.filter((f) => !f.enabled && !f.is_template);
 

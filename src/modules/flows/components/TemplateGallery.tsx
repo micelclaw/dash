@@ -39,7 +39,7 @@ export function TemplateGallery({ onSelect }: TemplateGalleryProps) {
   useEffect(() => {
     api.get<{ data: BuiltInTemplate[] }>('/flows/templates/built-in')
       .then((res) => setTemplates(res.data))
-      .catch(() => {})
+      .catch((err) => { console.warn('flows: failed to load built-in templates', err); })
       .finally(() => setLoading(false));
   }, []);
 

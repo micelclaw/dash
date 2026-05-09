@@ -10,10 +10,13 @@ import { api } from '@/services/api';
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
   completed: { icon: CheckCircle2, color: 'var(--success)', label: 'Completed' },
+  ok: { icon: CheckCircle2, color: 'var(--success)', label: 'OK' },
   failed: { icon: XCircle, color: 'var(--error)', label: 'Failed' },
+  error: { icon: XCircle, color: 'var(--error)', label: 'Error' },
   running: { icon: Loader2, color: 'var(--info)', label: 'Running' },
   waiting_approval: { icon: Clock, color: 'var(--amber)', label: 'Waiting' },
   cancelled: { icon: Ban, color: 'var(--text-muted)', label: 'Cancelled' },
+  queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
 };
 
 interface RunHistoryProps {
@@ -25,6 +28,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [expandedStep, setExpandedStep] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -103,16 +107,35 @@ export function RunHistory({ flowId }: RunHistoryProps) {
                 {/* Step results */}
                 {Array.isArray(run.step_results) && (run.step_results as Array<Record<string, unknown>>).length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {(run.step_results as Array<{ step_id: string; status: string; output_summary?: string; duration_ms?: number; error?: string }>).map((sr, i) => {
+                    {(run.step_results as Array<{ step_id: string; status: string; output_summary?: string; duration_ms?: number; error?: string; output?: unknown; tokens_used?: number }>).map((sr, i) => {
                       const stepConfig = STATUS_CONFIG[sr.status] ?? STATUS_CONFIG.cancelled;
                       const StepIcon = stepConfig.icon;
+                      const stepKey = `${run.id}:${sr.step_id}`;
+                      const stepOpen = expandedStep === stepKey;
+                      const hasDetail = sr.output !== undefined || sr.tokens_used != null;
                       return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                          <StepIcon size={11} style={{ color: stepConfig.color }} />
-                          <span style={{ color: 'var(--text)' }}>Step {sr.step_id}</span>
-                          {sr.output_summary && <span style={{ color: 'var(--text-dim)' }}>— {sr.output_summary}</span>}
-                          {sr.duration_ms != null && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{sr.duration_ms}ms</span>}
-                          {sr.error && <span style={{ color: 'var(--error)' }}>— {sr.error}</span>}
+                        <div key={i}>
+                          <div
+                            onClick={(e) => { e.stopPropagation(); if (hasDetail) setExpandedStep(stepOpen ? null : stepKey); }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: hasDetail ? 'pointer' : 'default' }}
+                          >
+                            <StepIcon size={11} style={{ color: stepConfig.color }} />
+                            <span style={{ color: 'var(--text)' }}>Step {sr.step_id}</span>
+                            {sr.output_summary && <span style={{ color: 'var(--text-dim)' }}>— {sr.output_summary}</span>}
+                            {sr.duration_ms != null && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{sr.duration_ms}ms</span>}
+                            {sr.error && <span style={{ color: 'var(--error)' }}>— {sr.error}</span>}
+                          </div>
+                          {stepOpen && hasDetail && (
+                            <pre style={{
+                              margin: '4px 0 8px 17px', padding: 8,
+                              background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 4,
+                              fontSize: 11, color: 'var(--text-dim)', maxHeight: 220, overflow: 'auto',
+                              fontFamily: 'var(--font-mono)',
+                            }}>
+                              {sr.output !== undefined ? JSON.stringify(sr.output, null, 2) : ''}
+                              {sr.tokens_used != null ? `\n\n— ${sr.tokens_used} tokens` : ''}
+                            </pre>
+                          )}
                         </div>
                       );
                     })}

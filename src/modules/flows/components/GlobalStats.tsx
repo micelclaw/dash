@@ -22,7 +22,9 @@ export function GlobalStats() {
   useEffect(() => {
     api.get<{ data: GlobalFlowStats }>('/flows/stats/global')
       .then((res) => setStats(res.data))
-      .catch(() => {}); // Silent fail — stats are optional
+      .catch((err) => {
+        console.warn('flows: failed to load global stats', err);
+      });
   }, []);
 
   if (!stats || stats.total_runs === 0) return null;

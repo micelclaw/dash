@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { TestTube2, X, CheckCircle2, Circle, ChevronDown, ChevronUp } from 'lucide-react';
+import { TestTube2, X, CheckCircle2, Circle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
@@ -56,7 +56,8 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <TestTube2 size={14} style={{ color: 'var(--mod-flows)' }} />
-          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Test Results</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Step preview</span>
+          <span style={{ fontSize: 9, color: 'var(--info)', background: 'rgba(56,189,248,0.1)', padding: '1px 4px', borderRadius: 3 }}>not executed</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {!testing && !results && (
@@ -75,7 +76,14 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
       <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px 12px' }}>
         {testing && (
           <div style={{ color: 'var(--text-dim)', fontSize: 13, textAlign: 'center', padding: 20 }}>
-            Running dry-run... Read steps execute with real data, write steps are simulated.
+            Loading preview...
+          </div>
+        )}
+
+        {!testing && results && (
+          <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 8 }}>
+            This is a static preview of the flow steps. Nothing was executed —
+            real dry-run requires a Lobster spec change.
           </div>
         )}
 
@@ -93,7 +101,7 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', cursor: 'pointer' }}
                   >
                     {isError ? (
-                      <span style={{ color: 'var(--error)', fontSize: 12 }}>❌</span>
+                      <XCircle size={12} style={{ color: 'var(--error)' }} />
                     ) : isSimulated ? (
                       <Circle size={12} style={{ color: 'var(--info)' }} />
                     ) : (

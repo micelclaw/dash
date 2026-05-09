@@ -21,7 +21,7 @@ export function FlowStats({ flowId, flowName, flowColor }: FlowStatsProps) {
   useEffect(() => {
     fetchStats(flowId)
       .then(setStats)
-      .catch(() => {})
+      .catch((err) => { console.warn('flows: failed to load flow stats', err); })
       .finally(() => setLoading(false));
   }, [flowId, fetchStats]);
 
