@@ -36,7 +36,13 @@ export function Component() {
   const { agents, loading, error, addAgent, refetch } = useAgents();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<AgentTab>('tree');
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  // Read ?selected= so deep-links from elsewhere (e.g. Settings →
+  // Sandbox per-agent table) can land on a specific agent. The
+  // ?tab= param is consumed inside AgentDetail.
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('selected');
+  });
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [newBtnHover, setNewBtnHover] = useState(false);
