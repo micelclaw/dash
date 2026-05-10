@@ -21,6 +21,7 @@ import { AgentSkills } from './AgentSkills';
 import { AgentActivity } from './AgentActivity';
 import { AgentToolAccess } from './AgentToolAccess';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
+import { AgentSandboxConfig } from './AgentSandboxConfig';
 import { getAgentColor, AGENT_PALETTE } from './agent-colors';
 import type { ManagedAgent } from './types';
 
@@ -63,7 +64,14 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const { agent, loading, refetch } = useAgentDetail(agentId);
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AgentDetailTab>('overview');
+  // Read ?tab= from the URL on first render so deep-links from
+  // Settings → Sandbox land on the Advanced tab directly.
+  const [activeTab, setActiveTab] = useState<AgentDetailTab>(() => {
+    if (typeof window === 'undefined') return 'overview';
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'tools' || t === 'advanced') return t;
+    return 'overview';
+  });
 
   // Inline editing
   const [editingField, setEditingField] = useState<'display_name' | 'role' | null>(null);
@@ -619,7 +627,25 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
       )}
 
       {activeTab === 'advanced' && (
-        <AgentAdvancedConfig />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Per-agent overrides (start with sandbox; more sections
+              can land here as they're implemented). */}
+          <div>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Per-agent overrides
+            </h3>
+            <AgentSandboxConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
+          </div>
+
+          {/* Global defaults. Editing here affects every agent that
+              inherits — distinct from the per-agent block above. */}
+          <div>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Global defaults
+            </h3>
+            <AgentAdvancedConfig />
+          </div>
+        </div>
       )}
     </div>
   );

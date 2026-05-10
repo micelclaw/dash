@@ -255,7 +255,9 @@ export function AgentAdvancedConfig() {
       </div>
 
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-        Global defaults for all agents. Per-agent overrides coming soon.
+        Global defaults for all agents. Sandbox per-agent overrides
+        live in the block above; thinking/context/subagents are still
+        defaults-only here.
       </span>
 
       {/* Thinking */}
