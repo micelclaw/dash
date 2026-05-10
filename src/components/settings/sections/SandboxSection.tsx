@@ -25,10 +25,16 @@ const SCOPE_OPTIONS = [
   { value: 'shared', label: 'Shared', desc: 'One container for all sandboxed sessions' },
 ];
 
+// `none` is intentionally NOT exposed: an OpenClaw agent without
+// access to its own workspace cannot read SOUL.md / MEMORY.md /
+// USER.md / TOOLS.md — at that point it is not an agent, just a
+// stateless LLM. The agent's workspace dir is the only host path
+// mounted into the container; the rest of the host stays
+// unreachable regardless of rw vs ro, so there is no sandbox
+// strength gain from disabling it.
 const WORKSPACE_OPTIONS = [
-  { value: 'none', label: 'None', desc: 'Sandbox has its own isolated workspace' },
-  { value: 'ro', label: 'Read-only', desc: 'Agent workspace mounted read-only at /agent' },
-  { value: 'rw', label: 'Read-write', desc: 'Agent workspace mounted read-write at /workspace' },
+  { value: 'rw', label: 'Read-write', desc: 'Agent workspace mounted read-write at /workspace (recommended)' },
+  { value: 'ro', label: 'Read-only', desc: 'Agent workspace mounted read-only — agent cannot update its memory' },
 ];
 
 export function SandboxSection() {
@@ -82,7 +88,7 @@ export function SandboxSection() {
   const applyRecommended = () => {
     setMode('non-main');
     setScope('session');
-    setWorkspaceAccess('none');
+    setWorkspaceAccess('rw');
     setDirty(true);
   };
 
@@ -110,11 +116,11 @@ export function SandboxSection() {
           </div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
             With sandbox off, an agent that wants to write a file does so on this machine.
-            Container isolation is the deterministic guarantee — combined with Workspace
-            <code> none</code>, the host filesystem is not reachable from the agent.
-            Recommended: <code>Non-main sessions</code> + Workspace <code>None</code> —
-            gives council/channel sessions Docker isolation without slowing down the main DM.
-            Per-agent overrides for fine-grained control are available below.
+            Container isolation is the deterministic guarantee — only the agent's own
+            workspace dir is mounted, the rest of the host stays unreachable.
+            Recommended: <code>Non-main sessions</code> + Workspace <code>Read-write</code> —
+            gives council/channel sessions Docker isolation while letting the agent
+            read/update its own SOUL.md, MEMORY.md, etc. Per-agent overrides below.
           </div>
           <div>
             <button

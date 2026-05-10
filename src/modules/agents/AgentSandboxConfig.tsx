@@ -53,10 +53,14 @@ const SCOPES = [
   { value: 'shared',  label: 'Shared',      desc: 'One container for all sandboxed sessions' },
 ];
 
+// `none` is intentionally NOT exposed: an OpenClaw agent without
+// its workspace mounted cannot read SOUL.md / MEMORY.md / TOOLS.md
+// — at that point it is not an agent, just a stateless LLM. The
+// host filesystem is unreachable in any sandboxed mode regardless
+// of this setting; only the agent's own workspace dir is mounted.
 const WORKSPACE_ACCESS = [
-  { value: 'none', label: 'None',       desc: 'Sandbox has its own isolated workspace' },
-  { value: 'ro',   label: 'Read-only',  desc: 'Agent workspace mounted read-only at /agent' },
-  { value: 'rw',   label: 'Read-write', desc: 'Agent workspace mounted read-write at /workspace' },
+  { value: 'rw', label: 'Read-write', desc: 'Agent workspace mounted read-write at /workspace (recommended)' },
+  { value: 'ro', label: 'Read-only',  desc: 'Agent workspace mounted read-only — agent cannot update its memory' },
 ];
 
 const INHERIT = '__inherit__';
@@ -163,10 +167,12 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
   const effMode = mode ?? globalMode;
   const effWs = workspaceAccess ?? globalWs;
 
-  // Determinism banner: if the agent ends up with mode!=off and
-  // workspaceAccess=none, the host filesystem is unreachable — the
-  // hard guarantee the user asked for. Surface it.
-  const isHostIsolated = effMode !== 'off' && effWs === 'none';
+  // Determinism: when sandbox is on (mode != off), the host is
+  // unreachable EXCEPT for the agent's own workspace dir (the only
+  // thing mounted). That's the same guarantee with rw or ro — the
+  // dangerous part of the host (other projects, secrets, /etc) is
+  // gone. Only mode=off lets the agent see the host directly.
+  const isHostIsolated = effMode !== 'off';
 
   if (loading) {
     return <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', padding: 12 }}>Loading sandbox config…</div>;
@@ -221,9 +227,8 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
 
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: 0, lineHeight: 1.5 }}>
         Per-agent overrides for this agent. Empty (italic) = inherits from
-        Settings → Sandbox. Combine <code>mode != off</code> with
-        <code> Workspace = none</code> to make the host filesystem
-        unreachable from this agent.
+        Settings → Sandbox. Any <code>mode != off</code> already makes the
+        host filesystem unreachable except the agent's own workspace dir.
       </p>
 
       {/* Determinism banner */}
@@ -237,7 +242,7 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Shield size={14} />
-          <span>Effective: <b>mode={effMode}, workspace=none</b> — host filesystem is not reachable from this agent.</span>
+          <span>Effective: <b>mode={effMode}, workspace={effWs}</b> — host filesystem unreachable except this agent's own workspace.</span>
         </div>
       ) : (
         <div style={{
@@ -249,7 +254,7 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <AlertTriangle size={14} style={{ color: 'var(--amber)' }} />
-          <span>Effective: <b>mode={effMode}, workspace={effWs}</b> — agent {effMode === 'off' ? 'runs on host' : 'in container with host paths mounted'}.</span>
+          <span>Effective: <b>mode=off</b> — agent runs directly on the host, can reach any path the OpenClaw process can.</span>
         </div>
       )}
 
