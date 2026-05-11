@@ -13,6 +13,7 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react';
 import { ArrowUp, ChevronUp, ChevronDown, Paperclip, X, FileText, Image as ImageIcon, File } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
+import { useGatewayStore } from '@/stores/gateway.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useModuleContext } from '@/hooks/use-module-context';
 import { useVoice } from '@/hooks/use-voice';
@@ -43,7 +44,12 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const cancelStream = useChatStore((s) => s.cancelStream);
+  const gwHealth = useGatewayStore((s) => s.health);
   const isProcessing = !!streamingMessage;
+  // Gateway state takes priority over "ready" only when NOT streaming
+  // (a stream in flight always shows red/cancel regardless of gateway).
+  const gatewayDown = !isProcessing && gwHealth?.status === 'down';
+  const gatewayDegraded = !isProcessing && gwHealth?.status === 'degraded';
   const moduleContext = useModuleContext();
   const voice = useVoice();
   const voiceStream = useVoiceStream();
@@ -392,20 +398,46 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       {/* Thinking level indicator */}
       <ThinkingLevelIndicator />
 
-      {/* Status indicator: red (processing, clickable to cancel) / green (ready) */}
-      <div
-        onClick={isProcessing ? cancelStream : undefined}
-        title={isProcessing ? 'Click to cancel' : 'Ready'}
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          flexShrink: 0,
-          background: isProcessing ? '#ef4444' : '#22c55e',
-          cursor: isProcessing ? 'pointer' : 'default',
-          transition: 'background 0.2s',
-        }}
-      />
+      {/* Status indicator:
+          - red (#ef4444) when processing — clickable to cancel
+          - dim red (#7f1d1d) when Gateway is down — chat won't go through
+          - amber (#f59e0b) when Gateway is degraded — may fail
+          - green (#22c55e) when ready */}
+      {(() => {
+        let color = '#22c55e';
+        let title = 'Ready';
+        let cursor: 'pointer' | 'default' = 'default';
+        if (isProcessing) {
+          color = '#ef4444';
+          title = 'Click to cancel';
+          cursor = 'pointer';
+        } else if (gatewayDown) {
+          color = '#7f1d1d';
+          const why = gwHealth?.error ?? gwHealth?.checks?.find(c => c.status === 'fail')?.message ?? 'unknown reason';
+          title = `Gateway no disponible — ${why}`;
+        } else if (gatewayDegraded) {
+          color = '#f59e0b';
+          const failed = gwHealth?.checks?.find(c => c.status === 'fail' || c.status === 'warn');
+          title = failed
+            ? `Gateway degraded — ${failed.name}: ${failed.message ?? 'check failed'}`
+            : 'Gateway degraded — algunas funciones pueden fallar';
+        }
+        return (
+          <div
+            onClick={isProcessing ? cancelStream : undefined}
+            title={title}
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              flexShrink: 0,
+              background: color,
+              cursor,
+              transition: 'background 0.2s',
+            }}
+          />
+        );
+      })()}
 
       {/* Send button */}
       {(text.trim() || pendingFiles.length > 0) && !isProcessing && (

@@ -3,11 +3,12 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Save, Heart, HeartOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import * as gwService from '@/services/gateway.service';
+import { useGatewayStore } from '@/stores/gateway.store';
 import { api } from '@/services/api';
 
 const INTERVALS = [
@@ -20,14 +21,14 @@ const INTERVALS = [
   { value: '4h', label: 'Every 4 hours' },
 ];
 
-const TARGETS = [
+const STATIC_TARGETS = [
   { value: '', label: 'None (internal only)' },
   { value: 'last', label: 'Last used channel' },
-  { value: 'telegram', label: 'Telegram' },
-  { value: 'discord', label: 'Discord' },
-  { value: 'slack', label: 'Slack' },
-  { value: 'whatsapp', label: 'WhatsApp' },
 ];
+
+function labelFor(channelType: string): string {
+  return channelType.charAt(0).toUpperCase() + channelType.slice(1);
+}
 
 const THINKING_LEVELS = [
   { value: '', label: 'Inherit (from agent)' },
@@ -45,6 +46,8 @@ interface AgentSummary {
 }
 
 export function HeartbeatTab() {
+  const channels = useGatewayStore(s => s.channels);
+  const fetchChannels = useGatewayStore(s => s.fetchChannels);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -95,7 +98,30 @@ export function HeartbeatTab() {
   }, []);
 
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
+  useEffect(() => { if (channels.length === 0) fetchChannels(); }, [channels.length, fetchChannels]);
   const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
+
+  // Build the target dropdown from configured channels. Connected ones
+  // come first, then login_required (yellow). If the saved `target` is
+  // not in the list (e.g. channel was removed), include it with a
+  // "(not configured)" suffix so the user can see the dangling state.
+  const targetOptions = useMemo(() => {
+    const opts = [...STATIC_TARGETS];
+    const seen = new Set(opts.map(o => o.value));
+    const sorted = [...channels].sort((a, b) => {
+      if (a.status === b.status) return a.type.localeCompare(b.type);
+      return a.status === 'connected' ? -1 : 1;
+    });
+    for (const ch of sorted) {
+      const suffix = ch.status === 'connected' ? '' : ` (${ch.status})`;
+      opts.push({ value: ch.type, label: `${labelFor(ch.type)}${suffix}` });
+      seen.add(ch.type);
+    }
+    if (target && !seen.has(target)) {
+      opts.push({ value: target, label: `${labelFor(target)} (not configured)` });
+    }
+    return opts;
+  }, [channels, target]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -170,7 +196,7 @@ export function HeartbeatTab() {
         <div style={{ marginBottom: 24, padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
           <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Global Defaults</h3>
           <Row label="Interval" desc="How often agents wake up to check"><Sel value={every} options={INTERVALS} onChange={d(setEvery)} /></Row>
-          <Row label="Delivery target" desc="Channel to send alerts"><Sel value={target} options={TARGETS} onChange={d(setTarget)} /></Row>
+          <Row label="Delivery target" desc="Channel to send alerts"><Sel value={target} options={targetOptions} onChange={d(setTarget)} /></Row>
           {target && target !== 'last' && <Row label="Target ID" desc="Chat/user ID for delivery"><input type="text" value={to} onChange={e => d(setTo)(e.target.value)} placeholder="e.g. -1001234567890" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 160, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} /></Row>}
           <Row label="Active hours start" desc="HH:MM (empty = 24/7)"><input type="text" value={activeStart} onChange={e => d(setActiveStart)(e.target.value)} placeholder="09:00" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 70, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', textAlign: 'center' }} /></Row>
           <Row label="Active hours end"><input type="text" value={activeEnd} onChange={e => d(setActiveEnd)(e.target.value)} placeholder="22:00" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 70, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', textAlign: 'center' }} /></Row>
@@ -194,6 +220,7 @@ export function HeartbeatTab() {
             // Use agentIdMap from backend (correct per-user ID)
             const openclawId = agentIdMap[agent.name] ?? Object.keys(agentHeartbeats).find(k => k.includes(`--${agent.name}`)) ?? `unknown--${agent.name}`;
             const enabled = isAgentHeartbeatEnabled(openclawId);
+            const effectiveEvery = (agentHeartbeats[openclawId]?.every as string) ?? every;
             const isToggling = togglingAgent === agent.id;
             return (
               <div key={agent.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
@@ -202,7 +229,7 @@ export function HeartbeatTab() {
                   <div>
                     <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{agent.display_name}</div>
                     <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                      {enabled ? `Active (${every})` : 'Paused'}
+                      {enabled ? `Active (${effectiveEvery})` : 'Paused'}
                     </div>
                   </div>
                 </div>

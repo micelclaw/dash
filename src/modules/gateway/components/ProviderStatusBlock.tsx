@@ -139,6 +139,14 @@ export function ProviderStatusBlock() {
             const isExpanded = expanded === prov.provider;
             const provProfiles = profiles.filter(p => p.provider === prov.provider);
             const hasAuth = prov.effective.kind !== 'none';
+            // If the provider has profiles and *all* of them are expired,
+            // surface that as a warning (orange dot) instead of green.
+            // The backend may still report kind !== 'none' because the
+            // raw record exists; the dash should reflect actual usability.
+            const now = Date.now();
+            const allProfilesExpired = provProfiles.length > 0 &&
+              provProfiles.every(p => typeof p.expires === 'number' && p.expires < now);
+            const dotColor = !hasAuth ? '#ef4444' : (allProfilesExpired ? '#f59e0b' : '#22c55e');
             const canExpand = provProfiles.length > 0;
 
             return (
@@ -156,10 +164,13 @@ export function ProviderStatusBlock() {
                   }}
                 >
                   {/* Status dot */}
-                  <span style={{
-                    width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                    background: hasAuth ? '#22c55e' : '#ef4444',
-                  }} />
+                  <span
+                    title={allProfilesExpired ? 'All profiles expired' : undefined}
+                    style={{
+                      width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                      background: dotColor,
+                    }}
+                  />
 
                   {/* Name */}
                   <span style={{

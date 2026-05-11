@@ -4,10 +4,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useGatewayStore } from '@/stores/gateway.store';
+import { isModelRefValid } from '../lib/refs';
 import type { AuthProfileEntry } from '../types';
 import { LocalOllamaBlock } from './LocalOllamaBlock';
 import { ProviderStatusBlock } from './ProviderStatusBlock';
@@ -34,6 +36,7 @@ export function ModelsAdvancedView() {
 // ─── Aliases ────────────────────────────────────────────────────────
 
 function AliasesBlock() {
+  const models = useGatewayStore(s => s.models);
   const [aliases, setAliases] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -86,16 +89,20 @@ function AliasesBlock() {
           {Object.keys(aliases).length === 0 && !showAdd && (
             <EmptyHint>No aliases yet. Add one to use shorter names like <code>sonnet</code> instead of <code>anthropic/claude-sonnet-4-6</code>.</EmptyHint>
           )}
-          {Object.entries(aliases).map(([alias, model]) => (
-            <Row key={alias}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
-                <strong style={{ color: 'var(--amber)' }}>{alias}</strong>
-                <span style={{ color: 'var(--text-dim)', margin: '0 8px' }}>→</span>
-                <span style={{ color: 'var(--text)' }}>{model}</span>
-              </span>
-              <RemoveButton onClick={() => handleRemove(alias)} loading={removing === alias} />
-            </Row>
-          ))}
+          {Object.entries(aliases).map(([alias, model]) => {
+            const valid = isModelRefValid(model, models);
+            return (
+              <Row key={alias}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+                  <strong style={{ color: 'var(--amber)' }}>{alias}</strong>
+                  <span style={{ color: 'var(--text-dim)', margin: '0 8px' }}>→</span>
+                  <span style={{ color: valid ? 'var(--text)' : '#f43f5e' }}>{model}</span>
+                  {!valid && <DanglingBadge title="Target not in configured models" />}
+                </span>
+                <RemoveButton onClick={() => handleRemove(alias)} loading={removing === alias} />
+              </Row>
+            );
+          })}
           {showAdd ? (
             <div style={{
               display: 'flex',
@@ -139,6 +146,7 @@ function AliasesBlock() {
 // ─── Fallbacks (text or image) ──────────────────────────────────────
 
 function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
+  const models = useGatewayStore(s => s.models);
   const [fallbacks, setFallbacks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -197,15 +205,19 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
           {fallbacks.length === 0 && !showAdd && (
             <EmptyHint>No {kind === 'text' ? 'text' : 'image'} fallbacks configured.</EmptyHint>
           )}
-          {fallbacks.map((model, i) => (
-            <Row key={model}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
-                <span style={{ color: 'var(--text-dim)', marginRight: 8 }}>{i + 1}.</span>
-                <span style={{ color: 'var(--text)' }}>{model}</span>
-              </span>
-              <RemoveButton onClick={() => handleRemove(model)} loading={removing === model} />
-            </Row>
-          ))}
+          {fallbacks.map((model, i) => {
+            const valid = isModelRefValid(model, models);
+            return (
+              <Row key={model}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem' }}>
+                  <span style={{ color: 'var(--text-dim)', marginRight: 8 }}>{i + 1}.</span>
+                  <span style={{ color: valid ? 'var(--text)' : '#f43f5e' }}>{model}</span>
+                  {!valid && <DanglingBadge title="Fallback not in configured models" />}
+                </span>
+                <RemoveButton onClick={() => handleRemove(model)} loading={removing === model} />
+              </Row>
+            );
+          })}
           {showAdd ? (
             <div style={{
               display: 'flex',
@@ -283,6 +295,31 @@ function Row({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </div>
+  );
+}
+
+function DanglingBadge({ title }: { title: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        marginLeft: 8,
+        padding: '1px 6px',
+        background: '#f43f5e20',
+        color: '#f43f5e',
+        borderRadius: 'var(--radius-sm)',
+        fontSize: '0.625rem',
+        fontFamily: 'var(--font-sans)',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.04em',
+      }}
+    >
+      <AlertTriangle size={10} /> invalid
+    </span>
   );
 }
 

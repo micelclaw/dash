@@ -19,6 +19,13 @@ interface ChatStore {
   conversations: Conversation[];
   activeConversationId: string | null;
   messages: Map<string, Message[]>;
+  /**
+   * Per-conversation unread count. Incremented when a WS message
+   * arrives for a conversation that is NOT the active one. Reset to 0
+   * when the user selects that conversation. Lives only in memory —
+   * resets on F5, which is acceptable for v1.
+   */
+  unreadByConv: Map<string, number>;
   streamingMessage: StreamingState | null;
   selectedAgent: string;
   chatState: ChatState;
@@ -50,6 +57,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   conversations: [],
   activeConversationId: null,
   messages: new Map(),
+  unreadByConv: new Map(),
   streamingMessage: null,
   selectedAgent: 'main',
   chatState: 1,
@@ -127,9 +135,14 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
   selectConversation: (id: string) => {
     const conv = get().conversations.find(c => c.id === id);
-    set({
-      activeConversationId: id,
-      selectedAgent: conv?.agent ?? get().selectedAgent,
+    set((state) => {
+      const unread = new Map(state.unreadByConv);
+      unread.delete(id);
+      return {
+        activeConversationId: id,
+        selectedAgent: conv?.agent ?? state.selectedAgent,
+        unreadByConv: unread,
+      };
     });
   },
 
@@ -143,8 +156,24 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     set((state) => {
       const updated = new Map(state.messages);
       const existing = updated.get(message.conversation_id) ?? [];
+      // Dedup by id: WS push + history fetch can deliver the same row twice.
+      if (existing.some((m) => m.id === message.id)) return state;
       updated.set(message.conversation_id, [...existing, message]);
-      return { messages: updated };
+
+      // Bump unread counter when the new message is for a conversation
+      // the user isn't currently viewing. Skip if it's the user's own
+      // message (role=user) — that comes from chat-bridge upfront on
+      // the active conv and we don't want to mark our own typing.
+      let unread = state.unreadByConv;
+      if (
+        message.conversation_id !== state.activeConversationId &&
+        message.role === 'assistant'
+      ) {
+        unread = new Map(state.unreadByConv);
+        unread.set(message.conversation_id, (unread.get(message.conversation_id) ?? 0) + 1);
+      }
+
+      return { messages: updated, unreadByConv: unread };
     });
   },
 
@@ -272,20 +301,39 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         from_agent: string;
         model_used: string | null;
         tokens_used: number | null;
+        tool_calls?: unknown;
+        metadata?: Record<string, unknown> | null;
         created_at: string;
         conversation_id: string;
       }> }>(`/conversations/threads/${conversationId}`);
 
-      const msgs: Message[] = (res.data ?? []).map((m) => ({
-        id: m.id,
-        conversation_id: conversationId,
-        role: m.role as 'user' | 'assistant',
-        content: m.message,
-        agent: m.role === 'assistant' ? m.from_agent : undefined,
-        model: m.model_used ?? undefined,
-        tokens_used: m.tokens_used ?? undefined,
-        timestamp: m.created_at,
-      }));
+      const msgs: Message[] = (res.data ?? []).map((m) => {
+        // Backend returns tool_calls as jsonb (Drizzle gives us back
+        // the array). It's the persisted ToolCallRecord shape but
+        // typed as `unknown`. Be defensive.
+        const tools = Array.isArray(m.tool_calls) ? (m.tool_calls as Array<Record<string, unknown>>).filter(Boolean) : undefined;
+        const toolCalls = tools?.map((t) => ({
+          id: String(t.id ?? crypto.randomUUID()),
+          tool: String(t.tool ?? t.name ?? 'unknown'),
+          status: t.status as 'pending' | 'running' | 'success' | 'error' | undefined,
+          summary: typeof t.summary === 'string' ? t.summary : undefined,
+          input: t.input ?? t.arguments ?? undefined,
+          output: typeof t.output === 'string' ? t.output : undefined,
+          metadata: t.metadata as Record<string, unknown> | undefined,
+        }));
+        return {
+          id: m.id,
+          conversation_id: conversationId,
+          role: m.role as 'user' | 'assistant',
+          content: m.message,
+          agent: m.role === 'assistant' ? m.from_agent : undefined,
+          model: m.model_used ?? undefined,
+          tokens_used: m.tokens_used ?? undefined,
+          timestamp: m.created_at,
+          tool_calls: toolCalls,
+          message_metadata: (m.metadata && typeof m.metadata === 'object') ? m.metadata : undefined,
+        };
+      });
 
       set((state) => {
         const updated = new Map(state.messages);
@@ -298,7 +346,43 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string) => {
+    const isYielded = model === 'yielded';
+    // Yield with empty text → keep a placeholder bubble so the user
+    // knows the agent is awaiting sub-agents (it's NOT a failure).
+    // Cleared when the actual reply arrives via `chat.post_yield_message`.
+    if (isYielded && !fullText.trim()) {
+      set({
+        streamingMessage: {
+          conversationId,
+          tokens: '🔄 Esperando respuesta de sub-agentes…',
+          thinking: '',
+          isThinking: false,
+          tools: [],
+        },
+      });
+      return;
+    }
+    // Skip adding an empty assistant message — happens for non-yield
+    // empty completions (rare; defensive).
+    if (!fullText.trim() && !errorType) {
+      set({ streamingMessage: null });
+      return;
+    }
     const conv = get().conversations.find(c => c.id === conversationId);
+    // Preserve tool blocks captured during the stream so they remain
+    // visible after the message is finalized (and after F5 — the same
+    // data is persisted server-side via chat-bridge → agent_conversations.tool_calls).
+    const streamingTools = get().streamingMessage?.tools ?? [];
+    const persistedToolCalls = streamingTools.length > 0
+      ? streamingTools.map((t) => ({
+          id: t.id,
+          tool: t.tool,
+          status: t.status as 'pending' | 'running' | 'success' | 'error' | undefined,
+          summary: t.summary,
+          input: t.input,
+          output: t.output,
+        }))
+      : undefined;
     const assistantMsg: Message = {
       id: crypto.randomUUID(),
       conversation_id: conversationId,
@@ -309,6 +393,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       tokens_used: tokensUsed,
       error_type: errorType,
       timestamp: new Date().toISOString(),
+      tool_calls: persistedToolCalls,
     };
 
     set((state) => {

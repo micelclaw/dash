@@ -82,6 +82,23 @@ export interface Settings {
     sound_enabled: boolean;
     show_digest_toasts: boolean;
     show_sync_toasts: boolean;
+    /** Show desktop notifications (Web Notifications API) when the dash is in the background. */
+    desktop_enabled?: boolean;
+    /** Per-event-type toggles for which categories of notifications surface as toasts/desktop. */
+    types?: {
+      chat_replies?: boolean;
+      agent_done?: boolean;
+      approvals?: boolean;
+      errors?: boolean;
+      mail?: boolean;
+      calendar_reminders?: boolean;
+    };
+    /** Do-not-disturb schedule. When `enabled`, notifications are suppressed between `from` and `to` (HH:MM 24h). */
+    dnd?: {
+      enabled: boolean;
+      from: string;
+      to: string;
+    };
   };
   calendar: {
     first_day_of_week: 0 | 1;
@@ -94,6 +111,12 @@ export interface Settings {
     full_duplex: boolean;
     autoplay_responses: boolean;
     shortcut_key: string;
+  };
+  feeds?: {
+    /** Days to keep read articles before automatic cleanup. Unread = 2x. */
+    retention_days: number;
+    default_view: 'three-column' | 'two-column';
+    default_sort: 'published_at_desc' | 'published_at_asc' | 'fetched_at_desc';
   };
 }
 

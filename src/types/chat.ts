@@ -29,6 +29,27 @@ export interface ChatAttachment {
   preview_url?: string;
 }
 
+/**
+ * One tool call recorded alongside an assistant message. Persisted
+ * shape — same record is used for streaming-time tool blocks and for
+ * tool blocks rendered in chat history after F5.
+ */
+export interface ToolCallRecord {
+  id: string;
+  /** Tool name (e.g. "sessions_spawn", "bash", "read"). */
+  tool: string;
+  /** Live status if known: pending → running → success/error. Optional. */
+  status?: 'pending' | 'running' | 'success' | 'error';
+  /** One-line summary for the collapsed view. Optional. */
+  summary?: string;
+  /** Raw input — args object, command string, file path… */
+  input?: string | Record<string, unknown>;
+  /** Raw output — text output of the tool. Optional. */
+  output?: string;
+  /** Free-form metadata: exit code, duration, etc. */
+  metadata?: Record<string, unknown>;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -41,6 +62,20 @@ export interface Message {
   timestamp: string;
   approval?: MessageApproval;
   attachments?: ChatAttachment[];
+  /**
+   * Tool calls associated with this assistant message. Persisted in
+   * `agent_conversations.tool_calls` (jsonb). Rendered by per-tool
+   * block components according to the user's tool visibility prefs.
+   * `undefined` means "no tools tracked"; `[]` means "tracked, none".
+   */
+  tool_calls?: ToolCallRecord[];
+  /**
+   * Free-form metadata mirrored from `agent_conversations.metadata`.
+   * Used by sub-agent briefings to surface the real `task` (instead
+   * of the OpenClaw "[Subagent Context]..." wrapper) and any other
+   * UI-specific signals (post_yield, briefing, delegated, etc.).
+   */
+  message_metadata?: Record<string, unknown>;
 }
 
 export interface Conversation {

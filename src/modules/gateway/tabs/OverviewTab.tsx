@@ -29,7 +29,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export function OverviewTab() {
   const isMobile = useIsMobile();
   const {
-    status, health, usage,
+    status, health, usage, models,
     fetchSnapshot, fetchUsage,
     gatewayStart, gatewayStop, gatewayRestart,
   } = useGatewayStore();
@@ -74,6 +74,25 @@ export function OverviewTab() {
 
   const isRunning = status?.running ?? false;
   const runtimeLoading = status?.running === undefined;
+
+  // Default Model card: `agents.defaults.model.primary` may point to a
+  // model that's no longer in `agents.defaults.models` (e.g. user
+  // removed the provider but didn't update the pointer). Surface that
+  // gap instead of showing a dangling string.
+  const defaultModelId = status?.default_model;
+  const configuredCount = status?.models_configured ?? 0;
+  const defaultIsConfigured = !!defaultModelId &&
+    models.some(m => m.id === defaultModelId || m.model === defaultModelId);
+  const defaultModelValue = !defaultModelId
+    ? 'None'
+    : defaultIsConfigured
+      ? defaultModelId
+      : `${defaultModelId} (invalid)`;
+  const defaultModelSubtitle = !defaultModelId
+    ? `${configuredCount} configured`
+    : defaultIsConfigured
+      ? `${configuredCount} configured`
+      : 'Not in configured list';
 
   return (
     <ScrollArea style={{ height: '100%' }}>
@@ -216,9 +235,9 @@ export function OverviewTab() {
           <MetricCard
             icon={Bot}
             label="Default Model"
-            value={status?.default_model ?? 'N/A'}
-            subtitle={`${status?.models_configured ?? 0} configured`}
-            accentColor="#f59e0b"
+            value={defaultModelValue}
+            subtitle={defaultModelSubtitle}
+            accentColor={defaultModelId && !defaultIsConfigured ? '#f43f5e' : '#f59e0b'}
           />
           <MetricCard
             icon={DollarSign}

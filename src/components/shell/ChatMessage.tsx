@@ -16,12 +16,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Layout, FileText, Image as ImageIcon, File, Terminal, Check, Loader2, ChevronDown, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
-import type { Message, MessageApproval, ChatAttachment } from '@/types/chat';
+import type { Message, MessageApproval, ChatAttachment, ToolCallRecord } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useCanvasStore } from '@/stores/canvas.store';
 import { startGateway } from '@/services/gateway.service';
+import { ToolRenderer } from '@/components/chat/tool-renderers';
+import { shouldRenderTool } from '@/config/tool-rendering';
+import { useToolVisibility } from '@/hooks/use-tool-visibility';
 
 function ToolBlock({ tool }: { tool: { id: string; tool: string; status: string; summary: string; input?: string; output?: string } }) {
   const [expanded, setExpanded] = useState(false);
@@ -62,6 +65,22 @@ function ToolBlock({ tool }: { tool: { id: string; tool: string; status: string;
           {tool.output && <div><strong style={{ color: 'var(--text-dim)' }}>Output:</strong> {tool.output}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Renders persisted tool calls (from a finalized assistant message)
+ * filtered by the user's tool-visibility preferences. Each tool gets
+ * a per-type renderer (delegation, bash, read, edit, etc.).
+ */
+function PersistedToolCalls({ toolCalls }: { toolCalls: ToolCallRecord[] }) {
+  const { visibility } = useToolVisibility();
+  const visible = toolCalls.filter((t) => shouldRenderTool(t.tool, visibility));
+  if (visible.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+      {visible.map((t) => <ToolRenderer key={t.id} tool={t} />)}
     </div>
   );
 }
@@ -148,6 +167,25 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                     {message.attachments.map((att) => (
                       <AttachmentChip key={att.id} attachment={att} />
                     ))}
+                  </div>
+                )}
+                {/* Sub-agent briefing badge — when this user-role
+                    message is actually a task delegated by a parent
+                    agent (mirror persisted `metadata.briefing=true`),
+                    show a clear header so the user understands this
+                    isn't their own input. */}
+                {message.message_metadata?.briefing === true && (
+                  <div
+                    style={{
+                      fontSize: '0.6875rem',
+                      color: 'var(--text-muted)',
+                      marginBottom: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    🪄 Briefing de <strong style={{ color: 'var(--text-dim)' }}>{message.agent ?? 'parent agent'}</strong> al sub-agente
                   </div>
                 )}
                 {message.content && message.content !== '(attached files)' && (
@@ -318,13 +356,23 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                 )}
               </div>
             )}
-            {/* Tool executions (minimized, expandable) */}
+            {/* Tool executions — STREAMING phase: live tool blocks
+                from the streamingMessage.tools (legacy, no visibility
+                filtering during streaming so the user sees what's
+                happening in real time). */}
             {isStreaming && tools && tools.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
                 {tools.map(t => (
                   <ToolBlock key={t.id} tool={t} />
                 ))}
               </div>
+            )}
+            {/* Tool executions — FINALIZED phase: persisted tool_calls
+                from agent_conversations.tool_calls. Filtered by user's
+                tool visibility preferences and rendered via per-tool
+                renderer (delegation, bash, read, edit, etc). */}
+            {!isStreaming && message.tool_calls && message.tool_calls.length > 0 && (
+              <PersistedToolCalls toolCalls={message.tool_calls} />
             )}
             {isStreaming && (!message.content || isThinking) && (
               <div style={{ padding: '2px 0' }}>

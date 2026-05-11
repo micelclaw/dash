@@ -4,9 +4,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, X, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Save, X, RotateCcw, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { useGatewayStore } from '@/stores/gateway.store';
 
 interface ChannelConfigPanelProps {
   channelType: string;
@@ -150,6 +151,9 @@ function Section({ title, expanded, onToggle, children }: {
 }
 
 export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelProps) {
+  const channels = useGatewayStore(s => s.channels);
+  const channelRuntime = channels.find(c => c.type === channelType);
+  const isConnected = channelRuntime?.status === 'connected';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -284,6 +288,29 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
+        {/* Runtime mismatch banner: config says enabled but runtime shows
+            login_required (bad token / offline). Changes still save but
+            won't take effect until the channel reconnects. */}
+        {channelRuntime && config.enabled !== false && !isConnected && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 8,
+            margin: '12px 0 0',
+            padding: '8px 12px',
+            background: '#f9731620',
+            border: '1px solid #f97316',
+            borderRadius: 'var(--radius-sm)',
+            color: '#f97316',
+            fontSize: '0.75rem',
+            lineHeight: 1.4,
+            fontFamily: 'var(--font-sans)',
+          }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>
+              Channel is not connected at runtime (status: <strong>{channelRuntime.status}</strong>).
+              Changes will save but won't apply until the channel reconnects (re-login or fix the token).
+            </span>
+          </div>
+        )}
         {/* Enabled toggle */}
         <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
           <ToggleRow

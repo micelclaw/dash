@@ -39,7 +39,7 @@ function formatRelativeDate(dateStr: string): string {
   return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function groupByDate<T extends { id: string; created_at: string }>(conversations: T[]) {
+function groupByDate<T extends { id: string; created_at: string; updated_at?: string }>(conversations: T[]) {
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const startOfYesterday = new Date(startOfToday.getTime() - 86_400_000);
@@ -54,7 +54,10 @@ function groupByDate<T extends { id: string; created_at: string }>(conversations
   const older: typeof conversations = [];
 
   for (const conv of conversations) {
-    const date = new Date(conv.created_at);
+    // Group by last activity (updated_at if present, else created_at).
+    // A thread that was created yesterday but is still active today
+    // belongs in TODAY, not YESTERDAY.
+    const date = new Date(conv.updated_at ?? conv.created_at);
     if (date >= startOfToday) today.push(conv);
     else if (date >= startOfYesterday) yesterday.push(conv);
     else if (date >= startOfWeek) thisWeek.push(conv);
@@ -85,6 +88,7 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
   const renameConversation = useChatStore((s) => s.renameConversation);
   const setConversations = useChatStore((s) => s.setConversations);
   const addMessage = useChatStore((s) => s.addMessage);
+  const unreadByConv = useChatStore((s) => s.unreadByConv);
   const agents = useChatStore((s) => s.agents);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -368,6 +372,32 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                           {formatRelativeDate(conv.created_at)}
                         </div>
                       </div>
+                      {(() => {
+                        const unread = unreadByConv.get(conv.id) ?? 0;
+                        if (unread <= 0) return null;
+                        return (
+                          <div
+                            style={{
+                              alignSelf: 'center',
+                              minWidth: 18,
+                              height: 18,
+                              padding: '0 6px',
+                              borderRadius: 9,
+                              background: 'var(--amber)',
+                              color: '#000',
+                              fontSize: '0.6875rem',
+                              fontWeight: 700,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                            aria-label={`${unread} sin leer`}
+                          >
+                            {unread > 99 ? '99+' : unread}
+                          </div>
+                        );
+                      })()}
                     </button>
                   } items={contextItems} />
                 );

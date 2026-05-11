@@ -3,17 +3,28 @@
  * All rights reserved.
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { useGatewayStore } from '@/stores/gateway.store';
+import { api } from '@/services/api';
 
 interface CronJobEditorProps {
   onClose: () => void;
   onCreated: () => void;
 }
 
+interface AgentSummary {
+  id: string;
+  name: string;
+  display_name: string;
+}
+
 export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
+  const channels = useGatewayStore(s => s.channels);
+  const fetchChannels = useGatewayStore(s => s.fetchChannels);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [name, setName] = useState('');
   const [scheduleType, setScheduleType] = useState<'at' | 'every' | 'cron'>('every');
   const [schedule, setSchedule] = useState('1h');
@@ -22,6 +33,17 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
   const [target, setTarget] = useState('');
   const [channel, setChannel] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (channels.length === 0) fetchChannels();
+    api.get<{ data: AgentSummary[] }>('/managed-agents')
+      .then(r => setAgents(r.data ?? []))
+      .catch(() => { /* silent — agents lookup is hint-only */ });
+  }, [channels.length, fetchChannels]);
+
+  const knownChannels = useMemo(() => channels.map(c => c.type), [channels]);
+  const channelKnown = !channel || knownChannels.includes(channel);
+  const targetIsAgent = target && agents.some(a => a.name === target || a.id === target || a.display_name === target);
 
   const handleSubmit = async () => {
     if (!name || !schedule || !payload) {
@@ -173,11 +195,47 @@ export function CronJobEditor({ onClose, onCreated }: CronJobEditorProps) {
             <div style={{ display: 'flex', gap: 10 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                 <span style={labelStyle}>Target (optional)</span>
-                <input value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Contact/group ID" style={inputStyle} />
+                <input
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  placeholder="Agent name or contact/group ID"
+                  list="cron-target-suggestions"
+                  style={inputStyle}
+                />
+                <datalist id="cron-target-suggestions">
+                  {agents.map(a => (
+                    <option key={a.id} value={a.name}>{a.display_name}</option>
+                  ))}
+                </datalist>
+                {target && !targetIsAgent && (
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                    Free-form ID — make sure it matches a real contact or group.
+                  </span>
+                )}
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                 <span style={labelStyle}>Channel (optional)</span>
-                <input value={channel} onChange={(e) => setChannel(e.target.value)} placeholder="telegram" style={inputStyle} />
+                <select
+                  value={channelKnown ? channel : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') return;
+                    setChannel(e.target.value);
+                  }}
+                  style={{ ...inputStyle, fontFamily: 'var(--font-sans)' }}
+                >
+                  <option value="">(none)</option>
+                  {channels.map(c => (
+                    <option key={c.type} value={c.type}>
+                      {c.type}{c.status !== 'connected' ? ` (${c.status})` : ''}
+                    </option>
+                  ))}
+                  {!channelKnown && <option value="__custom__">{channel} (not configured)</option>}
+                </select>
+                {!channelKnown && channel && (
+                  <span style={{ fontSize: '0.6875rem', color: '#f97316' }}>
+                    Channel "{channel}" is not configured.
+                  </span>
+                )}
               </label>
             </div>
           )}

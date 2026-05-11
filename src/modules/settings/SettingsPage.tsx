@@ -30,6 +30,7 @@ import { SyncSection } from '@/components/settings/sections/SyncSection';
 import { MailSection } from '@/components/settings/sections/MailSection';
 import { PhotosSection } from '@/components/settings/sections/PhotosSection';
 import { DashSection } from '@/components/settings/sections/DashSection';
+import { ChatToolsSection } from '@/components/settings/sections/ChatToolsSection';
 import { StorageSection } from '@/components/settings/sections/StorageSection';
 import { SecuritySection } from '@/components/settings/sections/SecuritySection';
 import { LicenseSection } from '@/components/settings/sections/LicenseSection';
@@ -150,6 +151,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
         { id: 'voice', label: 'Voice', icon: Mic },
         { id: 'tool-access-defaults', label: 'Tool Access', icon: Wrench },
+        { id: 'chat-tools', label: 'Chat Tools Display', icon: Wrench },
         { id: 'memory-search', label: 'Memory', icon: Brain },
         { id: 'preferences', label: 'Learned Preferences', icon: Brain },
         { id: 'sessions', label: 'Sessions', icon: History },
@@ -282,6 +284,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'network':              () => <NetworkSection />,
   'energy':               () => <EnergySection />,
   'dash':                 () => <DashSection />,
+  'chat-tools':           () => <ChatToolsSection />,
   'users':                () => <UsersSection />,
   'database':             () => <DatabaseSection />,
   'security':             () => <SecuritySection />,

@@ -85,6 +85,19 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
           <ArrowRight size={12} style={{ color: 'var(--text-dim)' }} />
           <span>{toAvatar}</span>
           <span>{toName}</span>
+          {message.type === 'delegation' && (
+            <span style={{
+              marginLeft: 6,
+              fontSize: '0.6875rem',
+              fontWeight: 500,
+              color: 'var(--amber)',
+              border: '1px solid var(--amber)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1px 6px',
+            }}>
+              🔀 delegated
+            </span>
+          )}
         </div>
         <span style={{
           fontSize: '0.75rem',
@@ -93,6 +106,18 @@ export function ConversationMessage({ message, agents }: ConversationMessageProp
           {time}
         </span>
       </div>
+
+      {/* "Briefed by X" line — when this is the synthetic spawn prompt */}
+      {message.metadata?.briefing === true && (
+        <div style={{
+          fontSize: '0.6875rem',
+          color: 'var(--text-muted)',
+          fontStyle: 'italic',
+          marginBottom: 4,
+        }}>
+          🪄 Briefing inicial enviado por {fromName} (no escrito por el usuario)
+        </div>
+      )}
 
       {/* Message body */}
       <div style={{

@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { toast } from 'sonner';
+import { api } from '@/services/api';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -49,6 +50,7 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import { useExtractionStore } from '@/stores/extraction.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
+import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -72,6 +74,7 @@ export function Shell() {
   // Gateway onboarding status
   const gatewayConfigured = useGatewayStore((s) => s.configured);
   const fetchSnapshot = useGatewayStore((s) => s.fetchSnapshot);
+  const fetchHealth = useGatewayStore((s) => s.fetchHealth);
   const [onboardingJustCompleted, setOnboardingJustCompleted] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const prevConfiguredRef = useRef<boolean | null>(null);
@@ -85,7 +88,13 @@ export function Shell() {
     // Ola 7: load OpenClaw config schema once at boot. Used by the Raw JSON
     // editor (/settings/raw) for client-side validation. Failures are silent.
     loadConfigSchema();
-  }, [fetchSnapshot, fetchSettings, loadConfigSchema]);
+    // Poll Gateway health every 30s so the composite ConnectionStatus
+    // and the chat input dot reflect the real Core↔Gateway state, not
+    // just dash↔Core. /gateway/health is cheap (<50ms). fetchHealth
+    // silently swallows errors (last-known value retained).
+    const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
+    return () => clearInterval(healthPoll);
+  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth]);
 
   // Poll every 10s while unconfigured to detect onboarding completion
   useEffect(() => {
@@ -127,6 +136,10 @@ export function Shell() {
 
   // Service lifecycle WS events
   useServiceEvents();
+
+  // Studio doc-phase generation streams — single global subscription
+  // so navigating between phases doesn't drop tokens / done events.
+  useStudioGenerationStreamsSubscription();
 
   // Fetch services on mount
   const fetchServices = useServicesStore((s) => s.fetchServices);
@@ -234,6 +247,7 @@ export function Shell() {
   const mediaEvent = useWebSocket('media.download.*');
   const sensorEvent = useWebSocket('sensor.*');
   const workflowEvent = useWebSocket('workflow.*');
+  const postYieldEvent = useWebSocket('chat.post_yield_message');
 
   useEffect(() => {
     if (!syncEvent) return;
@@ -304,6 +318,49 @@ export function Shell() {
     // refetches the open detail in this tab). No user-facing
     // notification — the user is the one who triggered it.
     if (agentEvent.event === 'agent.model_changed') return;
+
+    // agent.stuck_yield → parent agent waiting on aborted sub-agents.
+    // Persistent toast with a "Resume" action that calls the recovery
+    // endpoint to inject a synthetic wake-up message. The dash chat
+    // doesn't auto-open; we just notify the user.
+    if (agentEvent.event === 'agent.stuck_yield') {
+      const agentId = agentEvent.data.agent_id as string;
+      const agentName = agentEvent.data.agent_name as string;
+      const sessionKey = agentEvent.data.session_key as string;
+      const aborted = (agentEvent.data.aborted_children as Array<{ agent_name: string }>) ?? [];
+      const names = aborted.map(a => a.agent_name).filter(Boolean).join(', ') || 'sus sub-agentes';
+      toast.warning(`${agentName} esperando sub-agentes cancelados`, {
+        description: `${names} se cancelaron sin completar. Pulsa Reanudar para que ${agentName} retome.`,
+        duration: Infinity,
+        id: `stuck-yield-${sessionKey}`,
+        action: {
+          label: 'Reanudar',
+          onClick: async () => {
+            try {
+              const res = await api.post<{ resumed: boolean; already_resolved?: boolean }>(
+                `/managed-agents/${agentId}/stuck-yield/resume`,
+                { session_key: sessionKey },
+              );
+              if (res?.already_resolved) {
+                toast.info(`${agentName} ya había retomado por su cuenta.`);
+              } else {
+                toast.success(`${agentName} reanudado.`);
+              }
+            } catch (err) {
+              toast.error(`No se pudo reanudar ${agentName}: ${err instanceof Error ? err.message : 'error'}`);
+            }
+          },
+        },
+      });
+      return;
+    }
+
+    // agent.stuck_yield_resolved → another tab/client cleared it; dismiss.
+    if (agentEvent.event === 'agent.stuck_yield_resolved') {
+      const sessionKey = agentEvent.data.session_key as string;
+      toast.dismiss(`stuck-yield-${sessionKey}`);
+      return;
+    }
 
     // agent.message → user-facing notification
     const agent = agentEvent.data.agent as string;
@@ -435,6 +492,71 @@ export function Shell() {
     // Refresh pending count on any approval event
     fetchPendingCount();
   }, [approvalEvent, addNotification, fetchPendingCount]);
+
+  // Post-yield messages: when a parent agent (Francis) replies to a
+  // sub-agent's announce-back, that reply is generated INSIDE OpenClaw
+  // after chat-bridge already returned. Core's subagent-conversation
+  // mirror picks it up and broadcasts this event so the open chat tab
+  // can append the reply without waiting for a manual refresh.
+  useEffect(() => {
+    if (!postYieldEvent) return;
+    const data = postYieldEvent.data as {
+      id: string;
+      conversation_id: string | null;
+      session_id: string;
+      from_agent: string;
+      text: string;
+      created_at: string;
+    };
+    if (!data.id || !data.conversation_id) return;
+    const store = useChatStore.getState();
+    store.addMessage({
+      id: data.id,
+      conversation_id: data.conversation_id,
+      role: 'assistant',
+      content: data.text,
+      agent: data.from_agent,
+      timestamp: data.created_at,
+    });
+    // Clear the "Esperando…" placeholder if it was for this conversation.
+    if (store.streamingMessage?.conversationId === data.conversation_id) {
+      store.setStreamingMessage(null);
+    }
+  }, [postYieldEvent]);
+
+  // Sub-agent messages (from the parent's delegation): the mirror
+  // emits these as new sub-agent thread rows are persisted. The dash
+  // sidebar should reflect new threads in real time so the user sees
+  // the Francis↔Atlas / Francis↔Sentinel conversation pop up while
+  // they're delegating.
+  const subagentMsgEvent = useWebSocket('chat.subagent_message');
+  useEffect(() => {
+    if (!subagentMsgEvent) return;
+    const data = subagentMsgEvent.data as {
+      id: string;
+      conversation_id: string | null;
+      session_id: string;
+      from_agent: string;
+      to_agent: string;
+      role: 'user' | 'assistant';
+      text: string;
+      created_at: string;
+    };
+    if (!data.id || !data.conversation_id) return;
+    const store = useChatStore.getState();
+    // Append to messages map so the thread renders if opened.
+    store.addMessage({
+      id: data.id,
+      conversation_id: data.conversation_id,
+      role: data.role,
+      content: data.text,
+      agent: data.role === 'assistant' ? data.from_agent : undefined,
+      timestamp: data.created_at,
+    });
+    // Refresh conversation list so the new thread shows in sidebar
+    // with its message_count and lastMessageAt updated.
+    void store.loadConversations();
+  }, [subagentMsgEvent]);
 
   // Clipboard events
   const addClipboardEntry = useClipboardStore((s) => s.addEntry);

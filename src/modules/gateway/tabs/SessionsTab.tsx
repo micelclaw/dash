@@ -11,10 +11,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, RefreshCw, Bot, Clock, Cpu } from 'lucide-react';
+import { MessageSquare, RefreshCw, Bot, Clock, Cpu, AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { isModelRefValid } from '../lib/refs';
 
 function formatAge(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -28,15 +29,16 @@ function formatAge(ms: number): string {
 
 export function SessionsTab() {
   const isMobile = useIsMobile();
-  const { sessions, sessionsLoading, sessionsError, fetchSessions } = useGatewayStore();
+  const { sessions, sessionsLoading, sessionsError, fetchSessions, models, fetchModels } = useGatewayStore();
   const [refreshHover, setRefreshHover] = useState(false);
 
   useEffect(() => {
     if (sessions.length === 0) fetchSessions();
+    if (models.length === 0) fetchModels();
     // Auto-refresh every 30s
     const interval = setInterval(() => fetchSessions(), 30_000);
     return () => clearInterval(interval);
-  }, [sessions.length, fetchSessions]);
+  }, [sessions.length, fetchSessions, models.length, fetchModels]);
 
   if (sessionsLoading && sessions.length === 0) {
     return (
@@ -159,11 +161,19 @@ export function SessionsTab() {
                     fontFamily: 'var(--font-sans)', marginTop: 2,
                   }}>
                     <Cpu size={10} style={{ flexShrink: 0 }} />
-                    <span style={{
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {session.model}
-                    </span>
+                    {(() => {
+                      const valid = isModelRefValid(session.model, models);
+                      return (
+                        <span style={{
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          color: valid ? undefined : '#f43f5e',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }} title={valid ? undefined : 'Session model is not in the configured list'}>
+                          {!valid && <AlertTriangle size={10} />}
+                          {session.model}
+                        </span>
+                      );
+                    })()}
                     <span>&middot;</span>
                     <span>{(session.tokens_used / 1000).toFixed(1)}k tokens</span>
                     {session.context_tokens > 0 && (

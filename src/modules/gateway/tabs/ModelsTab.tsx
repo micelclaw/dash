@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2 } from 'lucide-react';
+import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -21,6 +21,7 @@ import * as gwService from '@/services/gateway.service';
 import { StatusPill } from '../components/StatusPill';
 import { ModelSetupWizard } from '../components/ModelSetupWizard';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
+import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayModel, CatalogModel } from '../types';
 
@@ -68,6 +69,14 @@ const PROVIDER_LABELS: Record<string, string> = {
 type View = 'configured' | 'catalog' | 'advanced';
 type CatalogSubView = 'providers' | 'models';
 
+// Providers that the user installs/configures from the dash wizard.
+// Custom providers follow the `custom-api-*` convention; the local-server
+// providers have fixed IDs aligned with the OpenClaw CLI.
+const USER_MANAGED_FIXED_PROVIDERS = new Set(['ollama', 'vllm', 'sglang', 'lm-studio']);
+function isUserManagedProvider(id: string): boolean {
+  return id.startsWith('custom-api-') || USER_MANAGED_FIXED_PROVIDERS.has(id);
+}
+
 interface ProviderEntry {
   provider: string;
   label: string;
@@ -109,7 +118,16 @@ export function ModelsTab() {
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [customWizardType, setCustomWizardType] = useState<import('../components/ModelSetupWizard').ProviderType | null>(null);
   const [customProviderIds, setCustomProviderIds] = useState<string[]>([]);
+  const [providersConfig, setProvidersConfig] = useState<gwService.ProvidersConfig | null>(null);
   const [discoveredCounts, setDiscoveredCounts] = useState<Record<string, number>>({});
+  const [customModelEditor, setCustomModelEditor] = useState<{
+    mode: 'add' | 'edit';
+    provider: string;
+    modelId: string;
+    modelName?: string;
+    contextWindow?: number;
+    maxTokens?: number;
+  } | null>(null);
   const ollamaStatus = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_status ?? 'disconnected');
   const ollamaUrl = useSettingsStore((s) => s.settings?.ai?.local_models?.ollama_url ?? 'http://127.0.0.1:11434');
 
@@ -121,10 +139,13 @@ export function ModelsTab() {
     if (view === 'catalog' && catalog.length === 0 && !catalogLoading) fetchCatalog();
   }, [view, catalog.length, catalogLoading, fetchCatalog]);
 
-  // Fetch custom provider IDs from config (so the grid shows them even with 0 catalog models)
+  // Fetch custom provider IDs and full config (so the grid shows them
+  // even with 0 catalog models, and the Edit modal can read existing
+  // contextWindow/maxTokens from `models.providers[id].models[]`).
   const fetchCustomProviders = useCallback(async () => {
     try {
       const config = await gwService.getProvidersConfig();
+      setProvidersConfig(config);
       setCustomProviderIds(Object.keys(config.providers ?? {}));
     } catch { /* silent */ }
   }, []);
@@ -209,14 +230,22 @@ export function ModelsTab() {
         grouped.set(id, { count: discoveredCounts[id] ?? 0, available: true, configured: 0 });
       }
     }
-    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => ({
-      provider,
-      label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
-      color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
-      modelCount: info.count,
-      configuredCount: info.configured,
-      hasAuth: info.available,
-    }));
+    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => {
+      // Orphan: user-managed provider whose models are still referenced by
+      // agents.list / agents.defaults, so the catalog lists them as
+      // available — but `models.providers[id]` is gone, so calls fail with
+      // 401 "no api key found". Treat as needing setup so clicking the
+      // tile opens the wizard pre-populated.
+      const isOrphan = isUserManagedProvider(provider) && !customProviderIds.includes(provider);
+      return {
+        provider,
+        label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
+        color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
+        modelCount: info.count,
+        configuredCount: info.configured,
+        hasAuth: info.available && !isOrphan,
+      };
+    });
     // Providers with auth first, then alphabetical
     entries.sort((a, b) => {
       if (a.hasAuth !== b.hasAuth) return a.hasAuth ? -1 : 1;
@@ -228,10 +257,15 @@ export function ModelsTab() {
   const handleProviderClick = (provider: string) => {
     const entry = providerEntries.find(e => e.provider === provider);
     if (!entry?.hasAuth) {
-      // No credentials — open wizard for this provider
-      const representative = catalog.find(m => m.provider === provider && !m.configured);
+      // No credentials — open wizard for this provider. For orphans, all
+      // catalog models are flagged `configured`, so fall back to any model
+      // from the provider (the wizard skips re-adding when configured).
+      const representative = catalog.find(m => m.provider === provider && !m.configured)
+        ?? catalog.find(m => m.provider === provider);
       if (representative) {
         setWizardModel(representative);
+      } else if (USER_MANAGED_FIXED_PROVIDERS.has(provider)) {
+        setCustomWizardType(provider as import('../components/ModelSetupWizard').ProviderType);
       } else {
         setCustomWizardType('custom');
       }
@@ -252,7 +286,11 @@ export function ModelsTab() {
     }
   };
 
-  // ── Discover models for custom providers with 0 catalog models ──
+  // ── Discover models for custom providers ──
+  // Always run for custom providers when viewing their model list, so the
+  // user can add additional models even after one is already configured.
+  // The render layer dedupes against the configured catalog entries and
+  // shows discovered-but-not-configured models as "available to add".
   const [discoveredModels, setDiscoveredModels] = useState<gwService.DiscoveredModel[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
@@ -260,9 +298,7 @@ export function ModelsTab() {
   useEffect(() => {
     if (catalogSubView !== 'models' || !selectedProvider) { setDiscoveredModels([]); return; }
     const isCustom = customProviderIds.includes(selectedProvider);
-    const hasCatalogModels = catalog.some(m => m.provider === selectedProvider);
-    if (!isCustom || hasCatalogModels) { setDiscoveredModels([]); return; }
-    // Auto-discover
+    if (!isCustom) { setDiscoveredModels([]); return; }
     let cancelled = false;
     setDiscovering(true);
     setDiscoverError(null);
@@ -274,30 +310,47 @@ export function ModelsTab() {
       if (!cancelled) setDiscovering(false);
     });
     return () => { cancelled = true; };
-  }, [catalogSubView, selectedProvider, customProviderIds, catalog]);
+  }, [catalogSubView, selectedProvider, customProviderIds]);
 
-  const handleAddDiscoveredModel = async (modelId: string) => {
-    const key = `${selectedProvider}/${modelId}`;
-    setMutatingModel(key);
-    try {
-      // Register the model in the provider's config with sensible defaults
-      // so OpenClaw knows its maxTokens (important for reasoning models)
-      await gwService.updateProvidersConfig({
-        models: {
-          providers: {
-            [selectedProvider!]: {
-              models: [{ id: modelId, name: modelId, maxTokens: 8192 }],
-            },
-          },
-        },
-      });
-      await addModel(key);
-      toast.success(`Added ${modelId}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add model');
-    } finally {
-      setMutatingModel(null);
-    }
+  // Adding a discovered model opens the editor modal so the user can set
+  // contextWindow + maxTokens explicitly. Without this OpenClaw falls
+  // back to DEFAULT_CONTEXT_TOKENS=200000, which is wrong for both small
+  // (Llama 8K) and large (DeepSeek 1M) custom models.
+  const handleAddDiscoveredModel = (modelId: string, modelName?: string) => {
+    if (!selectedProvider) return;
+    setCustomModelEditor({
+      mode: 'add',
+      provider: selectedProvider,
+      modelId,
+      modelName: modelName ?? modelId,
+    });
+  };
+
+  // Edit existing custom-managed model: pre-populate the modal with the
+  // current contextWindow + maxTokens read from `models.providers[id].models[]`.
+  const handleEditCustomModel = (model: CatalogModel) => {
+    const providerCfg = providersConfig?.providers?.[model.provider];
+    const modelsList = (providerCfg?.models as Array<Record<string, unknown>> | undefined) ?? [];
+    const modelId = model.key.startsWith(`${model.provider}/`)
+      ? model.key.slice(model.provider.length + 1)
+      : model.key;
+    const existing = modelsList.find(m => m.id === modelId);
+    setCustomModelEditor({
+      mode: 'edit',
+      provider: model.provider,
+      modelId,
+      modelName: (existing?.name as string | undefined) ?? model.name ?? modelId,
+      contextWindow: typeof existing?.contextWindow === 'number'
+        ? existing.contextWindow
+        : (model.context_window ?? undefined),
+      maxTokens: typeof existing?.maxTokens === 'number' ? existing.maxTokens : undefined,
+    });
+  };
+
+  const handleCustomModelEditorSuccess = () => {
+    fetchModels();
+    fetchCatalog();
+    fetchCustomProviders();
   };
 
   // ── Delete custom provider ──
@@ -348,10 +401,21 @@ export function ModelsTab() {
 
   const loading = view === 'advanced' ? false : (view === 'configured' ? modelsLoading : catalogLoading);
   const error = view === 'advanced' ? null : (view === 'configured' ? modelsError : catalogError);
+  // For custom providers in models view, include available-to-add
+  // (discovered but not yet configured) in the count.
+  const selectedProviderModelsCount = (() => {
+    const configured = filteredCatalog.filter(m => m.provider === selectedProvider).length;
+    if (!selectedProvider || !customProviderIds.includes(selectedProvider)) return configured;
+    const configuredKeys = new Set(
+      catalog.filter(m => m.provider === selectedProvider).map(m => m.key)
+    );
+    const available = discoveredModels.filter(dm => !configuredKeys.has(`${selectedProvider}/${dm.id}`)).length;
+    return configured + available;
+  })();
   const count = view === 'advanced' ? 0
     : view === 'configured' ? filteredModels.length
     : catalogSubView === 'providers' ? providerEntries.length
-    : filteredCatalog.filter(m => m.provider === selectedProvider).length;
+    : selectedProviderModelsCount;
   const countLabel = view === 'catalog' && catalogSubView === 'providers'
     ? `${count} provider${count !== 1 ? 's' : ''}`
     : `${count} model${count !== 1 ? 's' : ''}`;
@@ -573,17 +637,34 @@ export function ModelsTab() {
             {/* Model list for selected provider */}
             {(() => {
               const providerModels = filteredCatalog.filter(m => m.provider === selectedProvider);
+              const isCustom = customProviderIds.includes(selectedProvider!);
               const q = search.toLowerCase();
 
-              // Discovered models (custom providers with 0 catalog models)
-              if (providerModels.length === 0 && discovering) {
+              // For custom providers, surface available-to-add models
+              // (discovered from the provider's /models endpoint) that
+              // aren't already in the configured catalog.
+              const configuredKeys = new Set(
+                catalog.filter(m => m.provider === selectedProvider).map(m => m.key)
+              );
+              const availableToAdd = isCustom
+                ? discoveredModels.filter(dm => !configuredKeys.has(`${selectedProvider}/${dm.id}`))
+                : [];
+              const filteredAvailable = search
+                ? availableToAdd.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
+                : availableToAdd;
+
+              const showLoading = isCustom && discovering && providerModels.length === 0 && discoveredModels.length === 0;
+              const showError = isCustom && discoverError && providerModels.length === 0 && discoveredModels.length === 0;
+              const showEmpty = providerModels.length === 0 && filteredAvailable.length === 0 && !showLoading && !showError;
+
+              if (showLoading) {
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
                     <Loader2 size={14} className="spin" /> Discovering models from {selectedProvider}...
                   </div>
                 );
               }
-              if (providerModels.length === 0 && discoverError) {
+              if (showError) {
                 return (
                   <div style={{
                     padding: 20, background: '#ef444410', border: '1px solid #ef444425',
@@ -599,33 +680,7 @@ export function ModelsTab() {
                   </div>
                 );
               }
-              if (providerModels.length === 0 && discoveredModels.length > 0) {
-                const filtered = search
-                  ? discoveredModels.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
-                  : discoveredModels;
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <p style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 4 }}>
-                      {discoveredModels.length} model{discoveredModels.length !== 1 ? 's' : ''} discovered from {selectedProvider}. Click Add to configure.
-                    </p>
-                    {filtered.map((dm) => {
-                      const key = `${selectedProvider}/${dm.id}`;
-                      return (
-                        <DiscoveredModelRow
-                          key={dm.id}
-                          modelId={dm.id}
-                          modelName={dm.name}
-                          provider={selectedProvider!}
-                          loading={mutatingModel === key}
-                          onAdd={() => handleAddDiscoveredModel(dm.id)}
-                        />
-                      );
-                    })}
-                  </div>
-                );
-              }
-              if (providerModels.length === 0) {
-                const isCustom = customProviderIds.includes(selectedProvider!);
+              if (showEmpty) {
                 const text = search
                   ? 'No models match your search'
                   : isCustom && !discovering
@@ -633,8 +688,10 @@ export function ModelsTab() {
                     : 'No models available for this provider';
                 return <EmptyState text={text} />;
               }
+
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {/* Configured */}
                   {providerModels.map((model) => (
                     <CatalogRow
                       key={model.key}
@@ -646,8 +703,47 @@ export function ModelsTab() {
                       onAdd={handleAddModel}
                       onRemove={handleRemoveModel}
                       onConfigure={(m) => setWizardModel(m)}
+                      onEdit={isUserManagedProvider(model.provider) && model.configured
+                        ? handleEditCustomModel
+                        : undefined}
                     />
                   ))}
+                  {/* Available to add (custom providers only) */}
+                  {filteredAvailable.length > 0 && (
+                    <>
+                      <div style={{
+                        marginTop: providerModels.length > 0 ? 12 : 0,
+                        marginBottom: 4,
+                        display: 'flex', alignItems: 'center', gap: 8,
+                      }}>
+                        <span style={{
+                          fontSize: '0.6875rem', fontWeight: 600,
+                          color: 'var(--text-dim)',
+                          fontFamily: 'var(--font-display)',
+                          textTransform: 'uppercase', letterSpacing: '0.05em',
+                        }}>
+                          Available to add
+                        </span>
+                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                          {filteredAvailable.length} from {selectedProvider}
+                        </span>
+                        {discovering && <Loader2 size={11} className="spin" style={{ color: 'var(--text-dim)' }} />}
+                      </div>
+                      {filteredAvailable.map((dm) => {
+                        const key = `${selectedProvider}/${dm.id}`;
+                        return (
+                          <DiscoveredModelRow
+                            key={dm.id}
+                            modelId={dm.id}
+                            modelName={dm.name}
+                            provider={selectedProvider!}
+                            loading={mutatingModel === key}
+                            onAdd={() => handleAddDiscoveredModel(dm.id)}
+                          />
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               );
             })()}
@@ -667,6 +763,18 @@ export function ModelsTab() {
           providerType={customWizardType}
           onClose={() => setCustomWizardType(null)}
           onSuccess={handleWizardSuccess}
+        />
+      )}
+      {customModelEditor && (
+        <CustomModelConfigModal
+          mode={customModelEditor.mode}
+          provider={customModelEditor.provider}
+          modelId={customModelEditor.modelId}
+          modelName={customModelEditor.modelName}
+          initialContextWindow={customModelEditor.contextWindow}
+          initialMaxTokens={customModelEditor.maxTokens}
+          onClose={() => setCustomModelEditor(null)}
+          onSuccess={handleCustomModelEditorSuccess}
         />
       )}
     </ScrollArea>
@@ -1053,7 +1161,7 @@ function formatCtx(ctx: number | null): string {
   return `${ctx} ctx`;
 }
 
-function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd, onRemove, onConfigure }: {
+function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd, onRemove, onConfigure, onEdit }: {
   model: CatalogModel;
   isMobile: boolean;
   isHovered: boolean;
@@ -1062,6 +1170,9 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
   onAdd: (key: string) => void;
   onRemove: (key: string) => void;
   onConfigure: (model: CatalogModel) => void;
+  /** Set for user-managed (custom-api-*, ollama, vllm, sglang, lm-studio)
+   *  configured models — opens the modal to edit contextWindow / maxTokens. */
+  onEdit?: (model: CatalogModel) => void;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
   const isMutating = mutatingModel === model.key;
@@ -1153,37 +1264,49 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
       </div>
 
       {/* Action */}
-      {!model.is_default && (
-        model.configured ? (
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {/* Edit ctx/maxTokens — only for configured user-managed providers */}
+        {onEdit && model.configured && (
           <ActionButton
-            icon={<X size={12} />}
-            label="Remove"
-            loading={isMutating}
-            onClick={() => onRemove(model.key)}
-            variant="danger"
-          />
-        ) : model.available ? (
-          <ActionButton
-            icon={<Plus size={12} />}
-            label="Add"
-            loading={isMutating}
-            onClick={() => onAdd(model.key)}
-            variant="primary"
-          />
-        ) : (
-          // Provider has no credentials yet — open the wizard so the user
-          // can paste an API key (standard providers) or set up a custom
-          // base URL + key (custom-api-* providers). After success the
-          // wizard adds the model automatically.
-          <ActionButton
-            icon={<Key size={12} />}
-            label="Configure provider"
-            loading={isMutating}
-            onClick={() => onConfigure(model)}
+            icon={<Pencil size={12} />}
+            label="Edit"
+            loading={false}
+            onClick={() => onEdit(model)}
             variant="secondary"
           />
-        )
-      )}
+        )}
+        {!model.is_default && (
+          model.configured ? (
+            <ActionButton
+              icon={<X size={12} />}
+              label="Remove"
+              loading={isMutating}
+              onClick={() => onRemove(model.key)}
+              variant="danger"
+            />
+          ) : model.available ? (
+            <ActionButton
+              icon={<Plus size={12} />}
+              label="Add"
+              loading={isMutating}
+              onClick={() => onAdd(model.key)}
+              variant="primary"
+            />
+          ) : (
+            // Provider has no credentials yet — open the wizard so the user
+            // can paste an API key (standard providers) or set up a custom
+            // base URL + key (custom-api-* providers). After success the
+            // wizard adds the model automatically.
+            <ActionButton
+              icon={<Key size={12} />}
+              label="Configure provider"
+              loading={isMutating}
+              onClick={() => onConfigure(model)}
+              variant="secondary"
+            />
+          )
+        )}
+      </div>
     </div>
   );
 }

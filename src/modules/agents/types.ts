@@ -56,6 +56,19 @@ export interface AgentConversation {
   tokens_used: number | null;
   model_used: string | null;
   cost_usd: number | string | null; // Drizzle returns decimal columns as strings
+  /**
+   * One of `webchat | delegation | council | heartbeat | cron`. Drives badge
+   * rendering in ConversationMessage. `delegation` rows are sub-agent runs
+   * mirrored from OpenClaw JSONL by subagent-conversation-mirror.service.
+   */
+  type?: string;
+  /**
+   * Free-form jsonb. For `type=delegation` rows: `delegated: true` is always
+   * set; `briefing: true` flags the synthetic spawn prompt that came from
+   * the parent agent (so the dash can render "Briefed by X" instead of
+   * pretending the human user typed it).
+   */
+  metadata?: Record<string, unknown> | null;
 
   created_at: string;
 }
