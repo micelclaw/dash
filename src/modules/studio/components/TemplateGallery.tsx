@@ -14,7 +14,8 @@
 //
 // Phase 11: shows the 6-8 bundled templates as cards. Click → POST
 // /studio/templates/<slug>/instantiate → navigate to the new project
-// (which lands directly in the `concept` phase, skipping scoping).
+// (which lands in the scoping phase with the template's preset answers
+// pre-filled, so the user can review/edit before advancing).
 
 import { useEffect, useState } from 'react';
 import { Loader2, Sparkles, AlertCircle } from 'lucide-react';
@@ -69,7 +70,7 @@ export function TemplateGallery({ onInstantiated }: Props) {
   if (loading) {
     return (
       <div style={hint}>
-        <Loader2 size={14} className="animate-spin" /> Cargando plantillas…
+        <Loader2 size={14} className="animate-spin" /> Loading templates…
       </div>
     );
   }
@@ -83,7 +84,7 @@ export function TemplateGallery({ onInstantiated }: Props) {
   }
 
   if (templates.length === 0) {
-    return <div style={hint}>No hay plantillas disponibles.</div>;
+    return <div style={hint}>No templates available.</div>;
   }
 
   // Group by category for visual organisation
@@ -166,7 +167,7 @@ export function TemplateGallery({ onInstantiated }: Props) {
                       display: 'flex', alignItems: 'center', gap: 6,
                       fontSize: '0.6875rem', color: 'var(--amber)',
                     }}>
-                      <Loader2 size={11} className="animate-spin" /> Instanciando…
+                      <Loader2 size={11} className="animate-spin" /> Creating…
                     </div>
                   )}
                   {!isBusy && (
@@ -174,7 +175,7 @@ export function TemplateGallery({ onInstantiated }: Props) {
                       display: 'flex', alignItems: 'center', gap: 4,
                       fontSize: '0.6875rem', color: 'var(--text-muted)',
                     }}>
-                      <Sparkles size={10} /> Empezar desde aquí
+                      <Sparkles size={10} /> Start from here
                     </div>
                   )}
                 </button>

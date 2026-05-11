@@ -10,29 +10,44 @@
  * https://micelclaw.com
  */
 
-import { useStudioStore, type StudioProject } from '@/stores/studio.store';
+import { useEffect } from 'react';
+import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
 import { DocPhaseLayout } from './DocPhaseLayout';
 
 interface Props {
   project: StudioProject;
   viewMode?: 'edit' | 'past';
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
-export function FrontendPhase({ project, viewMode }: Props) {
+const DEFAULT_PLACEHOLDER =
+  'Describe the UI you have in mind: layout, density, references to existing apps, must-have screens…';
+
+export function FrontendPhase({ project, viewMode, onSelectPhase }: Props) {
   const generateFrontend = useStudioStore((s) => s.generateFrontend);
   const approvePhase = useStudioStore((s) => s.approvePhase);
+  const ensureTemplatesLoaded = useStudioStore((s) => s.ensureTemplatesLoaded);
+  const getTemplateBySlug = useStudioStore((s) => s.getTemplateBySlug);
+
+  useEffect(() => {
+    if (project.template_slug) ensureTemplatesLoaded().catch(() => {});
+  }, [project.template_slug, ensureTemplatesLoaded]);
+
+  const template = getTemplateBySlug(project.template_slug);
+  const placeholder = template?.placeholders?.frontend ?? DEFAULT_PLACEHOLDER;
 
   return (
     <DocPhaseLayout
       project={project}
       phase="frontend"
       docKey="doc_frontend"
-      title="Exploración de frontend"
-      emptyHint="Listo para explorar la UI de tu app"
-      approveLabel="Aprobar frontend →"
+      title="Frontend exploration"
+      emptyHint="Ready to explore your app's UI"
+      approveLabel="Approve frontend →"
       viewMode={viewMode}
-      initialContextLabel="¿Cómo te imaginas la UI?"
-      initialContextPlaceholder="Por ejemplo: estilo Notion minimalista, sidebar a la izquierda, vista diaria por defecto, calendario semanal para los horarios, tabla de pacientes con columnas personalizables, colores suaves verdes y azules sanitarios…"
+      onSelectPhase={onSelectPhase}
+      initialContextLabel="How do you imagine the UI?"
+      initialContextPlaceholder={placeholder}
       onGenerate={async (answers) => { await generateFrontend(project.id, answers); }}
       onApprove={async (comment) => { await approvePhase(project.id, 'frontend', comment); }}
     />

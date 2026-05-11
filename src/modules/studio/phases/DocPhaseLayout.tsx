@@ -24,12 +24,13 @@
 import { useEffect, useState } from 'react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore, type StudioProject } from '@/stores/studio.store';
+import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
 import { useStudioStream } from '../hooks/useStudioStream';
 import { StreamingMarkdown } from '../components/StreamingMarkdown';
 import { QuestionCardsPanel } from '../components/QuestionCardsPanel';
 import { RewindButton } from '../components/RewindButton';
 import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
+import { PhaseSidebar } from '../components/PhaseSidebar';
 
 export interface DocPhaseLayoutProps {
   project: StudioProject;
@@ -59,13 +60,15 @@ export interface DocPhaseLayoutProps {
   /**
    * Phase-specific label for the FIRST-TURN context textarea, shown
    * inside the empty state above the "Generar" button. Examples:
-   *   - "Cuéntame de qué va tu proyecto" (concept)
-   *   - "¿Cómo te imaginas la UI?" (frontend)
-   *   - "Restricciones técnicas o decisiones ya tomadas" (foundation)
+   *   - "Tell me about your project" (concept)
+   *   - "How do you imagine the UI?" (frontend)
+   *   - "Technical constraints or decisions already made" (foundation)
    */
   initialContextLabel?: string;
   /** Placeholder for the same textarea. */
   initialContextPlaceholder?: string;
+  /** Pipeline navigation callback (forwarded from ProjectDetailPage). */
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
 export function DocPhaseLayout(props: DocPhaseLayoutProps) {
@@ -75,6 +78,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     viewMode = 'edit',
     initialContextLabel,
     initialContextPlaceholder,
+    onSelectPhase,
   } = props;
   const isPast = viewMode === 'past';
   // First-turn context textarea state. Only used when the empty state
@@ -109,6 +113,18 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       return () => clearTimeout(timer);
     }
   }, [state.status, project.id, refetchProject]);
+
+  // Mount-time refetch: covers the case where the user navigated
+  // away mid-stream and the doc was persisted (or reconciled
+  // server-side from the OC session) while they were on another
+  // phase. Without this they'd land back on a stale project state.
+  // The backend GET self-heals via `reconcileDocPhaseFromOpencode`,
+  // so this is also what triggers recovery when Core died mid-stream.
+  useEffect(() => {
+    refetchProject(project.id).catch(() => {});
+    // Run only on (project, phase) change — NOT on every state.status flip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id, phase]);
 
   const isStreaming = state.status === 'starting' || state.status === 'streaming';
   const docFromProject = (project[docKey] ?? '') as string;
@@ -167,7 +183,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // Refetch so the new status (and the new phase component) takes
       // over without requiring a page refresh.
       await refetchProject(project.id);
-      toast.success('Fase aprobada');
+      toast.success('Phase approved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Approval failed');
     } finally {
@@ -205,7 +221,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             onClick={handleCancel}
             style={toolbarBtnSecondary}
           >
-            <Loader2 size={12} className="animate-spin" /> Cancelar
+            <Loader2 size={12} className="animate-spin" /> Cancel
           </button>
         ) : (
           <button
@@ -214,10 +230,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             disabled={submitting}
             style={toolbarBtnPrimary(submitting)}
           >
-            {hasDoc ? <><RefreshCw size={12} /> Regenerar</> : <><Sparkles size={12} /> Generar</>}
+            {hasDoc ? <><RefreshCw size={12} /> Regenerate</> : <><Sparkles size={12} /> Generate</>}
           </button>
         )}
       </div>
+
+      {/* Pipeline strip (horizontal navigator across all phases) */}
+      <PhaseSidebar project={project} viewedPhase={phase} onSelect={onSelectPhase} />
 
       {/* Body — split: doc viewer (left) + questions/approve (right).
           In past view we collapse to a single column (read-only). */}
@@ -232,7 +251,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             <div style={errorBanner}>
               <AlertCircle size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 1 }} />
               <div>
-                <strong>Error generando el documento.</strong>
+                <strong>Error generating the document.</strong>
                 <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: '0.75rem' }}>{state.error}</div>
               </div>
             </div>
@@ -254,7 +273,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                   <label style={{
                     fontSize: '0.75rem', color: 'var(--text)', fontWeight: 500,
                   }}>
-                    {initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>(opcional)</span>
+                    {initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
                   </label>
                   <textarea
                     value={initialContext}
@@ -290,24 +309,53 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                     }}
                   >
                     <Sparkles size={14} />
-                    Generar
+                    Generate
                   </button>
                   <div style={{
                     fontSize: '0.6875rem', color: 'var(--text-muted)',
                     marginTop: 4,
                   }}>
-                    Si lo dejas en blanco, se usará sólo la información del scope.
+                    If you leave it blank, only the scope info will be used.
                   </div>
                 </div>
               )}
             </div>
           )}
 
+          {state.reasoning && state.reasoning.length > 0 && (
+            <details
+              open={isStreaming || !hasDoc}
+              style={{
+                margin: '0 0 16px 0',
+                padding: '8px 12px',
+                background: 'color-mix(in srgb, var(--text-muted) 6%, transparent)',
+                border: '1px dashed var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontStyle: 'italic',
+                color: 'var(--text-muted)',
+                fontSize: '0.75rem',
+                lineHeight: 1.5,
+              }}
+            >
+              <summary style={{
+                cursor: 'pointer', fontStyle: 'normal',
+                fontSize: '0.65rem', textTransform: 'uppercase',
+                letterSpacing: '0.05em', color: 'var(--text-muted)',
+                fontWeight: 600, marginBottom: 4,
+              }}>
+                Builder reasoning {isStreaming && '· streaming…'}
+              </summary>
+              <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 6 }}>
+                {state.reasoning}
+              </div>
+            </details>
+          )}
+
           {hasDoc && <StreamingMarkdown text={displayText} streaming={isStreaming} />}
 
-          {isStreaming && state.text.length === 0 && (
+          {isStreaming && state.text.length === 0 && state.reasoning.length === 0 && (
             <div style={loadingHint}>
-              <Loader2 size={14} className="animate-spin" /> Studio Builder está pensando…
+              <Loader2 size={14} className="animate-spin" /> Studio Builder is thinking…
             </div>
           )}
         </div>
@@ -325,6 +373,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           {!isStreaming && hasDoc && (
             <QuestionCardsPanel
               questions={questions}
+              preamble={project.last_preamble ?? null}
               busy={submitting}
               onSubmit={(answers) => handleGenerate(answers)}
             />
@@ -340,11 +389,11 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 fontSize: '0.875rem', fontWeight: 600, margin: 0, color: 'var(--text)',
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <CheckCircle2 size={14} style={{ color: '#22c55e' }} /> Aprobar
+                <CheckCircle2 size={14} style={{ color: '#22c55e' }} /> Approve
               </h3>
               <p style={{ fontSize: '0.75rem', margin: 0, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Si el documento refleja lo que querías, apruébalo para pasar a la siguiente fase.
-                {questions.length > 0 && ' Puedes responder primero las preguntas pendientes para afinar el documento.'}
+                If the document reflects what you wanted, approve it to move on to the next phase.
+                {questions.length > 0 && ' You can answer the pending questions first to refine the document.'}
               </p>
 
               {withApprovalComment && (
@@ -360,13 +409,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                         textDecoration: 'underline',
                       }}
                     >
-                      + Añadir comentario antes de aprobar
+                      + Add a comment before approving
                     </button>
                   ) : (
                     <textarea
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Comentario opcional…"
+                      placeholder="Optional comment…"
                       rows={3}
                       style={{
                         padding: 8, fontSize: '0.75rem', background: 'var(--surface)',

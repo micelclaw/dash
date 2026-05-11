@@ -25,31 +25,31 @@ interface ProjectCardProps {
 }
 
 const STATUS_LABELS: Record<StudioProjectStatus, string> = {
-  scoping:        'Scoping',
-  concept:        'Concept',
-  frontend:       'Frontend',
-  foundation:     'Foundation',
-  implementation: 'Implementation',
-  testing:        'Testing',
-  packaging:      'Packaging',
-  packaged:       'Packaged',
-  published:      'Published',
-  archived:       'Archived',
-  frozen:         'Frozen',
+  scoping:    'Scoping',
+  concept:    'Concept',
+  frontend:   'Frontend',
+  foundation: 'Foundation',
+  build:      'Build',
+  testing:    'Testing',
+  packaging:  'Packaging',
+  packaged:   'Packaged',
+  published:  'Published',
+  archived:   'Archived',
+  frozen:     'Frozen',
 };
 
 const STATUS_COLORS: Record<StudioProjectStatus, string> = {
-  scoping:        'var(--amber)',
-  concept:        'var(--amber)',
-  frontend:       'var(--amber)',
-  foundation:     'var(--amber)',
-  implementation: '#3b82f6',
-  testing:        '#3b82f6',
-  packaging:      '#3b82f6',
-  packaged:       '#22c55e',
-  published:      '#22c55e',
-  archived:       'var(--text-muted)',
-  frozen:         '#06b6d4',
+  scoping:    'var(--amber)',
+  concept:    'var(--amber)',
+  frontend:   'var(--amber)',
+  foundation: 'var(--amber)',
+  build:      '#3b82f6',
+  testing:    '#3b82f6',
+  packaging:  '#3b82f6',
+  packaged:   '#22c55e',
+  published:  '#22c55e',
+  archived:   'var(--text-muted)',
+  frozen:     '#06b6d4',
 };
 
 function formatRelative(iso: string): string {

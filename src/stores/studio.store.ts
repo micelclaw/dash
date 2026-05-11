@@ -18,12 +18,19 @@ import { create } from 'zustand';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth.store';
 
+// Studio LLM-backed endpoints can take 30-180s. The dash's default
+// fetch timeout (15s) would abort them mid-run, leaving the UI with
+// stale state while the runner keeps working server-side. 10 minutes
+// covers even the slowest implementation session with comfortable
+// margin (auto-fix loop included).
+const STUDIO_LONG_RUNNING_TIMEOUT_MS = 10 * 60 * 1000;
+
 export type StudioProjectStatus =
   | 'scoping'
   | 'concept'
   | 'frontend'
   | 'foundation'
-  | 'implementation'
+  | 'build'
   | 'testing'
   | 'packaging'
   | 'packaged'
@@ -59,10 +66,21 @@ export interface StudioProject {
   status: StudioProjectStatus;
   app_level: AppLevel | null;
   scope: Record<string, unknown> & { needs_ui?: boolean };
+  /** Raw answers from the scoping wizard. Pre-populated when the
+   *  project was created from a template; the wizard hydrates from
+   *  this map so the user can review/edit before submitting. */
+  scoping_answers: Record<string, string>;
+  /** Slug of the bundled template this project was instantiated from
+   *  (null for blank projects). Used to look up template-specific
+   *  placeholders for phase context textareas. */
+  template_slug: string | null;
   doc_concept: string | null;
   doc_frontend: string | null;
   doc_foundation: string | null;
-  implementation_plan: Record<string, unknown> | null;
+  /** Free-form prose the model wrote OUTSIDE the structured blocks
+   *  on the latest doc-phase turn. Rendered above the question cards
+   *  so a quick comment-box answer isn't silently dropped. */
+  last_preamble: string | null;
   generated_files: unknown[];
   test_results: Record<string, unknown> | null;
   package_path: string | null;
@@ -72,6 +90,26 @@ export interface StudioProject {
   credits_consumed: number;
   pending_questions: StudioPendingQuestion[];
   user_comments: StudioUserComment[];
+  /** Absolute on-disk workspace dir. Set at project creation. */
+  workspace_path: string | null;
+  /** Build checklist; null until /build/start runs. */
+  build_checklist: Array<{
+    id: string;
+    text: string;
+    status: 'pending' | 'in_progress' | 'done';
+    evidence?: 'auto' | 'agent' | 'manual';
+    updated_at?: string;
+  }> | null;
+  build_token_cap: number;
+  build_turn_cap: number;
+  /** When true, every build turn is forced into plan-mode regardless of
+   *  the OC session's current mode. The user must approve each plan
+   *  before the agent executes. Toggleable from the build settings. */
+  build_force_plan_mode: boolean;
+  /** Per-project LLM model in `<provider>/<model>` form. Picked in the
+   *  create wizard, applies to every phase (Concept / Frontend /
+   *  Foundation / Build). */
+  model: string | null;
   created_at: string;
   updated_at: string;
   last_activity_at: string;
@@ -83,6 +121,9 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
   icon?: string;
+  /** `<provider>/<model>` identifier picked in the create wizard.
+   *  Applies to every LLM call for this project. */
+  model?: string | null;
 }
 
 export interface UpdateProjectInput {
@@ -131,6 +172,13 @@ interface StudioState {
   loading: boolean;
   error: string | null;
 
+  /** Bundled-template metadata cache. Populated lazily on first
+   *  `fetchTemplates()` call; phase wrappers read from here to look up
+   *  template-specific placeholders without an extra API roundtrip. */
+  templates: StudioTemplateMeta[] | null;
+  getTemplateBySlug: (slug: string | null | undefined) => StudioTemplateMeta | undefined;
+  ensureTemplatesLoaded: () => Promise<StudioTemplateMeta[]>;
+
   fetchProjects: () => Promise<void>;
   createProject: (input: CreateProjectInput) => Promise<StudioProject>;
   updateProject: (id: string, input: UpdateProjectInput) => Promise<void>;
@@ -149,12 +197,6 @@ interface StudioState {
   approvePhase: (projectId: string, phase: 'concept' | 'frontend' | 'foundation', comment?: string) => Promise<{ status: string }>;
   cancelGeneration: (projectId: string, phase: string) => Promise<void>;
   refetchProject: (projectId: string) => Promise<StudioProject | null>;
-
-  // Phase 6: planner + sessions
-  buildPlan: (projectId: string) => Promise<{ plan: StudioImplementationPlan }>;
-  fetchSessions: (projectId: string) => Promise<{ plan: StudioImplementationPlan | null; sessions: StudioSessionRow[] }>;
-  runSession: (projectId: string, sessionNumber: number) => Promise<{ files_generated: StudioGeneratedFile[]; route_count: number; test_results?: StudioTestResults | null }>;
-  runTests: (projectId: string, sessionNumber: number) => Promise<StudioTestResults>;
 
   // Phase 8: preview pane
   fetchSandboxRoutes: (projectId: string) => Promise<StudioMountedRoute[]>;
@@ -177,9 +219,153 @@ interface StudioState {
 
   // Rewind: roll back to an earlier phase, cascade-clearing downstream
   rewindProject: (projectId: string, target: StudioRewindTarget) => Promise<{ project: StudioProject; cleared: string[] }>;
+
+  // Phase 7: Testing — Studio Tester chat + auto tests + transitions
+  fetchTestMessages: (projectId: string) => Promise<StudioTestMessage[]>;
+  sendTestMessage: (projectId: string, message: string) => Promise<{ message_id: string; assistant_content: string }>;
+  runAutoTestsForProject: (projectId: string) => Promise<StudioTestResults>;
+  advanceToTesting: (projectId: string) => Promise<void>;
+  backToBuild: (projectId: string) => Promise<void>;
+  signOffTesting: (projectId: string) => Promise<void>;
+
+  // ─── Build phase (OpenCode-backed) ───────────────────────────────
+  startBuild: (projectId: string) => Promise<StudioBuildStartResult>;
+  sendBuildMessage: (projectId: string, message: string) => Promise<{ opencode_session_id: string }>;
+  abortBuild: (projectId: string) => Promise<{ aborted: boolean }>;
+  finishBuild: (projectId: string, force?: boolean) => Promise<{ transitioned_to: 'testing'; checklist_done: number; checklist_total: number }>;
+  fetchBuildSettings: (projectId: string) => Promise<StudioBuildSettings>;
+  saveBuildSettings: (projectId: string, settings: StudioBuildSettingsInput) => Promise<StudioBuildSettings>;
+  fetchBuildChecklist: (projectId: string) => Promise<StudioChecklistItem[]>;
+  patchChecklistItem: (projectId: string, itemId: string, status: StudioChecklistStatus) => Promise<StudioChecklistItem>;
+  fetchWorkspaceFiles: (projectId: string) => Promise<StudioWorkspaceFile[]>;
+  fetchWorkspaceFile: (projectId: string, path: string) => Promise<StudioWorkspaceFileContent>;
+  fetchBuildMessages: (projectId: string) => Promise<StudioBuildMessageRow[]>;
+  fetchBuildRecentEvents: (projectId: string, sinceSeq: number) => Promise<StudioBuildRecentEvents>;
+  /** Mode hydration on mount — used by useOpencodeStream so the badge
+   *  + plan-approval banner render correctly without waiting for a WS
+   *  event after a refresh. */
+  fetchBuildState: (projectId: string) => Promise<StudioBuildState>;
+  /** Flip a plan-mode session to build-mode after the user approves
+   *  the plan + checklist the agent emitted. */
+  approveBuildPlan: (projectId: string) => Promise<{ opencode_session_id: string; mode: 'build' }>;
+  /** Inverse: flip a build-mode session back to plan-mode (no auto
+   *  prompt — the next message goes via `agent: 'plan'`). Used when
+   *  the user wants to extend/revise the plan without aborting. */
+  revertBuildToPlan: (projectId: string) => Promise<{ opencode_session_id: string; mode: 'plan' }>;
+  /** Persist the project-level "force plan mode" toggle. */
+  setForcePlanMode: (projectId: string, enabled: boolean) => Promise<void>;
+  /** Preview of the plan-mode prompt that POST /build/start will send
+   *  to the agent. Used by the dash to render an empty-state preview
+   *  in the chat before the user clicks Start. */
+  fetchBuildWelcomePreview: (projectId: string) => Promise<StudioBuildWelcomePreview>;
 }
 
-export type StudioRewindTarget = 'scoping' | 'concept' | 'frontend' | 'foundation' | 'implementation';
+export interface StudioBuildWelcomePreview {
+  prompt: string;
+  mode: 'plan';
+  workspace_path: string;
+}
+
+// ─── Studio v2 wire types ─────────────────────────────────────────
+
+export type StudioOpencodeMode = 'plan' | 'build';
+
+export interface StudioBuildStartResult {
+  opencode_session_id: string;
+  workspace_path: string;
+  build_checklist: Array<{ id: string; text: string; status: 'pending' | 'in_progress' | 'done'; evidence?: string }>;
+  /** 'plan' on a fresh build session; flips to 'build' after the user
+   *  approves the plan via `approveBuildPlan`. Existing pre-mode
+   *  sessions report 'build' (default). */
+  mode: StudioOpencodeMode;
+  token_cap: number;
+  turn_cap: number;
+}
+
+export interface StudioBuildState {
+  mode: StudioOpencodeMode | null;
+  status: string | null;
+  opencode_session_id: string | null;
+  force_plan_mode: boolean;
+}
+
+export interface StudioBuildSettings {
+  /** Project-wide model. Set at creation; not editable from BuildPhase. */
+  model: string | null;
+  build_token_cap: number;
+  build_turn_cap: number;
+  build_force_plan_mode: boolean;
+}
+
+/** Caps + force-plan-mode toggle. Model is set at creation and is
+ *  project-wide. */
+export type StudioBuildSettingsInput = Partial<Pick<
+  StudioBuildSettings,
+  'build_token_cap' | 'build_turn_cap' | 'build_force_plan_mode'
+>>;
+
+export type StudioChecklistStatus = 'pending' | 'in_progress' | 'done';
+export type StudioChecklistEvidence = 'auto' | 'agent' | 'manual';
+export interface StudioChecklistItem {
+  id: string;
+  text: string;
+  status: StudioChecklistStatus;
+  evidence?: StudioChecklistEvidence;
+  updated_at?: string;
+}
+
+export interface StudioWorkspaceFile {
+  path: string;
+  size: number;
+  mtime: string;
+}
+
+export interface StudioWorkspaceFileContent {
+  path: string;
+  content: string;
+  size: number;
+  mtime: string;
+}
+
+export interface StudioBuildMessageRow {
+  id: string;
+  opencode_message_id: string;
+  opencode_session_id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  parts: unknown[];
+  tokens_input: number | null;
+  tokens_output: number | null;
+  created_at: string;
+}
+
+export interface StudioBuildRecentEvent {
+  seq: number;
+  event: string;
+  data: Record<string, unknown>;
+  ts: number;
+}
+
+export interface StudioBuildRecentEvents {
+  events: StudioBuildRecentEvent[];
+  current_seq: number;
+  truncated: boolean;
+}
+
+export interface StudioTestMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_calls: unknown;
+  created_at: string;
+}
+
+export type StudioRewindTarget = 'scoping' | 'concept' | 'frontend' | 'foundation';
+
+export interface StudioTemplatePlaceholders {
+  concept?: string;
+  frontend?: string;
+  foundation?: string;
+}
 
 export interface StudioTemplateMeta {
   slug: string;
@@ -190,6 +376,7 @@ export interface StudioTemplateMeta {
   app_level: 'L1' | 'L2' | 'L3';
   preset_scope: Record<string, unknown>;
   preset_answers: Record<string, string>;
+  placeholders?: StudioTemplatePlaceholders;
 }
 
 export interface StudioActivityReport {
@@ -252,44 +439,10 @@ export interface StudioTestResults {
   exit_code: number;
 }
 
-export interface StudioPlannedSession {
-  number: number;
-  title: string;
-  description: string;
-  filesToCreate: string[];
-}
-
-export interface StudioImplementationPlan {
-  totalSessions: number;
-  sessions: StudioPlannedSession[];
-}
-
 export interface StudioGeneratedFile {
   path: string;
   content: string;
-  session?: number;
   action?: 'create' | 'modify';
-}
-
-export interface StudioSessionRow {
-  id: string;
-  project_id: string;
-  session_number: number;
-  title: string;
-  description: string | null;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'retrying';
-  files_generated: StudioGeneratedFile[];
-  test_results: StudioTestResults | null;
-  retry_count: number;
-  max_retries: number;
-  error_log: string | null;
-  tokens_input: number;
-  tokens_output: number;
-  credits_cost: number;
-  model_used: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  created_at: string;
 }
 
 interface ApiEnvelope<T> {
@@ -301,6 +454,18 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
   projects: [],
   loading: false,
   error: null,
+  templates: null,
+
+  getTemplateBySlug(slug) {
+    if (!slug) return undefined;
+    return get().templates?.find((t) => t.slug === slug);
+  },
+
+  async ensureTemplatesLoaded() {
+    const cached = get().templates;
+    if (cached) return cached;
+    return get().fetchTemplates();
+  },
 
   async fetchProjects() {
     set({ loading: true, error: null });
@@ -378,11 +543,19 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
   },
 
   // ─── Generation (Phase 3+) ────────────────────────────────────────
+  //
+  // Studio LLM calls are long-running: a single doc-phase generation
+  // can take 30-180s (model thinking + token streaming + DB writes).
+  // The dash's default 15s fetch timeout would abort the POST mid-run,
+  // leaving the dash with stale state while the runner keeps working.
+  // We use a 10-minute timeout for every Studio endpoint that triggers
+  // an LLM call so the await holds until the runner truly finishes.
 
   async generateConcept(projectId, answers) {
     const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
       `/studio/projects/${projectId}/generate/concept`,
       answers ? { answers } : {},
+      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
     );
     return res.data;
   },
@@ -391,6 +564,7 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
       `/studio/projects/${projectId}/generate/frontend`,
       answers ? { answers } : {},
+      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
     );
     return res.data;
   },
@@ -399,6 +573,7 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
       `/studio/projects/${projectId}/generate/foundation`,
       answers ? { answers } : {},
+      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
     );
     return res.data;
   },
@@ -429,47 +604,6 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     return p;
   },
 
-  // ─── Phase 6: planner + sessions ─────────────────────────────────
-
-  async buildPlan(projectId) {
-    const res = await api.post<ApiEnvelope<{ plan: StudioImplementationPlan; tokens_used: number }>>(
-      `/studio/projects/${projectId}/plan`,
-      {},
-    );
-    return { plan: res.data.plan };
-  },
-
-  async fetchSessions(projectId) {
-    const res = await api.get<ApiEnvelope<{ plan: StudioImplementationPlan | null; sessions: StudioSessionRow[] }>>(
-      `/studio/projects/${projectId}/sessions`,
-    );
-    return res.data;
-  },
-
-  async runSession(projectId, sessionNumber) {
-    const res = await api.post<ApiEnvelope<{
-      session_number: number;
-      files_generated: StudioGeneratedFile[];
-      migration_applied: boolean;
-      notes: string | null;
-      tokens_used: number;
-      route_count: number;
-      test_results?: StudioTestResults | null;
-    }>>(
-      `/studio/projects/${projectId}/sessions/${sessionNumber}/run`,
-      {},
-    );
-    return res.data;
-  },
-
-  async runTests(projectId, sessionNumber) {
-    const res = await api.post<ApiEnvelope<StudioTestResults>>(
-      `/studio/projects/${projectId}/sessions/${sessionNumber}/test`,
-      {},
-    );
-    return res.data;
-  },
-
   // ─── Phase 8: preview pane ──────────────────────────────────────
 
   async fetchSandboxRoutes(projectId) {
@@ -481,7 +615,9 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
 
   async fetchTemplates() {
     const res = await api.get<ApiEnvelope<StudioTemplateMeta[]>>('/studio/templates');
-    return res.data;
+    const list = res.data ?? [];
+    set({ templates: list });
+    return list;
   },
 
   async instantiateTemplate(slug, name) {
@@ -584,5 +720,216 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     try { parsed = text ? JSON.parse(text) : null; }
     catch { parsed = text; }
     return { status: res.status, body: parsed, durationMs };
+  },
+
+  // ─── Phase 7: Testing ──────────────────────────────────────
+  async fetchTestMessages(projectId) {
+    const res = await api.get<ApiEnvelope<{ messages: StudioTestMessage[] }>>(
+      `/studio/projects/${projectId}/test/messages`,
+    );
+    return res.data.messages;
+  },
+
+  async sendTestMessage(projectId, message) {
+    const res = await api.post<ApiEnvelope<{ message_id: string; assistant_content: string; tokens_used: number }>>(
+      `/studio/projects/${projectId}/test/messages`,
+      { message },
+      // 10 min timeout — same generous window as runSession; the
+      // model can take a while to think for complex test diagnoses.
+      { timeout: 10 * 60 * 1000 },
+    );
+    return { message_id: res.data.message_id, assistant_content: res.data.assistant_content };
+  },
+
+  async runAutoTestsForProject(projectId) {
+    const res = await api.post<ApiEnvelope<StudioTestResults>>(
+      `/studio/projects/${projectId}/test/run-auto`,
+      {},
+      // Tests can take a few minutes; same envelope as runSession.
+      { timeout: 10 * 60 * 1000 },
+    );
+    return res.data;
+  },
+
+  async advanceToTesting(projectId) {
+    await api.post<ApiEnvelope<{ status: string }>>(
+      `/studio/projects/${projectId}/advance-to-testing`,
+      {},
+    );
+    // Refetch so UI sees the new status without a full page reload.
+    const res = await api.get<ApiEnvelope<StudioProject>>(`/studio/projects/${projectId}`);
+    set((state) => ({
+      projects: state.projects.map((p) => p.id === projectId ? res.data : p),
+    }));
+  },
+
+  async backToBuild(projectId) {
+    await api.post<ApiEnvelope<{ status: string }>>(
+      `/studio/projects/${projectId}/back-to-build`,
+      {},
+    );
+    const res = await api.get<ApiEnvelope<StudioProject>>(`/studio/projects/${projectId}`);
+    set((state) => ({
+      projects: state.projects.map((p) => p.id === projectId ? res.data : p),
+    }));
+  },
+
+  async signOffTesting(projectId) {
+    await api.post<ApiEnvelope<{ status: string }>>(
+      `/studio/projects/${projectId}/sign-off-testing`,
+      {},
+    );
+    const res = await api.get<ApiEnvelope<StudioProject>>(`/studio/projects/${projectId}`);
+    set((state) => ({
+      projects: state.projects.map((p) => p.id === projectId ? res.data : p),
+    }));
+  },
+
+  // ─── Build (OpenCode-backed) actions ───────────────────────────
+
+  async startBuild(projectId) {
+    const res = await api.post<ApiEnvelope<StudioBuildStartResult>>(
+      `/studio/projects/${projectId}/build/start`,
+      {},
+      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
+    );
+    return res.data;
+  },
+
+  async sendBuildMessage(projectId, message) {
+    const res = await api.post<ApiEnvelope<{ opencode_session_id: string }>>(
+      `/studio/projects/${projectId}/build/messages`,
+      { message },
+    );
+    return res.data;
+  },
+
+  async abortBuild(projectId) {
+    const res = await api.post<ApiEnvelope<{ aborted: boolean }>>(
+      `/studio/projects/${projectId}/build/abort`,
+      {},
+    );
+    return res.data;
+  },
+
+  async finishBuild(projectId, force = false) {
+    const res = await api.post<ApiEnvelope<{ transitioned_to: 'testing'; checklist_done: number; checklist_total: number }>>(
+      `/studio/projects/${projectId}/build/finish`,
+      { force },
+    );
+    // Refresh the project locally so the UI sees status='testing'.
+    await get().refetchProject(projectId);
+    return res.data;
+  },
+
+  async fetchBuildSettings(projectId) {
+    // Settings live on the project row itself; fetch it and pluck.
+    // The model is project-wide (set in the create wizard) but exposed
+    // here read-only for the BuildPhase settings popover.
+    const res = await api.get<ApiEnvelope<StudioProject>>(`/studio/projects/${projectId}`);
+    const p = res.data;
+    return {
+      model: p.model ?? null,
+      build_token_cap: p.build_token_cap,
+      build_turn_cap: p.build_turn_cap,
+      build_force_plan_mode: p.build_force_plan_mode,
+    };
+  },
+
+  async saveBuildSettings(projectId, settings) {
+    const res = await api.patch<ApiEnvelope<StudioBuildSettings>>(
+      `/studio/projects/${projectId}/build/settings`,
+      settings,
+    );
+    return res.data;
+  },
+
+  async fetchBuildChecklist(projectId) {
+    const res = await api.get<ApiEnvelope<{ items: StudioChecklistItem[] }>>(
+      `/studio/projects/${projectId}/build/checklist`,
+    );
+    return res.data?.items ?? [];
+  },
+
+  async patchChecklistItem(projectId, itemId, status) {
+    const res = await api.patch<ApiEnvelope<{ item: StudioChecklistItem }>>(
+      `/studio/projects/${projectId}/build/checklist/${itemId}`,
+      { status },
+    );
+    return res.data.item;
+  },
+
+  async fetchWorkspaceFiles(projectId) {
+    const res = await api.get<ApiEnvelope<{ files: StudioWorkspaceFile[]; total_size_bytes: number }>>(
+      `/studio/projects/${projectId}/workspace/files`,
+    );
+    return res.data.files ?? [];
+  },
+
+  async fetchWorkspaceFile(projectId, path) {
+    const res = await api.get<ApiEnvelope<StudioWorkspaceFileContent>>(
+      `/studio/projects/${projectId}/workspace/file`,
+      { path },
+    );
+    return res.data;
+  },
+
+  async fetchBuildMessages(projectId) {
+    const res = await api.get<ApiEnvelope<{ messages: StudioBuildMessageRow[] }>>(
+      `/studio/projects/${projectId}/build/messages`,
+    );
+    return res.data.messages ?? [];
+  },
+
+  async fetchBuildState(projectId) {
+    const res = await api.get<ApiEnvelope<StudioBuildState>>(
+      `/studio/projects/${projectId}/build/state`,
+    );
+    return res.data;
+  },
+
+  async approveBuildPlan(projectId) {
+    const res = await api.post<ApiEnvelope<{ opencode_session_id: string; mode: 'build' }>>(
+      `/studio/projects/${projectId}/build/approve-plan`,
+      {},
+    );
+    return res.data;
+  },
+
+  async revertBuildToPlan(projectId) {
+    const res = await api.post<ApiEnvelope<{ opencode_session_id: string; mode: 'plan' }>>(
+      `/studio/projects/${projectId}/build/revert-to-plan`,
+      {},
+    );
+    return res.data;
+  },
+
+  async fetchBuildWelcomePreview(projectId) {
+    const res = await api.get<ApiEnvelope<StudioBuildWelcomePreview>>(
+      `/studio/projects/${projectId}/build/welcome-preview`,
+    );
+    return res.data;
+  },
+
+  async setForcePlanMode(projectId, enabled) {
+    await api.patch<ApiEnvelope<StudioBuildSettings>>(
+      `/studio/projects/${projectId}/build/settings`,
+      { build_force_plan_mode: enabled },
+    );
+    // Reflect locally so the Settings UI doesn't have to round-trip a
+    // refetchProject just to flip a checkbox.
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId ? { ...p, build_force_plan_mode: enabled } : p,
+      ),
+    }));
+  },
+
+  async fetchBuildRecentEvents(projectId, sinceSeq) {
+    const res = await api.get<ApiEnvelope<StudioBuildRecentEvents>>(
+      `/studio/projects/${projectId}/build/recent-events`,
+      { since: sinceSeq },
+    );
+    return res.data;
   },
 }));

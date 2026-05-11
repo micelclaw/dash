@@ -26,10 +26,12 @@ import {
   type ScopingAnswers,
   type ScopingClassification,
   type StudioProject,
+  type StudioProjectStatus,
 } from '@/stores/studio.store';
 import { QuestionCard } from '../components/QuestionCard';
 import { ScopeSummary } from '../components/ScopeSummary';
 import { RewindButton } from '../components/RewindButton';
+import { PhaseSidebar } from '../components/PhaseSidebar';
 
 interface Props {
   projectId: string;
@@ -38,12 +40,14 @@ interface Props {
   viewMode?: 'edit' | 'past';
   /** Required in past mode (so we can show the persisted scope). */
   project?: StudioProject;
+  /** Pipeline navigation callback. */
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
-export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', project }: Props) {
+export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', project, onSelectPhase }: Props) {
   // ── Past view: render the persisted scope as a read-only summary
   if (viewMode === 'past' && project) {
-    return <ScopingReadOnly project={project} />;
+    return <ScopingReadOnly project={project} onSelectPhase={onSelectPhase} />;
   }
 
   const fetchScopingTree = useStudioStore((s) => s.fetchScopingTree);
@@ -54,7 +58,16 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [answers, setAnswers] = useState<ScopingAnswers>({});
+  // Hydrate the wizard from any pre-filled answers persisted on the
+  // project. Template-instantiated projects ship with their template's
+  // presetAnswers in `scoping_answers`; blank projects start with `{}`.
+  // We do this once, when the project prop is first available — later
+  // edits live in local state until the user submits.
+  const [answers, setAnswers] = useState<ScopingAnswers>(
+    () => (project?.scoping_answers && Object.keys(project.scoping_answers).length > 0
+      ? { ...project.scoping_answers }
+      : {}),
+  );
   const [stepIndex, setStepIndex] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [classification, setClassification] = useState<ScopingClassification | null>(null);
@@ -108,7 +121,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
   async function goNext() {
     if (!currentQuestion) return;
     if (!answers[currentQuestion.id]) {
-      toast.error('Selecciona una opción para continuar');
+      toast.error('Pick an option to continue');
       return;
     }
     if (isLastStep) {
@@ -119,7 +132,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
         setClassification(result);
         setShowSummary(true);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Error al calcular el alcance');
+        toast.error(err instanceof Error ? err.message : 'Failed to compute scope');
       } finally {
         setSubmitting(false);
       }
@@ -140,10 +153,10 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
     try {
       setSubmitting(true);
       await submitScoping(projectId, answers);
-      toast.success('Scoping guardado — pasando a la fase de concepto');
+      toast.success('Scope saved — moving on to concept phase');
       onComplete();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al guardar el scoping');
+      toast.error(err instanceof Error ? err.message : 'Failed to save scope');
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +170,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Cargando cuestionario…
+        Loading questionnaire…
       </div>
     );
   }
@@ -168,7 +181,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        {loadError ?? 'No se pudo cargar el cuestionario'}
+        {loadError ?? 'Could not load questionnaire'}
       </div>
     );
   }
@@ -188,8 +201,8 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
           color: 'var(--text-muted)',
         }}>
           {showSummary
-            ? 'Confirmación'
-            : `Pregunta ${stepIndex + 1} de ${totalSteps}`}
+            ? 'Confirmation'
+            : `Question ${stepIndex + 1} of ${totalSteps}`}
         </span>
         <div style={{
           flex: 1, height: 4, background: 'var(--surface)',
@@ -205,6 +218,13 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
           />
         </div>
       </div>
+
+      {/* Pipeline strip — but only when we have a project (the wizard
+          is also reachable BEFORE a project row exists; in that case
+          there's nothing to navigate to). */}
+      {project && (
+        <PhaseSidebar project={project} viewedPhase="scoping" onSelect={onSelectPhase} />
+      )}
 
       {/* Body */}
       <div style={{
@@ -251,7 +271,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
               fontFamily: 'var(--font-sans)',
             }}
           >
-            <ChevronLeft size={14} /> Atrás
+            <ChevronLeft size={14} /> Back
           </button>
           <button
             type="button"
@@ -270,7 +290,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
               fontFamily: 'var(--font-sans)',
             }}
           >
-            {isLastStep ? 'Ver resumen' : 'Siguiente'} <ChevronRight size={14} />
+            {isLastStep ? 'See summary' : 'Next'} <ChevronRight size={14} />
           </button>
         </div>
       )}
@@ -285,7 +305,10 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
 // + classification as a static card. The Rewind button restarts the
 // wizard fresh (cascade-clears everything downstream first).
 
-function ScopingReadOnly({ project }: { project: StudioProject }) {
+function ScopingReadOnly({ project, onSelectPhase }: {
+  project: StudioProject;
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
+}) {
   const scope = project.scope ?? {};
   // Filter out helper keys + format snake_case → display label
   const entries = Object.entries(scope)
@@ -307,11 +330,13 @@ function ScopingReadOnly({ project }: { project: StudioProject }) {
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Hammer size={14} style={{ color: 'var(--amber)' }} />
-          Alcance del proyecto
+          Project scope
         </h2>
         <div style={{ flex: 1 }} />
-        <RewindButton projectId={project.id} target="scoping" label="Volver a empezar el alcance" />
+        <RewindButton projectId={project.id} target="scoping" label="Restart scope" />
       </div>
+
+      <PhaseSidebar project={project} viewedPhase="scoping" onSelect={onSelectPhase} />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
         <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -334,7 +359,7 @@ function ScopingReadOnly({ project }: { project: StudioProject }) {
               )}
               {project.credits_estimated != null && (
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  ~{project.credits_estimated} créditos estimados
+                  ~{project.credits_estimated} estimated credits
                 </span>
               )}
             </div>
@@ -372,7 +397,7 @@ function ScopingReadOnly({ project }: { project: StudioProject }) {
             </div>
             {entries.length === 0 && (
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                Sin datos de scope persistidos.
+                No persisted scope data.
               </div>
             )}
           </div>
@@ -380,9 +405,9 @@ function ScopingReadOnly({ project }: { project: StudioProject }) {
             fontSize: '0.6875rem', color: 'var(--text-muted)',
             margin: 0, lineHeight: 1.5, textAlign: 'center',
           }}>
-            Estás viendo el alcance original del proyecto. Si quieres rehacerlo,
-            usa el botón <strong>"Volver a empezar el alcance"</strong> — esto borrará
-            todo lo generado posteriormente.
+            You are viewing the project's original scope. If you want to redo it,
+            use the <strong>"Restart scope"</strong> button — this will clear
+            everything generated afterwards.
           </p>
         </div>
       </div>
@@ -399,7 +424,7 @@ function humanizeKey(key: string): string {
 
 function formatScopeValue(value: unknown): string {
   if (value === null || value === undefined) return '—';
-  if (typeof value === 'boolean') return value ? 'Sí' : 'No';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'string') return value;
   if (typeof value === 'number') return String(value);
   if (typeof value === 'object') return JSON.stringify(value);

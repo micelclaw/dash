@@ -32,7 +32,7 @@ interface Props {
   projectId: string;
   /** Phase to rewind to. Must be ≤ project.status (caller's contract). */
   target: StudioRewindTarget;
-  /** Optional override label for the trigger button (default: "Rewind aquí"). */
+  /** Optional override label for the trigger button (default: "Rewind here to edit"). */
   label?: string;
 }
 
@@ -40,38 +40,35 @@ interface Props {
 // Used purely for the dialog copy.
 const CLEARED_BY_TARGET: Record<StudioRewindTarget, string[]> = {
   scoping: [
-    'todo el alcance (respuestas + scope + nivel)',
-    'el documento de concepto',
-    'el documento de frontend',
-    'el documento de foundation',
-    'el plan de implementación + sesiones generadas',
-    'el código generado',
-    'los resultados de tests',
-    'el paquete .claw construido',
+    'the entire scope (answers + scope + level)',
+    'the concept document',
+    'the frontend document',
+    'the foundation document',
+    'the build session + agent chat history',
+    'all generated code in the workspace',
+    'the test results',
+    'the built .claw package',
   ],
   concept: [
-    'el documento de frontend',
-    'el documento de foundation',
-    'el plan de implementación + sesiones generadas',
-    'el código generado',
-    'los resultados de tests',
-    'el paquete .claw construido',
+    'the frontend document',
+    'the foundation document',
+    'the build session + agent chat history',
+    'all generated code in the workspace',
+    'the test results',
+    'the built .claw package',
   ],
   frontend: [
-    'el documento de foundation',
-    'el plan de implementación + sesiones generadas',
-    'el código generado',
-    'los resultados de tests',
-    'el paquete .claw construido',
+    'the foundation document',
+    'the build session + agent chat history',
+    'all generated code in the workspace',
+    'the test results',
+    'the built .claw package',
   ],
   foundation: [
-    'el plan de implementación + sesiones generadas',
-    'el código generado',
-    'los resultados de tests',
-    'el paquete .claw construido',
-  ],
-  implementation: [
-    'el paquete .claw construido (el código generado se conserva)',
+    'the build session + agent chat history',
+    'all generated code in the workspace',
+    'the test results',
+    'the built .claw package',
   ],
 };
 
@@ -86,7 +83,7 @@ export function RewindButton({ projectId, target, label }: Props) {
     setBusy(true);
     try {
       await rewindProject(projectId, target);
-      toast.success(`Proyecto rebobinado a "${target}"`);
+      toast.success(`Project rewound to "${target}"`);
       // Drop the ?phase= query param so the page re-renders in edit
       // mode against the new (lower) status. Use replace so the back
       // button doesn't take the user to the now-invalid past view.
@@ -111,7 +108,7 @@ export function RewindButton({ projectId, target, label }: Props) {
         style={triggerStyle}
         title={`Rewind to ${target}`}
       >
-        <Rewind size={12} /> {label ?? 'Rewind aquí para editar'}
+        <Rewind size={12} /> {label ?? 'Rewind here to edit'}
       </button>
 
       {open && (
@@ -120,7 +117,7 @@ export function RewindButton({ projectId, target, label }: Props) {
             <div style={dialogHeader}>
               <AlertTriangle size={16} style={{ color: 'var(--amber)' }} />
               <h3 style={{ fontSize: '0.9375rem', margin: 0, color: 'var(--text)', flex: 1 }}>
-                Rewind a "{target}"
+                Rewind to "{target}"
               </h3>
               <button
                 type="button"
@@ -132,7 +129,7 @@ export function RewindButton({ projectId, target, label }: Props) {
             </div>
 
             <p style={{ margin: '0 0 8px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              Esta acción es <strong>destructiva e irreversible</strong>. Al rebobinar a esta fase se borrará:
+              This action is <strong>destructive and irreversible</strong>. Rewinding to this phase will clear:
             </p>
 
             <ul style={{
@@ -145,8 +142,8 @@ export function RewindButton({ projectId, target, label }: Props) {
             </ul>
 
             <p style={{ margin: '0 0 16px', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Solo el alcance, los documentos generados hasta esta fase y los datos del proyecto se conservan.
-              Tras rebobinar podrás regenerar las fases siguientes o aceptarlas tal como estaban.
+              Only the scope, the documents generated up to this phase and the project's data are kept.
+              After rewinding you can regenerate the following phases or accept them as they were.
             </p>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -156,7 +153,7 @@ export function RewindButton({ projectId, target, label }: Props) {
                 disabled={busy}
                 style={cancelBtn}
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="button"
@@ -165,8 +162,8 @@ export function RewindButton({ projectId, target, label }: Props) {
                 style={confirmBtn(busy)}
               >
                 {busy
-                  ? <><Loader2 size={12} className="animate-spin" /> Rebobinando…</>
-                  : <><Rewind size={12} /> Sí, rebobinar</>
+                  ? <><Loader2 size={12} className="animate-spin" /> Rewinding…</>
+                  : <><Rewind size={12} /> Yes, rewind</>
                 }
               </button>
             </div>

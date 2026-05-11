@@ -26,25 +26,25 @@ interface Props {
 
 const LEVEL_COPY: Record<string, { label: string; description: string; color: string }> = {
   L1: {
-    label: 'L1 — Skill del asistente',
-    description: 'Una habilidad pura para el agente IA. Sin UI ni base de datos propia.',
+    label: 'L1 — Assistant skill',
+    description: 'A pure capability for the AI agent. No UI or database of its own.',
     color: '#22c55e',
   },
   L2: {
-    label: 'L2 — App con backend',
-    description: 'Una app completa con su propia API, base de datos y pantalla.',
+    label: 'L2 — App with backend',
+    description: 'A full app with its own API, database and screen.',
     color: '#3b82f6',
   },
   L3: {
-    label: 'L3 — Integración con servicio',
-    description: 'Conecta con un container Docker o un servicio externo gestionado.',
+    label: 'L3 — Service integration',
+    description: 'Connects to a Docker container or a managed external service.',
     color: '#a855f7',
   },
 };
 
 export function ScopeSummary({ classification, onBack, onConfirm, submitting }: Props) {
   const { app_level, detected_components, credits_estimate } = classification;
-  const lvl = LEVEL_COPY[app_level];
+  const lvl = LEVEL_COPY[app_level] ?? LEVEL_COPY.L2!;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -52,13 +52,13 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
         <h2 style={{
           fontSize: '1.25rem', fontWeight: 600, margin: 0, color: 'var(--text)',
         }}>
-          Resumen de tu proyecto
+          Project summary
         </h2>
         <p style={{
           margin: '6px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)',
         }}>
-          He clasificado tu idea con la información que me has dado. Si todo
-          encaja, podemos pasar a la fase de exploración.
+          I've classified your idea using the information you provided. If
+          everything fits, we can move on to the exploration phase.
         </p>
       </div>
 
@@ -74,7 +74,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 4,
         }}>
-          Nivel
+          Level
         </div>
         <div style={{
           fontSize: '0.9375rem', fontWeight: 600, color: lvl.color,
@@ -99,11 +99,11 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 8,
         }}>
-          Componentes detectados
+          Detected components
         </div>
         {detected_components.length === 0 ? (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Sin componentes adicionales — sólo el skill base.
+            No additional components — just the base skill.
           </div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -140,10 +140,10 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
             color: 'var(--text-muted)',
           }}>
-            Créditos estimados
+            Estimated credits
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            ~{credits_estimate} créditos
+            ~{credits_estimate} credits
           </div>
         </div>
       </div>
@@ -162,7 +162,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <ChevronLeft size={14} /> Cambiar respuestas
+          <ChevronLeft size={14} /> Change answers
         </button>
         <button
           type="button"
@@ -179,7 +179,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontFamily: 'var(--font-sans)',
           }}
         >
-          {submitting ? 'Guardando…' : 'Empezar exploración →'}
+          {submitting ? 'Saving…' : 'Start exploration →'}
         </button>
       </div>
     </div>

@@ -26,17 +26,20 @@ import { toast } from 'sonner';
 import {
   useStudioStore,
   type StudioProject,
+  type StudioProjectStatus,
   type StudioPackageResult,
 } from '@/stores/studio.store';
 import { SafetyScannerReport } from '../components/SafetyScannerReport';
 import { RewindButton } from '../components/RewindButton';
+import { PhaseSidebar } from '../components/PhaseSidebar';
 
 interface Props {
   project: StudioProject;
   viewMode?: 'edit' | 'past';
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
-export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
+export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Props) {
   const isPast = viewMode === 'past';
   const packageProject = useStudioStore((s) => s.packageProject);
   const installPackagedProject = useStudioStore((s) => s.installPackagedProject);
@@ -94,23 +97,25 @@ export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
         )}
       </div>
 
+      <PhaseSidebar project={project} viewedPhase="packaging" onSelect={onSelectPhase} />
+
       <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', justifyContent: 'center' }}>
         <div style={{ maxWidth: 720, width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Checklist + build CTA */}
           <div style={cardStyle}>
             <h3 style={cardTitle}>
-              <Shield size={14} style={{ color: 'var(--amber)' }} /> Construir el .claw
+              <Shield size={14} style={{ color: 'var(--amber)' }} /> Build the .claw
             </h3>
             <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              Studio empaquetará el workspace + el manifest + las migraciones aplicadas en un único archivo
+              Studio will package the workspace + manifest + applied migrations into a single signed
               <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>.claw</code>
-              firmado. Antes de empaquetar, el Safety Scanner inspecciona el código y bloquea cualquier patrón
-              peligroso (acceso a credenciales, prompt injection, SQL destructivo, etc).
+              file. Before packaging, the Safety Scanner inspects the code and blocks any dangerous
+              patterns (credential access, prompt injection, destructive SQL, etc).
             </p>
 
             <div style={{ display: 'flex', gap: 8 }}>
               {isPast ? (
-                <RewindButton projectId={project.id} target="implementation" label="Rewind a implementación" />
+                <RewindButton projectId={project.id} target="foundation" label="Rewind to foundation" />
               ) : (
                 <button
                   type="button"
@@ -119,10 +124,10 @@ export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
                   style={primaryBtn(busy === 'build')}
                 >
                   {busy === 'build'
-                    ? <><Loader2 size={14} className="animate-spin" /> Construyendo…</>
+                    ? <><Loader2 size={14} className="animate-spin" /> Building…</>
                     : (isPackaged
-                        ? <><RefreshCw size={14} /> Reconstruir</>
-                        : <><Package size={14} /> Construir .claw</>)
+                        ? <><RefreshCw size={14} /> Rebuild</>
+                        : <><Package size={14} /> Build .claw</>)
                   }
                 </button>
               )}
@@ -136,10 +141,10 @@ export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
           {isPackaged && (
             <div style={cardStyle}>
               <h3 style={cardTitle}>
-                <Rocket size={14} style={{ color: '#22c55e' }} /> Listo para usar
+                <Rocket size={14} style={{ color: '#22c55e' }} /> Ready to use
               </h3>
               <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Tu app está empaquetada en
+                Your app is packaged at
                 <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
                   {project.package_path}
                 </code>
@@ -151,7 +156,7 @@ export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
                   download
                   style={secondaryLink}
                 >
-                  <Download size={14} /> Descargar .claw
+                  <Download size={14} /> Download .claw
                 </a>
                 {!isPast && (
                   <button
@@ -161,15 +166,15 @@ export function PackagingPhase({ project, viewMode = 'edit' }: Props) {
                     style={primaryBtn(busy === 'install')}
                   >
                     {busy === 'install'
-                      ? <><Loader2 size={14} className="animate-spin" /> Instalando…</>
-                      : <><Rocket size={14} /> Instalar localmente</>
+                      ? <><Loader2 size={14} className="animate-spin" /> Installing…</>
+                      : <><Rocket size={14} /> Install locally</>
                     }
                   </button>
                 )}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Instalar localmente copia el paquete a <code>core/apps/</code> y la app aparecerá en
-                tu sidebar tras reiniciar el Core.
+                Installing locally copies the package to <code>core/apps/</code> and the app will appear
+                in your sidebar after restarting Core.
               </p>
             </div>
           )}

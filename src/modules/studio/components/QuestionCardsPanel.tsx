@@ -18,7 +18,7 @@
 // doc-generation phases (concept / frontend / foundation).
 
 import { useState } from 'react';
-import { MessageCircleQuestion, RefreshCw, Loader2 } from 'lucide-react';
+import { MessageCircleQuestion, RefreshCw, Loader2, MessageSquare } from 'lucide-react';
 import type { StudioPendingQuestion } from '@/stores/studio.store';
 
 // Reserved id matching the FREE_COMMENT_ID constant in
@@ -29,11 +29,16 @@ const FREE_COMMENT_ID = '_user_comment';
 
 interface Props {
   questions: StudioPendingQuestion[];
+  /** Free-form text the model wrote outside the structured blocks on
+   *  the previous turn. Rendered as a "Studio Builder says:" message
+   *  above the question cards so the user can see quick replies that
+   *  the model emitted alongside (or instead of) a doc rewrite. */
+  preamble?: string | null;
   busy: boolean;
   onSubmit: (answers: Record<string, string>) => void;
 }
 
-export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
+export function QuestionCardsPanel({ questions, preamble, busy, onSubmit }: Props) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   // The panel ALWAYS renders, even when there are no structured
@@ -66,14 +71,40 @@ export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
       }}>
         <MessageCircleQuestion size={16} style={{ color: 'var(--amber)' }} />
         <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0, color: 'var(--text)' }}>
-          {questions.length > 0 ? 'Preguntas pendientes' : 'Iterar el documento'}
+          {questions.length > 0 ? 'Pending questions' : 'Iterate on the document'}
         </h3>
         {questions.length > 0 && (
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            {answeredCount}/{questions.length} respondidas
+            {answeredCount}/{questions.length} answered
           </span>
         )}
       </div>
+
+      {preamble && preamble.trim().length > 0 && (
+        <div style={{
+          display: 'flex', gap: 8,
+          padding: '10px 12px',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderLeft: '2px solid var(--amber)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: '0.75rem',
+          color: 'var(--text)',
+          lineHeight: 1.5,
+          whiteSpace: 'pre-wrap',
+        }}>
+          <MessageSquare size={12} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 3 }} />
+          <div>
+            <div style={{
+              fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+              color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4,
+            }}>
+              Studio Builder says
+            </div>
+            {preamble.trim()}
+          </div>
+        </div>
+      )}
 
       {questions.map((q, idx) => (
         <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -152,7 +183,7 @@ export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
                   fontSize: '0.625rem', color: 'var(--text-muted)',
                   fontStyle: 'italic', marginTop: 2,
                 }}>
-                  Puedes elegir varias.
+                  You can pick several.
                 </span>
               )}
             </div>
@@ -160,7 +191,7 @@ export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
             <textarea
               value={answers[q.id] ?? ''}
               onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-              placeholder="Escribe tu respuesta…"
+              placeholder="Type your answer…"
               rows={2}
               style={{
                 padding: 8, fontSize: '0.75rem', background: 'var(--surface)',
@@ -185,16 +216,16 @@ export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
           fontSize: '0.75rem', fontWeight: 500, color: 'var(--text)',
         }}>
           {questions.length > 0
-            ? '¿Algo más que añadir o aclarar? (opcional)'
-            : '¿Quieres pedir algún cambio o aclarar algo? (opcional)'}
+            ? 'Anything else to add or clarify? (optional)'
+            : 'Want to request a change or clarify something? (optional)'}
         </label>
         <textarea
           value={answers[FREE_COMMENT_ID] ?? ''}
           onChange={(e) => setAnswers((a) => ({ ...a, [FREE_COMMENT_ID]: e.target.value }))}
           placeholder={
             questions.length > 0
-              ? 'Detalles adicionales, correcciones, contexto…'
-              : 'Por ejemplo: "cambia el título a X" o "añade una sección sobre Y"…'
+              ? 'Extra details, corrections, context…'
+              : 'For example: "change the title to X" or "add a section about Y"…'
           }
           rows={3}
           style={{
@@ -222,7 +253,7 @@ export function QuestionCardsPanel({ questions, busy, onSubmit }: Props) {
         }}
       >
         {busy ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-        Enviar al chat
+        Send to chat
       </button>
     </div>
   );

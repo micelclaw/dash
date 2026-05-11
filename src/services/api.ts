@@ -75,6 +75,11 @@ class ApiClient {
       headers,
       body: options?.body ? JSON.stringify(options.body) : undefined,
       signal: AbortSignal.timeout(options?.timeout ?? REQUEST_TIMEOUT_MS),
+      // Authed live API — never want a cached response. Without this
+      // the browser may serve stale data for repeated GETs to the same
+      // URL (notably workspace/files during a build, where the user
+      // expects newly-written files to appear within ~300ms).
+      cache: 'no-store',
     });
 
     if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {

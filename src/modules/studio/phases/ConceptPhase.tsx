@@ -10,29 +10,44 @@
  * https://micelclaw.com
  */
 
-import { useStudioStore, type StudioProject } from '@/stores/studio.store';
+import { useEffect } from 'react';
+import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
 import { DocPhaseLayout } from './DocPhaseLayout';
 
 interface Props {
   project: StudioProject;
   viewMode?: 'edit' | 'past';
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
-export function ConceptPhase({ project, viewMode }: Props) {
+const DEFAULT_PLACEHOLDER =
+  'Add any context about your project: target users, scale, key constraints, decisions already made…';
+
+export function ConceptPhase({ project, viewMode, onSelectPhase }: Props) {
   const generateConcept = useStudioStore((s) => s.generateConcept);
   const approvePhase = useStudioStore((s) => s.approvePhase);
+  const ensureTemplatesLoaded = useStudioStore((s) => s.ensureTemplatesLoaded);
+  const getTemplateBySlug = useStudioStore((s) => s.getTemplateBySlug);
+
+  useEffect(() => {
+    if (project.template_slug) ensureTemplatesLoaded().catch(() => {});
+  }, [project.template_slug, ensureTemplatesLoaded]);
+
+  const template = getTemplateBySlug(project.template_slug);
+  const placeholder = template?.placeholders?.concept ?? DEFAULT_PLACEHOLDER;
 
   return (
     <DocPhaseLayout
       project={project}
       phase="concept"
       docKey="doc_concept"
-      title="Documento de concepto"
-      emptyHint="Listo para generar tu documento de concepto"
-      approveLabel="Aprobar concepto →"
+      title="Concept document"
+      emptyHint="Ready to generate your concept document"
+      approveLabel="Approve concept →"
       viewMode={viewMode}
-      initialContextLabel="Cuéntame de qué va tu proyecto"
-      initialContextPlaceholder="Por ejemplo: clínica con 3 fisioterapeutas, ~200 pacientes/mes, facturación a Salud Madrid y particulares, queremos que el agente IA pueda decirnos cuántas sesiones se cierran esta semana…"
+      onSelectPhase={onSelectPhase}
+      initialContextLabel="Tell me about your project"
+      initialContextPlaceholder={placeholder}
       onGenerate={async (answers) => { await generateConcept(project.id, answers); }}
       onApprove={async (comment) => { await approvePhase(project.id, 'concept', comment); }}
     />

@@ -93,13 +93,13 @@ export function PreviewPanel({ projectId }: Props) {
       <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
         {loading && routes.length === 0 ? (
           <div style={emptyHint}>
-            <Loader2 size={14} className="animate-spin" /> Cargando rutas…
+            <Loader2 size={14} className="animate-spin" /> Loading routes…
           </div>
         ) : routes.length === 0 ? (
           <div style={emptyHint}>
             <AlertCircle size={14} />
-            Aún no hay rutas montadas. Ejecuta una sesión que genere un archivo
-            <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>api/*.route.mjs</code>.
+            No routes mounted yet. Run a session that emits an
+            <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>api/*.route.mjs</code> file.
           </div>
         ) : (
           <>
@@ -162,7 +162,7 @@ function RouteCard({ route, expanded, onToggle, onCall }: RouteCardProps) {
         try {
           body = bodyText.trim().length > 0 ? JSON.parse(bodyText) : null;
         } catch {
-          setError('Body no es JSON válido');
+          setError('Body is not valid JSON');
           setBusy(false);
           return;
         }
@@ -219,7 +219,7 @@ function RouteCard({ route, expanded, onToggle, onCall }: RouteCardProps) {
         }}>
           {route.param_names.length > 0 && (
             <div>
-              <div style={fieldLabel}>Parámetros</div>
+              <div style={fieldLabel}>Parameters</div>
               {route.param_names.map((name) => (
                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                   <span style={paramName}>:{name}</span>

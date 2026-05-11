@@ -22,16 +22,16 @@ import { ScopingWizard } from './phases/ScopingWizard';
 import { ConceptPhase } from './phases/ConceptPhase';
 import { FrontendPhase } from './phases/FrontendPhase';
 import { FoundationPhase } from './phases/FoundationPhase';
-import { ImplementationPhase } from './phases/ImplementationPhase';
+import { BuildPhase } from './phases/v2/BuildPhase';
+import { TestingPhase } from './phases/TestingPhase';
 import { PackagingPhase } from './phases/PackagingPhase';
-import { PhaseSidebar } from './components/PhaseSidebar';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
 
 // Mirror of `core/src/studio/services/phase-advancement.ts::STATUS_ORDER`.
 // Used here to clamp viewedPhase ≤ project.status so the user can never
 // "preview" a phase the project hasn't reached yet.
 const STATUS_ORDER: StudioProjectStatus[] = [
-  'scoping', 'concept', 'frontend', 'foundation', 'implementation',
+  'scoping', 'concept', 'frontend', 'foundation', 'build',
   'testing', 'packaging', 'packaged', 'published',
 ];
 
@@ -155,7 +155,22 @@ export function Component() {
             {project.app_level}
           </span>
         )}
-        {(project.status === 'implementation' || project.status === 'testing' || project.status === 'packaging') && (
+        {project.model && (
+          <span
+            title="LLM model used by every phase of this project"
+            style={{
+              fontSize: '0.6875rem',
+              background: 'var(--surface)', color: 'var(--text-dim)',
+              padding: '2px 8px', borderRadius: 'var(--radius-full)',
+              fontFamily: 'var(--font-mono)',
+              border: '1px solid var(--border)',
+              maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+          >
+            {project.model}
+          </span>
+        )}
+        {(project.status === 'build' || project.status === 'testing' || project.status === 'packaging') && (
           <SandboxStatusBadge projectId={project.id} />
         )}
       </header>
@@ -170,11 +185,11 @@ export function Component() {
         }}>
           <Snowflake size={16} style={{ color: '#06b6d4', flexShrink: 0, marginTop: 1 }} />
           <div>
-            <strong style={{ color: 'var(--text)' }}>Proyecto congelado</strong>
+            <strong style={{ color: 'var(--text)' }}>Project frozen</strong>
             <div style={{ marginTop: 2, color: 'var(--text-dim)', fontSize: '0.75rem', lineHeight: 1.5 }}>
-              Excede el límite de proyectos activos de tu plan actual. Sigue siendo legible y descargable,
-              pero no puedes regenerar fases ni ejecutar sesiones. Sube de plan o elimina otro proyecto activo
-              para descongelarlo.
+              It exceeds the active-project limit on your current plan. It's still readable and downloadable,
+              but you can't regenerate phases or run sessions. Upgrade your plan or delete another active project
+              to unfreeze it.
             </div>
           </div>
         </div>
@@ -190,8 +205,8 @@ export function Component() {
         }}>
           <Eye size={12} style={{ color: 'var(--amber)' }} />
           <span style={{ color: 'var(--text)' }}>
-            Estás viendo la fase <strong>{viewedPhase}</strong> en modo lectura.
-            La fase actual del proyecto es <strong>{project.status}</strong>.
+            You are viewing the <strong>{viewedPhase}</strong> phase in read-only mode.
+            The project's current phase is <strong>{project.status}</strong>.
           </span>
           <div style={{ flex: 1 }} />
           <button
@@ -204,18 +219,15 @@ export function Component() {
               cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Volver a la fase actual
+            Back to current phase
           </button>
         </div>
       )}
 
-      {/* Body — phase sidebar + active phase pane */}
+      {/* Body — phase pane (pipeline strip is rendered inside each phase
+          below its own toolbar, so the page no longer reserves a left
+          column for it). */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
-        <PhaseSidebar
-          project={project}
-          viewedPhase={viewedPhase}
-          onSelect={selectPhase}
-        />
         <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
           {viewedPhase === 'scoping' ? (
             <ScopingWizard
@@ -223,17 +235,20 @@ export function Component() {
               onComplete={() => { /* status refreshes from server */ }}
               viewMode={viewMode}
               project={project}
+              onSelectPhase={selectPhase}
             />
           ) : viewedPhase === 'concept' ? (
-            <ConceptPhase project={project} viewMode={viewMode} />
+            <ConceptPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : viewedPhase === 'frontend' ? (
-            <FrontendPhase project={project} viewMode={viewMode} />
+            <FrontendPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : viewedPhase === 'foundation' ? (
-            <FoundationPhase project={project} viewMode={viewMode} />
-          ) : viewedPhase === 'implementation' ? (
-            <ImplementationPhase project={project} viewMode={viewMode} />
+            <FoundationPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
+          ) : viewedPhase === 'build' ? (
+            <BuildPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
+          ) : viewedPhase === 'testing' ? (
+            <TestingPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : viewedPhase === 'packaging' || viewedPhase === 'packaged' ? (
-            <PackagingPhase project={project} viewMode={viewMode} />
+            <PackagingPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : (
             <div style={{ height: '100%', overflowY: 'auto', padding: 24 }}>
               <div style={{
@@ -250,8 +265,8 @@ export function Component() {
                   margin: '0 0 16px', fontSize: '0.8125rem', color: 'var(--text-dim)',
                   lineHeight: 1.5,
                 }}>
-                  Esta fase aún no está implementada. Próximamente: planner
-                  de sesiones, generación de código, sandbox y empaquetado.
+                  This phase isn't implemented yet. Coming soon: session
+                  planner, code generation, sandbox and packaging.
                 </p>
                 <pre style={{
                   margin: 0, padding: 12, background: 'var(--surface)',

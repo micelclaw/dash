@@ -10,30 +10,45 @@
  * https://micelclaw.com
  */
 
-import { useStudioStore, type StudioProject } from '@/stores/studio.store';
+import { useEffect } from 'react';
+import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
 import { DocPhaseLayout } from './DocPhaseLayout';
 
 interface Props {
   project: StudioProject;
   viewMode?: 'edit' | 'past';
+  onSelectPhase?: (phase: StudioProjectStatus) => void;
 }
 
-export function FoundationPhase({ project, viewMode }: Props) {
+const DEFAULT_PLACEHOLDER =
+  'Tech decisions or constraints already made: database, auth approach, integrations, hosting…';
+
+export function FoundationPhase({ project, viewMode, onSelectPhase }: Props) {
   const generateFoundation = useStudioStore((s) => s.generateFoundation);
   const approvePhase = useStudioStore((s) => s.approvePhase);
+  const ensureTemplatesLoaded = useStudioStore((s) => s.ensureTemplatesLoaded);
+  const getTemplateBySlug = useStudioStore((s) => s.getTemplateBySlug);
+
+  useEffect(() => {
+    if (project.template_slug) ensureTemplatesLoaded().catch(() => {});
+  }, [project.template_slug, ensureTemplatesLoaded]);
+
+  const template = getTemplateBySlug(project.template_slug);
+  const placeholder = template?.placeholders?.foundation ?? DEFAULT_PLACEHOLDER;
 
   return (
     <DocPhaseLayout
       project={project}
       phase="foundation"
       docKey="doc_foundation"
-      title="Documento de foundation"
-      emptyHint="Listo para escribir el blueprint de implementación"
-      approveLabel="Aprobado, empezar a construir →"
+      title="Foundation document"
+      emptyHint="Ready to write the implementation blueprint"
+      approveLabel="Approved, start building →"
       withApprovalComment
       viewMode={viewMode}
-      initialContextLabel="Restricciones técnicas o decisiones ya tomadas"
-      initialContextPlaceholder="Por ejemplo: queremos PostgreSQL, sesiones simples sin OAuth, granularidad de 15 minutos, single-tenant, auditoría en todas las tablas críticas, sin notificaciones automáticas por ahora…"
+      onSelectPhase={onSelectPhase}
+      initialContextLabel="Technical constraints or decisions already made"
+      initialContextPlaceholder={placeholder}
       onGenerate={async (answers) => { await generateFoundation(project.id, answers); }}
       onApprove={async (comment) => { await approvePhase(project.id, 'foundation', comment); }}
     />

@@ -21,11 +21,12 @@
 // ImplementationPhase toolbar. Picking an agent and clicking attach
 // rewrites their TOOLS.md (server-side); detach strips it back out.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Beaker, Loader2, Link as LinkIcon, X, MessageSquare, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useStudioStore } from '@/stores/studio.store';
+import { useChatStore } from '@/stores/chat.store';
 
 interface AgentRow {
   id: string;
@@ -45,10 +46,30 @@ export function SkillTestChat({ projectId, compact }: Props) {
   const [attached, setAttached] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAttached = useStudioStore((s) => s.fetchSkillTestAttached);
   const attachSkillTest = useStudioStore((s) => s.attachSkillTest);
   const detachSkillTest = useStudioStore((s) => s.detachSkillTest);
+  const selectAgent = useChatStore((s) => s.selectAgent);
+  const setChatState = useChatStore((s) => s.setChatState);
+
+  // Click-outside closes the popover so it doesn't linger after use.
+  useEffect(() => {
+    if (!compact || !open) return;
+    function onDocClick(e: MouseEvent) {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [compact, open]);
+
+  function openChatInPlace(name: string) {
+    selectAgent(name);
+    setChatState(2);
+    setOpen(false);
+  }
 
   async function refresh() {
     setLoading(true);
@@ -97,24 +118,29 @@ export function SkillTestChat({ projectId, compact }: Props) {
     }
   }
 
-  if (compact && !open) {
+  if (compact) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        style={triggerBtn}
-        title="Attach this project to an agent for testing"
-      >
-        <Beaker size={11} /> Test with agent
-        {attached.length > 0 && (
-          <span style={countBadge}>{attached.length}</span>
-        )}
-      </button>
+      <div ref={wrapperRef} style={{ position: 'relative' }}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          style={triggerBtn}
+          title="Attach this project to an agent for testing"
+        >
+          <Beaker size={11} /> Test with agent
+          {attached.length > 0 && (
+            <span style={countBadge}>{attached.length}</span>
+          )}
+        </button>
+        {open && <div style={popoverStyle}>{renderPanelBody()}</div>}
+      </div>
     );
   }
 
-  return (
-    <div style={panelStyle}>
+  return <div style={panelStyle}>{renderPanelBody()}</div>;
+
+  function renderPanelBody() {
+    return (<>
       <div style={panelHeader}>
         <Beaker size={12} style={{ color: 'var(--amber)' }} />
         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)' }}>
@@ -129,13 +155,13 @@ export function SkillTestChat({ projectId, compact }: Props) {
       </div>
 
       <p style={{ margin: '0 0 8px', fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        Inyecta el catálogo de rutas de este proyecto en el TOOLS.md de un agente.
-        Mientras esté adjunto, podrás chatear con el agente y pedirle que pruebe la app.
+        Injects this project's route catalogue into an agent's TOOLS.md.
+        While attached, you can chat with the agent and ask it to test the app.
       </p>
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-dim)', fontSize: '0.6875rem' }}>
-          <Loader2 size={11} className="animate-spin" /> Cargando agentes…
+          <Loader2 size={11} className="animate-spin" /> Loading agents…
         </div>
       ) : agents.length === 0 ? (
         <div style={{
@@ -143,7 +169,7 @@ export function SkillTestChat({ projectId, compact }: Props) {
           fontSize: '0.6875rem', color: 'var(--text-dim)',
         }}>
           <AlertCircle size={11} style={{ marginTop: 2 }} />
-          No hay agentes disponibles. Configura uno desde el módulo Agents.
+          No agents available. Configure one from the Agents module.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -160,13 +186,14 @@ export function SkillTestChat({ projectId, compact }: Props) {
                 </span>
                 {isAttached ? (
                   <>
-                    <a
-                      href={`/chat?agent=${encodeURIComponent(a.name)}`}
+                    <button
+                      type="button"
+                      onClick={() => openChatInPlace(a.name)}
                       style={chatLink}
-                      title="Open chat with this agent"
+                      title="Open chat with this agent without leaving Studio"
                     >
                       <MessageSquare size={11} /> Chat
-                    </a>
+                    </button>
                     <button
                       type="button"
                       disabled={isBusy}
@@ -193,8 +220,8 @@ export function SkillTestChat({ projectId, compact }: Props) {
           })}
         </div>
       )}
-    </div>
-  );
+    </>);
+  }
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────
@@ -219,6 +246,20 @@ const panelStyle: React.CSSProperties = {
   background: 'var(--card)',
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius-md)',
+  display: 'flex', flexDirection: 'column', gap: 8,
+};
+const popoverStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% + 6px)',
+  right: 0,
+  zIndex: 50,
+  width: 360,
+  maxHeight: '60vh', overflowY: 'auto',
+  padding: 12,
+  background: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md)',
+  boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
   display: 'flex', flexDirection: 'column', gap: 8,
 };
 const panelHeader: React.CSSProperties = {
