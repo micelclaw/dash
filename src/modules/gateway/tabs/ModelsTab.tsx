@@ -556,7 +556,7 @@ export function ModelsTab() {
                   entry={{
                     provider: 'ollama',
                     label: 'Ollama',
-                    color: PROVIDER_COLORS.ollama,
+                    color: PROVIDER_COLORS.ollama ?? '#888',
                     modelCount: 0,
                     configuredCount: 0,
                     hasAuth: false,

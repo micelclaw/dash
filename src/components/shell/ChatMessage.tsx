@@ -752,7 +752,7 @@ function ApiErrorCard({ message }: { message: Message }) {
   const messages = useChatStore((s) => s.messages);
   const [retried, setRetried] = useState(false);
 
-  const info = ERROR_INFO[message.error_type ?? 'unknown'] ?? ERROR_INFO.unknown;
+  const info = ERROR_INFO[message.error_type ?? 'unknown'] ?? ERROR_INFO.unknown!;
 
   const handleRetry = () => {
     // Find the last user message in this conversation

@@ -11,7 +11,7 @@
  */
 
 import { create } from 'zustand';
-import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttachment } from '@/types/chat';
+import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttachment, ToolExecution } from '@/types/chat';
 import { useWebSocketStore } from './websocket.store';
 import { api } from '@/services/api';
 
@@ -199,9 +199,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const tools = [...current.tools];
       const existing = tools.findIndex(t => t.id === event.id);
       if (existing >= 0) {
-        tools[existing] = { ...tools[existing], ...event };
+        tools[existing] = { ...tools[existing], ...event } as ToolExecution;
       } else {
-        tools.push(event as any);
+        tools.push(event as ToolExecution);
       }
       return { streamingMessage: { ...current, tools } };
     });
@@ -317,7 +317,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           tool: String(t.tool ?? t.name ?? 'unknown'),
           status: t.status as 'pending' | 'running' | 'success' | 'error' | undefined,
           summary: typeof t.summary === 'string' ? t.summary : undefined,
-          input: t.input ?? t.arguments ?? undefined,
+          input: (() => {
+            const raw = t.input ?? t.arguments;
+            if (typeof raw === 'string') return raw;
+            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
+            return undefined;
+          })(),
           output: typeof t.output === 'string' ? t.output : undefined,
           metadata: t.metadata as Record<string, unknown> | undefined,
         }));
@@ -447,7 +452,7 @@ function simulateMockStreaming(
         return;
       }
       accumulated += (accumulated ? ' ' : '') + words[i];
-      set(() => ({ streamingMessage: { conversationId: convId, tokens: accumulated } }));
+      set(() => ({ streamingMessage: { conversationId: convId, tokens: accumulated, thinking: '', isThinking: false, tools: [] } }));
       i++;
     }, 20 + Math.random() * 15);
   }, 500);
