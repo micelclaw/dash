@@ -247,6 +247,7 @@ export function Shell() {
   const mediaEvent = useWebSocket('media.download.*');
   const sensorEvent = useWebSocket('sensor.*');
   const workflowEvent = useWebSocket('workflow.*');
+  const notificationEvent = useWebSocket('notification.new');
   const postYieldEvent = useWebSocket('chat.post_yield_message');
 
   useEffect(() => {
@@ -639,6 +640,42 @@ export function Shell() {
       action: route ? { label: 'View', route } : undefined,
     });
   }, [changeEvent, addNotification]);
+
+  // Ola 5: reactive push notifications from the ClawEventBus. The Core
+  // service `push-from-events.service.ts` maps bus events (built-in
+  // safety net + user triggers with action `push.send`) into
+  // `notification.new` frames. We just relay severity → toast style and
+  // pipe the payload into the notification store (its 30-min title
+  // dedup is enough to avoid spam).
+  useEffect(() => {
+    if (!notificationEvent || notificationEvent.event !== 'notification.new') return;
+    const d = notificationEvent.data as {
+      template?: string;
+      title?: string;
+      body?: string;
+      severity?: 'debug' | 'info' | 'warn' | 'error' | 'critical';
+      action?: { label: string; route?: string };
+    };
+    const title = d.title ?? d.template ?? 'Notificación';
+    const description = d.body;
+    switch (d.severity) {
+      case 'critical':
+      case 'error':
+        toast.error(title, { description, duration: 8000 });
+        break;
+      case 'warn':
+        toast.warning(title, { description, duration: 6000 });
+        break;
+      default:
+        toast(title, { description });
+    }
+    addNotification({
+      type: 'system',
+      title,
+      body: description,
+      action: d.action,
+    });
+  }, [notificationEvent, addNotification]);
 
   // Sensor fusion events
   useEffect(() => {
