@@ -16,7 +16,7 @@ import {
   Settings, Puzzle, Activity, Wrench, Workflow,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
-  Terminal, Radio, Server, Hammer,
+  Terminal, Radio, Server, Hammer, Zap,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -28,6 +28,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null },
   { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null },
   { id: 'flows',    label: 'Flows',         icon: Workflow,      color: 'var(--mod-flows)',    path: '/flows',    group: null },
+  { id: 'triggers', label: 'Triggers',      icon: Zap,           color: '#facc15',             path: '/triggers', group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },
