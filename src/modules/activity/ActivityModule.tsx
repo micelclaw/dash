@@ -11,17 +11,17 @@
  * state and runs its own data fetching via the adapter contract.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
-import { ActivityHeader } from './ActivityHeader';
-import { ActivityTable } from './ActivityTable';
 import type { Adapter } from './adapters/types';
-import { buildPlaceholderAdapter } from './adapters/placeholder.adapter';
 import { EventsTab } from './tabs/EventsTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
+import { GatewayLogsTab } from './tabs/GatewayLogsTab';
+import { CoreLogsTab } from './tabs/CoreLogsTab';
+import { ContainersLogsTab } from './tabs/ContainersLogsTab';
 import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 
@@ -123,8 +123,6 @@ export function Component() {
     onTogglePause: () => setPaused((p) => !p),
   };
 
-  const placeholderAdapter = useMemo(() => buildPlaceholderAdapter(activeTab, activeTab), [activeTab]);
-
   return (
     <div className="flex h-full min-h-0 bg-[var(--bg-base)]">
       {/* Left sidebar — 5 tabs */}
@@ -183,20 +181,9 @@ export function Component() {
       <section className="flex-1 flex flex-col min-h-0">
         {activeTab === 'events' && <EventsTab {...sharedProps} />}
         {activeTab === 'notifications' && <NotificationsTab {...sharedProps} />}
-        {(activeTab === 'gateway' || activeTab === 'containers' || activeTab === 'core') && (
-          <>
-            <ActivityHeader
-              adapter={placeholderAdapter}
-              {...sharedProps}
-            />
-            <ActivityTable
-              adapter={placeholderAdapter}
-              rows={[]}
-              loading={false}
-              emptyMessage="Este tab se cablea en la próxima sesión."
-            />
-          </>
-        )}
+        {activeTab === 'gateway' && <GatewayLogsTab {...sharedProps} />}
+        {activeTab === 'containers' && <ContainersLogsTab {...sharedProps} />}
+        {activeTab === 'core' && <CoreLogsTab {...sharedProps} />}
       </section>
     </div>
   );
