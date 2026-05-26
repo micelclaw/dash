@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchParams, useNavigate } from 'react-router';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { OverviewTab } from './tabs/OverviewTab';
@@ -19,9 +19,9 @@ import { ChannelsTab } from './tabs/ChannelsTab';
 import { ModelsTab } from './tabs/ModelsTab';
 import { SessionsTab } from './tabs/SessionsTab';
 import { CronTab } from './tabs/CronTab';
-import { LogsTab } from './tabs/LogsTab';
 import { DevicesTab } from './tabs/DevicesTab';
 import { HeartbeatTab } from './tabs/HeartbeatTab';
+import { ConfigHealthBanner } from './components/ConfigHealthBanner';
 import type { GatewayTab } from './types';
 
 const TABS: { key: GatewayTab; label: string }[] = [
@@ -30,19 +30,26 @@ const TABS: { key: GatewayTab; label: string }[] = [
   { key: 'models', label: 'Models' },
   { key: 'sessions', label: 'Sessions' },
   { key: 'cron', label: 'Cron' },
-  { key: 'logs', label: 'Logs' },
   { key: 'devices', label: 'Devices' },
   { key: 'heartbeat', label: 'Heartbeat' },
 ];
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const initialTab = (searchParams.get('tab') as GatewayTab) || 'overview';
   const [activeTab, setActiveTab] = useState<GatewayTab>(initialTab);
   const [hoveredTab, setHoveredTab] = useState<GatewayTab | null>(null);
 
   const { fetchSnapshot, statusLoading } = useGatewayStore();
+
+  // Logs tab moved to Activity Center — preserve old bookmarks.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'logs') {
+      navigate('/activity?tab=gateway', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   // Fetch everything in one request on mount
   useEffect(() => {
@@ -138,6 +145,9 @@ export function Component() {
         {!isMobile && <div style={{ width: 80 }} />}
       </div>
 
+      {/* Config-health banner — solo aparece si hay orphans en openclaw.json */}
+      <ConfigHealthBanner />
+
       {/* Tab content */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {activeTab === 'overview' && <OverviewTab />}
@@ -145,7 +155,6 @@ export function Component() {
         {activeTab === 'models' && <ModelsTab />}
         {activeTab === 'sessions' && <SessionsTab />}
         {activeTab === 'cron' && <CronTab />}
-        {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'devices' && <DevicesTab />}
         {activeTab === 'heartbeat' && <HeartbeatTab />}
       </div>

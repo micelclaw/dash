@@ -103,7 +103,6 @@ const router = createBrowserRouter([
           { path: '/gateway', lazy: () => import('@/modules/gateway/GatewayPage') },
           { path: '/flows', lazy: () => import('@/modules/flows/FlowsPage') },
           { path: '/flows/:flowId', lazy: () => import('@/modules/flows/FlowEditor') },
-          { path: '/triggers', lazy: () => import('@/modules/triggers/TriggersPage') },
           { path: '/activity', lazy: () => import('@/modules/activity/ActivityModule') },
           { path: '/studio', lazy: () => import('@/modules/studio/StudioPage') },
           { path: '/studio/:projectId', lazy: () => import('@/modules/studio/ProjectDetailPage') },

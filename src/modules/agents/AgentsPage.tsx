@@ -20,7 +20,6 @@ import { AgentConversations } from './AgentConversations';
 import { AgentWorkspaces } from './AgentWorkspaces';
 import { CreateAgentWizard } from './CreateAgentWizard';
 import { ImportAgentModal } from './ImportAgentModal';
-import { EventsTab } from './events/EventsTab';
 import { useChatStore } from '@/stores/chat.store';
 import type { AgentTab } from './types';
 
@@ -29,7 +28,6 @@ const TABS: { key: AgentTab; label: string }[] = [
   { key: 'council', label: 'Council' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'workspaces', label: 'Workspaces' },
-  { key: 'events', label: 'Events' },
 ];
 
 export function Component() {
@@ -247,7 +245,6 @@ export function Component() {
         {activeTab === 'council' && <CouncilTab agents={agents} />}
         {activeTab === 'conversations' && <AgentConversations agents={agents} />}
         {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} initialAgentId={selectedAgentId} />}
-        {activeTab === 'events' && <EventsTab agents={agents} />}
       </div>
 
       {/* Import modal */}

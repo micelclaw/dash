@@ -140,4 +140,4 @@ export interface Meeting {
   created_at: string;
 }
 
-export type AgentTab = 'tree' | 'council' | 'conversations' | 'workspaces' | 'events';
+export type AgentTab = 'tree' | 'council' | 'conversations' | 'workspaces';
