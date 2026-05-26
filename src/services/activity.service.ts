@@ -73,6 +73,16 @@ export interface AgentEventRow {
   created_at: string;
 }
 
+export interface NotificationHistoryRow {
+  id: string;
+  type: string;
+  severity: string;
+  user_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+  rule_key: string | null;
+}
+
 export interface CoreLogEntry {
   timestamp: string;
   level: string;
@@ -155,6 +165,14 @@ export async function resetNotificationRule(ruleKey: string): Promise<RuleOverri
 }
 
 // ─── Events feed ────────────────────────────────────────────────────
+
+export async function getNotificationsHistory(opts: { windowHours?: number; limit?: number } = {}): Promise<NotificationHistoryRow[]> {
+  const query: Record<string, string | number | undefined> = {};
+  if (opts.windowHours) query.window = `${opts.windowHours}h`;
+  if (opts.limit) query.limit = opts.limit;
+  const { data } = await api.get<{ data: { events: NotificationHistoryRow[] } }>('/activity/notifications-history', query);
+  return data.events;
+}
 
 export async function listEvents(params: {
   type?: string;

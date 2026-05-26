@@ -6,9 +6,9 @@
  * layout: left sidebar with the 5 tabs, top header (histogram +
  * filters), bottom table with row→drawer detail.
  *
- * Each tab provides an Adapter<Row> (see adapters/types.ts). The shell
- * just orchestrates: load stats, run the active adapter's
- * fetchSnapshot, pipe filters/search/pause state down.
+ * The shell owns: stats polling for sidebar badges, ?tab= sync,
+ * filters/search/pause state. The active tab component receives that
+ * state and runs its own data fetching via the adapter contract.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -20,6 +20,8 @@ import { ActivityHeader } from './ActivityHeader';
 import { ActivityTable } from './ActivityTable';
 import type { Adapter } from './adapters/types';
 import { buildPlaceholderAdapter } from './adapters/placeholder.adapter';
+import { EventsTab } from './tabs/EventsTab';
+import { NotificationsTab } from './tabs/NotificationsTab';
 import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 
@@ -46,18 +48,12 @@ function formatMB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function pickAdapter(key: TabKey): Adapter<{ id: string }> {
-  // Sessions 6 + 7 replace these placeholders with the real adapters.
-  return buildPlaceholderAdapter(key, TABS.find((t) => t.key === key)?.label ?? key);
-}
-
 export function Component() {
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
-  // ?tab=events|notifications|gateway|containers|core
   const queryTab = (search.get('tab') ?? 'events') as TabKey;
   const initialTab: TabKey = TABS.some((t) => t.key === queryTab) ? queryTab : 'events';
 
@@ -67,7 +63,11 @@ export function Component() {
   const [searchText, setSearchText] = useState('');
   const [paused, setPaused] = useState(false);
 
-  const adapter = useMemo(() => pickAdapter(activeTab), [activeTab]);
+  // Reset filters when the tab changes — facets differ per adapter.
+  useEffect(() => {
+    setFilters({});
+    setSearchText('');
+  }, [activeTab]);
 
   // Fetch + poll stats (header histogram + bucket sizes for sidebar badges)
   useEffect(() => {
@@ -78,7 +78,7 @@ export function Component() {
         const s = await getActivityStats(24);
         if (!cancelled) setStats(s);
       } catch {
-        // best-effort — leave previous snapshot
+        // best-effort
       }
     }
     void load();
@@ -88,12 +88,6 @@ export function Component() {
       clearInterval(id);
     };
   }, [isAdmin]);
-
-  // Reset filters when the tab changes — facets differ.
-  useEffect(() => {
-    setFilters({});
-    setSearchText('');
-  }, [activeTab]);
 
   // Sync ?tab= when activeTab changes
   useEffect(() => {
@@ -117,6 +111,19 @@ export function Component() {
     if (!bucket || !stats) return null;
     return stats.buckets.find((b) => b.bucket === bucket) ?? null;
   };
+
+  const sharedProps = {
+    stats,
+    filters,
+    onFilterChange: (k: string, v: string) =>
+      setFilters((prev) => ({ ...prev, [k]: v })),
+    search: searchText,
+    onSearchChange: setSearchText,
+    paused,
+    onTogglePause: () => setPaused((p) => !p),
+  };
+
+  const placeholderAdapter = useMemo(() => buildPlaceholderAdapter(activeTab, activeTab), [activeTab]);
 
   return (
     <div className="flex h-full min-h-0 bg-[var(--bg-base)]">
@@ -172,24 +179,24 @@ export function Component() {
         )}
       </aside>
 
-      {/* Main column — header (graph + filters) + table */}
+      {/* Main column — dispatch by active tab */}
       <section className="flex-1 flex flex-col min-h-0">
-        <ActivityHeader
-          adapter={adapter}
-          stats={stats}
-          filters={filters}
-          onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
-          search={searchText}
-          onSearchChange={setSearchText}
-          paused={paused}
-          onTogglePause={() => setPaused((p) => !p)}
-        />
-        <ActivityTable<{ id: string }>
-          adapter={adapter}
-          rows={[]}
-          loading={false}
-          emptyMessage="Este tab se cablea en la próxima sesión."
-        />
+        {activeTab === 'events' && <EventsTab {...sharedProps} />}
+        {activeTab === 'notifications' && <NotificationsTab {...sharedProps} />}
+        {(activeTab === 'gateway' || activeTab === 'containers' || activeTab === 'core') && (
+          <>
+            <ActivityHeader
+              adapter={placeholderAdapter}
+              {...sharedProps}
+            />
+            <ActivityTable
+              adapter={placeholderAdapter}
+              rows={[]}
+              loading={false}
+              emptyMessage="Este tab se cablea en la próxima sesión."
+            />
+          </>
+        )}
       </section>
     </div>
   );
