@@ -22,6 +22,7 @@ import { NotificationsTab } from './tabs/NotificationsTab';
 import { GatewayLogsTab } from './tabs/GatewayLogsTab';
 import { CoreLogsTab } from './tabs/CoreLogsTab';
 import { ContainersLogsTab } from './tabs/ContainersLogsTab';
+import { ActivitySettingsModal } from './settings/ActivitySettingsModal';
 import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 
@@ -56,12 +57,14 @@ export function Component() {
 
   const queryTab = (search.get('tab') ?? 'events') as TabKey;
   const initialTab: TabKey = TABS.some((t) => t.key === queryTab) ? queryTab : 'events';
+  const initialSettingsOpen = search.get('settings') === 'open';
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [searchText, setSearchText] = useState('');
   const [paused, setPaused] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(initialSettingsOpen);
 
   // Reset filters when the tab changes — facets differ per adapter.
   useEffect(() => {
@@ -130,7 +133,7 @@ export function Component() {
         <header className="px-3 py-3 border-b border-[var(--border-base)] flex items-center justify-between">
           <span className="text-sm font-medium">Activity</span>
           <button
-            onClick={() => navigate('/activity?settings=open')}
+            onClick={() => setSettingsOpen(true)}
             className="p-1 rounded hover:bg-[var(--bg-hover)]"
             aria-label="Settings"
             title="Settings"
@@ -185,6 +188,11 @@ export function Component() {
         {activeTab === 'containers' && <ContainersLogsTab {...sharedProps} />}
         {activeTab === 'core' && <CoreLogsTab {...sharedProps} />}
       </section>
+
+      <ActivitySettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   );
 }
