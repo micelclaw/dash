@@ -13,7 +13,7 @@
 import {
   MessageSquare, MessageCircle, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
-  Settings, Puzzle, Activity, Wrench, Workflow,
+  Settings, Puzzle, Activity, Wrench, Workflow, LineChart,
   Waypoints, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
   Terminal, Radio, Server, Hammer, Zap,
@@ -63,6 +63,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'terminal', label: 'Terminal',      icon: Terminal,      color: 'var(--mod-terminal)', path: '/terminal', group: 'System' },
   { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
   { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },
+  { id: 'activity', label: 'Activity Center', icon: LineChart,     color: '#22d3ee',             path: '/activity',  group: 'System' },
   // { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },
   { id: 'settings', label: 'Settings',      icon: Settings,      color: 'var(--mod-settings)', path: '/settings', group: 'System' },
 ];
