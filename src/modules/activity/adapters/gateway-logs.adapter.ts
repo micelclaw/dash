@@ -79,13 +79,13 @@ export const gatewayLogsAdapter: Adapter<GatewayLogEntry> = {
       render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
     },
   ],
-  async fetchSnapshot({ filters }) {
+  async fetchSnapshot() {
     const res = await getGatewayLogs({ limit: 500 });
-    let rows = res.entries;
-    if (filters.level && filters.level !== 'all') {
-      rows = rows.filter((r) => r.level === filters.level);
-    }
-    return { rows };
+    return { rows: res.entries };
+  },
+  matchesFilters(row, filters) {
+    if (filters.level && filters.level !== 'all' && row.level !== filters.level) return false;
+    return true;
   },
   renderDetail(row) {
     return createElement(
@@ -109,7 +109,7 @@ export const gatewayLogsAdapter: Adapter<GatewayLogEntry> = {
         createElement('div', { className: 'text-[var(--text-muted)]' }, 'Message'),
         createElement(
           'pre',
-          { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
+          { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
           row.message,
         ),
       ),

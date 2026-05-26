@@ -89,13 +89,13 @@ export const notificationsAdapter: Adapter<NotificationHistoryRow> = {
       render: (row) => createElement('span', { className: 'text-xs' }, describeRow(row)),
     },
   ],
-  async fetchSnapshot({ filters, limit }) {
+  async fetchSnapshot({ limit }) {
     const rows = await getNotificationsHistory({ windowHours: 24, limit });
-    let filtered = rows;
-    if (filters.rule && filters.rule !== 'all') {
-      filtered = filtered.filter((r) => r.rule_key === filters.rule);
-    }
-    return { rows: filtered };
+    return { rows };
+  },
+  matchesFilters(row, filters) {
+    if (filters.rule && filters.rule !== 'all' && row.rule_key !== filters.rule) return false;
+    return true;
   },
   renderDetail(row) {
     return createElement(
@@ -131,7 +131,7 @@ export const notificationsAdapter: Adapter<NotificationHistoryRow> = {
         createElement('div', { className: 'text-[var(--text-muted)]' }, 'Payload'),
         createElement(
           'pre',
-          { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-72' },
+          { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-72' },
           JSON.stringify(row.payload, null, 2),
         ),
       ),

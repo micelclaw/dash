@@ -149,6 +149,43 @@ test.describe('Activity Center smoke', () => {
     await page.waitForTimeout(500);
   });
 
+  test('Core (System) level filter actually filters', async ({ page }) => {
+    await loginAsPaco(page);
+    await gotoActivity(page, 'core');
+    // Wait for initial paint
+    await page.waitForTimeout(1500);
+    // Select 'warn' — most lines are info so we expect very few/none
+    const levelSelect = page.locator('select').filter({ hasText: 'Level' });
+    await levelSelect.selectOption('warn');
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: `${SHOTS}/11-core-filter-warn.png`, fullPage: true });
+
+    // None of the visible rows in the table body should be of level info.
+    // Look at the "Lvl" cell (column 2) — it should NOT contain "INFO".
+    const lvlPills = page.locator('tbody td:nth-child(2) span');
+    const count = await lvlPills.count();
+    for (let i = 0; i < count; i++) {
+      const txt = (await lvlPills.nth(i).textContent())?.toLowerCase() ?? '';
+      if (txt && txt.includes('info')) throw new Error('info row leaked past warn filter');
+    }
+  });
+
+  test('Histogram tooltip is readable on hover', async ({ page }) => {
+    await loginAsPaco(page);
+    await gotoActivity(page);
+    await page.waitForTimeout(1500);
+    // Hover over the chart area to trigger the recharts tooltip
+    const chart = page.locator('.recharts-bar-rectangles').first();
+    await chart.waitFor({ timeout: 5_000 }).catch(() => {});
+    const box = await chart.boundingBox();
+    if (box) {
+      // Aim at the centre of a bar
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(400);
+    }
+    await page.screenshot({ path: `${SHOTS}/12-histogram-tooltip.png`, fullPage: true });
+  });
+
   test('Settings: toggle a built-in rule + verify activity.settings.changed event', async ({ page }) => {
     await loginAsPaco(page);
     await gotoActivity(page);

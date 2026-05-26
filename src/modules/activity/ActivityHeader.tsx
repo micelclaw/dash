@@ -75,7 +75,7 @@ export function ActivityHeader<Row>({
   );
 
   return (
-    <div className="border-b border-[var(--border-base)] bg-[var(--bg-base)]">
+    <div className="border-b border-[var(--border)] bg-[var(--bg)]">
       {/* Histogram */}
       <div className="h-32 px-3 pt-2">
         {rows.length > 0 ? (
@@ -84,11 +84,17 @@ export function ActivityHeader<Row>({
               <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="var(--text-muted)" />
               <YAxis tick={{ fontSize: 10 }} stroke="var(--text-muted)" width={32} />
               <Tooltip
+                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                 contentStyle={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-base)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
                   fontSize: 11,
+                  color: 'var(--text)',
+                  padding: '6px 8px',
                 }}
+                labelStyle={{ color: 'var(--text)', fontWeight: 500 }}
+                itemStyle={{ color: 'var(--text)' }}
               />
               {orderedSeverities.map((sev) => (
                 <Bar key={sev} dataKey={sev} stackId="a" fill={SEVERITY_COLORS[sev] ?? '#64748b'} />
@@ -103,13 +109,13 @@ export function ActivityHeader<Row>({
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t border-[var(--border-subtle)]">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-t border-[var(--border)]">
         {adapter.filters.map((facet) => (
           <select
             key={facet.key}
             value={filters[facet.key] ?? 'all'}
             onChange={(e) => onFilterChange(facet.key, e.target.value)}
-            className="text-xs px-2 py-1 rounded border border-[var(--border-base)] bg-[var(--bg-surface)]"
+            className="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)]"
             aria-label={facet.label}
           >
             <option value="all">{facet.label}: todos</option>
@@ -125,12 +131,12 @@ export function ActivityHeader<Row>({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Buscar…"
-          className="flex-1 min-w-[120px] text-xs px-2 py-1 rounded border border-[var(--border-base)] bg-[var(--bg-surface)]"
+          className="flex-1 min-w-[120px] text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)]"
         />
         {onTogglePause && (
           <button
             onClick={onTogglePause}
-            className="text-xs px-2 py-1 rounded border border-[var(--border-base)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)]"
+            className="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]"
             aria-pressed={paused}
           >
             {paused ? '▶ Reanudar' : '⏸ Pausar'}

@@ -106,18 +106,24 @@ export function useActivityRows<Row>({ adapter, filters, search, paused, ws }: O
     return unsubscribe;
   }, [adapter, client, paused, ws]);
 
-  // Client-side search overlay
+  // Client-side overlay: adapter filters + free-text search. Applied
+  // here (not in the adapter's snapshot) so live WS rows respect the
+  // current filter state even though the WS itself fans out unfiltered.
   const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows;
+    let out = rows;
+    if (adapter.matchesFilters) {
+      out = out.filter((row) => adapter.matchesFilters!(row, filters));
+    }
+    if (!search.trim()) return out;
     const needle = search.toLowerCase();
-    return rows.filter((row) => {
+    return out.filter((row) => {
       try {
         return JSON.stringify(row).toLowerCase().includes(needle);
       } catch {
         return false;
       }
     });
-  }, [rows, search]);
+  }, [rows, search, filters, adapter]);
 
   return {
     rows,

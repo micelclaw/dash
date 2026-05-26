@@ -85,13 +85,16 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
       render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
     },
   ],
-  async fetchSnapshot({ filters }) {
+  async fetchSnapshot() {
+    // Don't filter here — useActivityRows applies matchesFilters() to
+    // both snapshot and live WS rows so they stay consistent when the
+    // user changes the dropdown.
     const res = await getCoreLogs({ limit: 500, tailBytes: 512 * 1024 });
-    let rows = res.entries;
-    if (filters.level && filters.level !== 'all') {
-      rows = rows.filter((r) => r.level === filters.level);
-    }
-    return { rows };
+    return { rows: res.entries };
+  },
+  matchesFilters(row, filters) {
+    if (filters.level && filters.level !== 'all' && row.level !== filters.level) return false;
+    return true;
   },
   renderDetail(row) {
     return createElement(
@@ -115,7 +118,7 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
         createElement('div', { className: 'text-[var(--text-muted)]' }, 'Message'),
         createElement(
           'pre',
-          { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
+          { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
           row.message,
         ),
       ),
@@ -125,7 +128,7 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
         createElement('div', { className: 'text-[var(--text-muted)]' }, 'Raw pino frame'),
         createElement(
           'pre',
-          { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-72 text-[10px]' },
+          { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-72 text-[10px]' },
           JSON.stringify(row.raw, null, 2),
         ),
       ),

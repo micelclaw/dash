@@ -180,9 +180,9 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
               </div>
 
               {budget && (
-                <div className="mt-3 rounded-md border border-[var(--border-base)] overflow-hidden">
+                <div className="mt-3 rounded-md border border-[var(--border)] overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="bg-[var(--bg-surface)] text-[var(--text-muted)]">
+                    <thead className="bg-[var(--surface)] text-[var(--text-muted)]">
                       <tr>
                         <th className="text-left px-2 py-1.5">Bucket</th>
                         <th className="text-right px-2 py-1.5">%</th>
@@ -190,22 +190,22 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="border-t border-[var(--border-subtle)]">
+                      <tr className="border-t border-[var(--border)]">
                         <td className="px-2 py-1.5">Events</td>
                         <td className="text-right px-2 py-1.5">40%</td>
                         <td className="text-right px-2 py-1.5 tabular-nums">{formatMB(budget.splits.events)}</td>
                       </tr>
-                      <tr className="border-t border-[var(--border-subtle)]">
+                      <tr className="border-t border-[var(--border)]">
                         <td className="px-2 py-1.5">Gateway</td>
                         <td className="text-right px-2 py-1.5">25%</td>
                         <td className="text-right px-2 py-1.5 tabular-nums">{formatMB(budget.splits.gateway)}</td>
                       </tr>
-                      <tr className="border-t border-[var(--border-subtle)]">
+                      <tr className="border-t border-[var(--border)]">
                         <td className="px-2 py-1.5">Containers</td>
                         <td className="text-right px-2 py-1.5">20%</td>
                         <td className="text-right px-2 py-1.5 tabular-nums">{formatMB(budget.splits.containers)}</td>
                       </tr>
-                      <tr className="border-t border-[var(--border-subtle)]">
+                      <tr className="border-t border-[var(--border)]">
                         <td className="px-2 py-1.5">Core</td>
                         <td className="text-right px-2 py-1.5">15%</td>
                         <td className="text-right px-2 py-1.5 tabular-nums">{formatMB(budget.splits.core)}</td>
@@ -229,7 +229,7 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
                 {rules.map((rule) => (
                   <div
                     key={rule.key}
-                    className="rounded-md border border-[var(--border-base)] p-3 space-y-2"
+                    className="rounded-md border border-[var(--border)] p-3 space-y-2"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">

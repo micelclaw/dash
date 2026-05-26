@@ -64,6 +64,13 @@ export interface Adapter<Row> {
   renderDetail(row: Row): ReactNode;
   /** Optional row key extractor (default falls back to index). */
   getRowKey?(row: Row): string;
+  /**
+   * Client-side filter predicate. Applied AFTER fetchSnapshot AND on
+   * each live-WS row, so the result matches the user's current filter
+   * even when the snapshot was loaded before the filter changed and
+   * the WS keeps pushing unfiltered rows. Returns true to keep.
+   */
+  matchesFilters?(row: Row, filters: Record<string, string>): boolean;
 }
 
 /**

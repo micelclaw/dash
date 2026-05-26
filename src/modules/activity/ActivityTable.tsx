@@ -29,9 +29,9 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
 
   return (
     <div className="flex h-full min-h-0 flex-1">
-      <div className="flex-1 min-h-0 overflow-auto bg-[var(--bg-surface)]">
+      <div className="flex-1 min-h-0 overflow-auto bg-[var(--surface)]">
         <table className="w-full text-sm border-collapse">
-          <thead className="sticky top-0 z-10 bg-[var(--bg-base)] border-b border-[var(--border-base)]">
+          <thead className="sticky top-0 z-10 bg-[var(--bg)] border-b border-[var(--border)]">
             <tr>
               {adapter.columns.map((col) => (
                 <th
@@ -64,8 +64,8 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
                   <tr
                     key={key}
                     onClick={() => setSelectedRow(row)}
-                    className={`cursor-pointer border-b border-[var(--border-subtle)] hover:bg-[var(--bg-hover)] ${
-                      isSelected ? 'bg-[var(--bg-hover)]' : ''
+                    className={`cursor-pointer border-b border-[var(--border)] hover:bg-[var(--surface-hover)] ${
+                      isSelected ? 'bg-[var(--surface-hover)]' : ''
                     }`}
                   >
                     {adapter.columns.map((col) => (
@@ -82,12 +82,12 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
       </div>
 
       {selectedRow && (
-        <div className="w-[420px] border-l border-[var(--border-base)] bg-[var(--bg-base)] overflow-auto">
-          <div className="flex items-center justify-between border-b border-[var(--border-base)] px-3 py-2">
+        <div className="w-[420px] border-l border-[var(--border)] bg-[var(--bg)] overflow-auto">
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
             <span className="text-sm font-medium">Detalle</span>
             <button
               onClick={() => setSelectedRow(null)}
-              className="p-1 rounded hover:bg-[var(--bg-hover)]"
+              className="p-1 rounded hover:bg-[var(--surface-hover)]"
               aria-label="Cerrar detalle"
             >
               <X size={14} />

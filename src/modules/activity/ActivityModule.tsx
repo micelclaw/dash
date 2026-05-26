@@ -127,14 +127,14 @@ export function Component() {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-[var(--bg-base)]">
+    <div className="flex h-full min-h-0 bg-[var(--bg)]">
       {/* Left sidebar — 5 tabs */}
-      <aside className="w-[208px] shrink-0 border-r border-[var(--border-base)] flex flex-col">
-        <header className="px-3 py-3 border-b border-[var(--border-base)] flex items-center justify-between">
+      <aside className="w-[208px] shrink-0 border-r border-[var(--border)] flex flex-col">
+        <header className="px-3 py-3 border-b border-[var(--border)] flex items-center justify-between">
           <span className="text-sm font-medium">Activity</span>
           <button
             onClick={() => setSettingsOpen(true)}
-            className="p-1 rounded hover:bg-[var(--bg-hover)]"
+            className="p-1 rounded hover:bg-[var(--surface-hover)]"
             aria-label="Settings"
             title="Settings"
           >
@@ -153,8 +153,8 @@ export function Component() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`w-full flex items-center justify-between px-3 py-1.5 text-sm hover:bg-[var(--bg-hover)] ${
-                  isActive ? 'bg-[var(--bg-hover)] border-l-2 border-[var(--accent)]' : ''
+                className={`w-full flex items-center justify-between px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] ${
+                  isActive ? 'bg-[var(--surface-hover)] border-l-2 border-[var(--primary)]' : ''
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -174,7 +174,7 @@ export function Component() {
           })}
         </nav>
         {stats && (
-          <footer className="px-3 py-2 border-t border-[var(--border-base)] text-[10px] text-[var(--text-muted)]">
+          <footer className="px-3 py-2 border-t border-[var(--border)] text-[10px] text-[var(--text-muted)]">
             Budget total: {stats.budget.budget_mb} MB
           </footer>
         )}

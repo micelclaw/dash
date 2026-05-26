@@ -105,6 +105,9 @@ export function buildContainerLogsAdapter(serviceList: string[]): Adapter<Contai
       },
     ],
     async fetchSnapshot({ filters }) {
+      // `service` decides WHICH endpoint to hit — stays in fetchSnapshot
+      // because it's not a row-level filter. `stream` is row-level
+      // (see matchesFilters below).
       const svc = filters.service && filters.service !== 'all' ? filters.service : MERGED_SENTINEL;
       let rows: ContainerLogRow[] = [];
       if (svc === MERGED_SENTINEL) {
@@ -114,10 +117,11 @@ export function buildContainerLogsAdapter(serviceList: string[]): Adapter<Contai
         const res = await getServiceLogs(svc, { tailBytes: 256 * 1024, limit: 500 });
         rows = res.entries.map((e) => ({ ...e, service: svc }));
       }
-      if (filters.stream && filters.stream !== 'all') {
-        rows = rows.filter((r) => r.stream === filters.stream);
-      }
       return { rows };
+    },
+    matchesFilters(row, filters) {
+      if (filters.stream && filters.stream !== 'all' && row.stream !== filters.stream) return false;
+      return true;
     },
     renderDetail(row) {
       return createElement(
@@ -141,7 +145,7 @@ export function buildContainerLogsAdapter(serviceList: string[]): Adapter<Contai
           createElement('div', { className: 'text-[var(--text-muted)]' }, 'Message'),
           createElement(
             'pre',
-            { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
+            { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-96' },
             row.message,
           ),
         ),

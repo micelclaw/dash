@@ -101,20 +101,14 @@ export const eventsAdapter: Adapter<AgentEventRow> = {
       render: (row) => createElement('span', { className: 'text-xs text-[var(--text-muted)]' }, snippet(row.payload)),
     },
   ],
-  async fetchSnapshot({ filters, limit }) {
-    // Severity filter is applied client-side because the REST endpoint
-    // doesn't support it natively (yet). Same for domain prefix — Core
-    // does support a `type` glob param but we let the adapter do it so
-    // multi-domain searches stay flexible.
+  async fetchSnapshot({ limit }) {
     const events = await listEvents({ limit });
-    let rows = events.events;
-    if (filters.severity && filters.severity !== 'all') {
-      rows = rows.filter((r) => r.severity === filters.severity);
-    }
-    if (filters.domain && filters.domain !== 'all') {
-      rows = rows.filter((r) => r.type.startsWith(filters.domain));
-    }
-    return { rows };
+    return { rows: events.events };
+  },
+  matchesFilters(row, filters) {
+    if (filters.severity && filters.severity !== 'all' && row.severity !== filters.severity) return false;
+    if (filters.domain && filters.domain !== 'all' && !row.type.startsWith(filters.domain)) return false;
+    return true;
   },
   renderDetail(row) {
     return createElement(
@@ -144,7 +138,7 @@ export const eventsAdapter: Adapter<AgentEventRow> = {
         createElement('div', { className: 'text-[var(--text-muted)]' }, 'Payload'),
         createElement(
           'pre',
-          { className: 'mt-1 p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-base)] overflow-auto whitespace-pre-wrap break-all max-h-72' },
+          { className: 'mt-1 p-2 rounded bg-[var(--surface)] border border-[var(--border)] overflow-auto whitespace-pre-wrap break-all max-h-72' },
           JSON.stringify(row.payload, null, 2),
         ),
       ),
