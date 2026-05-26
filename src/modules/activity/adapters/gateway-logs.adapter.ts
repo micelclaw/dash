@@ -80,7 +80,7 @@ export const gatewayLogsAdapter: Adapter<GatewayLogEntry> = {
     },
   ],
   async fetchSnapshot({ filters }) {
-    const res = await getGatewayLogs({ tail: 500 });
+    const res = await getGatewayLogs({ limit: 500 });
     let rows = res.entries;
     if (filters.level && filters.level !== 'all') {
       rows = rows.filter((r) => r.level === filters.level);

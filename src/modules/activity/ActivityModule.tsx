@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';

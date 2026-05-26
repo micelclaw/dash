@@ -208,11 +208,13 @@ export interface GatewayLogEntry {
   source?: string;
 }
 
-export async function getGatewayLogs(opts: { tail?: number } = {}): Promise<{ entries: GatewayLogEntry[] }> {
+export async function getGatewayLogs(opts: { limit?: number } = {}): Promise<{ entries: GatewayLogEntry[] }> {
   const query: Record<string, number | undefined> = {};
-  if (opts.tail) query.tail = opts.tail;
-  const { data } = await api.get<{ data: { entries: GatewayLogEntry[] } }>('/gateway/logs', query);
-  return data;
+  if (opts.limit) query.limit = opts.limit;
+  // Core returns `{ data: GatewayLogEntry[] }` — the array IS the data,
+  // not wrapped in an "entries" object.
+  const { data } = await api.get<{ data: GatewayLogEntry[] }>('/gateway/logs', query);
+  return { entries: Array.isArray(data) ? data : [] };
 }
 
 // ─── Container logs (per-service + merged) ──────────────────────────

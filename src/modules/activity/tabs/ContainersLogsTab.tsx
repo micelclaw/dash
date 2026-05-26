@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { ActivityHeader } from '../ActivityHeader';
 import { ActivityTable } from '../ActivityTable';
 import { useActivityRows } from '../useActivityRows';
