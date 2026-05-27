@@ -191,10 +191,11 @@ export async function listEvents(params: {
 
 // ─── Core logs ──────────────────────────────────────────────────────
 
-export async function getCoreLogs(opts: { limit?: number; tailBytes?: number } = {}): Promise<CoreLogsResponse> {
-  const query: Record<string, number | undefined> = {};
+export async function getCoreLogs(opts: { limit?: number; tailBytes?: number; level?: string } = {}): Promise<CoreLogsResponse> {
+  const query: Record<string, string | number | undefined> = {};
   if (opts.limit) query.limit = opts.limit;
   if (opts.tailBytes) query.tail_bytes = opts.tailBytes;
+  if (opts.level && opts.level !== 'all') query.level = opts.level;
   const { data } = await api.get<{ data: CoreLogsResponse }>('/core/logs', query);
   return data;
 }

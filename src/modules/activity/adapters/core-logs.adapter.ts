@@ -85,11 +85,12 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
       render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
     },
   ],
-  async fetchSnapshot() {
-    // Don't filter here — useActivityRows applies matchesFilters() to
-    // both snapshot and live WS rows so they stay consistent when the
-    // user changes the dropdown.
-    const res = await getCoreLogs({ limit: 500, tailBytes: 512 * 1024 });
+  async fetchSnapshot({ filters }) {
+    // Level filter goes SERVER-SIDE: info dominates the file 98%, so a
+    // blind tail never surfaces old warn/error. The backend scans a
+    // wider window when a level is passed. matchesFilters() below still
+    // applies the same gate to live WS rows for consistency.
+    const res = await getCoreLogs({ limit: 500, level: filters.level });
     return { rows: res.entries };
   },
   matchesFilters(row, filters) {

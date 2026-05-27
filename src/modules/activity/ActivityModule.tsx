@@ -11,7 +11,7 @@
  * state and runs its own data fetching via the adapter contract.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -66,8 +66,17 @@ export function Component() {
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(initialSettingsOpen);
 
-  // Reset filters when the tab changes — facets differ per adapter.
+  // Reset filters when the tab ACTUALLY changes — facets differ per
+  // adapter. Skip the initial mount: filters already start empty, and
+  // firing setFilters({}) there churns a fresh {} object that races
+  // the first user filter selection (live WS rows could slip in during
+  // the window where filters momentarily looks empty).
+  const didMountRef = useRef(false);
   useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
     setFilters({});
     setSearchText('');
   }, [activeTab]);
