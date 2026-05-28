@@ -321,10 +321,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   loadMessages: async (conversationId: string) => {
-    // Skip if we already have messages for this conversation
-    const existing = get().messages.get(conversationId);
-    if (existing && existing.length > 0) return;
-
+    // Always refetch on conversation switch. The previous "skip if we have
+    // anything" was unsafe: if the WS `chat.post_yield_message` was missed
+    // (transient socket reconnect, dash hidden tab, etc.), the local store
+    // would only contain the user message — and we'd never recover the
+    // assistant reply that lives in DB. Refetch is cheap (~5-10ms on
+    // localhost) and the merge below preserves any in-flight local state.
     try {
       const res = await api.get<{ data: Array<{
         id: string;
@@ -376,7 +378,36 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
       set((state) => {
         const updated = new Map(state.messages);
-        updated.set(conversationId, msgs);
+        // Merge: DB wins for known ids. Local-only msgs (just-sent user msg
+        // not yet flushed, or assistant msg materialised by finalizeStream)
+        // are preserved at the tail, then sorted by timestamp.
+        //
+        // Dedup gotcha: `sendMessage` and `finalizeStream` mint local
+        // messages with `crypto.randomUUID()` — those IDs never match the
+        // ones the backend assigns when persisting. Without a fingerprint
+        // fallback, navigating away and back doubles every message in the
+        // conversation. We dedup by `role + content + ts(±5s)` as a
+        // pragmatic safety net (proper fix: backend echoes its persisted
+        // id back via WS so the dash can rewrite local IDs).
+        const existing = state.messages.get(conversationId) ?? [];
+        const dbIds = new Set(msgs.map((m) => m.id));
+        const matchesByFingerprint = (local: Message): boolean => {
+          if (!local.content || local.content.length < 3) return false;
+          const localTs = new Date(local.timestamp).getTime();
+          return msgs.some(
+            (db) =>
+              db.role === local.role &&
+              db.content === local.content &&
+              Math.abs(new Date(db.timestamp).getTime() - localTs) < 5_000,
+          );
+        };
+        const localOnly = existing.filter(
+          (m) => !dbIds.has(m.id) && !matchesByFingerprint(m),
+        );
+        const merged = [...msgs, ...localOnly].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+        updated.set(conversationId, merged);
         return { messages: updated };
       });
     } catch (err) {
