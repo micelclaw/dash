@@ -53,7 +53,7 @@ export interface ToolCallRecord {
 export interface Message {
   id: string;
   conversation_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   agent?: string;
   model?: string;
@@ -69,6 +69,13 @@ export interface Message {
    * `undefined` means "no tools tracked"; `[]` means "tracked, none".
    */
   tool_calls?: ToolCallRecord[];
+  /**
+   * Model's reasoning/thinking content for this assistant message.
+   * Persisted in `agent_conversations.thinking`. `null`/`undefined` means
+   * the reasoning visibility was `off` or the model emitted no thinking.
+   * Rendered as a collapsible chip under the message (cursiva gris).
+   */
+  thinking?: string | null;
   /**
    * Free-form metadata mirrored from `agent_conversations.metadata`.
    * Used by sub-agent briefings to surface the real `task` (instead

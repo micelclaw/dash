@@ -11,8 +11,9 @@
  */
 
 import { create } from 'zustand';
-import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttachment, ToolExecution } from '@/types/chat';
+import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttachment, ToolExecution, ToolCallRecord } from '@/types/chat';
 import { useWebSocketStore } from './websocket.store';
+import { isKnownSlash } from '@/config/slash-commands';
 import { api } from '@/services/api';
 
 interface ChatStore {
@@ -45,7 +46,11 @@ interface ChatStore {
   appendStreamToken: (conversationId: string, token: string, type?: 'thinking' | 'text') => void;
   addToolEvent: (conversationId: string, event: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }) => void;
   cancelStream: () => void;
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string) => void;
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null) => void;
+  /** Append a system message (slash-command confirmation) to a conversation. */
+  addSystemMessage: (conversationId: string, text: string) => void;
+  /** Clear all messages of a conversation in the dash (/clear). */
+  clearConversationMessages: (conversationId: string) => void;
   deleteConversation: (id: string) => void;
   renameConversation: (id: string, title: string) => void;
   updateApprovalStatus: (approvalId: string, status: 'approved' | 'rejected' | 'expired') => void;
@@ -59,14 +64,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   messages: new Map(),
   unreadByConv: new Map(),
   streamingMessage: null,
-  selectedAgent: 'main',
+  selectedAgent: 'francis',
   chatState: 1,
   bubbleMessage: null,
   agents: [],
 
   sendMessage: (text: string, context?: Record<string, unknown>, attachments?: ChatAttachment[]) => {
-    // Block sending while a stream is active
-    if (get().streamingMessage) return;
+    // Block sending while a stream is active — UNLESS the message is a known
+    // slash command. Slash commands run on a separate dispatcher and must be
+    // available during streaming (especially `/stop`, which aborts the run
+    // currently in flight).
+    if (get().streamingMessage && !isKnownSlash(text)) return;
 
     const { activeConversationId, selectedAgent, messages, chatState, conversations } = get();
     const convId = activeConversationId ?? crypto.randomUUID();
@@ -174,6 +182,30 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       }
 
       return { messages: updated, unreadByConv: unread };
+    });
+  },
+
+  addSystemMessage: (conversationId: string, text: string) => {
+    set((state) => {
+      const updated = new Map(state.messages);
+      const existing = updated.get(conversationId) ?? [];
+      const sysMsg: Message = {
+        id: crypto.randomUUID(),
+        conversation_id: conversationId,
+        role: 'system',
+        content: text,
+        timestamp: new Date().toISOString(),
+      };
+      updated.set(conversationId, [...existing, sysMsg]);
+      return { messages: updated };
+    });
+  },
+
+  clearConversationMessages: (conversationId: string) => {
+    set((state) => {
+      const updated = new Map(state.messages);
+      updated.set(conversationId, []);
+      return { messages: updated };
     });
   },
 
@@ -298,6 +330,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         id: string;
         role: string;
         message: string;
+        thinking?: string | null;
         from_agent: string;
         model_used: string | null;
         tokens_used: number | null;
@@ -336,6 +369,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           tokens_used: m.tokens_used ?? undefined,
           timestamp: m.created_at,
           tool_calls: toolCalls,
+          thinking: typeof m.thinking === 'string' && m.thinking.length > 0 ? m.thinking : null,
           message_metadata: (m.metadata && typeof m.metadata === 'object') ? m.metadata : undefined,
         };
       });
@@ -350,7 +384,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string) => {
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null) => {
     const isYielded = model === 'yielded';
     // Yield with empty text → keep a placeholder bubble so the user
     // knows the agent is awaiting sub-agents (it's NOT a failure).
@@ -374,20 +408,28 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       return;
     }
     const conv = get().conversations.find(c => c.id === conversationId);
-    // Preserve tool blocks captured during the stream so they remain
-    // visible after the message is finalized (and after F5 — the same
-    // data is persisted server-side via chat-bridge → agent_conversations.tool_calls).
+    // Server sends tool_calls in stream.done (includes JSONL-extracted internal
+    // tools like sessions_spawn that never fire onToolEvent). Use those when
+    // available; fall back to whatever was captured during streaming.
     const streamingTools = get().streamingMessage?.tools ?? [];
-    const persistedToolCalls = streamingTools.length > 0
-      ? streamingTools.map((t) => ({
-          id: t.id,
-          tool: t.tool,
-          status: t.status as 'pending' | 'running' | 'success' | 'error' | undefined,
-          summary: t.summary,
-          input: t.input,
-          output: t.output,
-        }))
-      : undefined;
+    const persistedToolCalls: ToolCallRecord[] | undefined = serverToolCalls && serverToolCalls.length > 0
+      ? serverToolCalls
+      : streamingTools.length > 0
+        ? streamingTools.map((t) => ({
+            id: t.id,
+            tool: t.tool,
+            status: t.status as 'pending' | 'running' | 'success' | 'error' | undefined,
+            summary: t.summary,
+            input: t.input,
+            output: t.output,
+          }))
+        : undefined;
+    // Reasoning persisted to DB when visibility != 'off'. Prefer the
+    // server-confirmed value from chat.stream.done; fall back to whatever
+    // we accumulated locally during streaming.
+    const streamingThinking = get().streamingMessage?.thinking;
+    const finalThinking = thinking ?? (streamingThinking && streamingThinking.length > 0 ? streamingThinking : null);
+
     const assistantMsg: Message = {
       id: crypto.randomUUID(),
       conversation_id: conversationId,
@@ -399,6 +441,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       error_type: errorType,
       timestamp: new Date().toISOString(),
       tool_calls: persistedToolCalls,
+      thinking: finalThinking,
     };
 
     set((state) => {

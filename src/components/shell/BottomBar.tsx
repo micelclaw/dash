@@ -34,6 +34,9 @@ export function BottomBar() {
   const addToolEvent = useChatStore((s) => s.addToolEvent);
   const finalizeStream = useChatStore((s) => s.finalizeStream);
   const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
+  const addSystemMessage = useChatStore((s) => s.addSystemMessage);
+  const clearConversationMessages = useChatStore((s) => s.clearConversationMessages);
+  const startNewConversation = useChatStore((s) => s.startNewConversation);
   const navigate = useNavigate();
 
   // Listen to chat stream events
@@ -60,6 +63,19 @@ export function BottomBar() {
       case 'chat.stream.gateway_down':
         finalizeStream(convId, '', '__gateway_down__', 0);
         break;
+      case 'chat.stream.system_message':
+        // Slash-command confirmation chip (e.g. "Nivel de pensamiento → medium").
+        addSystemMessage(convId, data.text as string);
+        break;
+      case 'chat.stream.cleared':
+        // /clear — wipe the dash conversation view (does not touch DB).
+        clearConversationMessages(convId);
+        break;
+      case 'chat.stream.new_session':
+        // /new — drop the active conversation pointer so the next send starts
+        // a fresh one (parity with the "New chat" button in the sidebar).
+        startNewConversation();
+        break;
       case 'chat.stream.done':
         finalizeStream(
           convId,
@@ -67,10 +83,12 @@ export function BottomBar() {
           data.model as string | undefined,
           data.tokens_used as number | undefined,
           data.error_type as string | undefined,
+          undefined,
+          typeof data.thinking === 'string' ? (data.thinking as string) : null,
         );
         break;
     }
-  }, [streamEvent, appendStreamToken, finalizeStream, setStreamingMessage]);
+  }, [streamEvent, appendStreamToken, addToolEvent, finalizeStream, setStreamingMessage, addSystemMessage, clearConversationMessages, startNewConversation]);
 
   // Auto-dismiss bubble after 8s
   useEffect(() => {

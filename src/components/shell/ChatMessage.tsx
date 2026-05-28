@@ -10,12 +10,12 @@
  * https://micelclaw.com
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Layout, FileText, Image as ImageIcon, File, Terminal, Check, Loader2, ChevronDown, ChevronRight, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Layout, FileText, Image as ImageIcon, File, Terminal, Check, Loader2, ChevronDown, ChevronRight, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
 import type { Message, MessageApproval, ChatAttachment, ToolCallRecord } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
@@ -23,6 +23,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { useCanvasStore } from '@/stores/canvas.store';
 import { startGateway } from '@/services/gateway.service';
 import { ToolRenderer } from '@/components/chat/tool-renderers';
+import { ReasoningChip } from '@/components/chat/ReasoningChip';
 import { shouldRenderTool } from '@/config/tool-rendering';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 
@@ -93,6 +94,15 @@ interface ChatMessageProps {
   tools?: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }[];
 }
 
+/** Render a single line with **bold** segments (system-message chips). */
+function renderInlineBold(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith('**') && part.endsWith('**')
+      ? <strong key={i} style={{ fontStyle: 'normal' }}>{part.slice(2, -2)}</strong>
+      : <span key={i}>{part}</span>,
+  );
+}
+
 export function ChatMessage({ message, isStreaming, thinkingText, isThinking, tools }: ChatMessageProps) {
   const navigate = useNavigate();
   const isUser = message.role === 'user';
@@ -110,6 +120,37 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   // Render error card for API errors (overloaded, rate limit, timeout, etc.)
   if (message.model === 'error') {
     return <ApiErrorCard message={message} />;
+  }
+
+  // Render system message (slash-command confirmation) as a discrete centered
+  // gray chip — distinct from user/assistant bubbles. No avatar, no actions.
+  // Content is dash-controlled (slash-command output), supports **bold** and
+  // multi-line via \n.
+  if (message.role === 'system') {
+    const lines = message.content.split('\n');
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 6,
+          maxWidth: '85%',
+          padding: '6px 12px',
+          borderRadius: 12,
+          fontSize: '0.75rem',
+          fontStyle: 'italic',
+          color: 'var(--text-muted)',
+          background: 'color-mix(in srgb, var(--text-muted) 8%, transparent)',
+        }}>
+          <Settings size={12} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {lines.map((line, i) => (
+              <span key={i}>{renderInlineBold(line)}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const handleLinkClick = useCallback(
@@ -374,31 +415,23 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
             {!isStreaming && message.tool_calls && message.tool_calls.length > 0 && (
               <PersistedToolCalls toolCalls={message.tool_calls} />
             )}
-            {isStreaming && (!message.content || isThinking) && (
-              <div style={{ padding: '2px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Thinking</span>
-                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0s' }}>.</span>
-                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.2s' }}>.</span>
-                  <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.4s' }}>.</span>
-                </div>
-                {thinkingText && (
-                  <div style={{
-                    fontSize: '0.6875rem',
-                    lineHeight: 1.4,
-                    color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono, monospace)',
-                    maxHeight: 80,
-                    overflow: 'hidden',
-                    maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                    WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-                    marginTop: 4,
-                    opacity: 0.7,
-                  }}>
-                    {thinkingText.slice(-300)}
-                  </div>
-                )}
+            {/* Reasoning: animated dots while streaming with no text yet, then
+                a collapsible chip (expanded while live, collapsed once done).
+                Live thinkingText wins over persisted message.thinking until
+                the stream finishes (see chat.store.finalizeStream). */}
+            {isStreaming && isThinking && !thinkingText && (
+              <div style={{ padding: '2px 0', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Thinking</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0s' }}>.</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.2s' }}>.</span>
+                <span style={{ color: 'var(--amber)', fontSize: '1rem', fontWeight: 700, animation: 'dotFade 1.4s ease-in-out infinite', animationDelay: '0.4s' }}>.</span>
               </div>
+            )}
+            {(thinkingText || message.thinking) && (
+              <ReasoningChip
+                thinking={(thinkingText && thinkingText.length > 0 ? thinkingText : message.thinking) ?? ''}
+                isStreaming={isStreaming && !!thinkingText}
+              />
             )}
             {isStreaming && message.content && (
               <span
@@ -740,6 +773,31 @@ const ERROR_INFO: Record<string, { title: string; description: string; hint: str
     description: 'No se pudo autenticar con el servicio de IA.',
     hint: 'Verifica la configuracion de la API key.',
   },
+  subscription_expired: {
+    title: 'Modelo no disponible',
+    description: 'El proveedor devolvio 410 - el modelo ya no existe o la suscripcion ha caducado.',
+    hint: 'Reasigna el agente a otro modelo en Gateway -> Models.',
+  },
+  payment_required: {
+    title: 'Pago requerido',
+    description: 'El proveedor agoto saldo o requiere pago.',
+    hint: 'Recarga la cuenta del proveedor o usa otro modelo.',
+  },
+  model_unavailable: {
+    title: 'Modelo no encontrado',
+    description: 'El modelo ya no existe en el proveedor.',
+    hint: 'Reasigna el agente a un modelo valido desde Gateway -> Models.',
+  },
+  service_unavailable: {
+    title: 'Servicio no disponible',
+    description: 'El proveedor esta temporalmente caido (503).',
+    hint: 'Espera unos minutos o usa otro proveedor.',
+  },
+  sandbox_error: {
+    title: 'Sandbox no configurado',
+    description: 'El sandbox Docker del agente no esta construido todavia.',
+    hint: 'Ve a Settings -> Sandbox y pulsa "Build image" (~2-5 min, sin terminal).',
+  },
   unknown: {
     title: 'Error inesperado',
     description: 'Algo salio mal al procesar tu mensaje.',
@@ -750,9 +808,33 @@ const ERROR_INFO: Record<string, { title: string; description: string; hint: str
 function ApiErrorCard({ message }: { message: Message }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const messages = useChatStore((s) => s.messages);
+  const navigate = useNavigate();
   const [retried, setRetried] = useState(false);
+  const [showFullDetail, setShowFullDetail] = useState(false);
 
   const info = ERROR_INFO[message.error_type ?? 'unknown'] ?? ERROR_INFO.unknown!;
+  // Para errores de "modelo roto" (proveedor 410/402/modelo eliminado) un
+  // retry vuelve a fallar — el camino correcto es reasignar el modelo del
+  // agente. Mostramos un botón extra que lleva a Gateway → Models.
+  const isModelBroken =
+    message.error_type === 'subscription_expired' ||
+    message.error_type === 'payment_required' ||
+    message.error_type === 'model_unavailable';
+  // sandbox_error: el camino correcto NO es reasignar modelo — es construir
+  // la imagen Docker del sandbox desde Settings → Sandbox.
+  const isSandboxBroken = message.error_type === 'sandbox_error';
+
+  // El backend envía el mensaje real (enriquecido para tipos conocidos, crudo
+  // para 'unknown') en `message.content`. Antes lo descartábamos y solo
+  // mostrábamos el `info.description` genérico — eso ocultaba info útil
+  // como "Sandbox image not found: openclaw-sandbox:bookworm-slim". Ahora
+  // lo renderizamos si no es trivial (no vacío, distinto de info.description).
+  const rawDetail = (message.content ?? '').trim();
+  const showRawDetail = rawDetail.length > 0 && rawDetail !== info.description;
+  const DETAIL_TRUNC = 280;
+  const detailTruncated = rawDetail.length > DETAIL_TRUNC && !showFullDetail
+    ? rawDetail.slice(0, DETAIL_TRUNC) + '…'
+    : rawDetail;
 
   const handleRetry = () => {
     // Find the last user message in this conversation
@@ -785,30 +867,107 @@ function ApiErrorCard({ message }: { message: Message }) {
         <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem', marginBottom: 4 }}>
           {info.description}
         </div>
+        {showRawDetail && (
+          <div style={{
+            color: 'var(--text)',
+            fontSize: '0.75rem',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '6px 8px',
+            marginBottom: 8,
+            fontFamily: 'var(--font-mono, monospace)',
+            wordBreak: 'break-word',
+            whiteSpace: 'pre-wrap',
+          }}>
+            {detailTruncated}
+            {rawDetail.length > DETAIL_TRUNC && (
+              <button
+                onClick={() => setShowFullDetail(v => !v)}
+                style={{
+                  marginLeft: 6,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--amber)',
+                  cursor: 'pointer',
+                  fontSize: '0.6875rem',
+                  padding: 0,
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {showFullDetail ? 'ocultar' : 'ver completo'}
+              </button>
+            )}
+          </div>
+        )}
         <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginBottom: 10 }}>
           {info.hint}
         </div>
 
         {!retried ? (
-          <button
-            onClick={handleRetry}
-            style={{
-              padding: '6px 16px',
-              borderRadius: 'var(--radius-md)',
-              border: 'none',
-              background: 'var(--amber)',
-              color: '#000',
-              fontWeight: 600,
-              fontSize: '0.8125rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <RefreshCw size={14} />
-            Reintentar
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {isModelBroken && (
+              <button
+                onClick={() => navigate('/gateway?tab=models')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: 'var(--amber)',
+                  color: '#000',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Wand2 size={14} />
+                Reasignar modelo
+              </button>
+            )}
+            {isSandboxBroken && (
+              <button
+                onClick={() => navigate('/settings/sandbox')}
+                style={{
+                  padding: '6px 16px',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: 'var(--amber)',
+                  color: '#000',
+                  fontWeight: 600,
+                  fontSize: '0.8125rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Wand2 size={14} />
+                Configurar sandbox
+              </button>
+            )}
+            <button
+              onClick={handleRetry}
+              style={{
+                padding: '6px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: (isModelBroken || isSandboxBroken) ? '1px solid var(--border)' : 'none',
+                background: (isModelBroken || isSandboxBroken) ? 'transparent' : 'var(--amber)',
+                color: (isModelBroken || isSandboxBroken) ? 'var(--text)' : '#000',
+                fontWeight: 600,
+                fontSize: '0.8125rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <RefreshCw size={14} />
+              Reintentar
+            </button>
+          </div>
         ) : (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
             Mensaje reenviado.
