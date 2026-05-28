@@ -316,14 +316,40 @@ export function ModelsTab() {
   // contextWindow + maxTokens explicitly. Without this OpenClaw falls
   // back to DEFAULT_CONTEXT_TOKENS=200000, which is wrong for both small
   // (Llama 8K) and large (DeepSeek 1M) custom models.
-  const handleAddDiscoveredModel = (modelId: string, modelName?: string) => {
-    if (!selectedProvider) return;
-    setCustomModelEditor({
-      mode: 'add',
-      provider: selectedProvider,
-      modelId,
-      modelName: modelName ?? modelId,
-    });
+  // Add a model from a custom-provider catalog directly, WITHOUT opening the
+  // modal. Uses sensible defaults (200K ctx, 8K maxTokens) — the user can fine-
+  // tune via Edit afterwards. Decision recorded in plan 2026-05-23: NVIDIA
+  // doesn't expose context_length in /v1/models, so we'd be asking the user
+  // for info they don't have. One-click Add + Edit-when-needed is simpler.
+  const handleAddCustomModelDirect = async (provider: string, modelId: string) => {
+    const key = `${provider}/${modelId}`;
+    setMutatingModel(key);
+    try {
+      await gwService.addModelWithConfig({
+        model: key,
+        provider_id: provider,
+        model_id: modelId,
+        name: modelId,
+        context_window: 200_000,
+        max_tokens: 8_192,
+      });
+      toast.success(`Added ${modelId}`);
+      // Refresh catalog + providers so the row immediately flips to
+      // "Configured" with Edit/Remove actions.
+      fetchModels();
+      fetchCatalog();
+      fetchCustomProviders();
+    } catch (err) {
+      // Probe errors (MODEL_NOT_IN_CATALOG / MODEL_NOT_SERVING / etc.) come
+      // through with a structured shape from the api client. Surface the full
+      // message so the user sees what the provider said.
+      const sample = (err as { available_sample?: string[] }).available_sample;
+      const msg = err instanceof Error ? err.message : String(err);
+      const hint = sample?.length ? ` (ej.: ${sample.slice(0, 3).join(', ')})` : '';
+      toast.error(msg + hint);
+    } finally {
+      setMutatingModel(null);
+    }
   };
 
   // Edit existing custom-managed model: pre-populate the modal with the
@@ -689,10 +715,65 @@ export function ModelsTab() {
                 return <EmptyState text={text} />;
               }
 
+              // ── Unified list ────────────────────────────────────────
+              // The user complained about the two visually separated lists
+              // ("Configured" then "Available to add") feeling redundant with
+              // the dedicated "Configured" tab. We now show ONE continuous list
+              // of the provider's full catalog — configured models on top
+              // (preserved relevance), each row carrying its own state badge
+              // ("Configured" green pill) and the right action button (Edit/
+              // Remove vs Add).
+              //
+              // `discoveredAsCatalog` adapts the discovered shape into the
+              // CatalogModel-shape that CatalogRow already consumes, so we
+              // don't duplicate render code. `available: true` because if the
+              // provider exposes the model via /v1/models we have auth (or
+              // it's a public catalog like OpenRouter).
+              const discoveredAsCatalog: CatalogModel[] = filteredAvailable.map((dm) => ({
+                key: `${selectedProvider}/${dm.id}`,
+                name: dm.name || dm.id,
+                provider: selectedProvider!,
+                context_window: null,
+                input_type: 'text',
+                available: true,
+                configured: false,
+                is_default: false,
+                local: false,
+              }));
+              const unifiedList: CatalogModel[] = [...providerModels, ...discoveredAsCatalog];
+
+              // Count "added" from the source-of-truth `configured` flag, not
+              // from `providerModels.length`. The catalog can list entries that
+              // exist in `models.providers.<id>.models` (provider entry) but
+              // aren't yet in `agents.defaults.models` (the allow-list that
+              // marks `configured: true`). Counting by flag avoids misleading
+              // numbers in that edge case.
+              const addedCount = unifiedList.filter((m) => m.configured).length;
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {/* Configured */}
-                  {providerModels.map((model) => (
+                  {/* Single header with counts */}
+                  {unifiedList.length > 0 && (
+                    <div style={{
+                      marginBottom: 4,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                    }}>
+                      <span style={{
+                        fontSize: '0.6875rem', fontWeight: 600,
+                        color: 'var(--text-dim)',
+                        fontFamily: 'var(--font-display)',
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
+                      }}>
+                        {unifiedList.length} model{unifiedList.length !== 1 ? 's' : ''}
+                      </span>
+                      {addedCount > 0 && (
+                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                          · {addedCount} added
+                        </span>
+                      )}
+                      {discovering && <Loader2 size={11} className="spin" style={{ color: 'var(--text-dim)' }} />}
+                    </div>
+                  )}
+                  {unifiedList.map((model) => (
                     <CatalogRow
                       key={model.key}
                       model={model}
@@ -700,7 +781,26 @@ export function ModelsTab() {
                       isHovered={hoveredRow === model.key}
                       onHover={setHoveredRow}
                       mutatingModel={mutatingModel}
-                      onAdd={handleAddModel}
+                      // Dispatch del Add según el tipo de provider:
+                      //   - Custom (en `models.providers.<id>`: nvidia, ollama,
+                      //     custom-api-*, lm-studio, etc.) → llama directamente
+                      //     a addModelWithConfig con defaults 200K/8K (sin modal).
+                      //     El usuario ajusta luego con Edit si los defaults no
+                      //     encajan. Razón: NVIDIA y otros no exponen
+                      //     context_length en /v1/models, así que el modal
+                      //     pedía info que el usuario no tiene a mano.
+                      //   - Built-in puro (openrouter, anthropic, openai sin
+                      //     entry custom) → addModel directo, sin metadata
+                      //     (el binario openclaw sabe sus ctx nativamente).
+                      onAdd={(key) => {
+                        if (!model.configured && customProviderIds.includes(model.provider)) {
+                          const slash = key.indexOf('/');
+                          const modelId = slash >= 0 ? key.slice(slash + 1) : key;
+                          void handleAddCustomModelDirect(model.provider, modelId);
+                        } else {
+                          handleAddModel(key);
+                        }
+                      }}
                       onRemove={handleRemoveModel}
                       onConfigure={(m) => setWizardModel(m)}
                       onEdit={isUserManagedProvider(model.provider) && model.configured
@@ -708,42 +808,6 @@ export function ModelsTab() {
                         : undefined}
                     />
                   ))}
-                  {/* Available to add (custom providers only) */}
-                  {filteredAvailable.length > 0 && (
-                    <>
-                      <div style={{
-                        marginTop: providerModels.length > 0 ? 12 : 0,
-                        marginBottom: 4,
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
-                        <span style={{
-                          fontSize: '0.6875rem', fontWeight: 600,
-                          color: 'var(--text-dim)',
-                          fontFamily: 'var(--font-display)',
-                          textTransform: 'uppercase', letterSpacing: '0.05em',
-                        }}>
-                          Available to add
-                        </span>
-                        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                          {filteredAvailable.length} from {selectedProvider}
-                        </span>
-                        {discovering && <Loader2 size={11} className="spin" style={{ color: 'var(--text-dim)' }} />}
-                      </div>
-                      {filteredAvailable.map((dm) => {
-                        const key = `${selectedProvider}/${dm.id}`;
-                        return (
-                          <DiscoveredModelRow
-                            key={dm.id}
-                            modelId={dm.id}
-                            modelName={dm.name}
-                            provider={selectedProvider!}
-                            loading={mutatingModel === key}
-                            onAdd={() => handleAddDiscoveredModel(dm.id)}
-                          />
-                        );
-                      })}
-                    </>
-                  )}
                 </div>
               );
             })()}
@@ -917,60 +981,10 @@ function AddProviderTypeCard({ label, description, onClick }: {
   );
 }
 
-// ─── Discovered Model Row (from provider /models endpoint) ─────────
-
-function DiscoveredModelRow({ modelId, modelName, provider, loading, onAdd }: {
-  modelId: string;
-  modelName: string;
-  provider: string;
-  loading: boolean;
-  onAdd: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const providerColor = PROVIDER_COLORS[provider?.toLowerCase()] ?? 'var(--text-dim)';
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 14,
-        padding: '10px 14px',
-        background: hovered ? 'var(--surface-hover)' : 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)',
-        transition: 'var(--transition-fast)',
-      }}
-    >
-      <div style={{
-        width: 34, height: 34, borderRadius: 'var(--radius-sm)',
-        background: `${providerColor}15`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        <Cpu size={16} style={{ color: providerColor }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{
-          fontSize: '0.8125rem', fontWeight: 500,
-          color: 'var(--text)', fontFamily: 'var(--font-mono)',
-        }}>
-          {modelName || modelId}
-        </span>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginTop: 2 }}>
-          Discovered from API
-        </div>
-      </div>
-      <ActionButton
-        icon={<Plus size={12} />}
-        label="Add"
-        loading={loading}
-        onClick={onAdd}
-        variant="primary"
-      />
-    </div>
-  );
-}
+// `DiscoveredModelRow` removed (2026-05-23): the catalog tab now uses a single
+// unified list backed by CatalogRow, which adapts discovered models via a
+// `discoveredAsCatalog` shape (see the render block above). Add-action flow
+// still distinguishes built-in vs user-managed providers internally.
 
 // ─── View Toggle ────────────────────────────────────────────────────
 
@@ -1121,6 +1135,17 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
             </span>
           )}
           {model.status && <StatusPill status={model.status} />}
+          {model.orphan && (
+            <span title="Provider no existe en openclaw.json. Esta entrada es basura residual: b\u00f3rrala o configura el provider." style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              background: '#ef444420', color: '#ef4444',
+              borderRadius: 'var(--radius-sm)',
+              padding: '1px 6px', fontSize: '0.625rem', fontWeight: 600,
+              fontFamily: 'var(--font-sans)',
+            }}>
+              \u26a0 ORPHAN
+            </span>
+          )}
         </div>
         <div style={{
           fontSize: '0.75rem', color: 'var(--text-dim)',
@@ -1129,6 +1154,7 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
         }}>
           {model.provider}
           {model.is_fallback && ' \u00b7 fallback'}
+          {model.orphan && ' \u00b7 provider eliminado'}
         </div>
       </div>
 

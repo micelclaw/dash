@@ -54,12 +54,17 @@ export function CustomModelConfigModal({
   const [contextWindow, setContextWindow] = useState<number>(initialContextWindow ?? 200_000);
   const [maxTokens, setMaxTokens] = useState<number>(initialMaxTokens ?? 8_192);
   const [saving, setSaving] = useState(false);
+  // Inline error from the backend probe (catalog lookup). Surfaced in the
+  // modal instead of via toast so the user sees the actionable detail
+  // (sample of available model ids when it's a catalog mismatch).
+  const [probeError, setProbeError] = useState<{ code?: string; message: string; sample?: string[] } | null>(null);
 
   const canSave = contextWindow > 0 && maxTokens > 0 && maxTokens <= contextWindow;
 
   const handleSave = async () => {
     if (!canSave) return;
     setSaving(true);
+    setProbeError(null);
     try {
       await gwService.addModelWithConfig({
         model: `${provider}/${modelId}`,
@@ -73,7 +78,22 @@ export function CustomModelConfigModal({
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save model');
+      const code = (err as { code?: string }).code;
+      const sample = (err as { available_sample?: string[] }).available_sample;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Probe failures get inline display so the user sees the available
+      // model sample (when catalog mismatch) or a clear "not serving" message.
+      // Other errors fall through to toast.
+      if (
+        code === 'MODEL_NOT_IN_CATALOG' ||
+        code === 'MODEL_PROBE_FAILED' ||
+        code === 'MODEL_PROBE_UNREACHABLE' ||
+        code === 'MODEL_NOT_SERVING'
+      ) {
+        setProbeError({ code, message: msg, sample });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -158,6 +178,54 @@ export function CustomModelConfigModal({
           </p>
         )}
 
+        {probeError && (
+          <div style={{
+            margin: '12px 0 4px',
+            padding: '8px 10px',
+            background: 'color-mix(in srgb, #ef4444 12%, transparent)',
+            border: '1px solid color-mix(in srgb, #ef4444 35%, transparent)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.6875rem',
+            fontFamily: 'var(--font-sans)',
+            color: 'var(--text)',
+            lineHeight: 1.4,
+          }}>
+            <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: 4 }}>
+              {probeError.code === 'MODEL_NOT_IN_CATALOG'
+                ? 'Modelo no encontrado en el proveedor'
+                : probeError.code === 'MODEL_PROBE_UNREACHABLE'
+                  ? 'No se pudo contactar al proveedor'
+                  : probeError.code === 'MODEL_NOT_SERVING'
+                    ? 'Modelo listado pero no responde'
+                    : 'Verificación rechazada por el proveedor'}
+            </div>
+            <div style={{ color: 'var(--text-dim)', marginBottom: 6 }}>
+              {probeError.message}
+            </div>
+            {probeError.sample && probeError.sample.length > 0 && (
+              <details style={{ marginTop: 6 }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.625rem' }}>
+                  Modelos disponibles ({probeError.sample.length})
+                </summary>
+                <div style={{
+                  marginTop: 6,
+                  fontFamily: 'var(--font-mono, monospace)',
+                  fontSize: '0.625rem',
+                  color: 'var(--text-muted)',
+                  maxHeight: 120,
+                  overflowY: 'auto',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '6px 8px',
+                }}>
+                  {probeError.sample.map((id) => <div key={id}>{id}</div>)}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div style={{
           display: 'flex', justifyContent: 'flex-end', gap: 8,
@@ -189,7 +257,7 @@ export function CustomModelConfigModal({
             }}
           >
             {saving && <Loader2 size={12} className="spin" />}
-            {saving ? 'Saving...' : mode === 'add' ? 'Add' : 'Save'}
+            {saving ? 'Verifying...' : mode === 'add' ? 'Add' : 'Save'}
           </button>
         </div>
       </div>

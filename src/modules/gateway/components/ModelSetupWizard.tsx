@@ -282,7 +282,7 @@ function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardPro
         marginBottom: 16,
         lineHeight: 1.4,
       }}>
-        🔒 This key is stored locally in <code style={{ fontFamily: 'var(--font-mono)' }}>~/.openclaw/agents/main/agent/auth-profiles.json</code> and never sent anywhere except {info.label} when you make a model call.
+        🔒 This key is stored locally in your agents' auth profile files (<code style={{ fontFamily: 'var(--font-mono)' }}>~/.openclaw/agents/&lt;you&gt;--&lt;agent&gt;/agent/auth-profiles.json</code>) and never sent anywhere except {info.label} when you make a model call.
       </p>
 
       <ButtonRow

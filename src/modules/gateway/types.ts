@@ -87,6 +87,95 @@ export interface GatewayModel {
   is_image: boolean;
   is_fallback: boolean;
   status: 'available' | 'no_auth' | 'expired' | 'error' | string;
+  /**
+   * True when the provider isn't declared in `models.providers` (the
+   * allow-list entry is stale, calls will fail at runtime). Computed
+   * server-side by `extractModelsFromConfig`.
+   */
+  orphan?: boolean;
+}
+
+/**
+ * Result of `GET /gateway/config-health` — audit of orphan references in
+ * openclaw.json. Each list contains items whose referenced provider isn't
+ * declared in `models.providers` and isn't an OpenClaw built-in via
+ * `auth.profiles`.
+ *
+ * `agents_missing_auth` is only populated when the endpoint is called with
+ * `?check_agent_auth=1` (per-agent disk reads).
+ *
+ * All keys are snake_case (matches backend's preSerialization plugin).
+ */
+export interface ConfigHealthReport {
+  has_issues: boolean;
+  /** Keys in `agents.defaults.models` whose provider doesn't exist. */
+  orphan_allowed_models: string[];
+  /** Agents whose assigned `model` references a missing provider. */
+  orphan_agent_models: Array<{
+    agent_id: string;  // OpenClaw id format: <prefix>--<name>
+    model: string;
+  }>;
+  /** Default `primary` model if its provider is missing. */
+  orphan_primary: string | null;
+  /** Fallback models whose provider is missing. */
+  orphan_fallbacks: string[];
+  /**
+   * Agents whose assigned model points to a declared provider, BUT the
+   * agent's per-agent `auth-profiles.json` lacks a valid token for that
+   * provider. Spawn-time failure: "No API key found for provider X".
+   * Undefined when the endpoint was called without `?check_agent_auth=1`.
+   */
+  agents_missing_auth?: Array<{
+    agent_id: string;
+    model: string;
+    provider: string;
+  }>;
+  generated_at: string;
+}
+
+/**
+ * Result of one fix applied by `POST /gateway/config-health/auto-fix`. The
+ * endpoint returns an array of these plus a `remaining_issues` report.
+ */
+export interface AutoFixApplied {
+  type: 'primary' | 'fallback' | 'allowed_model' | 'agent_model' | 'agent_auth';
+  target: string;
+  before: string | null;
+  after: string | null;
+  auth_propagation?: {
+    propagated: boolean;
+    source: string | null;
+    reason: 'already_present' | 'no_donor' | 'propagated' | 'unknown_provider';
+  };
+}
+
+// ─── Sandbox image (Docker autobuild) ──────────────────────────────
+
+/**
+ * Docker availability as detected by Core via /var/run/docker.sock.
+ * Distinct kinds let the UI show specific actionable messages.
+ */
+export type SandboxDockerAvailability =
+  | { kind: 'available'; api_version?: string }
+  | { kind: 'socket_missing' }
+  | { kind: 'daemon_down'; detail?: string }
+  | { kind: 'permission_denied'; detail?: string };
+
+/**
+ * Result of `GET /gateway/sandbox/image-status`. The dash uses this to
+ * decide which UI state to show in Settings → Sandbox (ready/missing/etc).
+ */
+export interface SandboxImageStatus {
+  docker: SandboxDockerAvailability;
+  image_exists: boolean;
+  image_size_bytes?: number;
+  image_id?: string;
+  last_built_at?: string;
+}
+
+export interface AutoFixResult {
+  fixes_applied: AutoFixApplied[];
+  remaining_issues: ConfigHealthReport;
 }
 
 export interface CatalogModel {

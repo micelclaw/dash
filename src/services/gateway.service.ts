@@ -21,6 +21,9 @@ import type {
   GatewaySession,
   GatewayUsage,
   CatalogModel,
+  ConfigHealthReport,
+  AutoFixResult,
+  SandboxImageStatus,
   CronJob,
   CronRun,
   LogEntry,
@@ -170,8 +173,61 @@ export async function setDefaultModel(model: string): Promise<void> {
   await api.post('/gateway/models/default', { model });
 }
 
+/**
+ * Audit orphan references in openclaw.json. Pass `checkAgentAuth: true`
+ * to also read per-agent `auth-profiles.json` files and surface agents
+ * whose assigned model's provider isn't authed at the agent level (the
+ * Gateway will fail spawn with "No API key found for provider X").
+ */
+export async function getConfigHealth(opts?: { checkAgentAuth?: boolean }): Promise<ConfigHealthReport> {
+  const res = await api.get<{ data: ConfigHealthReport }>(
+    '/gateway/config-health',
+    opts?.checkAgentAuth ? { check_agent_auth: '1' } : undefined,
+  );
+  return res.data;
+}
+
+/**
+ * Single-shot saneo for orphan references in openclaw.json. The backend
+ * reassigns user-scoped orphan agents to the default primary (saneado), prunes
+ * orphan fallbacks, unsets orphan allow-list keys, swaps a broken primary, and
+ * propagates auth profiles from a donor. Returns a per-fix breakdown plus the
+ * `remaining_issues` audit (non-empty when something couldn't be auto-resolved,
+ * typically because the system has zero valid models left).
+ */
+export async function autoFixConfigHealth(): Promise<AutoFixResult> {
+  const res = await api.post<{ data: AutoFixResult }>('/gateway/config-health/auto-fix', {});
+  return res.data;
+}
+
+/**
+ * Check whether the Docker sandbox image (`openclaw-sandbox:bookworm-slim`)
+ * is built on the host. Also reports Docker availability so the UI can show
+ * specific errors (socket missing / daemon down / permission denied).
+ */
+export async function getSandboxImageStatus(): Promise<SandboxImageStatus> {
+  const res = await api.get<{ data: SandboxImageStatus }>('/gateway/sandbox/image-status');
+  return res.data;
+}
+
+/**
+ * Trigger an async build of the sandbox image. Returns immediately with a
+ * build_id; progress streams over WebSocket as `service.starting/logs/ready/
+ * failed` events with `service: 'sandbox-image'`. Backend returns 409 if a
+ * build is already in progress.
+ */
+export async function buildSandboxImage(): Promise<{ ok: boolean; build_id: string }> {
+  const res = await api.post<{ data: { ok: boolean; build_id: string } }>('/gateway/sandbox/build-image', {});
+  return res.data;
+}
+
 export async function getModelCatalog(): Promise<{ count: number; models: CatalogModel[] }> {
-  const res = await api.get<{ data: { count: number; models: CatalogModel[] } }>('/gateway/models/catalog');
+  // 45s timeout: the underlying CLI call (`openclaw models list --all --json`)
+  // takes ~20s for a full catalog on a cold Core. Core pre-warms in boot, so
+  // most user-visible calls hit the 5min cache and return in <50ms. The 45s
+  // ceiling is a safety net for the very first request after boot or after
+  // mutation-driven cache invalidations.
+  const res = await api.get<{ data: { count: number; models: CatalogModel[] } }>('/gateway/models/catalog', undefined, { timeout: 45_000 });
   const d = res.data;
   if (d && typeof d === 'object' && 'models' in d) return d as { count: number; models: CatalogModel[] };
   return { count: 0, models: [] };
@@ -184,6 +240,11 @@ export async function addModel(model: string): Promise<void> {
 // Add model + register it in models.providers[id].models[] in a single
 // configPatch (saves 1 write of the 3-per-60s rate limit). Used for
 // discovered models from custom providers (LM Studio, vLLM, etc.).
+//
+// The backend probes the provider's catalog (`GET /v1/models`) to verify
+// the model id exists. Fast (~1s) and authoritative — no cold-start cost.
+// If the model is not in the catalog, the backend returns
+// `MODEL_NOT_IN_CATALOG` with a sample of available ids.
 export async function addModelWithConfig(params: {
   model: string;
   provider_id: string;
@@ -193,7 +254,10 @@ export async function addModelWithConfig(params: {
   context_window?: number;
   input?: string[];
 }): Promise<void> {
-  await api.post('/gateway/models/add-with-config', params);
+  // Backend probe is 2-phase: catalog (8s) + service ping (15s). 25s da margen
+  // por encima del peor caso (23s) para que el cliente reciba el error code real
+  // (MODEL_NOT_SERVING) en lugar de abortarse con un "signal timed out" genérico.
+  await api.post('/gateway/models/add-with-config', params, { timeout: 25_000 });
 }
 
 export async function removeModel(model: string): Promise<void> {
@@ -573,6 +637,21 @@ export async function getMemoryConfig(): Promise<{ memory_search: Record<string,
 
 export async function updateMemoryConfig(config: { memorySearch?: Record<string, unknown>; memory?: Record<string, unknown> }): Promise<void> {
   await api.patch('/gateway/memory-config', config);
+}
+
+// ─── Active Memory Config ──────────────────────────────────────────
+
+export async function getActiveMemoryConfig(): Promise<{ plugin_enabled: boolean; config: Record<string, unknown> }> {
+  const res = await api.get<{ data: { plugin_enabled: boolean; config: Record<string, unknown> } }>('/gateway/active-memory-config');
+  return res.data;
+}
+
+export async function updateActiveMemoryConfig(config: Record<string, unknown>): Promise<void> {
+  await api.patch('/gateway/active-memory-config', { config });
+}
+
+export async function enableActiveMemoryPlugin(): Promise<void> {
+  await api.post('/gateway/plugins/active-memory/enable', {});
 }
 
 // ─── Session Config ────────────────────────────────────────────────
