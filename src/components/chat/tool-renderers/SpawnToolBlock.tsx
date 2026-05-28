@@ -36,7 +36,7 @@ function parseInput(input: ToolCallRecord['input']): SpawnArgs {
 }
 
 function shortAgentName(agentId: string | undefined): string {
-  // "dd4d75fb--sentinel" → "Sentinel"
+  // "paco--sentinel" → "Sentinel"
   if (!agentId) return 'sub-agent';
   const m = agentId.match(/^[a-f0-9]{8}--(.+)$/);
   const name = m?.[1] ?? agentId;

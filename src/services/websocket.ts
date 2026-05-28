@@ -188,7 +188,7 @@ export class ClawWebSocket {
       setTimeout(() => {
         this.dispatch({
           event: 'chat.stream.start',
-          data: { conversation_id: convId, agent: 'francis', model: 'claude-opus-4-6' },
+          data: { conversation_id: convId, agent: 'paco--francis', model: 'claude-opus-4-6' },
           timestamp: new Date().toISOString(),
         });
 
@@ -251,7 +251,7 @@ export class ClawWebSocket {
         event: {
           event: 'agent.message',
           data: {
-            agent: 'francis',
+            agent: 'paco--francis',
             action: 'note_created',
             summary: "Created note 'Meeting summary'",
             route: '/notes?id=note-new',

@@ -63,10 +63,11 @@ export function NewMeetingModal({
   const [description, setDescription] = useState(() => existingMeeting?.description ?? '');
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(() => {
     if (existingMeeting) return new Set(existingMeeting.participants.map(p => p.id));
-    // Francis (first chief) always selected by default for new meetings
-    const chiefs = agents.filter(a => a.is_chief);
-    const francis = chiefs.find(a => a.name.toLowerCase() === 'francis');
-    return new Set(francis ? [francis.id] : chiefs.length > 0 ? [chiefs[0]!.id] : []);
+    // The chief (first agent with is_chief=true) is always selected by default
+    // for new meetings. We don't hard-code "francis" so this keeps working if
+    // the chief is ever renamed.
+    const chief = agents.find(a => a.is_chief);
+    return new Set(chief ? [chief.id] : []);
   });
   const [userParticipates, setUserParticipates] = useState(() => existingMeeting?.user_participates ?? false);
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>(() =>
@@ -93,9 +94,10 @@ export function NewMeetingModal({
   const [devilsAdvocate, setDevilsAdvocate] = useState<boolean>(() => existingMeeting?.advanced_options?.devils_advocate ?? false);
   const [extractActionItems, setExtractActionItems] = useState<boolean>(() => existingMeeting?.advanced_options?.extract_action_items ?? true);
 
-  // Find the "Francis" agent (always checked + disabled)
+  // The chief agent is always checked + disabled in the participant grid.
+  // Use is_chief instead of hard-coding "francis" so future renames work.
   const francisAgent = useMemo(
-    () => agents.find(a => a.name.toLowerCase() === 'francis'),
+    () => agents.find(a => a.is_chief),
     [agents]
   );
 

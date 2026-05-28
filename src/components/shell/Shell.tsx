@@ -541,10 +541,26 @@ export function Shell() {
       to_agent: string;
       role: 'user' | 'assistant';
       text: string;
+      tool_calls?: Array<Record<string, unknown>> | null;
       created_at: string;
     };
     if (!data.id || !data.conversation_id) return;
     const store = useChatStore.getState();
+    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
+      ? data.tool_calls.map((t) => ({
+          id: String(t.id ?? crypto.randomUUID()),
+          tool: String(t.tool ?? t.name ?? 'unknown'),
+          status: t.status as import('@/types/chat').ToolCallRecord['status'],
+          summary: typeof t.summary === 'string' ? t.summary : undefined,
+          input: (() => {
+            const raw = t.input ?? t.arguments;
+            if (typeof raw === 'string') return raw;
+            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
+            return undefined;
+          })(),
+          output: typeof t.output === 'string' ? t.output : undefined,
+        }))
+      : undefined;
     // Append to messages map so the thread renders if opened.
     store.addMessage({
       id: data.id,
@@ -553,6 +569,7 @@ export function Shell() {
       content: data.text,
       agent: data.role === 'assistant' ? data.from_agent : undefined,
       timestamp: data.created_at,
+      tool_calls: toolCalls,
     });
     // Refresh conversation list so the new thread shows in sidebar
     // with its message_count and lastMessageAt updated.

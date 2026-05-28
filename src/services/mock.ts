@@ -44,23 +44,23 @@ const MOCK_AGENTS: Agent[] = [
 // ── Conversations & Messages ──
 
 const MOCK_CONVERSATIONS: Conversation[] = [
-  { id: 'conv-1', agent: 'francis', first_message: 'Budget Q3 review', message_count: 5, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-  { id: 'conv-2', agent: 'francis', first_message: 'What meetings do I have today?', message_count: 3, created_at: new Date(Date.now() - 3600_000).toISOString(), updated_at: new Date(Date.now() - 3600_000).toISOString() },
+  { id: 'conv-1', agent: 'paco--francis', first_message: 'Budget Q3 review', message_count: 5, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+  { id: 'conv-2', agent: 'paco--francis', first_message: 'What meetings do I have today?', message_count: 3, created_at: new Date(Date.now() - 3600_000).toISOString(), updated_at: new Date(Date.now() - 3600_000).toISOString() },
   { id: 'conv-3', agent: 'elon', first_message: 'Help me with TypeScript generics', message_count: 8, created_at: new Date(Date.now() - 86400_000).toISOString(), updated_at: new Date(Date.now() - 86400_000).toISOString() },
-  { id: 'conv-4', agent: 'francis', first_message: 'Setup DNS records for new domain', message_count: 4, created_at: new Date(Date.now() - 86400_000 * 2).toISOString(), updated_at: new Date(Date.now() - 86400_000 * 2).toISOString() },
+  { id: 'conv-4', agent: 'paco--francis', first_message: 'Setup DNS records for new domain', message_count: 4, created_at: new Date(Date.now() - 86400_000 * 2).toISOString(), updated_at: new Date(Date.now() - 86400_000 * 2).toISOString() },
   { id: 'conv-5', agent: 'ana', first_message: 'Analyze last month expenses', message_count: 6, created_at: new Date(Date.now() - 86400_000 * 5).toISOString(), updated_at: new Date(Date.now() - 86400_000 * 5).toISOString() },
 ];
 
 const MOCK_MESSAGES: Record<string, Message[]> = {
   'conv-1': [
     { id: 'm1', conversation_id: 'conv-1', role: 'user', content: 'Can you review the Budget Q3 document?', timestamp: new Date(Date.now() - 300_000).toISOString() },
-    { id: 'm2', conversation_id: 'conv-1', role: 'assistant', content: "I've reviewed the **Budget Q3** document. Here are the key points:\n\n### Revenue\n- Total revenue: **€142,500** (+12% vs Q2)\n- Recurring: €98,000\n- One-time: €44,500\n\n### Expenses\n- Infrastructure: €23,400\n- Team: €67,800\n- Marketing: €15,200\n\n> Net margin is healthy at **25.3%**\n\n[Open Budget →](/notes?id=budget-q3)", agent: 'francis', model: 'claude-opus-4-6', tokens_used: 156, timestamp: new Date(Date.now() - 290_000).toISOString() },
+    { id: 'm2', conversation_id: 'conv-1', role: 'assistant', content: "I've reviewed the **Budget Q3** document. Here are the key points:\n\n### Revenue\n- Total revenue: **€142,500** (+12% vs Q2)\n- Recurring: €98,000\n- One-time: €44,500\n\n### Expenses\n- Infrastructure: €23,400\n- Team: €67,800\n- Marketing: €15,200\n\n> Net margin is healthy at **25.3%**\n\n[Open Budget →](/notes?id=budget-q3)", agent: 'paco--francis', model: 'claude-opus-4-6', tokens_used: 156, timestamp: new Date(Date.now() - 290_000).toISOString() },
     { id: 'm3', conversation_id: 'conv-1', role: 'user', content: 'What about the infrastructure costs breakdown?', timestamp: new Date(Date.now() - 200_000).toISOString() },
-    { id: 'm4', conversation_id: 'conv-1', role: 'assistant', content: "Here's the infrastructure breakdown:\n\n| Service | Monthly | Q3 Total |\n|---------|---------|----------|\n| AWS | €3,200 | €9,600 |\n| Hetzner | €1,800 | €5,400 |\n| Cloudflare | €400 | €1,200 |\n| Monitoring | €900 | €2,700 |\n| Other | €1,500 | €4,500 |\n\nAWS costs increased 8% due to the new ML pipeline.", agent: 'francis', model: 'claude-opus-4-6', tokens_used: 189, timestamp: new Date(Date.now() - 190_000).toISOString() },
+    { id: 'm4', conversation_id: 'conv-1', role: 'assistant', content: "Here's the infrastructure breakdown:\n\n| Service | Monthly | Q3 Total |\n|---------|---------|----------|\n| AWS | €3,200 | €9,600 |\n| Hetzner | €1,800 | €5,400 |\n| Cloudflare | €400 | €1,200 |\n| Monitoring | €900 | €2,700 |\n| Other | €1,500 | €4,500 |\n\nAWS costs increased 8% due to the new ML pipeline.", agent: 'paco--francis', model: 'claude-opus-4-6', tokens_used: 189, timestamp: new Date(Date.now() - 190_000).toISOString() },
   ],
   'conv-2': [
     { id: 'm5', conversation_id: 'conv-2', role: 'user', content: 'What meetings do I have today?', timestamp: new Date(Date.now() - 7200_000).toISOString() },
-    { id: 'm6', conversation_id: 'conv-2', role: 'assistant', content: "Today you have 3 meetings:\n\n- **10:00** — Standup diario [Open →](/calendar)\n- **14:00** — Design review with the team\n- **16:30** — Client call with Acme Corp\n\nYou also have a deadline for the proposal draft at 18:00.", agent: 'francis', model: 'claude-opus-4-6', tokens_used: 87, timestamp: new Date(Date.now() - 7190_000).toISOString() },
+    { id: 'm6', conversation_id: 'conv-2', role: 'assistant', content: "Today you have 3 meetings:\n\n- **10:00** — Standup diario [Open →](/calendar)\n- **14:00** — Design review with the team\n- **16:30** — Client call with Acme Corp\n\nYou also have a deadline for the proposal draft at 18:00.", agent: 'paco--francis', model: 'claude-opus-4-6', tokens_used: 87, timestamp: new Date(Date.now() - 7190_000).toISOString() },
   ],
   'conv-3': [
     { id: 'm7', conversation_id: 'conv-3', role: 'user', content: 'Help me understand TypeScript generics with a practical example', timestamp: new Date(Date.now() - 90000_000).toISOString() },
@@ -563,30 +563,30 @@ let mockFiles: FileRecord[] = [
   },
   // Gateway files
   {
-    id: 'gw-1', filename: 'francis', filepath: '/gateway/workspace/agents/francis/',
+    id: 'gw-1', filename: 'paco--francis', filepath: '/gateway/workspace/agents/paco--francis/',
     mime_type: 'inode/directory', size_bytes: 0, checksum_sha256: null,
     source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/',
     is_directory: true, metadata: null, tags: [], custom_fields: null,
     created_at: daysAgo(30), updated_at: hoursAgo(2), synced_at: null, deleted_at: null,
   },
   {
-    id: 'gw-2', filename: 'AGENT.md', filepath: '/gateway/workspace/agents/francis/AGENT.md',
+    id: 'gw-2', filename: 'AGENT.md', filepath: '/gateway/workspace/agents/paco--francis/AGENT.md',
     mime_type: 'text/markdown', size_bytes: 2356, checksum_sha256: 'gw2',
-    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/francis/',
+    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/paco--francis/',
     is_directory: false, metadata: null, tags: [], custom_fields: null,
     created_at: daysAgo(30), updated_at: hoursAgo(2), synced_at: null, deleted_at: null,
   },
   {
-    id: 'gw-3', filename: 'SOUL.md', filepath: '/gateway/workspace/agents/francis/SOUL.md',
+    id: 'gw-3', filename: 'SOUL.md', filepath: '/gateway/workspace/agents/paco--francis/SOUL.md',
     mime_type: 'text/markdown', size_bytes: 1892, checksum_sha256: 'gw3',
-    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/francis/',
+    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/paco--francis/',
     is_directory: false, metadata: null, tags: [], custom_fields: null,
     created_at: daysAgo(30), updated_at: daysAgo(5), synced_at: null, deleted_at: null,
   },
   {
-    id: 'gw-4', filename: 'skills', filepath: '/gateway/workspace/agents/francis/skills/',
+    id: 'gw-4', filename: 'skills', filepath: '/gateway/workspace/agents/paco--francis/skills/',
     mime_type: 'inode/directory', size_bytes: 0, checksum_sha256: null,
-    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/francis/',
+    source: 'local', source_id: null, parent_folder: '/gateway/workspace/agents/paco--francis/',
     is_directory: true, metadata: null, tags: [], custom_fields: null,
     created_at: daysAgo(30), updated_at: daysAgo(1), synced_at: null, deleted_at: null,
   },
@@ -699,7 +699,7 @@ const MOCK_MANAGED_AGENTS: ManagedAgent[] = [
       { id: 'sk-11', name: 'Digest', icon: '📰', enabled: true, domain: 'digest' },
       { id: 'sk-12', name: 'System', icon: '⚙️', enabled: true, domain: 'system' },
     ],
-    workspace_path: '/gateway/workspace/agents/francis/',
+    workspace_path: '/gateway/workspace/agents/paco--francis/',
     status: 'active', last_active_at: new Date(Date.now() - 300000).toISOString(),
     sessions_today: 12, tokens_today: 45230, created_at: daysAgo(60),
   },
@@ -808,7 +808,7 @@ let managedAgentIdCounter = 10;
 const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   {
     id: 'aconv-1', session_id: 'sess_abc123',
-    from_agent: 'francis', to_agent: 'elon',
+    from_agent: 'paco--francis', to_agent: 'paco--elon',
     message: 'Necesito que configures el endpoint de partnerships',
     tool_calls: [{ tool: 'exec', params: { command: 'curl -X POST ...' }, result: '201 Created' }],
     tokens_used: 1523, model_used: 'claude-opus-4-6', cost_usd: 0.04567,
@@ -816,7 +816,7 @@ const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   },
   {
     id: 'aconv-2', session_id: 'sess_abc123',
-    from_agent: 'elon', to_agent: 'francis',
+    from_agent: 'paco--elon', to_agent: 'paco--francis',
     message: 'Endpoint configurado en /api/v1/partnerships. Tests passing.',
     tool_calls: [],
     tokens_used: 892, model_used: 'claude-sonnet-4-5', cost_usd: 0.00267,
@@ -824,7 +824,7 @@ const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   },
   {
     id: 'aconv-3', session_id: 'sess_def456',
-    from_agent: 'francis', to_agent: 'mailer',
+    from_agent: 'paco--francis', to_agent: 'paco--mailer',
     message: 'Send the weekly report to the team',
     tool_calls: [{ tool: 'send_email', params: { to: 'team@clearmud.ai', subject: 'Weekly Report' } }],
     tokens_used: 2100, model_used: 'claude-opus-4-6', cost_usd: 0.063,
@@ -832,7 +832,7 @@ const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   },
   {
     id: 'aconv-4', session_id: 'sess_def456',
-    from_agent: 'mailer', to_agent: 'francis',
+    from_agent: 'paco--mailer', to_agent: 'paco--francis',
     message: 'Email queued successfully. Will be sent from paco@clearmud.ai.',
     tool_calls: [],
     tokens_used: 450, model_used: 'claude-sonnet-4-5', cost_usd: 0.00135,
@@ -840,7 +840,7 @@ const MOCK_AGENT_CONVERSATIONS: AgentConversation[] = [
   },
   {
     id: 'aconv-5', session_id: 'sess_ghi789',
-    from_agent: 'francis', to_agent: 'scheduler',
+    from_agent: 'paco--francis', to_agent: 'paco--scheduler',
     message: 'Check if there are any conflicts for tomorrow afternoon',
     tool_calls: [{ tool: 'list_events', params: { date: 'tomorrow', from: '12:00', to: '18:00' } }],
     tokens_used: 1800, model_used: 'claude-opus-4-6', cost_usd: 0.054,
@@ -956,7 +956,7 @@ const MOCK_CONVERSATION_STATS: ConversationStats = {
     { model: 'deepseek-chat', messages: 12, tokens: 50000, cost_usd: 0.11 },
   ],
   by_agent: [
-    { agent: 'francis', messages: 150, tokens: 2000000, cost_usd: 30.00 },
+    { agent: 'paco--francis', messages: 150, tokens: 2000000, cost_usd: 30.00 },
     { agent: 'elon', messages: 80, tokens: 1000000, cost_usd: 15.00 },
     { agent: 'creative', messages: 40, tokens: 400000, cost_usd: 4.00 },
     { agent: 'strategy', messages: 25, tokens: 250000, cost_usd: 3.50 },

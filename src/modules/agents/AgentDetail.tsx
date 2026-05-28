@@ -54,10 +54,26 @@ function formatRelativeTime(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
+/**
+ * Last segment after the final `/` — the actual model identifier.
+ * Works for any depth: `provider/name`, `provider/org/name`, `provider/a/b/c/d`.
+ * Preserves the original characters (colons, dots, dashes) — no cosmetic
+ * mangling, so `gpt-oss-120b:free` stays exactly as is.
+ *
+ *  anthropic/claude-sonnet-4-6              → claude-sonnet-4-6
+ *  openrouter/openai/gpt-oss-120b:free      → gpt-oss-120b:free
+ *  amazon-bedrock/amazon.nova-2-lite-v1:0   → amazon.nova-2-lite-v1:0
+ *  fireworks/accounts/fireworks/models/glm-5 → glm-5
+ *  cloudflare-ai-gateway/workers-ai/@cf/nvidia/nemotron-nano-3-30b → nemotron-nano-3-30b
+ */
+function modelShortName(modelId: string): string {
+  if (!modelId) return '';
+  const lastSlash = modelId.lastIndexOf('/');
+  return lastSlash >= 0 ? modelId.slice(lastSlash + 1) : modelId;
+}
+
 function ModelLabel({ model }: { model: string }) {
-  // "anthropic/claude-haiku-4-5" → "Claude Haiku 4.5"
-  const raw = model.includes('/') ? model.split('/')[1]! : model;
-  return <>{raw.replace(/^claude-/, 'Claude ').replace(/-(\d+)-(\d+)/, ' $1.$2').replace(/-/g, ' ')}</>;
+  return <>{modelShortName(model)}</>;
 }
 
 export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrowseFiles }: AgentDetailProps) {
@@ -467,10 +483,13 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                           fontFamily: 'var(--font-sans)',
                           transition: 'var(--transition-fast)',
                           textAlign: 'left',
+                          gap: 8,
                         }}
+                        title={m}
                       >
-                        <ModelLabel model={m} />
-                        {m === agent.model && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8 }}>current</span>}
+                        {/* Full path so the user can see the provider/org/model unambiguously. */}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m}</span>
+                        {m === agent.model && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8, flexShrink: 0 }}>current</span>}
                       </button>
                     ))
                   )}

@@ -30,23 +30,23 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   error: { bg: 'rgba(239,68,68,0.15)', text: 'var(--error)' },
 };
 
+/**
+ * Last segment after the final `/` — the actual model identifier.
+ * Handles any depth and preserves all characters (colons, dots, dashes).
+ *
+ *  anthropic/claude-sonnet-4-6              → claude-sonnet-4-6
+ *  openrouter/openai/gpt-oss-120b:free      → gpt-oss-120b:free
+ *  amazon-bedrock/amazon.nova-2-lite-v1:0   → amazon.nova-2-lite-v1:0
+ *  fireworks/accounts/fireworks/models/glm-5 → glm-5
+ *  cloudflare-ai-gateway/workers-ai/@cf/nvidia/nemotron-nano-3-30b → nemotron-nano-3-30b
+ *
+ * If no slash: returns the input as-is (defensive — covers agents without
+ * a fully-qualified model identifier).
+ */
 function formatModelName(model: string): string {
   if (!model) return '';
-  const lower = model.toLowerCase();
-  if (lower.includes('opus')) {
-    const ver = lower.match(/(\d+)[-.](\d+)/);
-    return ver ? `Opus ${ver[1]}.${ver[2]}` : 'Opus';
-  }
-  if (lower.includes('sonnet')) {
-    const ver = lower.match(/(\d+)[-.](\d+)/);
-    return ver ? `Sonnet ${ver[1]}.${ver[2]}` : 'Sonnet';
-  }
-  if (lower.includes('haiku')) {
-    const ver = lower.match(/(\d+)[-.](\d+)/);
-    return ver ? `Haiku ${ver[1]}.${ver[2]}` : 'Haiku';
-  }
-  if (lower.includes('deepseek')) return 'DeepSeek';
-  return model;
+  const lastSlash = model.lastIndexOf('/');
+  return lastSlash >= 0 ? model.slice(lastSlash + 1) : model;
 }
 
 export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 0, expanded = true, onToggleExpand }: AgentTreeNodeProps) {

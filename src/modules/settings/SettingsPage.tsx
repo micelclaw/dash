@@ -63,6 +63,7 @@ import { GatewayAuthSection } from '@/components/settings/sections/GatewayAuthSe
 import { DevicesSection } from '@/components/settings/sections/DevicesSection';
 import { ApprovalsForwardingSection } from '@/components/settings/sections/ApprovalsForwardingSection';
 import { MemorySearchSection } from '@/components/settings/sections/MemorySearchSection';
+import { ActiveMemorySection } from '@/components/settings/sections/ActiveMemorySection';
 import { SessionSection } from '@/components/settings/sections/SessionSection';
 import { CronConfigSection } from '@/components/settings/sections/CronConfigSection';
 import { HooksSection } from '@/components/settings/sections/HooksSection';
@@ -153,6 +154,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'tool-access-defaults', label: 'Tool Access', icon: Wrench },
         { id: 'chat-tools', label: 'Chat Tools Display', icon: Wrench },
         { id: 'memory-search', label: 'Memory', icon: Brain },
+        { id: 'active-memory', label: 'Memoria Activa', icon: Brain },
         { id: 'preferences', label: 'Learned Preferences', icon: Brain },
         { id: 'sessions', label: 'Sessions', icon: History },
         { id: 'channel-bindings', label: 'Channel Bindings', icon: Link2 },
@@ -304,6 +306,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'devices':              () => <DevicesSection />,
   'approvals-forwarding': () => <ApprovalsForwardingSection />,
   'memory-search':        () => <MemorySearchSection />,
+  'active-memory':        () => <ActiveMemorySection />,
   'sessions':             () => <SessionSection />,
   'cron-config':          () => <CronConfigSection />,
   'hooks':                () => <HooksSection />,
