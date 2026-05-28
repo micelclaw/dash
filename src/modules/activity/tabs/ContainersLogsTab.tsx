@@ -22,6 +22,7 @@ import {
   MERGED_SENTINEL,
   type ContainerLogRow,
 } from '../adapters/container-logs.adapter';
+import type { TimeRange } from '../adapters/types';
 import { getActiveTails } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 
@@ -35,6 +36,8 @@ interface Props {
   onSearchChange: (value: string) => void;
   paused: boolean;
   onTogglePause: () => void;
+  range?: TimeRange;
+  onRangeChange: (range: TimeRange | undefined) => void;
 }
 
 export function ContainersLogsTab(props: Props) {
@@ -82,6 +85,7 @@ export function ContainersLogsTab(props: Props) {
     filters: effectiveFilters,
     search: props.search,
     paused: props.paused,
+    range: props.range,
   });
 
   // Poll while not paused — container log files don't have a WS
@@ -103,6 +107,8 @@ export function ContainersLogsTab(props: Props) {
         onSearchChange={props.onSearchChange}
         paused={props.paused}
         onTogglePause={props.onTogglePause}
+        range={props.range}
+        onRangeChange={props.onRangeChange}
       />
       <ActivityTable<ContainerLogRow>
         adapter={adapter}

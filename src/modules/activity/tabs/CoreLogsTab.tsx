@@ -11,6 +11,7 @@ import { ActivityHeader } from '../ActivityHeader';
 import { ActivityTable } from '../ActivityTable';
 import { useActivityRows } from '../useActivityRows';
 import { coreLogsAdapter } from '../adapters/core-logs.adapter';
+import type { TimeRange } from '../adapters/types';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import type { CoreLogEntry, ActivityStats } from '@/services/activity.service';
 import type { WsEvent } from '@/types/websocket';
@@ -30,6 +31,8 @@ interface Props {
   onSearchChange: (value: string) => void;
   paused: boolean;
   onTogglePause: () => void;
+  range?: TimeRange;
+  onRangeChange: (range: TimeRange | undefined) => void;
 }
 
 export function CoreLogsTab(props: Props) {
@@ -49,9 +52,11 @@ export function CoreLogsTab(props: Props) {
     filters: props.filters,
     search: props.search,
     paused: props.paused,
+    range: props.range,
     ws: {
       pattern: 'core.logs.entry',
       transform: wsToRow,
+      timestampOf: (row) => row.timestamp,
     },
   });
 
@@ -66,6 +71,8 @@ export function CoreLogsTab(props: Props) {
         onSearchChange={props.onSearchChange}
         paused={props.paused}
         onTogglePause={props.onTogglePause}
+        range={props.range}
+        onRangeChange={props.onRangeChange}
       />
       <ActivityTable<CoreLogEntry>
         adapter={coreLogsAdapter}

@@ -104,17 +104,27 @@ export function buildContainerLogsAdapter(serviceList: string[]): Adapter<Contai
         render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
       },
     ],
-    async fetchSnapshot({ filters }) {
+    async fetchSnapshot({ filters, range }) {
       // `service` decides WHICH endpoint to hit — stays in fetchSnapshot
       // because it's not a row-level filter. `stream` is row-level
       // (see matchesFilters below).
       const svc = filters.service && filters.service !== 'all' ? filters.service : MERGED_SENTINEL;
       let rows: ContainerLogRow[] = [];
       if (svc === MERGED_SENTINEL) {
-        const res: MergedContainerLogsResponse = await getMergedContainerLogs({ tailBytes: 64 * 1024, limit: 500 });
+        const res: MergedContainerLogsResponse = await getMergedContainerLogs({
+          tailBytes: 64 * 1024,
+          limit: 500,
+          from: range?.from,
+          to: range?.to,
+        });
         rows = res.entries.map((e) => ({ ...e, service: e.service }));
       } else if (svc) {
-        const res = await getServiceLogs(svc, { tailBytes: 256 * 1024, limit: 500 });
+        const res = await getServiceLogs(svc, {
+          tailBytes: 256 * 1024,
+          limit: 500,
+          from: range?.from,
+          to: range?.to,
+        });
         rows = res.entries.map((e) => ({ ...e, service: svc }));
       }
       return { rows };

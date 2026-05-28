@@ -89,8 +89,13 @@ export const notificationsAdapter: Adapter<NotificationHistoryRow> = {
       render: (row) => createElement('span', { className: 'text-xs' }, describeRow(row)),
     },
   ],
-  async fetchSnapshot({ limit }) {
-    const rows = await getNotificationsHistory({ windowHours: 24, limit });
+  async fetchSnapshot({ limit, range }) {
+    const rows = await getNotificationsHistory({
+      windowHours: 24,
+      limit,
+      from: range?.from,
+      to: range?.to,
+    });
     return { rows };
   },
   matchesFilters(row, filters) {

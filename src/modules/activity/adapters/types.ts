@@ -33,10 +33,24 @@ export interface AdapterColumn<Row> {
   render: (row: Row) => ReactNode;
 }
 
+export interface TimeRange {
+  /** ISO timestamp lower bound (inclusive). */
+  from: string;
+  /** ISO timestamp upper bound (exclusive). */
+  to: string;
+}
+
 export interface AdapterFetchParams {
   filters: Record<string, string>;
   search: string;
   limit: number;
+  /**
+   * Optional time-range filter. When set, adapters MUST pass `from`/`to`
+   * to their underlying endpoint so the snapshot includes older rows
+   * that fall inside the range (the default tail-by-bytes won't reach
+   * them). Without a range, adapters use their usual default window.
+   */
+  range?: TimeRange;
 }
 
 export interface AdapterFetchResult<Row> {

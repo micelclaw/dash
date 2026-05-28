@@ -14,8 +14,9 @@
 
 import { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import type { Adapter } from './adapters/types';
+import type { Adapter, TimeRange } from './adapters/types';
 import { bucketColor } from './adapters/types';
+import { TimeRangePicker } from './TimeRangePicker';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
@@ -26,6 +27,8 @@ interface Props<Row> {
   onSearchChange: (value: string) => void;
   paused?: boolean;
   onTogglePause?: () => void;
+  range?: TimeRange;
+  onRangeChange?: (range: TimeRange | undefined) => void;
 }
 
 interface HourPoint {
@@ -88,6 +91,8 @@ export function ActivityHeader<Row>({
   onSearchChange,
   paused,
   onTogglePause,
+  range,
+  onRangeChange,
 }: Props<Row>) {
   const { points, buckets } = useMemo(() => {
     if (!adapter.histogramOf) return { points: [], buckets: [] };
@@ -186,6 +191,9 @@ export function ActivityHeader<Row>({
           >
             {paused ? '▶ Reanudar' : '⏸ Pausar'}
           </button>
+        )}
+        {onRangeChange && (
+          <TimeRangePicker range={range} onChange={onRangeChange} />
         )}
       </div>
     </div>

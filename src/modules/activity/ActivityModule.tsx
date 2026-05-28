@@ -16,7 +16,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
-import type { Adapter } from './adapters/types';
+import type { Adapter, TimeRange } from './adapters/types';
 import { EventsTab } from './tabs/EventsTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
 import { GatewayLogsTab } from './tabs/GatewayLogsTab';
@@ -65,6 +65,10 @@ export function Component() {
   const [searchText, setSearchText] = useState('');
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(initialSettingsOpen);
+  // Optional time-range overlay — propagated to every tab via
+  // sharedProps so the header chart AND the table reflect the same
+  // window. Undefined = endpoint default (recent tail).
+  const [range, setRange] = useState<TimeRange | undefined>(undefined);
 
   // Reset filters when the tab ACTUALLY changes — facets differ per
   // adapter. Skip the initial mount: filters already start empty, and
@@ -133,6 +137,8 @@ export function Component() {
     onSearchChange: setSearchText,
     paused,
     onTogglePause: () => setPaused((p) => !p),
+    range,
+    onRangeChange: setRange,
   };
 
   return (

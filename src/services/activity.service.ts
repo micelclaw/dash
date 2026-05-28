@@ -166,10 +166,12 @@ export async function resetNotificationRule(ruleKey: string): Promise<RuleOverri
 
 // ─── Events feed ────────────────────────────────────────────────────
 
-export async function getNotificationsHistory(opts: { windowHours?: number; limit?: number } = {}): Promise<NotificationHistoryRow[]> {
+export async function getNotificationsHistory(opts: { windowHours?: number; limit?: number; from?: string; to?: string } = {}): Promise<NotificationHistoryRow[]> {
   const query: Record<string, string | number | undefined> = {};
   if (opts.windowHours) query.window = `${opts.windowHours}h`;
   if (opts.limit) query.limit = opts.limit;
+  if (opts.from) query.from = opts.from;
+  if (opts.to) query.to = opts.to;
   const { data } = await api.get<{ data: { events: NotificationHistoryRow[] } }>('/activity/notifications-history', query);
   return data.events;
 }
@@ -178,12 +180,16 @@ export async function listEvents(params: {
   type?: string;
   limit?: number;
   before?: string;
+  from?: string;
+  to?: string;
   processed?: 'true' | 'false';
 }): Promise<{ events: AgentEventRow[] }> {
   const query: Record<string, string | number | undefined> = {};
   if (params.type) query.type = params.type;
   if (params.limit) query.limit = params.limit;
   if (params.before) query.before = params.before;
+  if (params.from) query.from = params.from;
+  if (params.to) query.to = params.to;
   if (params.processed) query.processed = params.processed;
   const { data } = await api.get<{ data: { events: AgentEventRow[] } }>('/agent-events', query);
   return data;
@@ -191,11 +197,13 @@ export async function listEvents(params: {
 
 // ─── Core logs ──────────────────────────────────────────────────────
 
-export async function getCoreLogs(opts: { limit?: number; tailBytes?: number; level?: string } = {}): Promise<CoreLogsResponse> {
+export async function getCoreLogs(opts: { limit?: number; tailBytes?: number; level?: string; from?: string; to?: string } = {}): Promise<CoreLogsResponse> {
   const query: Record<string, string | number | undefined> = {};
   if (opts.limit) query.limit = opts.limit;
   if (opts.tailBytes) query.tail_bytes = opts.tailBytes;
   if (opts.level && opts.level !== 'all') query.level = opts.level;
+  if (opts.from) query.from = opts.from;
+  if (opts.to) query.to = opts.to;
   const { data } = await api.get<{ data: CoreLogsResponse }>('/core/logs', query);
   return data;
 }
@@ -209,9 +217,11 @@ export interface GatewayLogEntry {
   source?: string;
 }
 
-export async function getGatewayLogs(opts: { limit?: number } = {}): Promise<{ entries: GatewayLogEntry[] }> {
-  const query: Record<string, number | undefined> = {};
+export async function getGatewayLogs(opts: { limit?: number; from?: string; to?: string } = {}): Promise<{ entries: GatewayLogEntry[] }> {
+  const query: Record<string, string | number | undefined> = {};
   if (opts.limit) query.limit = opts.limit;
+  if (opts.from) query.from = opts.from;
+  if (opts.to) query.to = opts.to;
   // Core returns `{ data: GatewayLogEntry[] }` — the array IS the data,
   // not wrapped in an "entries" object.
   const { data } = await api.get<{ data: GatewayLogEntry[] }>('/gateway/logs', query);
@@ -227,21 +237,25 @@ export async function getActiveTails(): Promise<ActiveTailsResponse> {
 
 export async function getServiceLogs(
   service: string,
-  opts: { tailBytes?: number; limit?: number } = {},
+  opts: { tailBytes?: number; limit?: number; from?: string; to?: string } = {},
 ): Promise<ContainerLogsResponse> {
-  const query: Record<string, number | undefined> = {};
+  const query: Record<string, string | number | undefined> = {};
   if (opts.tailBytes) query.tail_bytes = opts.tailBytes;
   if (opts.limit) query.limit = opts.limit;
+  if (opts.from) query.from = opts.from;
+  if (opts.to) query.to = opts.to;
   const { data } = await api.get<{ data: ContainerLogsResponse }>(`/lifecycle/services/${encodeURIComponent(service)}/logs`, query);
   return data;
 }
 
 export async function getMergedContainerLogs(
-  opts: { tailBytes?: number; limit?: number } = {},
+  opts: { tailBytes?: number; limit?: number; from?: string; to?: string } = {},
 ): Promise<MergedContainerLogsResponse> {
-  const query: Record<string, number | undefined> = {};
+  const query: Record<string, string | number | undefined> = {};
   if (opts.tailBytes) query.tail_bytes = opts.tailBytes;
   if (opts.limit) query.limit = opts.limit;
+  if (opts.from) query.from = opts.from;
+  if (opts.to) query.to = opts.to;
   const { data } = await api.get<{ data: MergedContainerLogsResponse }>('/lifecycle/services/logs', query);
   return data;
 }

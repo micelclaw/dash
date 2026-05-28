@@ -85,12 +85,17 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
       render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
     },
   ],
-  async fetchSnapshot({ filters }) {
+  async fetchSnapshot({ filters, range }) {
     // Level filter goes SERVER-SIDE: info dominates the file 98%, so a
     // blind tail never surfaces old warn/error. The backend scans a
     // wider window when a level is passed. matchesFilters() below still
     // applies the same gate to live WS rows for consistency.
-    const res = await getCoreLogs({ limit: 500, level: filters.level });
+    const res = await getCoreLogs({
+      limit: 500,
+      level: filters.level,
+      from: range?.from,
+      to: range?.to,
+    });
     return { rows: res.entries };
   },
   matchesFilters(row, filters) {

@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import type { WsEvent } from '@/types/websocket';
-import type { Adapter, AdapterFetchParams } from './adapters/types';
+import type { Adapter, AdapterFetchParams, TimeRange } from './adapters/types';
 
 const DEFAULT_LIMIT = 200;
 const MAX_BUFFER = 1000;
@@ -26,6 +26,13 @@ interface Options<Row> {
   search: string;
   paused: boolean;
   /**
+   * Optional time-range overlay. When set, the snapshot is fetched with
+   * `from`/`to` query params (most endpoints fall back to reading the
+   * whole file) AND live WS rows whose timestamp falls outside the range
+   * are dropped at insertion time so the table stays consistent.
+   */
+  range?: TimeRange;
+  /**
    * Optional WS configuration. When set, the hook listens to the
    * pattern and feeds matching events through `transform` (which may
    * filter via returning null).
@@ -33,6 +40,8 @@ interface Options<Row> {
   ws?: {
     pattern: string;
     transform: (event: WsEvent) => Row | null;
+    /** Extracts a timestamp from the row so the hook can gate by range. */
+    timestampOf?: (row: Row) => string | undefined;
   };
 }
 
@@ -56,20 +65,21 @@ function dedupeByKey<Row>(rows: Row[], getKey: (row: Row) => string): Row[] {
   return out;
 }
 
-export function useActivityRows<Row>({ adapter, filters, search, paused, ws }: Options<Row>): State<Row> {
+export function useActivityRows<Row>({ adapter, filters, search, paused, range, ws }: Options<Row>): State<Row> {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const client = useWebSocketStore((s) => s.client);
 
-  // Serialize filters/search so a re-render passing a fresh `filters`
-  // object with identical content doesn't re-trigger the snapshot.
+  // Serialize filters/search/range so a re-render passing fresh objects
+  // with identical content doesn't re-trigger the snapshot.
   const filtersKey = JSON.stringify(filters);
+  const rangeKey = range ? `${range.from}|${range.to}` : '';
   const params: AdapterFetchParams = useMemo(
-    () => ({ filters, search, limit: DEFAULT_LIMIT }),
+    () => ({ filters, search, limit: DEFAULT_LIMIT, range }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtersKey, search],
+    [filtersKey, search, rangeKey],
   );
 
   // Monotonic guard: in-flight snapshots can resolve out of order
@@ -104,6 +114,11 @@ export function useActivityRows<Row>({ adapter, filters, search, paused, ws }: O
   const filtersRef = useRef(filters);
   filtersRef.current = filters;
 
+  // Mirror the active range too so the WS handler can drop rows that
+  // fall outside the user's selected window.
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
+
   // Live WS subscription (when the tab declares one)
   useEffect(() => {
     if (!ws || !client) return;
@@ -114,6 +129,20 @@ export function useActivityRows<Row>({ adapter, filters, search, paused, ws }: O
       // Respect the active filter at insertion — don't buffer rows the
       // user has filtered out.
       if (adapter.matchesFilters && !adapter.matchesFilters(row, filtersRef.current)) return;
+      // Range gate: drop rows outside the user-selected window when the
+      // adapter exposes a timestamp.
+      const activeRange = rangeRef.current;
+      if (activeRange && ws.timestampOf) {
+        const ts = ws.timestampOf(row);
+        if (ts) {
+          const t = new Date(ts).getTime();
+          if (!Number.isNaN(t)) {
+            const fromT = new Date(activeRange.from).getTime();
+            const toT = new Date(activeRange.to).getTime();
+            if (t < fromT || t >= toT) return;
+          }
+        }
+      }
       setRows((prev) => {
         const getKey = adapter.getRowKey ?? ((r: Row) => JSON.stringify(r));
         const next = dedupeByKey([row, ...prev], getKey).slice(0, MAX_BUFFER);

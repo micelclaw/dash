@@ -79,8 +79,8 @@ export const gatewayLogsAdapter: Adapter<GatewayLogEntry> = {
       render: (row) => createElement('span', { className: 'text-xs whitespace-pre-wrap break-words' }, row.message),
     },
   ],
-  async fetchSnapshot() {
-    const res = await getGatewayLogs({ limit: 500 });
+  async fetchSnapshot({ range }) {
+    const res = await getGatewayLogs({ limit: 500, from: range?.from, to: range?.to });
     return { rows: res.entries };
   },
   matchesFilters(row, filters) {

@@ -11,6 +11,7 @@ import { ActivityHeader } from '../ActivityHeader';
 import { ActivityTable } from '../ActivityTable';
 import { useActivityRows } from '../useActivityRows';
 import { notificationsAdapter } from '../adapters/notifications.adapter';
+import type { TimeRange } from '../adapters/types';
 import type { NotificationHistoryRow } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 import type { WsEvent } from '@/types/websocket';
@@ -49,17 +50,21 @@ interface Props {
   onSearchChange: (value: string) => void;
   paused: boolean;
   onTogglePause: () => void;
+  range?: TimeRange;
+  onRangeChange: (range: TimeRange | undefined) => void;
 }
 
-export function NotificationsTab({ stats, filters, onFilterChange, search, onSearchChange, paused, onTogglePause }: Props) {
+export function NotificationsTab({ filters, onFilterChange, search, onSearchChange, paused, onTogglePause, range, onRangeChange }: Props) {
   const { filteredRows, loading } = useActivityRows<NotificationHistoryRow>({
     adapter: notificationsAdapter,
     filters,
     search,
     paused,
+    range,
     ws: {
       pattern: 'notification.new',
       transform: wsToRow,
+      timestampOf: (row) => row.created_at,
     },
   });
 
@@ -74,6 +79,8 @@ export function NotificationsTab({ stats, filters, onFilterChange, search, onSea
         onSearchChange={onSearchChange}
         paused={paused}
         onTogglePause={onTogglePause}
+        range={range}
+        onRangeChange={onRangeChange}
       />
       <ActivityTable<NotificationHistoryRow>
         adapter={notificationsAdapter}

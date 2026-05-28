@@ -101,8 +101,8 @@ export const eventsAdapter: Adapter<AgentEventRow> = {
       render: (row) => createElement('span', { className: 'text-xs text-[var(--text-muted)]' }, snippet(row.payload)),
     },
   ],
-  async fetchSnapshot({ limit }) {
-    const events = await listEvents({ limit });
+  async fetchSnapshot({ limit, range }) {
+    const events = await listEvents({ limit, from: range?.from, to: range?.to });
     return { rows: events.events };
   },
   matchesFilters(row, filters) {

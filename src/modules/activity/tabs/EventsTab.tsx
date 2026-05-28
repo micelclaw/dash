@@ -10,6 +10,7 @@ import { ActivityHeader } from '../ActivityHeader';
 import { ActivityTable } from '../ActivityTable';
 import { useActivityRows } from '../useActivityRows';
 import { eventsAdapter } from '../adapters/events.adapter';
+import type { TimeRange } from '../adapters/types';
 import type { AgentEventRow } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 import type { WsEvent } from '@/types/websocket';
@@ -52,17 +53,21 @@ interface Props {
   onSearchChange: (value: string) => void;
   paused: boolean;
   onTogglePause: () => void;
+  range?: TimeRange;
+  onRangeChange: (range: TimeRange | undefined) => void;
 }
 
-export function EventsTab({ stats, filters, onFilterChange, search, onSearchChange, paused, onTogglePause }: Props) {
+export function EventsTab({ filters, onFilterChange, search, onSearchChange, paused, onTogglePause, range, onRangeChange }: Props) {
   const { filteredRows, loading } = useActivityRows<AgentEventRow>({
     adapter: eventsAdapter,
     filters,
     search,
     paused,
+    range,
     ws: {
       pattern: 'agent.event',
       transform: wsToRow,
+      timestampOf: (row) => row.created_at,
     },
   });
 
@@ -77,6 +82,8 @@ export function EventsTab({ stats, filters, onFilterChange, search, onSearchChan
         onSearchChange={onSearchChange}
         paused={paused}
         onTogglePause={onTogglePause}
+        range={range}
+        onRangeChange={onRangeChange}
       />
       <ActivityTable<AgentEventRow>
         adapter={eventsAdapter}
