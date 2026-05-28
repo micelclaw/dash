@@ -66,6 +66,14 @@ export const TOOL_DEFS: ToolDef[] = [
   { name: 'process_status', tier: 3, icon: '📋', label: 'Estado de proceso',  renderer: 'generic' },
   { name: 'process_log',    tier: 3, icon: '📋', label: 'Log de proceso',     renderer: 'generic' },
   { name: 'process_kill',   tier: 3, icon: '📋', label: 'Matar proceso',      renderer: 'generic' },
+
+  // ─── Plugin debug entries (`pluginDebugEntries` from sessions.json) ──
+  // Chat-bridge emits one `chat.stream.tool` per OpenClaw plugin status
+  // line, with `tool: "plugin:<pluginId>"`. Featured plugins get a tailored
+  // icon/label; any other plugin falls back to the generic classifier
+  // (tier 3, 🔧, lowercased name).
+  { name: 'plugin:active-memory', tier: 3, icon: '🧩', label: 'OpenClaw: Active Memory', renderer: 'generic' },
+  { name: 'plugin:memory-core',   tier: 3, icon: '🧠', label: 'OpenClaw: Memory Core',   renderer: 'generic' },
 ];
 
 const BY_NAME = new Map<string, ToolDef>();
