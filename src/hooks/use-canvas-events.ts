@@ -24,13 +24,20 @@ export function useCanvasEvents() {
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const setCanvasContent = useCanvasStore((s) => s.setCanvasContent);
   const setCanvasUrl = useCanvasStore((s) => s.setCanvasUrl);
+  const setCanvasError = useCanvasStore((s) => s.setCanvasError);
+  const appendCanvasHistoryItem = useCanvasStore((s) => s.appendCanvasHistoryItem);
   const reloadCanvas = useCanvasStore((s) => s.reloadCanvas);
   const clearCanvas = useCanvasStore((s) => s.clearCanvas);
   const canvasStates = useCanvasStore((s) => s.canvasStates);
 
   useEffect(() => {
     if (!event) return;
-    const convId = activeConvId ?? '__standalone__';
+    // Always prefer the event's own conversation_id so a push lands on the
+    // chat that triggered it, even if the user has since switched tabs.
+    // Falling back to activeConvId leaked content into "New chat".
+    const eventConvId = (event.data.conversation_id as string | undefined) ?? activeConvId;
+    if (!eventConvId) return;
+    const convId = eventConvId;
 
     switch (event.event) {
       case 'canvas.content': {
@@ -46,6 +53,28 @@ export function useCanvasEvents() {
           const content = event.data.content as string;
           if (content) setCanvasContent(convId, type, content, path);
         }
+        // Si el backend incluyó el id de la fila de canvas_pushes en el
+        // payload, añadirlo al historial para que la barra de navegación
+        // muestre el nuevo item inmediatamente sin necesidad de re-fetch.
+        const rowId = event.data.canvas_push_id as string | undefined;
+        const title = (event.data.title as string | undefined) ?? path ?? 'canvas';
+        if (rowId) {
+          const url = event.data.url as string | undefined;
+          appendCanvasHistoryItem(convId, {
+            id: rowId,
+            url: url ?? null,
+            path: path ?? null,
+            title,
+            type: type === 'url' ? 'html' : type,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        break;
+      }
+      case 'canvas.error': {
+        const message = (event.data.message as string) || 'Error al cargar el canvas';
+        const code = event.data.code as string | undefined;
+        setCanvasError(convId, message, code);
         break;
       }
       case 'canvas.reload':
@@ -62,10 +91,9 @@ export function useCanvasEvents() {
         // Snapshot events are informational — no UI action needed yet
         break;
     }
-  }, [event, activeConvId, setCanvasContent, setCanvasUrl, reloadCanvas, clearCanvas]);
+  }, [event, activeConvId, setCanvasContent, setCanvasUrl, setCanvasError, appendCanvasHistoryItem, reloadCanvas, clearCanvas]);
 
-  const key = activeConvId ?? '__standalone__';
-  const current = canvasStates.get(key);
+  const current = activeConvId ? canvasStates.get(activeConvId) : undefined;
   return {
     hasContent: current?.hasContent ?? false,
     canvasType: current?.type ?? null,
