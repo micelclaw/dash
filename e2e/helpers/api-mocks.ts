@@ -116,7 +116,7 @@ export const MOCK_MANAGED_AGENTS = {
       is_chief: true,
       parent_agent_id: null,
       skills: [],
-      workspace_path: '/gateway/workspace/agents/francis/',
+      workspace_path: '/gateway/workspace/agents/paco--francis/',
       status: 'active',
       last_active_at: new Date().toISOString(),
       sessions_today: 12,
