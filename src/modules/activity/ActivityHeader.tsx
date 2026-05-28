@@ -4,12 +4,19 @@
  *
  * Activity Center — shared header rendered above every tab.
  *
- * The line histogram is now derived from the tab's CURRENT rows
- * (snapshot + live), grouped by hour, with one line per categorical
- * bucket the adapter declares via `histogramOf` (severity / log
- * level / docker stream / etc.). Each tab therefore shows ITS own
- * shape — and the chart reacts to filters automatically because
- * filteredRows feeds in.
+ * The line histogram is derived from the tab's CURRENT rows (snapshot
+ * + live), with one line per categorical bucket the adapter declares
+ * via `histogramOf` (severity / log level / docker stream / etc.).
+ *
+ * Granularity is chosen automatically from the row timespan:
+ *   - < 3 hours of data → bucket per minute
+ *   - < 7 days          → bucket per hour
+ *   - ≥ 7 days          → bucket per day
+ *
+ * Gaps inside the range are filled with explicit zero so the line
+ * doesn't break across empty slots. With ≤ 5 data points the chart
+ * also shows dots — a 1-2 point dataset would otherwise be invisible
+ * (recharts can't draw a line from a single sample).
  */
 
 import { useMemo } from 'react';
@@ -31,51 +38,126 @@ interface Props<Row> {
   onRangeChange?: (range: TimeRange | undefined) => void;
 }
 
-interface HourPoint {
-  hour: string;       // human label "13h"
-  fullHour: string;   // ISO truncated to hour
+type Granularity = 'minute' | 'hour' | 'day';
+
+interface HistogramPoint {
+  /** Display label for the X axis (e.g. "13h", "12:34", "May 27"). */
+  label: string;
+  /** Slot start as ms-since-epoch — used by the tooltip + sort + ticks. */
+  t: number;
+  /** One numeric key per bucket, count of rows in this slot. */
   [bucket: string]: string | number;
 }
 
+interface HistogramResult {
+  points: HistogramPoint[];
+  buckets: string[];
+  granularity: Granularity;
+}
+
+const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+
+function pickGranularity(spanMs: number): Granularity {
+  if (spanMs < 3 * HOUR_MS) return 'minute';
+  if (spanMs < 7 * DAY_MS) return 'hour';
+  return 'day';
+}
+
+function floorSlot(d: Date, g: Granularity): Date {
+  switch (g) {
+    case 'minute': return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes());
+    case 'hour':   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours());
+    case 'day':    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+}
+
+function stepMs(g: Granularity): number {
+  return g === 'minute' ? 60_000 : g === 'hour' ? HOUR_MS : DAY_MS;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function formatAxisLabel(d: Date, g: Granularity): string {
+  switch (g) {
+    case 'minute': return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    case 'hour':   return `${pad(d.getHours())}h`;
+    case 'day':    return d.toLocaleDateString([], { month: 'short', day: '2-digit' });
+  }
+}
+
+function formatTooltipLabel(t: number, g: Granularity): string {
+  const d = new Date(t);
+  switch (g) {
+    case 'minute':
+      return d.toLocaleString([], { weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    case 'hour':
+      return d.toLocaleString([], { weekday: 'short', month: 'short', day: '2-digit', hour: '2-digit' }) + 'h';
+    case 'day':
+      return d.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'short', day: '2-digit' });
+  }
+}
+
 /**
- * Group rows by (hour, bucket) into a recharts-friendly series.
- * Skips rows whose timestamp can't be parsed.
+ * Build a recharts-friendly histogram from row timestamps. Slots
+ * between the earliest and latest sample are filled with explicit
+ * zeros for every bucket so the line stays continuous across empty
+ * regions instead of jumping.
  */
 function buildHistogram<Row>(
   rows: Row[],
   project: (row: Row) => { time: string; bucket: string } | null,
-): { points: HourPoint[]; buckets: string[] } {
-  const byHour = new Map<string, HourPoint>();
-  const buckets = new Set<string>();
+): HistogramResult {
+  const stamped: Array<{ t: number; bucket: string }> = [];
+  const bucketSet = new Set<string>();
   for (const row of rows) {
     const p = project(row);
     if (!p) continue;
     const t = new Date(p.time);
     if (Number.isNaN(t.getTime())) continue;
-    // Truncate to the hour (local time) for the X axis.
-    const hourKey = new Date(t.getFullYear(), t.getMonth(), t.getDate(), t.getHours()).toISOString();
-    buckets.add(p.bucket);
-    const existing = byHour.get(hourKey);
-    if (existing) {
-      existing[p.bucket] = ((existing[p.bucket] as number) ?? 0) + 1;
-    } else {
-      byHour.set(hourKey, {
-        hour: `${String(t.getHours()).padStart(2, '0')}h`,
-        fullHour: hourKey,
-        [p.bucket]: 1,
-      } as HourPoint);
-    }
+    stamped.push({ t: t.getTime(), bucket: p.bucket });
+    bucketSet.add(p.bucket);
   }
-  // Ensure every point carries 0 for every bucket so recharts joins
-  // the line across gaps instead of dropping the segment.
-  const bucketList = Array.from(buckets);
-  const points = Array.from(byHour.values())
-    .sort((a, b) => a.fullHour.localeCompare(b.fullHour))
-    .map((p) => {
-      for (const b of bucketList) if (p[b] === undefined) p[b] = 0;
-      return p;
-    });
-  return { points, buckets: bucketList };
+  if (stamped.length === 0) {
+    return { points: [], buckets: [], granularity: 'hour' };
+  }
+  let tMin = Number.POSITIVE_INFINITY;
+  let tMax = Number.NEGATIVE_INFINITY;
+  for (const s of stamped) {
+    if (s.t < tMin) tMin = s.t;
+    if (s.t > tMax) tMax = s.t;
+  }
+  const granularity = pickGranularity(tMax - tMin);
+  const step = stepMs(granularity);
+  const buckets = Array.from(bucketSet);
+
+  // Pre-allocate every slot in [floor(tMin), floor(tMax)] so the line
+  // joins across zero-activity windows. Capped at 500 slots to keep
+  // recharts responsive on extreme ranges (a long span automatically
+  // picks `day`, so 500 days is already 1.3 years).
+  const startSlot = floorSlot(new Date(tMin), granularity).getTime();
+  const endSlot = floorSlot(new Date(tMax), granularity).getTime();
+  const slotCount = Math.floor((endSlot - startSlot) / step) + 1;
+  const SAFETY_CAP = 500;
+  const effectiveStep = slotCount > SAFETY_CAP
+    ? step * Math.ceil(slotCount / SAFETY_CAP)
+    : step;
+  const byT = new Map<number, HistogramPoint>();
+  for (let cur = startSlot; cur <= endSlot; cur += effectiveStep) {
+    const point: HistogramPoint = { label: formatAxisLabel(new Date(cur), granularity), t: cur };
+    for (const b of buckets) point[b] = 0;
+    byT.set(cur, point);
+  }
+  // Bucket assignment — find the largest slot <= s.t.
+  for (const s of stamped) {
+    const slot = startSlot + Math.floor((s.t - startSlot) / effectiveStep) * effectiveStep;
+    const point = byT.get(slot);
+    if (point) point[s.bucket] = ((point[s.bucket] as number) ?? 0) + 1;
+  }
+  const points = Array.from(byT.values()).sort((a, b) => (a.t as number) - (b.t as number));
+  return { points, buckets, granularity };
 }
 
 // Severity / level natural order. Buckets outside this set (e.g. docker
@@ -94,8 +176,8 @@ export function ActivityHeader<Row>({
   range,
   onRangeChange,
 }: Props<Row>) {
-  const { points, buckets } = useMemo(() => {
-    if (!adapter.histogramOf) return { points: [], buckets: [] };
+  const { points, buckets, granularity } = useMemo<HistogramResult>(() => {
+    if (!adapter.histogramOf) return { points: [], buckets: [], granularity: 'hour' };
     return buildHistogram(rows, adapter.histogramOf);
   }, [rows, adapter]);
 
@@ -107,17 +189,38 @@ export function ActivityHeader<Row>({
     [buckets],
   );
 
+  // Reduce X-axis labels when we have many slots — recharts default
+  // crams them and they overlap. ~12 ticks reads well across the
+  // 1100-1400px main column on a typical desktop.
+  const tickInterval = useMemo(() => {
+    if (points.length <= 12) return 0;
+    return Math.max(0, Math.floor(points.length / 12) - 1);
+  }, [points.length]);
+
+  // With very few data points recharts cannot render a line (1 sample
+  // = no segment). Switching to visible dots makes a 1-2 point dataset
+  // readable; with denser data we drop them to avoid noise.
+  const showDots = points.length <= 5;
+
   return (
     <div className="border-b border-[var(--border)] bg-[var(--bg)]">
-      {/* Per-tab histogram, ~2× the original height so trends read at a
-          glance. Empty state when there's no data or the adapter
-          doesn't declare a histogram projection. */}
       <div className="h-64 px-3 pt-2 pb-1">
         {points.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="var(--text-muted)" />
-              <YAxis tick={{ fontSize: 10 }} stroke="var(--text-muted)" width={32} allowDecimals={false} />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 10 }}
+                stroke="var(--text-muted)"
+                interval={tickInterval}
+                minTickGap={8}
+              />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="var(--text-muted)"
+                width={32}
+                allowDecimals={false}
+              />
               <Tooltip
                 cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}
                 contentStyle={{
@@ -130,6 +233,13 @@ export function ActivityHeader<Row>({
                 }}
                 labelStyle={{ color: 'var(--text)', fontWeight: 500 }}
                 itemStyle={{ color: 'var(--text)' }}
+                labelFormatter={(_label: string, payload) => {
+                  if (Array.isArray(payload) && payload.length > 0 && payload[0]?.payload) {
+                    const t = (payload[0].payload as HistogramPoint).t as number;
+                    if (typeof t === 'number') return formatTooltipLabel(t, granularity);
+                  }
+                  return _label;
+                }}
               />
               <Legend
                 verticalAlign="top"
@@ -144,8 +254,8 @@ export function ActivityHeader<Row>({
                   dataKey={b}
                   stroke={bucketColor(b)}
                   strokeWidth={1.5}
-                  dot={false}
-                  activeDot={{ r: 3 }}
+                  dot={showDots ? { r: 3, fill: bucketColor(b), stroke: bucketColor(b) } : false}
+                  activeDot={{ r: 4 }}
                   isAnimationActive={false}
                 />
               ))}
