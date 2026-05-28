@@ -71,6 +71,15 @@ export interface Adapter<Row> {
    * the WS keeps pushing unfiltered rows. Returns true to keep.
    */
   matchesFilters?(row: Row, filters: Record<string, string>): boolean;
+  /**
+   * Project a row to the histogram axes (time, plus a categorical
+   * bucket — severity / log level / docker stream / etc.).
+   * When defined, ActivityHeader plots one line per bucket derived
+   * from the tab's CURRENT rows, so each tab gets its own histogram
+   * that mirrors the rendered table (and reacts to filters / live
+   * inserts). Return null to skip a row.
+   */
+  histogramOf?(row: Row): { time: string; bucket: string } | null;
 }
 
 /**
@@ -89,4 +98,19 @@ export const SEVERITY_COLORS: Record<string, string> = {
 
 export function severityColor(severity: string): string {
   return SEVERITY_COLORS[severity.toLowerCase()] ?? '#64748b';
+}
+
+/**
+ * Palette for non-severity categorical histogram axes (Docker streams,
+ * notification rule keys, etc.). Falls back to severity colours so
+ * tabs that bucket by level reuse the same palette.
+ */
+export const BUCKET_COLORS: Record<string, string> = {
+  stdout: '#94a3b8',
+  stderr: '#ef4444',
+};
+
+export function bucketColor(bucket: string): string {
+  const lower = bucket.toLowerCase();
+  return SEVERITY_COLORS[lower] ?? BUCKET_COLORS[lower] ?? '#64748b';
 }

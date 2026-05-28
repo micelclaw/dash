@@ -70,7 +70,7 @@ export function EventsTab({ stats, filters, onFilterChange, search, onSearchChan
     <div className="flex h-full min-h-0 flex-col">
       <ActivityHeader
         adapter={eventsAdapter}
-        stats={stats}
+        rows={filteredRows}
         filters={filters}
         onFilterChange={onFilterChange}
         search={search}

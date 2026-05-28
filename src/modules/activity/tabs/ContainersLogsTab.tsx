@@ -96,7 +96,7 @@ export function ContainersLogsTab(props: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <ActivityHeader
         adapter={adapter}
-        stats={props.stats}
+        rows={filteredRows}
         filters={effectiveFilters}
         onFilterChange={props.onFilterChange}
         search={props.search}

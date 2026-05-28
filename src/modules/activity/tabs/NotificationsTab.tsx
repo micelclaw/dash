@@ -67,7 +67,7 @@ export function NotificationsTab({ stats, filters, onFilterChange, search, onSea
     <div className="flex h-full min-h-0 flex-col">
       <ActivityHeader
         adapter={notificationsAdapter}
-        stats={stats}
+        rows={filteredRows}
         filters={filters}
         onFilterChange={onFilterChange}
         search={search}

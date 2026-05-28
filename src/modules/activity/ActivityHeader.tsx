@@ -3,18 +3,23 @@
  * All rights reserved.
  *
  * Activity Center — shared header rendered above every tab.
- * Stacked-bar histogram of the last 24h + the adapter's filter facets.
+ *
+ * The line histogram is now derived from the tab's CURRENT rows
+ * (snapshot + live), grouped by hour, with one line per categorical
+ * bucket the adapter declares via `histogramOf` (severity / log
+ * level / docker stream / etc.). Each tab therefore shows ITS own
+ * shape — and the chart reacts to filters automatically because
+ * filteredRows feeds in.
  */
 
 import { useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Adapter } from './adapters/types';
-import { SEVERITY_COLORS } from './adapters/types';
-import type { ActivityStats } from '@/services/activity.service';
+import { bucketColor } from './adapters/types';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
-  stats: ActivityStats | null;
+  rows: Row[];
   filters: Record<string, string>;
   onFilterChange: (key: string, value: string) => void;
   search: string;
@@ -23,45 +28,60 @@ interface Props<Row> {
   onTogglePause?: () => void;
 }
 
-interface HourBucket {
+interface HourPoint {
   hour: string;       // human label "13h"
   fullHour: string;   // ISO truncated to hour
-  [severity: string]: string | number;
+  [bucket: string]: string | number;
 }
 
 /**
- * Group the flat histogram rows into one row per hour with one column
- * per severity, suitable for a recharts stacked Bar.
+ * Group rows by (hour, bucket) into a recharts-friendly series.
+ * Skips rows whose timestamp can't be parsed.
  */
-function buildHourBuckets(stats: ActivityStats | null): { rows: HourBucket[]; severities: string[] } {
-  if (!stats) return { rows: [], severities: [] };
-  const byHour = new Map<string, HourBucket>();
-  const severities = new Set<string>();
-  for (const row of stats.events.histogram) {
-    severities.add(row.severity);
-    const existing = byHour.get(row.bucket);
+function buildHistogram<Row>(
+  rows: Row[],
+  project: (row: Row) => { time: string; bucket: string } | null,
+): { points: HourPoint[]; buckets: string[] } {
+  const byHour = new Map<string, HourPoint>();
+  const buckets = new Set<string>();
+  for (const row of rows) {
+    const p = project(row);
+    if (!p) continue;
+    const t = new Date(p.time);
+    if (Number.isNaN(t.getTime())) continue;
+    // Truncate to the hour (local time) for the X axis.
+    const hourKey = new Date(t.getFullYear(), t.getMonth(), t.getDate(), t.getHours()).toISOString();
+    buckets.add(p.bucket);
+    const existing = byHour.get(hourKey);
     if (existing) {
-      existing[row.severity] = ((existing[row.severity] as number) ?? 0) + row.count;
+      existing[p.bucket] = ((existing[p.bucket] as number) ?? 0) + 1;
     } else {
-      const d = new Date(row.bucket);
-      byHour.set(row.bucket, {
-        hour: `${String(d.getHours()).padStart(2, '0')}h`,
-        fullHour: row.bucket,
-        [row.severity]: row.count,
-      } as HourBucket);
+      byHour.set(hourKey, {
+        hour: `${String(t.getHours()).padStart(2, '0')}h`,
+        fullHour: hourKey,
+        [p.bucket]: 1,
+      } as HourPoint);
     }
   }
-  return {
-    rows: Array.from(byHour.values()).sort((a, b) => a.fullHour.localeCompare(b.fullHour)),
-    severities: Array.from(severities),
-  };
+  // Ensure every point carries 0 for every bucket so recharts joins
+  // the line across gaps instead of dropping the segment.
+  const bucketList = Array.from(buckets);
+  const points = Array.from(byHour.values())
+    .sort((a, b) => a.fullHour.localeCompare(b.fullHour))
+    .map((p) => {
+      for (const b of bucketList) if (p[b] === undefined) p[b] = 0;
+      return p;
+    });
+  return { points, buckets: bucketList };
 }
 
-const SEVERITY_ORDER = ['debug', 'info', 'warn', 'error', 'critical'];
+// Severity / level natural order. Buckets outside this set (e.g. docker
+// streams stdout/stderr, rule keys) keep insertion order after these.
+const KNOWN_ORDER = ['trace', 'debug', 'info', 'warn', 'error', 'critical', 'fatal'];
 
 export function ActivityHeader<Row>({
   adapter,
-  stats,
+  rows,
   filters,
   onFilterChange,
   search,
@@ -69,22 +89,32 @@ export function ActivityHeader<Row>({
   paused,
   onTogglePause,
 }: Props<Row>) {
-  const { rows, severities } = useMemo(() => buildHourBuckets(stats), [stats]);
-  const orderedSeverities = SEVERITY_ORDER.filter((s) => severities.includes(s)).concat(
-    severities.filter((s) => !SEVERITY_ORDER.includes(s)),
+  const { points, buckets } = useMemo(() => {
+    if (!adapter.histogramOf) return { points: [], buckets: [] };
+    return buildHistogram(rows, adapter.histogramOf);
+  }, [rows, adapter]);
+
+  const orderedBuckets = useMemo(
+    () =>
+      KNOWN_ORDER.filter((b) => buckets.includes(b)).concat(
+        buckets.filter((b) => !KNOWN_ORDER.includes(b)),
+      ),
+    [buckets],
   );
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--bg)]">
-      {/* Histogram */}
-      <div className="h-32 px-3 pt-2">
-        {rows.length > 0 ? (
+      {/* Per-tab histogram, ~2× the original height so trends read at a
+          glance. Empty state when there's no data or the adapter
+          doesn't declare a histogram projection. */}
+      <div className="h-64 px-3 pt-2 pb-1">
+        {points.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rows}>
+            <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
               <XAxis dataKey="hour" tick={{ fontSize: 10 }} stroke="var(--text-muted)" />
-              <YAxis tick={{ fontSize: 10 }} stroke="var(--text-muted)" width={32} />
+              <YAxis tick={{ fontSize: 10 }} stroke="var(--text-muted)" width={32} allowDecimals={false} />
               <Tooltip
-                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}
                 contentStyle={{
                   background: 'var(--surface)',
                   border: '1px solid var(--border)',
@@ -96,14 +126,29 @@ export function ActivityHeader<Row>({
                 labelStyle={{ color: 'var(--text)', fontWeight: 500 }}
                 itemStyle={{ color: 'var(--text)' }}
               />
-              {orderedSeverities.map((sev) => (
-                <Bar key={sev} dataKey={sev} stackId="a" fill={SEVERITY_COLORS[sev] ?? '#64748b'} />
+              <Legend
+                verticalAlign="top"
+                height={20}
+                iconType="line"
+                wrapperStyle={{ fontSize: 10, color: 'var(--text-muted)' }}
+              />
+              {orderedBuckets.map((b) => (
+                <Line
+                  key={b}
+                  type="monotone"
+                  dataKey={b}
+                  stroke={bucketColor(b)}
+                  strokeWidth={1.5}
+                  dot={false}
+                  activeDot={{ r: 3 }}
+                  isAnimationActive={false}
+                />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         ) : (
           <div className="h-full flex items-center justify-center text-xs text-[var(--text-muted)]">
-            Sin actividad en las últimas 24h
+            Sin actividad en este tab
           </div>
         )}
       </div>

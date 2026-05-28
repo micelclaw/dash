@@ -116,4 +116,5 @@ export const gatewayLogsAdapter: Adapter<GatewayLogEntry> = {
     );
   },
   getRowKey: rowKey,
+  histogramOf: (row) => ({ time: row.timestamp, bucket: row.level.toLowerCase() }),
 };

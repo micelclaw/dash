@@ -62,7 +62,7 @@ export function GatewayLogsTab(props: Props) {
     <div className="flex h-full min-h-0 flex-col">
       <ActivityHeader
         adapter={gatewayLogsAdapter}
-        stats={props.stats}
+        rows={filteredRows}
         filters={props.filters}
         onFilterChange={props.onFilterChange}
         search={props.search}

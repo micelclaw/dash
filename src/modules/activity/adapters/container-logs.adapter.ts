@@ -152,5 +152,8 @@ export function buildContainerLogsAdapter(serviceList: string[]): Adapter<Contai
       );
     },
     getRowKey: rowKey,
+    histogramOf: (row) => row.timestamp
+      ? { time: row.timestamp, bucket: row.stream || 'unknown' }
+      : null,
   };
 }

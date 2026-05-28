@@ -136,4 +136,5 @@ export const coreLogsAdapter: Adapter<CoreLogEntry> = {
     );
   },
   getRowKey: rowKey,
+  histogramOf: (row) => ({ time: row.timestamp, bucket: row.level.toLowerCase() }),
 };

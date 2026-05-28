@@ -138,4 +138,5 @@ export const notificationsAdapter: Adapter<NotificationHistoryRow> = {
     );
   },
   getRowKey: (row) => row.id,
+  histogramOf: (row) => ({ time: row.created_at, bucket: row.severity }),
 };
