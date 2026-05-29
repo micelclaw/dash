@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { X, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { getProviderIcon } from '@/config/provider-icons';
 import type { CatalogModel } from '../types';
 
 export type ProviderType = 'custom' | 'ollama' | 'sglang' | 'vllm' | 'lm-studio';
@@ -220,7 +221,14 @@ function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardPro
   };
 
   return (
-    <ModalShell title={`Configure ${info.label}`} onClose={onClose}>
+    <ModalShell
+      title={`Configure ${info.label}`}
+      titleIcon={(() => {
+        const Icon = getProviderIcon(model.provider);
+        return Icon ? <Icon size={20} style={{ color: 'var(--amber)' }} /> : null;
+      })()}
+      onClose={onClose}
+    >
       <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
         {info.description}
       </p>
@@ -544,7 +552,14 @@ function FixedProviderForm({ defaults, onClose, onSuccess }: {
   };
 
   return (
-    <ModalShell title={`Set up ${defaults.label}`} onClose={onClose}>
+    <ModalShell
+      title={`Set up ${defaults.label}`}
+      titleIcon={(() => {
+        const Icon = getProviderIcon(defaults.providerId);
+        return Icon ? <Icon size={20} style={{ color: 'var(--amber)' }} /> : null;
+      })()}
+      onClose={onClose}
+    >
       <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
         Configure the connection to your {defaults.label} instance.
       </p>
@@ -686,7 +701,7 @@ function ButtonRow({
   );
 }
 
-function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ModalShell({ title, titleIcon, onClose, children }: { title: string; titleIcon?: React.ReactNode; onClose: () => void; children: React.ReactNode }) {
   return (
     <div
       onClick={onClose}
@@ -726,7 +741,13 @@ function ModalShell({ title, onClose, children }: { title: string; onClose: () =
             fontWeight: 600,
             color: 'var(--text)',
             fontFamily: 'var(--font-display)',
-          }}>{title}</h2>
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            {titleIcon}
+            <span>{title}</span>
+          </h2>
           <button
             onClick={onClose}
             style={{

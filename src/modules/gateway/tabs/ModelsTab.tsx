@@ -20,27 +20,62 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
 import { StatusPill } from '../components/StatusPill';
 import { ModelSetupWizard } from '../components/ModelSetupWizard';
+import { getProviderIcon } from '@/config/provider-icons';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
 import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayModel, CatalogModel } from '../types';
 
 const PROVIDER_COLORS: Record<string, string> = {
+  // Mainstream
   anthropic: '#d4a017',
   openai: '#10b981',
+  'openai-codex': '#10b981',
   openrouter: '#6366f1',
   gemini: '#4285F4',
+  google: '#4285F4',
+  'google-vertex': '#4285F4',
+  vertexai: '#4285F4',
   mistral: '#f97316',
   ollama: '#0ea5e9',
   deepseek: '#5b6ee1',
   'amazon-bedrock': '#ff9900',
-  google: '#4285F4',
+  bedrock: '#ff9900',
   groq: '#f55036',
   together: '#6366f1',
   fireworks: '#ff6b35',
   cerebras: '#00d4aa',
   xai: '#999999',
   cohere: '#39594d',
+  // New (2026.5.7 + brand-recognised)
+  nvidia: '#76B900',
+  deepinfra: '#2563eb',
+  arcee: '#7c3aed',
+  'github-copilot': '#22272e',
+  copilot: '#22272e',
+  huggingface: '#FF9D00',
+  byteplus: '#1d4ed8',
+  'byteplus-plan': '#1d4ed8',
+  cloudflare: '#f6821f',
+  'cloudflare-ai-gateway': '#f6821f',
+  'cloudflare-workers-ai': '#f6821f',
+  microsoft: '#0078d4',
+  azure: '#0078d4',
+  'azure-openai-responses': '#0078d4',
+  minimax: '#0066ff',
+  'minimax-cn': '#0066ff',
+  moonshot: '#16a085',
+  moonshotai: '#16a085',
+  'moonshotai-cn': '#16a085',
+  'kimi-coding': '#16a085',
+  voyage: '#7c3aed',
+  'lm-studio': '#374151',
+  lmstudio: '#374151',
+  vllm: '#0ea5e9',
+  opencode: '#111827',
+  'opencode-go': '#111827',
+  xiaomi: '#ff6900',
+  'xiaomi-mimo': '#ff6900',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -640,13 +675,16 @@ export function ModelsTab() {
               {selectedProvider && (() => {
                 const entry = providerEntries.find(e => e.provider === selectedProvider);
                 const color = PROVIDER_COLORS[selectedProvider] ?? 'var(--text-dim)';
+                const ProviderIcon = getProviderIcon(selectedProvider);
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{
                       width: 24, height: 24, borderRadius: 'var(--radius-sm)',
                       background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      <Cpu size={12} style={{ color }} />
+                      {ProviderIcon
+                        ? <ProviderIcon size={14} style={{ color }} />
+                        : <Cpu size={12} style={{ color }} />}
                     </div>
                     <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>
                       {PROVIDER_LABELS[selectedProvider] ?? selectedProvider}
@@ -869,6 +907,7 @@ function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
   deleting?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const ProviderIcon = getProviderIcon(entry.provider);
   return (
     <button
       onClick={onClick}
@@ -894,7 +933,9 @@ function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <Cpu size={14} style={{ color: entry.color }} />
+          {ProviderIcon
+            ? <ProviderIcon size={18} style={{ color: entry.color }} />
+            : <Cpu size={14} style={{ color: entry.color }} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
@@ -1074,6 +1115,7 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
   onRemove: (key: string) => void;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
+  const ProviderIcon = getProviderIcon(model.provider);
 
   return (
     <div
@@ -1099,7 +1141,9 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <Cpu size={16} style={{ color: providerColor }} />
+        {ProviderIcon
+          ? <ProviderIcon size={20} style={{ color: providerColor }} />
+          : <Cpu size={16} style={{ color: providerColor }} />}
       </div>
 
       {/* Info */}
@@ -1201,6 +1245,7 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
   onEdit?: (model: CatalogModel) => void;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
+  const ProviderIcon = getProviderIcon(model.provider);
   const isMutating = mutatingModel === model.key;
 
   return (
@@ -1227,7 +1272,9 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
       }}>
-        <Cpu size={16} style={{ color: providerColor }} />
+        {ProviderIcon
+          ? <ProviderIcon size={20} style={{ color: providerColor }} />
+          : <Cpu size={16} style={{ color: providerColor }} />}
       </div>
 
       {/* Info */}

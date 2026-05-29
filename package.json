@@ -35,6 +35,7 @@
     "@excalidraw/excalidraw": "^0.18.0",
     "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
+    "@lobehub/icons": "^5.10.0",
     "@micelclaw/mail-admin-ui": "link:../micel-mail/admin-ui",
     "@radix-ui/react-avatar": "^1.1.0",
     "@radix-ui/react-dialog": "^1.1.0",
