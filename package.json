@@ -9,13 +9,14 @@
     "build": "tsc -b && NODE_OPTIONS='--max-old-space-size=4096' vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui",
-    "e2e:headed": "playwright test --headed",
-    "e2e:flows": "playwright test e2e/flows.spec.ts && npx tsx e2e/generate-report.ts",
-    "e2e:flows:headed": "playwright test e2e/flows.spec.ts --headed && npx tsx e2e/generate-report.ts",
-    "contracts": "playwright test --config playwright.contracts.config.ts",
-    "contracts:headed": "playwright test --config playwright.contracts.config.ts --headed"
+    "e2e": "cd tests && playwright test",
+    "e2e:ui": "cd tests && playwright test --ui",
+    "e2e:headed": "cd tests && playwright test --headed",
+    "e2e:flows": "cd tests && playwright test e2e/flows.spec.ts && npx tsx e2e/generate-report.ts",
+    "e2e:flows:headed": "cd tests && playwright test e2e/flows.spec.ts --headed && npx tsx e2e/generate-report.ts",
+    "e2e:auth:save": "cd tests && tsx mcp/auth/save-paco-storage.ts",
+    "contracts": "cd tests && playwright test --config playwright.contracts.config.ts",
+    "contracts:headed": "cd tests && playwright test --config playwright.contracts.config.ts --headed"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",
@@ -86,6 +87,7 @@
     "remark-gfm": "^4.0.0",
     "sonner": "^1.7.0",
     "tailwind-merge": "^2.6.0",
+    "workbox-precaching": "^7.4.1",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

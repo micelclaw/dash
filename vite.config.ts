@@ -66,7 +66,14 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      devOptions: { enabled: true },
+      // G5: switched from `generateSW` to `injectManifest` so we can ship
+      // a custom Service Worker with `push` + `notificationclick` handlers
+      // (workbox auto-precaching kept via `precacheAndRoute` inside sw.ts).
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectRegister: 'auto',
+      devOptions: { enabled: true, type: 'module' },
       manifest: {
         name: 'Micelclaw',
         short_name: 'Micelclaw',
@@ -81,7 +88,9 @@ export default defineConfig({
           { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
+      // With injectManifest, `workbox.globPatterns` becomes
+      // `injectManifest.globPatterns`. Same file set.
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
