@@ -720,7 +720,7 @@ export function ModelsTab() {
                       background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {ProviderIcon
-                        ? <ProviderIcon size={14} style={{ color }} />
+                        ? <ProviderIcon size={18} style={{ color }} />
                         : <Cpu size={12} style={{ color }} />}
                     </div>
                     <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>
@@ -971,7 +971,7 @@ function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
           flexShrink: 0,
         }}>
           {ProviderIcon
-            ? <ProviderIcon size={18} style={{ color: entry.color }} />
+            ? <ProviderIcon size={24} style={{ color: entry.color }} />
             : <Cpu size={14} style={{ color: entry.color }} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1179,7 +1179,7 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
         flexShrink: 0,
       }}>
         {ProviderIcon
-          ? <ProviderIcon size={20} style={{ color: providerColor }} />
+          ? <ProviderIcon size={26} style={{ color: providerColor }} />
           : <Cpu size={16} style={{ color: providerColor }} />}
       </div>
 
@@ -1310,7 +1310,7 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
         flexShrink: 0,
       }}>
         {ProviderIcon
-          ? <ProviderIcon size={20} style={{ color: providerColor }} />
+          ? <ProviderIcon size={26} style={{ color: providerColor }} />
           : <Cpu size={16} style={{ color: providerColor }} />}
       </div>
 

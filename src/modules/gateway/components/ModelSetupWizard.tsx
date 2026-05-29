@@ -225,7 +225,7 @@ function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardPro
       title={`Configure ${info.label}`}
       titleIcon={(() => {
         const Icon = getProviderIcon(model.provider);
-        return Icon ? <Icon size={20} style={{ color: 'var(--amber)' }} /> : null;
+        return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
       })()}
       onClose={onClose}
     >
@@ -556,7 +556,7 @@ function FixedProviderForm({ defaults, onClose, onSuccess }: {
       title={`Set up ${defaults.label}`}
       titleIcon={(() => {
         const Icon = getProviderIcon(defaults.providerId);
-        return Icon ? <Icon size={20} style={{ color: 'var(--amber)' }} /> : null;
+        return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
       })()}
       onClose={onClose}
     >
