@@ -11,14 +11,53 @@ import { SettingsBlock } from '../shared/SettingsBlock';
 import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 
+// Lista canónica del speech-provider registry de OpenClaw 2026.5.7.
+// Para añadir nuevos en futuras versiones: grep
+//   `createXxxEmbeddingProvider` en /usr/lib/node_modules/openclaw/dist/*.js
+// y mirar `extensions/<id>/embedding-provider.ts`.
+//
+// Orden: local primero → cloud free-tier → cloud API-key mainstream → enterprise.
+//
+// NO incluidos:
+// - "Ollama Web Search" — es un provider del tool `web_search` (no de
+//   embeddings; ver `extensions/ollama/src/web-search-provider.ts`). Cuando
+//   tengamos UI para web search providers, va ahí.
+// - Bedrock model sub-selector (titan-v1/v2 · cohere · nova · twelvelabs)
+//   se elige via `provider.model` field del config (no en este selector).
 const PROVIDERS = [
-  { value: 'ollama', label: 'Ollama (local, free)' },
-  { value: 'openai', label: 'OpenAI (cloud, requires API key)' },
-  { value: 'gemini', label: 'Google Gemini (cloud, requires API key)' },
-  { value: 'voyage', label: 'Voyage AI (cloud)' },
-  { value: 'mistral', label: 'Mistral (cloud)' },
-  { value: 'local', label: 'Local GGUF model (no network)' },
+  // Local — no network, no API key
+  { value: 'ollama',          label: 'Ollama (local, free)' },
+  { value: 'lmstudio',        label: 'LM Studio (local, free)' },
+  { value: 'local',           label: 'Local GGUF model (no network)' },
+  // Cloud free-tier / generous
+  { value: 'gemini',          label: 'Google Gemini (cloud, API key)' },
+  // Cloud API-key mainstream
+  { value: 'openai',          label: 'OpenAI (cloud, API key)' },
+  { value: 'voyage',          label: 'Voyage AI (cloud, API key; asymmetric inputType)' },
+  { value: 'mistral',         label: 'Mistral (cloud, API key)' },
+  { value: 'deepinfra',       label: 'DeepInfra (cloud, API key; open-model proxy)' },
+  { value: 'github-copilot',  label: 'GitHub Copilot (cloud, OAuth)' },
+  // Enterprise
+  { value: 'bedrock',         label: 'Amazon Bedrock (enterprise; Titan/Cohere/Nova/TwelveLabs)' },
 ];
+
+/**
+ * Inline hint shown under the selector for the active provider — typical
+ * model ids, where to put the API key, regional quirks. Keep each entry
+ * to one short line so the layout stays compact.
+ */
+const PROVIDER_DESCRIPTIONS: Record<string, string> = {
+  ollama:           'Local, free. Default model: nomic-embed-text. Recommended baseline if you run Ollama locally.',
+  lmstudio:         'Local, free. Loads embedding models via the LM Studio app (port 1234 by default).',
+  local:            'Embed inline via a GGUF model file — no network, no separate process. Slower than Ollama for big indexes.',
+  gemini:           'Google AI Studio API key required. Models: text-embedding-004, gemini-embedding-exp.',
+  openai:           'API key required (Settings → AI → API Keys). Models: text-embedding-3-small / text-embedding-3-large.',
+  voyage:           'API key required. Models: voyage-3, voyage-3-large, voyage-code-3. Supports asymmetric inputType (set below).',
+  mistral:          'API key required. Single model: mistral-embed.',
+  deepinfra:        'API key required. Proxy to many open-source models (BGE, E5, Jina, etc.) at OpenAI-compatible endpoints.',
+  'github-copilot': 'GitHub Copilot OAuth — same auth flow as Copilot chat. Cheap if you already pay for Copilot.',
+  bedrock:          'AWS credentials + region required. Model family selected by the configured model id (titan-v1/v2 · cohere · nova · twelvelabs). Cohere variants also support asymmetric inputType (set below).',
+};
 
 const BACKENDS = [
   { value: 'builtin', label: 'Built-in SQLite (default, in-process)' },
@@ -45,7 +84,7 @@ export function MemorySearchSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [sections, setSections] = useState<Record<string, boolean>>({ search: true, sync: false, backend: false });
+  const [sections, setSections] = useState<Record<string, boolean>>({ search: true, sync: false, backend: false, advanced: false });
 
   const [provider, setProvider] = useState('ollama');
   const [enabled, setEnabled] = useState(true);
@@ -67,6 +106,12 @@ export function MemorySearchSection() {
   const [backend, setBackend] = useState('builtin');
   const [citations, setCitations] = useState('auto');
   const [cacheEnabled, setCacheEnabled] = useState(true);
+  // Asymmetric inputType — only meaningful for voyage and bedrock (cohere
+  // family). Empty string = use the provider's default. Other providers
+  // ignore the fields if set; we still persist them so a future provider
+  // switch back to voyage/bedrock restores the user's intent.
+  const [queryInputType, setQueryInputType] = useState('');
+  const [documentInputType, setDocumentInputType] = useState('');
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -101,6 +146,9 @@ export function MemorySearchSection() {
       setCacheEnabled((ca.enabled ?? true) as boolean);
       setBackend((mem.backend ?? 'builtin') as string);
       setCitations((mem.citations ?? 'auto') as string);
+      // Asymmetric inputType (snake_case from API per case-transform plugin).
+      setQueryInputType((ms.query_input_type ?? '') as string);
+      setDocumentInputType((ms.document_input_type ?? '') as string);
       setDirty(false);
     } catch (err) { toast.error(describeError(err, 'Failed to load memory config')); }
     finally { setLoading(false); }
@@ -126,6 +174,11 @@ export function MemorySearchSection() {
             },
           },
           cache: { enabled: cacheEnabled },
+          // Asymmetric inputType — only sent when non-empty so we don't
+          // pollute the config with empty strings (the runtime uses the
+          // provider's default when these are missing).
+          ...(queryInputType ? { queryInputType } : {}),
+          ...(documentInputType ? { documentInputType } : {}),
         },
         memory: { backend, citations },
       });
@@ -153,6 +206,20 @@ export function MemorySearchSection() {
     }} />
   );
 
+  const Txt = ({ value, placeholder, onChange }: { value: string; placeholder?: string; onChange: (v: string) => void }) => (
+    <input
+      type="text"
+      value={value}
+      placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+      style={{
+        padding: '4px 8px', fontSize: '0.75rem', width: 180, background: 'var(--surface)',
+        border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+        fontFamily: 'var(--font-mono, monospace)',
+      }}
+    />
+  );
+
   return (
     <SectionShell
       title="Memory Search"
@@ -164,6 +231,35 @@ export function MemorySearchSection() {
     >
       <Row label="Memory search enabled" desc="Allow agents to search their memory files"><Toggle value={enabled} onChange={d(setEnabled)} /></Row>
       <Row label="Embedding provider" desc="Service that generates vector embeddings for semantic search"><Sel value={provider} options={PROVIDERS} onChange={d(setProvider)} /></Row>
+      {PROVIDER_DESCRIPTIONS[provider] && (
+        <div style={{ padding: '0 0 8px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+          {PROVIDER_DESCRIPTIONS[provider]}
+        </div>
+      )}
+
+      {(provider === 'voyage' || provider === 'bedrock') && (
+        <SettingsBlock
+          title="Asymmetric inputType (advanced)"
+          expanded={sections.advanced!}
+          onToggle={() => setSections(p => ({ ...p, advanced: !p.advanced }))}
+        >
+          <div style={{ padding: '4px 0 8px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+            Some embedding providers expose different optimisations for embedding QUERIES vs DOCUMENTS. When set, the runtime uses these instead of the provider's generic <code>inputType</code>. Leave blank for the provider default.
+          </div>
+          <Row
+            label="Query inputType"
+            desc="Voyage: query · Cohere/Bedrock: search_query"
+          >
+            <Txt value={queryInputType} placeholder="e.g. query" onChange={d(setQueryInputType)} />
+          </Row>
+          <Row
+            label="Document inputType"
+            desc="Voyage: document · Cohere/Bedrock: search_document"
+          >
+            <Txt value={documentInputType} placeholder="e.g. document" onChange={d(setDocumentInputType)} />
+          </Row>
+        </SettingsBlock>
+      )}
 
       <SettingsBlock title="Search Quality" expanded={sections.search!} onToggle={() => setSections(p => ({ ...p, search: !p.search }))}>
         <Row label="Max results" desc="How many memory snippets the agent gets back per search. More = richer context but slower."><Num value={maxResults} min={1} max={30} onChange={d(setMaxResults)} /></Row>
