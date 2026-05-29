@@ -892,6 +892,7 @@ export function ModelsTab() {
       {wizardModel && (
         <ModelSetupWizard
           model={wizardModel}
+          providerModels={catalog.filter(m => m.provider === wizardModel.provider)}
           onClose={() => setWizardModel(null)}
           onSuccess={handleWizardSuccess}
         />
@@ -900,6 +901,7 @@ export function ModelsTab() {
         <ModelSetupWizard
           model={null}
           providerType={customWizardType}
+          providerModels={catalog.filter(m => m.provider === customWizardType)}
           onClose={() => setCustomWizardType(null)}
           onSuccess={handleWizardSuccess}
         />

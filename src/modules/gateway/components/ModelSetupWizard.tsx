@@ -15,6 +15,10 @@ export type ProviderType = 'custom' | 'ollama' | 'sglang' | 'vllm' | 'lm-studio'
 interface ModelSetupWizardProps {
   model: CatalogModel | null;
   providerType?: ProviderType;
+  /** Modelos del catálogo que pertenecen al provider del wizard. Se
+   *  muestran en la zona inferior del modal a doble columna para que
+   *  el usuario vea qué obtiene al configurar las credenciales. */
+  providerModels?: CatalogModel[];
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -160,12 +164,12 @@ const FIXED_PROVIDER_DEFAULTS: Record<string, FixedProviderDefaults> = {
   },
 };
 
-export function ModelSetupWizard({ model, providerType, onClose, onSuccess }: ModelSetupWizardProps) {
+export function ModelSetupWizard({ model, providerType, providerModels, onClose, onSuccess }: ModelSetupWizardProps) {
   // Standalone mode with specific provider type (user clicked a type card)
   if (!model && providerType) {
     const defaults = FIXED_PROVIDER_DEFAULTS[providerType];
     if (defaults) {
-      return <FixedProviderForm defaults={defaults} onClose={onClose} onSuccess={onSuccess} />;
+      return <FixedProviderForm defaults={defaults} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
     }
     // 'custom' type falls through to CustomProviderForm
     return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
@@ -177,12 +181,12 @@ export function ModelSetupWizard({ model, providerType, onClose, onSuccess }: Mo
   if (model.provider.startsWith(CUSTOM_PROVIDER_PREFIX)) {
     return <CustomProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
   }
-  return <StandardProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
+  return <StandardProviderForm model={model} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
 }
 
 // ─── Standard provider form (Anthropic, OpenAI, etc.) ──────────────
 
-function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps & { model: CatalogModel }) {
+function StandardProviderForm({ model, providerModels, onClose, onSuccess }: ModelSetupWizardProps & { model: CatalogModel }) {
   const info = PROVIDER_INFO[model.provider] ?? {
     label: model.provider,
     description: `Configure an API key for ${model.provider}.`,
@@ -329,6 +333,8 @@ function StandardProviderForm({ model, onClose, onSuccess }: ModelSetupWizardPro
         confirmDisabled={!canSave || saving}
         loading={saving}
       />
+
+      <ProviderModelsList models={providerModels} providerLabel={info.label} />
     </ModalShell>
   );
 }
@@ -470,7 +476,8 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
 
 // ─── Fixed provider form (Ollama, vLLM, SGLang, LM Studio) ────────
 
-function FixedProviderForm({ defaults, onClose, onSuccess }: {
+function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
+  providerModels?: CatalogModel[];
   defaults: FixedProviderDefaults;
   onClose: () => void;
   onSuccess: () => void;
@@ -614,6 +621,8 @@ function FixedProviderForm({ defaults, onClose, onSuccess }: {
         confirmDisabled={!canSave || saving}
         loading={saving}
       />
+
+      <ProviderModelsList models={providerModels} providerLabel={defaults.label} />
     </ModalShell>
   );
 }
@@ -763,6 +772,70 @@ function ModalShell({ title, titleIcon, onClose, children }: { title: string; ti
           </button>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Provider models list (doble columna, footer) ───────────────────
+
+function ProviderModelsList({ models, providerLabel }: { models?: CatalogModel[]; providerLabel: string }) {
+  if (!models || models.length === 0) return null;
+
+  // Sort: default first, then configured, then alphabetical
+  const sorted = [...models].sort((a, b) => {
+    if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+    if (a.configured !== b.configured) return a.configured ? -1 : 1;
+    return (a.name || a.key).localeCompare(b.name || b.key);
+  });
+
+  return (
+    <div style={{
+      marginTop: 20,
+      paddingTop: 16,
+      borderTop: '1px solid var(--border)',
+    }}>
+      <div style={{
+        fontSize: '0.6875rem',
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        color: 'var(--text-dim)',
+        marginBottom: 10,
+        fontFamily: 'var(--font-display)',
+        fontWeight: 600,
+      }}>
+        {sorted.length} model{sorted.length !== 1 ? 's' : ''} from {providerLabel}
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '4px 12px',
+        maxHeight: 200,
+        overflowY: 'auto',
+        fontFamily: 'var(--font-mono)',
+      }}>
+        {sorted.map((m) => (
+          <div
+            key={m.key}
+            title={m.context_window ? `${m.context_window.toLocaleString()} ctx` : undefined}
+            style={{
+              fontSize: '0.6875rem',
+              color: m.is_default ? 'var(--amber)' : 'var(--text-dim)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            {m.is_default && <span style={{ color: 'var(--amber)' }}>★</span>}
+            {m.configured && !m.is_default && <span style={{ color: '#10b981', fontSize: '0.625rem' }}>●</span>}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {m.name || m.key}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
