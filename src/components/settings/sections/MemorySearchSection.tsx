@@ -5,11 +5,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
+import { Loader2, ChevronRight } from 'lucide-react';
 import * as gwService from '@/services/gateway.service';
+import type { SecretProvider } from '@/services/gateway.service';
 import { describeError } from '@/lib/api-errors';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { SecretInputField, type SecretInputValue } from '@/components/shared/SecretInputField';
 
 // Lista canónica del speech-provider registry de OpenClaw 2026.5.7.
 // Para añadir nuevos en futuras versiones: grep
@@ -113,6 +116,22 @@ export function MemorySearchSection() {
   const [queryInputType, setQueryInputType] = useState('');
   const [documentInputType, setDocumentInputType] = useState('');
 
+  // G7: LanceDB cloud storage state ------------------------------------------
+  const [storagePreset, setStoragePreset] = useState<'aws-s3' | 'r2' | 'b2' | 'minio' | 'custom'>('aws-s3');
+  const [r2AccountId, setR2AccountId] = useState('');
+  const [s3Bucket, setS3Bucket] = useState('');
+  const [s3Prefix, setS3Prefix] = useState('');
+  const [s3Endpoint, setS3Endpoint] = useState('');
+  const [s3Region, setS3Region] = useState('us-east-1');
+  const [accessKey, setAccessKey] = useState<SecretInputValue>({ mode: 'plain', value: '' });
+  const [secretKey, setSecretKey] = useState<SecretInputValue>({ mode: 'plain', value: '' });
+  const [helpExpanded, setHelpExpanded] = useState(false);
+  const [secretProviders, setSecretProviders] = useState<Record<string, SecretProvider>>({});
+  const [testing, setTesting] = useState(false);
+  const [initing, setIniting] = useState(false);
+  const [testStatus, setTestStatus] = useState<'idle' | 'ok' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
+
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
@@ -149,6 +168,49 @@ export function MemorySearchSection() {
       // Asymmetric inputType (snake_case from API per case-transform plugin).
       setQueryInputType((ms.query_input_type ?? '') as string);
       setDocumentInputType((ms.document_input_type ?? '') as string);
+
+      // G7: hydrate LanceDB cloud storage state from memory-lancedb plugin config
+      const lance = (data.memory_lancedb ?? {}) as Record<string, unknown>;
+      const dbPath = (lance.db_path ?? '') as string;
+      const storage = (lance.storage_options ?? {}) as Record<string, string>;
+      // Parse s3://bucket/prefix → bucket + prefix
+      const uriMatch = dbPath.match(/^(s3|r2|gs|az):\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])(\/(.*))?$/);
+      if (uriMatch) {
+        setS3Bucket(uriMatch[2]);
+        setS3Prefix(uriMatch[4] ?? '');
+      }
+      setS3Endpoint((storage.endpoint ?? '') as string);
+      setS3Region((storage.region ?? 'us-east-1') as string);
+      // Detect preset by endpoint pattern
+      const ep = (storage.endpoint ?? '') as string;
+      if (ep.includes('r2.cloudflarestorage.com')) {
+        setStoragePreset('r2');
+        const m = ep.match(/https?:\/\/([a-z0-9]+)\.r2\.cloudflarestorage\.com/);
+        if (m) setR2AccountId(m[1]);
+      } else if (ep.includes('backblazeb2.com')) setStoragePreset('b2');
+      else if (ep && !ep.includes('amazonaws.com')) setStoragePreset('minio');
+      else if (uriMatch) setStoragePreset('aws-s3');
+      // Hydrate credentials: detect ${REF} pattern → reference mode
+      const ak = (storage.access_key_id ?? '') as string;
+      const sk = (storage.secret_access_key ?? '') as string;
+      const refRe = /^\$\{([A-Za-z0-9_-]+)\}$/;
+      const akRef = ak.match(refRe);
+      const skRef = sk.match(refRe);
+      setAccessKey(akRef
+        ? { mode: 'ref', source: 'env', provider: akRef[1], id: akRef[1] }
+        : { mode: 'plain', value: ak });
+      setSecretKey(skRef
+        ? { mode: 'ref', source: 'env', provider: skRef[1], id: skRef[1] }
+        : { mode: 'plain', value: sk });
+
+      // Load secret providers for the SecretInputField dropdown (best-effort)
+      try {
+        const secretsCfg = await gwService.getSecretsConfig();
+        setSecretProviders(secretsCfg.providers ?? {});
+      } catch {
+        // Silent: SecretInputField shows the "no providers configured" hint
+      }
+
       setDirty(false);
     } catch (err) { toast.error(describeError(err, 'Failed to load memory config')); }
     finally { setLoading(false); }
@@ -156,6 +218,89 @@ export function MemorySearchSection() {
 
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
   const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
+
+  // G7 helpers ----------------------------------------------------------------
+  const PRESET_DEFAULTS: Record<string, { endpoint: string; region: string }> = {
+    'aws-s3': { endpoint: '', region: 'us-east-1' },
+    r2: { endpoint: r2AccountId ? `https://${r2AccountId}.r2.cloudflarestorage.com` : '', region: 'auto' },
+    b2: { endpoint: 'https://s3.us-west-002.backblazeb2.com', region: 'us-west-002' },
+    minio: { endpoint: 'http://localhost:9000', region: 'us-east-1' },
+    custom: { endpoint: '', region: 'us-east-1' },
+  };
+  const applyPreset = (next: typeof storagePreset) => {
+    setStoragePreset(next);
+    const defaults = PRESET_DEFAULTS[next];
+    setS3Endpoint(defaults.endpoint);
+    setS3Region(defaults.region);
+    setDirty(true);
+    setTestStatus('idle');
+  };
+  const serializeSecret = (v: SecretInputValue): string => {
+    if (v.mode === 'plain') return v.value;
+    return v.provider ? `\${${v.provider}}` : '';
+  };
+  const buildDbPath = (): string => {
+    if (!s3Bucket) return '';
+    const scheme = storagePreset === 'r2' ? 's3' : 's3'; // r2 uses s3 scheme too (LanceDB convention)
+    const prefix = s3Prefix ? `/${s3Prefix.replace(/^\/+|\/+$/g, '')}` : '';
+    return `${scheme}://${s3Bucket}${prefix}`;
+  };
+  const buildStorageOptions = (): Record<string, string> => {
+    const opts: Record<string, string> = {};
+    if (s3Endpoint) opts.endpoint = s3Endpoint;
+    if (s3Region) opts.region = s3Region;
+    const ak = serializeSecret(accessKey);
+    const sk = serializeSecret(secretKey);
+    if (ak) opts.access_key_id = ak;
+    if (sk) opts.secret_access_key = sk;
+    return opts;
+  };
+  const isCloudConfigured = !!s3Bucket && !!serializeSecret(accessKey) && !!serializeSecret(secretKey);
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestStatus('idle');
+    setTestMessage('');
+    try {
+      const result = await gwService.testLanceDbConnection({
+        dbPath: buildDbPath(),
+        storageOptions: buildStorageOptions(),
+      });
+      if (result.ok) {
+        setTestStatus('ok');
+        setTestMessage(`Bucket reachable (${result.region}, ${result.object_count ?? 0} obj in prefix)`);
+      } else {
+        setTestStatus('error');
+        setTestMessage(result.error || 'Connection failed');
+      }
+    } catch (err) {
+      setTestStatus('error');
+      setTestMessage(describeError(err, 'Test failed'));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleInitBucket = async () => {
+    setIniting(true);
+    try {
+      const result = await gwService.initLanceDbBucket({
+        dbPath: buildDbPath(),
+        storageOptions: buildStorageOptions(),
+      });
+      if (result.ok && result.created) {
+        toast.success('Bucket initialized — marker written successfully');
+      } else if (result.ok && result.warning) {
+        toast.warning(result.warning, { duration: 8000 });
+      } else {
+        toast.error(result.error || 'Init failed');
+      }
+    } catch (err) {
+      toast.error(describeError(err, 'Init failed'));
+    } finally {
+      setIniting(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -181,6 +326,11 @@ export function MemorySearchSection() {
           ...(documentInputType ? { documentInputType } : {}),
         },
         memory: { backend, citations },
+        // G7: only emit memoryLancedb when the user has configured a bucket.
+        // Empty object would clobber existing config; null would delete it.
+        ...(s3Bucket
+          ? { memoryLancedb: { dbPath: buildDbPath(), storageOptions: buildStorageOptions() } }
+          : {}),
       });
       toast.success('Memory saved');
       setDirty(false);
@@ -293,6 +443,201 @@ export function MemorySearchSection() {
           ]} onChange={d(setCitations)} />
         </Row>
       </SettingsBlock>
+
+      <SettingsBlock
+        title="Cloud storage (S3-compatible)"
+        expanded={sections.cloud ?? false}
+        onToggle={() => setSections(p => ({ ...p, cloud: !p.cloud }))}
+      >
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
+          Point the LanceDB plugin (<code style={{ fontFamily: 'var(--font-mono)' }}>@openclaw/memory-lancedb</code>) at an S3-compatible bucket instead of local disk. Useful for shared embeddings across nodes or off-host backups.
+        </p>
+
+        <Row label="Provider preset" desc="Pre-fills endpoint & region for common S3-compatible services">
+          <Sel
+            value={storagePreset}
+            options={[
+              { value: 'aws-s3', label: 'AWS S3' },
+              { value: 'r2', label: 'Cloudflare R2' },
+              { value: 'b2', label: 'Backblaze B2' },
+              { value: 'minio', label: 'MinIO (self-hosted)' },
+              { value: 'custom', label: 'Custom endpoint' },
+            ]}
+            onChange={(v) => applyPreset(v as typeof storagePreset)}
+          />
+        </Row>
+
+        {storagePreset === 'r2' && (
+          <Row label="R2 account ID" desc="Cloudflare account hash (32 hex chars)">
+            <input
+              type="text"
+              value={r2AccountId}
+              onChange={(e) => {
+                setR2AccountId(e.target.value);
+                setS3Endpoint(e.target.value ? `https://${e.target.value}.r2.cloudflarestorage.com` : '');
+                setDirty(true);
+              }}
+              placeholder="a1b2c3d4e5f6..."
+              style={inputStyle}
+            />
+          </Row>
+        )}
+
+        <Row label="Bucket name" desc="Name of the S3 bucket — must already exist">
+          <input
+            type="text"
+            value={s3Bucket}
+            onChange={(e) => d(setS3Bucket)(e.target.value)}
+            placeholder="my-memory-backup"
+            style={inputStyle}
+          />
+        </Row>
+        <Row label="Path prefix" desc="Optional sub-directory inside the bucket">
+          <input
+            type="text"
+            value={s3Prefix}
+            onChange={(e) => d(setS3Prefix)(e.target.value)}
+            placeholder="prod/lance"
+            style={inputStyle}
+          />
+        </Row>
+        <Row label="Endpoint URL" desc="Leave empty for AWS S3 (region-derived)">
+          <input
+            type="text"
+            value={s3Endpoint}
+            onChange={(e) => d(setS3Endpoint)(e.target.value)}
+            placeholder="https://s3.eu-west-1.amazonaws.com"
+            style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
+          />
+        </Row>
+        <Row label="Region" desc="Bucket region — e.g. us-east-1, eu-west-1, auto (R2)">
+          <input
+            type="text"
+            value={s3Region}
+            onChange={(e) => d(setS3Region)(e.target.value)}
+            placeholder="us-east-1"
+            style={inputStyle}
+          />
+        </Row>
+
+        <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+          <h4 style={{ fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-dim)', margin: '0 0 10px 0', fontWeight: 600 }}>
+            Credentials
+          </h4>
+          <div style={{ marginBottom: 12 }}>
+            <SecretInputField
+              label="Access key ID"
+              value={accessKey}
+              onChange={(v) => { setAccessKey(v); setDirty(true); }}
+              providers={secretProviders}
+              placeholder="AKIAIOSFODNN7EXAMPLE"
+            />
+          </div>
+          <SecretInputField
+            label="Secret access key"
+            value={secretKey}
+            onChange={(v) => { setSecretKey(v); setDirty(true); }}
+            providers={secretProviders}
+            placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            disabled={!isCloudConfigured || testing}
+            onClick={handleTestConnection}
+            style={buttonStyle(testing)}
+          >
+            {testing && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+            Test connection
+          </button>
+          <button
+            type="button"
+            disabled={!isCloudConfigured || initing}
+            onClick={handleInitBucket}
+            style={buttonStyle(initing)}
+          >
+            {initing && <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />}
+            Initialize bucket
+          </button>
+          {testStatus !== 'idle' && (
+            <span style={{
+              fontSize: '0.75rem',
+              color: testStatus === 'ok' ? '#10b981' : 'var(--red)',
+            }}>
+              {testStatus === 'ok' ? '✓ ' : '✗ '}{testMessage}
+            </span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setHelpExpanded(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            marginTop: 16, padding: '4px 0',
+            background: 'transparent', border: 'none',
+            color: 'var(--text-dim)', fontSize: '0.75rem',
+            cursor: 'pointer', fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <ChevronRight size={12} style={{ transform: helpExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+          Migrating existing data?
+        </button>
+        {helpExpanded && (
+          <div style={{
+            marginTop: 8, padding: '12px 14px',
+            background: 'var(--surface)',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border)',
+            fontSize: '0.75rem', color: 'var(--text-dim)',
+            lineHeight: 1.6,
+          }}>
+            The plugin does not expose a native migrate command. To move an existing
+            local LanceDB store to the bucket, sync the files directly with the AWS CLI:
+            <pre style={{
+              margin: '8px 0 0 0', padding: '8px 10px',
+              background: 'var(--card)',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.6875rem', color: 'var(--text)',
+              overflowX: 'auto',
+            }}>
+{`aws s3 sync ~/.openclaw/memory/lancedb/ s3://${s3Bucket || '<bucket>'}/${s3Prefix || '<prefix>'}/`}
+            </pre>
+            LanceDB stores standard Parquet/Lance files, so a plain S3 sync works.
+            After migration, save the config here and restart Core for the plugin to pick up the new path.
+          </div>
+        )}
+      </SettingsBlock>
     </SectionShell>
   );
+}
+
+const inputStyle: React.CSSProperties = {
+  padding: '6px 10px',
+  fontSize: '0.75rem',
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--text)',
+  fontFamily: 'var(--font-sans)',
+  outline: 'none',
+  width: '100%',
+};
+function buttonStyle(busy: boolean): React.CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '6px 12px',
+    fontSize: '0.75rem',
+    background: busy ? 'var(--surface)' : 'var(--amber-dim)',
+    color: busy ? 'var(--text-dim)' : 'var(--amber)',
+    border: '1px solid ' + (busy ? 'var(--border)' : 'transparent'),
+    borderRadius: 'var(--radius-sm)',
+    cursor: busy ? 'wait' : 'pointer',
+    fontFamily: 'var(--font-sans)',
+    fontWeight: 500,
+  };
 }

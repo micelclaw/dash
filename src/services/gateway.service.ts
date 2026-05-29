@@ -630,13 +630,48 @@ export async function updateApprovalsConfig(config: Record<string, unknown>): Pr
 
 // ─── Memory Config ─────────────────────────────────────────────────
 
-export async function getMemoryConfig(): Promise<{ memory_search: Record<string, unknown>; memory: Record<string, unknown> }> {
-  const res = await api.get<{ data: { memory_search: Record<string, unknown>; memory: Record<string, unknown> } }>('/gateway/memory-config');
+export async function getMemoryConfig(): Promise<{
+  memory_search: Record<string, unknown>;
+  memory: Record<string, unknown>;
+  memory_lancedb?: Record<string, unknown>;
+}> {
+  const res = await api.get<{ data: { memory_search: Record<string, unknown>; memory: Record<string, unknown>; memory_lancedb?: Record<string, unknown> } }>('/gateway/memory-config');
   return res.data;
 }
 
-export async function updateMemoryConfig(config: { memorySearch?: Record<string, unknown>; memory?: Record<string, unknown> }): Promise<void> {
+export async function updateMemoryConfig(config: {
+  memorySearch?: Record<string, unknown>;
+  memory?: Record<string, unknown>;
+  memoryLancedb?: Record<string, unknown>;
+}): Promise<void> {
   await api.patch('/gateway/memory-config', config);
+}
+
+// ─── G7: LanceDB S3-compatible storage ─────────────────────────────
+
+export interface LanceDbS3TestResult {
+  ok: boolean;
+  bucket_name?: string;
+  region?: string;
+  object_count?: number;
+  error?: string;
+}
+
+export interface LanceDbS3InitResult {
+  ok: boolean;
+  created?: boolean;
+  warning?: string;
+  error?: string;
+}
+
+export async function testLanceDbConnection(body: { dbPath: string; storageOptions: Record<string, string> }): Promise<LanceDbS3TestResult> {
+  const res = await api.post<{ data: LanceDbS3TestResult }>('/gateway/memory/lancedb-test', body);
+  return res.data;
+}
+
+export async function initLanceDbBucket(body: { dbPath: string; storageOptions: Record<string, string> }): Promise<LanceDbS3InitResult> {
+  const res = await api.post<{ data: LanceDbS3InitResult }>('/gateway/memory/lancedb-init', body);
+  return res.data;
 }
 
 // ─── Active Memory Config ──────────────────────────────────────────
