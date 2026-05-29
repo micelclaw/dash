@@ -507,10 +507,30 @@ export function Shell() {
       session_id: string;
       from_agent: string;
       text: string;
+      tool_calls?: Array<Record<string, unknown>> | null;
       created_at: string;
     };
     if (!data.id || !data.conversation_id) return;
     const store = useChatStore.getState();
+    // Hydrate the tool_calls from the WS payload so the chat bubble shows
+    // the tool pills immediately (sessions_spawn / sessions_yield etc.).
+    // Without this, the bubble appears bare until a manual refresh because
+    // the local store skips the next history fetch (see loadMessages dedup).
+    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
+      ? data.tool_calls.map((t) => ({
+          id: String(t.id ?? crypto.randomUUID()),
+          tool: String(t.tool ?? t.name ?? 'unknown'),
+          status: t.status as import('@/types/chat').ToolCallRecord['status'],
+          summary: typeof t.summary === 'string' ? t.summary : undefined,
+          input: (() => {
+            const raw = t.input ?? t.arguments;
+            if (typeof raw === 'string') return raw;
+            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
+            return undefined;
+          })(),
+          output: typeof t.output === 'string' ? t.output : undefined,
+        }))
+      : undefined;
     store.addMessage({
       id: data.id,
       conversation_id: data.conversation_id,
@@ -518,6 +538,7 @@ export function Shell() {
       content: data.text,
       agent: data.from_agent,
       timestamp: data.created_at,
+      tool_calls: toolCalls,
     });
     // Clear the "Esperando…" placeholder if it was for this conversation.
     if (store.streamingMessage?.conversationId === data.conversation_id) {
