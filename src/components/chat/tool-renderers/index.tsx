@@ -19,6 +19,7 @@ import { EditToolBlock } from './EditToolBlock';
 import { BrowseToolBlock } from './BrowseToolBlock';
 import { SearchToolBlock } from './SearchToolBlock';
 import { MemoryToolBlock } from './MemoryToolBlock';
+import { PluginStatusToolBlock } from './PluginStatusToolBlock';
 import { GenericToolBlock } from './GenericToolBlock';
 
 interface Props { tool: ToolCallRecord }
@@ -26,8 +27,16 @@ interface Props { tool: ToolCallRecord }
 /**
  * Pick a renderer by classifying the tool name. Falls back to
  * `GenericToolBlock` for unknown tools.
+ *
+ * Tools whose name starts with `plugin:` (emitted by chat-bridge from
+ * `session.pluginDebugEntries`) are short-circuited to `PluginStatusToolBlock`
+ * BEFORE classify so future plugins work without any TOOL_DEFS entry — the
+ * featured ones (active-memory, memory-core) just get nicer icon/label.
  */
 export function ToolRenderer({ tool }: Props) {
+  if (typeof tool.tool === 'string' && tool.tool.toLowerCase().startsWith('plugin:')) {
+    return <PluginStatusToolBlock tool={tool} />;
+  }
   const def = classify(tool.tool);
   switch (def.renderer) {
     case 'spawn':   return <SpawnToolBlock tool={tool} />;
