@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
+import { useTtsChatState, nextTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useCanvasEvents } from '@/hooks/use-canvas-events';
@@ -220,6 +221,9 @@ export function Component() {
             </button>
           )}
 
+          {/* Per-conv TTS toggle (G2) — visible on both desktop and mobile */}
+          <TtsToggleButton />
+
           {/* Canvas toggle — hidden on mobile */}
           {!isMobile && (
             <button
@@ -308,5 +312,77 @@ export function Component() {
         <ChevronDown size={16} />
       </button>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  TtsToggleButton — header chip cycling through default → on → off → …      */
+/* -------------------------------------------------------------------------- */
+
+/** Visual mapping for the three toggle states. */
+const TTS_TOGGLE_PRESENTATION: Record<TtsChatState, {
+  Icon: typeof Volume1;
+  color: string;
+  background: string;
+  border: string;
+  title: string;
+}> = {
+  default: {
+    Icon: Volume1,
+    color: 'var(--text-muted)',
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    // What clicking will do next, mirrors `nextTtsChatState`.
+    title: 'TTS auto-play: default — heredando setting global. Click para activar siempre en esta conversación.',
+  },
+  on: {
+    Icon: Volume2,
+    color: '#3b82f6',
+    background: 'rgba(59, 130, 246, 0.12)',
+    border: '1px solid rgba(59, 130, 246, 0.45)',
+    title: 'TTS auto-play: ON — reproducirá cada respuesta en esta conversación. Click para silenciar.',
+  },
+  off: {
+    Icon: VolumeX,
+    color: 'var(--text-muted)',
+    background: 'transparent',
+    border: '1px solid var(--border)',
+    title: 'TTS auto-play: OFF — silenciado en esta conversación. Click para volver al comportamiento por defecto.',
+  },
+};
+
+const TTS_TOGGLE_BUTTON_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: 4,
+  borderRadius: 'var(--radius-md)',
+  cursor: 'pointer',
+  transition: 'background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast)',
+};
+
+function TtsToggleButton() {
+  const activeConvId = useChatStore((s) => s.activeConversationId);
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const state = useTtsChatState(activeConvId);
+  const { Icon, color, background, border, title } = TTS_TOGGLE_PRESENTATION[state];
+
+  const onClick = () => {
+    const next = nextTtsChatState(state);
+    // sendMessage takes care of writeTtsChatState via the early hook inside the
+    // store (so localStorage updates synchronously) AND ships the slash to the
+    // backend dispatcher, which echoes the confirmation chip into the chat.
+    sendMessage(`/tts chat ${next}`);
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      style={{ ...TTS_TOGGLE_BUTTON_STYLE, color, background, border }}
+      title={title}
+      aria-label={title}
+    >
+      <Icon size={16} />
+    </button>
   );
 }

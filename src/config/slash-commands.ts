@@ -15,6 +15,7 @@ import {
   User,
   HelpCircle,
   Send,
+  Volume2,
   Users,
   Layers,
   Wrench,
@@ -86,6 +87,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'fast', label: 'Fast Mode', icon: Zap, category: 'session', options: ['on', 'off'] },
   { name: 'verbose', label: 'Verbose', icon: MessageSquare, category: 'session', options: ['on', 'off', 'full'] },
   { name: 'send', label: 'Send Policy', icon: Send, category: 'session', options: ['on', 'off', 'inherit'] },
+  { name: 'tts', label: 'TTS auto-play (chat)', icon: Volume2, category: 'session', options: ['chat on', 'chat off', 'chat default'] },
 
   // ── Context ── instant actions on the conversation context
   { name: 'compact', label: 'Compact Context', icon: FileDown, category: 'context' },

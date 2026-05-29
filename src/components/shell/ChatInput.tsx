@@ -18,6 +18,7 @@ import { useSettingsStore } from '@/stores/settings.store';
 import { useModuleContext } from '@/hooks/use-module-context';
 import { useVoice } from '@/hooks/use-voice';
 import { useVoiceStream } from '@/hooks/use-voice-stream';
+import { readTtsChatState } from '@/hooks/use-tts-chat-state';
 import { AgentSelector } from './AgentSelector';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { VoiceButton } from '@/components/voice/VoiceButton';
@@ -218,11 +219,30 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     };
   }, [voice, voiceStream, handleVoiceStop, isFullDuplex, conversationId]);
 
-  // TTS auto-play: when the last input was voice AND autoplay_responses is enabled
+  // TTS auto-play. Precedence (G2 plan):
+  //   1. Per-conversation toggle (claw-tts-chat-<convId> in localStorage):
+  //        'on'  → always play, regardless of input type
+  //        'off' → never play, regardless of voice/setting
+  //   2. Fallback (no per-conv toggle set): existing behaviour — play only
+  //      if the user used VOICE input AND `voice.autoplay_responses` is on.
   useEffect(() => {
     const handler = (e: Event) => {
       const responseText = (e as CustomEvent).detail?.text as string;
       if (!responseText || voice.state !== 'idle') return;
+
+      const convId = useChatStore.getState().activeConversationId;
+      const perConv = readTtsChatState(convId);
+      if (perConv === 'off') {
+        lastInputWasVoiceRef.current = false;
+        return;
+      }
+      if (perConv === 'on') {
+        lastInputWasVoiceRef.current = false;
+        voice.playTts(responseText);
+        return;
+      }
+
+      // perConv === 'default' → original behaviour
       if (!lastInputWasVoiceRef.current) return;
       const autoplay = useSettingsStore.getState().settings?.voice?.autoplay_responses ?? false;
       if (!autoplay) {

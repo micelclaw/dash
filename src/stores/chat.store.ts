@@ -15,6 +15,7 @@ import type { Message, Conversation, Agent, ChatState, StreamingState, ChatAttac
 import { useWebSocketStore } from './websocket.store';
 import { isKnownSlash } from '@/config/slash-commands';
 import { api } from '@/services/api';
+import { writeTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 
 interface ChatStore {
   conversations: Conversation[];
@@ -78,6 +79,16 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
     const { activeConversationId, selectedAgent, messages, chatState, conversations } = get();
     const convId = activeConversationId ?? crypto.randomUUID();
+
+    // `/tts chat <on|off|default>` round-trip: the backend dispatcher just
+    // emits a system chip; the actual state lives in localStorage (the dash
+    // is the TTS player for webchat sessions). Detect both header-button and
+    // typed paths here so the local toggle is updated in parallel with the
+    // WS send — the chip arriving later just confirms.
+    const ttsChatMatch = /^\/tts\s+chat\s+(on|off|default)\s*$/i.exec(text.trim());
+    if (ttsChatMatch) {
+      writeTtsChatState(convId, ttsChatMatch[1]!.toLowerCase() as TtsChatState);
+    }
 
     // Resolve the correct agent: conversation's agent takes priority over selector
     const activeConv = activeConversationId
