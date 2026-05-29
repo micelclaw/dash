@@ -83,8 +83,13 @@ export function BottomBar() {
           data.model as string | undefined,
           data.tokens_used as number | undefined,
           data.error_type as string | undefined,
-          undefined,
+          Array.isArray(data.tool_calls) ? (data.tool_calls as import('@/types/chat').ToolCallRecord[]) : undefined,
           typeof data.thinking === 'string' ? (data.thinking as string) : null,
+          {
+            clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
+            userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
+            assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
+          },
         );
         break;
     }

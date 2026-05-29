@@ -46,7 +46,7 @@ interface ChatStore {
   appendStreamToken: (conversationId: string, token: string, type?: 'thinking' | 'text') => void;
   addToolEvent: (conversationId: string, event: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }) => void;
   cancelStream: () => void;
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null) => void;
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null, ids?: { clientTempId?: string | null; userMessageId?: string | null; assistantMessageId?: string | null }) => void;
   /** Append a system message (slash-command confirmation) to a conversation. */
   addSystemMessage: (conversationId: string, text: string) => void;
   /** Clear all messages of a conversation in the dash (/clear). */
@@ -133,6 +133,11 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         conversation_id: convId,
         context: context ?? null,
         attachments: attachmentsMeta ?? null,
+        // Echoed back by Core in `chat.stream.done` as `client_temp_id`.
+        // `finalizeStream` uses it to find this local user message and
+        // rewrite its id to the DB-assigned one, so `loadMessages` dedup
+        // by id Just Works on re-navigation.
+        client_temp_id: userMsg.id,
       });
     }
   },
@@ -382,28 +387,14 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         // not yet flushed, or assistant msg materialised by finalizeStream)
         // are preserved at the tail, then sorted by timestamp.
         //
-        // Dedup gotcha: `sendMessage` and `finalizeStream` mint local
-        // messages with `crypto.randomUUID()` — those IDs never match the
-        // ones the backend assigns when persisting. Without a fingerprint
-        // fallback, navigating away and back doubles every message in the
-        // conversation. We dedup by `role + content + ts(±5s)` as a
-        // pragmatic safety net (proper fix: backend echoes its persisted
-        // id back via WS so the dash can rewrite local IDs).
+        // Dedup by id only — the previous content-fingerprint fallback is
+        // gone now that backend echoes `client_temp_id` / `user_message_id`
+        // / `assistant_message_id` in `chat.stream.done` and `finalizeStream`
+        // rewrites local UUIDs to the DB ids. If we ever see dups here it
+        // means the round-trip is broken; the right fix is upstream.
         const existing = state.messages.get(conversationId) ?? [];
         const dbIds = new Set(msgs.map((m) => m.id));
-        const matchesByFingerprint = (local: Message): boolean => {
-          if (!local.content || local.content.length < 3) return false;
-          const localTs = new Date(local.timestamp).getTime();
-          return msgs.some(
-            (db) =>
-              db.role === local.role &&
-              db.content === local.content &&
-              Math.abs(new Date(db.timestamp).getTime() - localTs) < 5_000,
-          );
-        };
-        const localOnly = existing.filter(
-          (m) => !dbIds.has(m.id) && !matchesByFingerprint(m),
-        );
+        const localOnly = existing.filter((m) => !dbIds.has(m.id));
         const merged = [...msgs, ...localOnly].sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
         );
@@ -415,7 +406,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
-  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null) => {
+  finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null, ids?: { clientTempId?: string | null; userMessageId?: string | null; assistantMessageId?: string | null }) => {
     const isYielded = model === 'yielded';
     // Yield with empty text → keep a placeholder bubble so the user
     // knows the agent is awaiting sub-agents (it's NOT a failure).
@@ -461,8 +452,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     const streamingThinking = get().streamingMessage?.thinking;
     const finalThinking = thinking ?? (streamingThinking && streamingThinking.length > 0 ? streamingThinking : null);
 
+    // Backend echoes DB-assigned ids in `chat.stream.done` so the next
+    // `loadMessages` dedup-by-id works without falling back to the content
+    // fingerprint. If they're missing (mock mode, error path with no
+    // persisted row, …) keep the local UUID as fallback.
     const assistantMsg: Message = {
-      id: crypto.randomUUID(),
+      id: ids?.assistantMessageId ?? crypto.randomUUID(),
       conversation_id: conversationId,
       role: 'assistant',
       content: fullText,
@@ -478,7 +473,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     set((state) => {
       const updated = new Map(state.messages);
       const existing = updated.get(conversationId) ?? [];
-      updated.set(conversationId, [...existing, assistantMsg]);
+      // Rewrite the matching local user message id from the temp UUID we
+      // sent in `client_temp_id` to the DB-assigned `user_message_id`.
+      // Without this the user row appears twice after the next refetch
+      // (local UUID never matches the DB one).
+      let nextExisting = existing;
+      if (ids?.clientTempId && ids?.userMessageId && ids.clientTempId !== ids.userMessageId) {
+        nextExisting = existing.map((m) =>
+          m.id === ids.clientTempId ? { ...m, id: ids.userMessageId! } : m,
+        );
+      }
+      updated.set(conversationId, [...nextExisting, assistantMsg]);
 
       const isShort = fullText.split('\n').length <= 3 && !fullText.includes('```');
       const shouldBubble = state.chatState === 1 && isShort;

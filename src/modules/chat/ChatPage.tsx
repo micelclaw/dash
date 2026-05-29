@@ -103,6 +103,11 @@ export function Component() {
           data.error_type as string | undefined,
           Array.isArray(data.tool_calls) ? (data.tool_calls as import('@/types/chat').ToolCallRecord[]) : undefined,
           typeof data.thinking === 'string' ? (data.thinking as string) : null,
+          {
+            clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
+            userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
+            assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
+          },
         );
         // Dispatch event for TTS auto-play (ChatInput listens)
         if (data.model !== 'error') {
