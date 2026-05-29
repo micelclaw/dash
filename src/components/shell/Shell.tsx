@@ -96,6 +96,31 @@ export function Shell() {
     return () => clearInterval(healthPoll);
   }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth]);
 
+  // G5: auto-resubscribe push idempotently. If permission is granted and
+  // the browser still holds a sub but the backend has lost it (DB wipe,
+  // 410 cleanup race, etc.), re-POST it. Pure best-effort: silent on
+  // every failure path because the user already gave permission once.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const local = await reg.pushManager.getSubscription();
+        if (!local) return;
+        const { api } = await import('@/services/api');
+        const res = await api.get<{ data: { subscriptions: Array<{ id: string; endpoint?: string }> } }>('/push/subscriptions');
+        const known = (res.data.subscriptions ?? []).some((s) => s.endpoint === local.endpoint);
+        if (known) return;
+        const json = local.toJSON();
+        await api.post('/push/subscribe', { endpoint: json.endpoint, keys: json.keys });
+      } catch (err) {
+        console.warn('[push] auto-resubscribe failed', err);
+      }
+    })();
+  }, []);
+
   // Poll every 10s while unconfigured to detect onboarding completion
   useEffect(() => {
     if (gatewayConfigured !== false) return;

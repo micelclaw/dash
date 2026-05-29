@@ -19,6 +19,7 @@ import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
 import { SaveBar } from '../SaveBar';
 import { SettingsBlock } from '../shared/SettingsBlock';
+import { usePushSubscription, type DeviceSubscription } from '@/hooks/use-push-subscription';
 
 const POSITION_OPTIONS = [
   { value: 'bottom-right', label: 'Bottom Right' },
@@ -44,6 +45,48 @@ const DEFAULT_TYPES = {
 };
 
 const DEFAULT_DND = { enabled: false, from: '22:00', to: '08:00' };
+
+/**
+ * The 4 built-in notification rule templates that may trigger a browser
+ * push (matched server-side in `dispatchWebPushIfEnabled`). Order =
+ * order in the UI; same as the dispatcher's emit order.
+ */
+const PUSH_CATEGORIES: Array<{ template: string; label: string; desc: string }> = [
+  { template: 'system.error.critical', label: 'Critical system errors', desc: 'Unhandled exceptions, severity critical' },
+  { template: 'lifecycle.service.failed', label: 'Service failures', desc: 'When a lifecycle-managed service fails to start' },
+  { template: 'auth.brute_force.detected', label: 'Brute-force login attempts', desc: 'Multiple failed logins from the same IP' },
+  { template: 'billing.plan_limit.exceeded', label: 'Plan limits exceeded', desc: 'Usage / quota caps' },
+];
+
+function formatUA(ua: string | null): string {
+  if (!ua) return 'Unknown device';
+  // Quick'n'dirty browser+OS extraction.
+  const browser =
+    /Firefox\/\d/.test(ua) ? 'Firefox' :
+    /Edg\/\d/.test(ua) ? 'Edge' :
+    /Chrome\/\d/.test(ua) ? 'Chrome' :
+    /Safari\/\d/.test(ua) ? 'Safari' :
+    'Browser';
+  const os =
+    /Windows NT/.test(ua) ? 'Windows' :
+    /Mac OS X/.test(ua) ? 'macOS' :
+    /Android/.test(ua) ? 'Android' :
+    /iPhone|iPad|iPod/.test(ua) ? 'iOS' :
+    /Linux/.test(ua) ? 'Linux' :
+    '';
+  return os ? `${browser} on ${os}` : browser;
+}
+
+function formatRelative(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
 
 export function NotificationsSection() {
   const settings = useSettingsStore((s) => s.settings);
@@ -289,7 +332,175 @@ export function NotificationsSection() {
         </div>
       </SettingsBlock>
 
+      <BrowserPushBlock />
+
       <SaveBar visible={!!dirty.notifications} saving={saving} onSave={handleSave} onDiscard={() => resetSection('notifications')} />
     </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  BrowserPushBlock — G5 Web Push subscription + per-template opt-in         */
+/* -------------------------------------------------------------------------- */
+
+function BrowserPushBlock() {
+  const [open, setOpen] = useState(false);
+  const settings = useSettingsStore((s) => s.settings);
+  const setLocalValue = useSettingsStore((s) => s.setLocalValue);
+  const { status, subscriptions, loading, subscribe, unsubscribe, test } = usePushSubscription();
+
+  const pushPrefs = (settings?.notifications as Record<string, unknown> | undefined)
+    ?.push_notifications as Record<string, boolean> | undefined ?? {};
+
+  const setPushPref = (template: string, value: boolean) => {
+    setLocalValue('notifications.push_notifications', { ...pushPrefs, [template]: value });
+  };
+
+  const isHttps = typeof window !== 'undefined' && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  const masterToggle = async (v: boolean) => {
+    try {
+      if (v) await subscribe();
+      else await unsubscribe();
+    } catch (err) {
+      toast.error('Push subscription failed', { description: String((err as Error).message ?? err) });
+    }
+  };
+
+  const handleTest = async () => {
+    try {
+      const result = await test();
+      if (result.reason === 'no_subscriptions') {
+        toast.error('No subscribed devices');
+      } else if (result.delivered > 0) {
+        toast.success(`Test push delivered to ${result.delivered} device(s)`);
+      } else {
+        toast.error(`Push failed (expired: ${result.expired}, failed: ${result.failed})`);
+      }
+    } catch (err) {
+      toast.error('Test push failed', { description: String((err as Error).message ?? err) });
+    }
+  };
+
+  const handleRemove = async (id: string) => {
+    try {
+      await unsubscribe(id);
+      toast.success('Device removed');
+    } catch (err) {
+      toast.error('Remove failed', { description: String((err as Error).message ?? err) });
+    }
+  };
+
+  const labelStyle = { fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' } as const;
+  const descStyle = { fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginTop: 2 } as const;
+  const bannerStyle = { padding: '8px 12px', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8 } as const;
+
+  return (
+    <SettingsBlock
+      title="Browser push notifications"
+      expanded={open}
+      onToggle={() => setOpen((v) => !v)}
+    >
+      <div style={{ padding: '4px 0' }}>
+        {status.kind === 'unsupported' && (
+          <div style={bannerStyle}>Your browser doesn't support push notifications.</div>
+        )}
+        {status.kind === 'ios_needs_install' && (
+          <div style={bannerStyle}>
+            On iOS, web push requires the app to be installed as a PWA. Open the share menu → "Add to Home Screen" first.
+          </div>
+        )}
+        {status.kind === 'permission_denied' && (
+          <div style={bannerStyle}>
+            Browser permission denied. Re-enable in your browser settings (Site Settings → Notifications → Allow).
+          </div>
+        )}
+        {!isHttps && (
+          <div style={bannerStyle}>
+            Web push requires HTTPS (localhost is exempt for dev). Production traffic must go through Caddy/HTTPS.
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={labelStyle}>Enable browser push</div>
+            <div style={descStyle}>
+              Show OS-level notifications when the dash is closed or in another tab. Permission needed once per device.
+            </div>
+          </div>
+          <SettingToggle
+            label=""
+            checked={status.kind === 'subscribed'}
+            onChange={masterToggle}
+            disabled={loading || status.kind === 'unsupported' || status.kind === 'ios_needs_install' || status.kind === 'permission_denied'}
+          />
+        </div>
+
+        {status.kind === 'subscribed' && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ flex: 1 }}>
+                <div style={labelStyle}>Test notification</div>
+                <div style={descStyle}>
+                  Sends a push to all of your devices to verify end-to-end delivery.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleTest}
+                disabled={loading}
+                style={{ padding: '6px 14px', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: loading ? 'wait' : 'pointer' }}
+              >
+                Send test
+              </button>
+            </div>
+
+            <div style={{ padding: '12px 0 4px 0', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Categories
+            </div>
+            <div style={{ ...descStyle, padding: '0 0 8px 0' }}>
+              Per-rule opt-in. User-defined push rules are configured in{' '}
+              <a href="/activity?tab=notifications" style={{ color: 'var(--accent)' }}>Activity Center → Notification rules</a>.
+            </div>
+            {PUSH_CATEGORIES.map((cat) => (
+              <div key={cat.template} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={labelStyle}>{cat.label}</div>
+                  <div style={descStyle}>{cat.desc} · <code style={{ fontFamily: 'var(--font-mono, monospace)' }}>{cat.template}</code></div>
+                </div>
+                <SettingToggle
+                  label=""
+                  checked={pushPrefs[cat.template] !== false}
+                  onChange={(v) => setPushPref(cat.template, v)}
+                />
+              </div>
+            ))}
+
+            <div style={{ padding: '12px 0 4px 0', fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Subscribed devices
+            </div>
+            {subscriptions.length === 0 ? (
+              <div style={{ ...descStyle, padding: '8px 0' }}>No devices subscribed yet.</div>
+            ) : (
+              subscriptions.map((sub: DeviceSubscription) => (
+                <div key={sub.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={labelStyle}>{formatUA(sub.user_agent)}</div>
+                    <div style={descStyle}>last seen {formatRelative(sub.last_seen_at)} · subscribed {formatRelative(sub.created_at)}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(sub.id)}
+                    style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            )}
+          </>
+        )}
+      </div>
+    </SettingsBlock>
   );
 }
