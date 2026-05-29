@@ -101,6 +101,18 @@ const PROVIDER_COLORS: Record<string, string> = {
   'amazon-bedrock-mantle': '#ff9900',
   'azure-speech': '#0078d4',
   'microsoft-foundry': '#0078d4',
+  // Round 3 (custom abstract glyphs — no lobehub coverage)
+  chutes: '#3b82f6',
+  deepgram: '#13ef93',
+  firecrawl: '#fa5d19',
+  gradium: '#a855f7',
+  inworld: '#0ea5e9',
+  litellm: '#22c55e',
+  searxng: '#3050ff',
+  sglang: '#475569',
+  synthetic: '#10b981',
+  tokenjuice: '#84cc16',
+  vydra: '#ec4899',
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
