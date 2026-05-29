@@ -76,6 +76,34 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
     tokenPrefix: '',
     description: 'Cohere\u2019s text and embedding models.',
   },
+  // \u2500\u2500 New bundled providers in OpenClaw 2026.5.7 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  // Same shape as the rest \u2014 OpenClaw knows each baseUrl natively
+  // (see `extensions/<id>/onboard.ts` in the bundled binary). Only the
+  // signup link + token-format hint are dash-side metadata.
+  cerebras: {
+    label: 'Cerebras',
+    signupUrl: 'https://cloud.cerebras.ai/platform/',
+    tokenPrefix: 'csk-',
+    description: 'Ultra-fast inference for Llama, Qwen, GLM-4.7 and others. Free tier available.',
+  },
+  nvidia: {
+    label: 'NVIDIA',
+    signupUrl: 'https://build.nvidia.com/',
+    tokenPrefix: 'nvapi-',
+    description: 'NIM endpoints \u2014 Nemotron, Llama Nemotron, and curated open models.',
+  },
+  arcee: {
+    label: 'Arcee AI',
+    signupUrl: 'https://models.arcee.ai/',
+    tokenPrefix: '',
+    description: 'Small/medium specialised models (Trinity, Coder, Spark, SuperNova).',
+  },
+  deepinfra: {
+    label: 'DeepInfra',
+    signupUrl: 'https://deepinfra.com/dash/api_keys',
+    tokenPrefix: '',
+    description: 'Hosted open-source models (Llama, Mixtral, DeepSeek, BGE, etc.) at low cost.',
+  },
 };
 
 const CUSTOM_PROVIDER_PREFIX = 'custom-api-';
