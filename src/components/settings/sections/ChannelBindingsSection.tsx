@@ -54,11 +54,56 @@ const TTS_AUTO_MODES = [
   { value: 'tagged', label: 'Tagged (only when reply includes [[tts]])' },
 ];
 
+// Providers nativos del speech-provider registry de OpenClaw 2026.5.7
+// (`messages.tts.providers.<id>` en /usr/lib/node_modules/openclaw/dist/).
+//
+// Orden: free/sin-config primero, después API-key mainstream, después
+// providers regionales / API-key minor. Ayuda al usuario a tomar la
+// decisión sin tener que leer las descripciones de los 12.
+//
+// NO incluidos (mencionados en el changelog 2026.3.13→2026.5.7 pero no
+// presentes como providers nativos en la versión 2026.5.7 instalada):
+// `DeepInfra TTS`, `OpenRouter TTS`, `SenseAudio`, `Local CLI TTS`. Si
+// OpenClaw los añade en futuras versiones, basta extender este array
+// y `TTS_PROVIDER_DESCRIPTIONS` abajo.
+// `eleven_v3` no es un provider sino un model id DENTRO de elevenlabs.
+//
+// Histórico: `edge` se migró a `microsoft` por `doctor --fix` durante
+// el upgrade a 2026.5.7 (legacy-config-migrations-DMwlWTca.js).
 const TTS_PROVIDERS = [
-  { value: 'edge', label: 'Edge TTS (free, Microsoft neural voices)' },
-  { value: 'openai', label: 'OpenAI TTS (requires API key)' },
-  { value: 'elevenlabs', label: 'ElevenLabs (requires API key)' },
+  { value: 'microsoft',    label: 'Microsoft Edge TTS (free, neural voices)' },
+  { value: 'openai',       label: 'OpenAI TTS (API key)' },
+  { value: 'elevenlabs',   label: 'ElevenLabs (API key, custom voices + multilingual)' },
+  { value: 'google',       label: 'Google / Gemini TTS (API key, Gemini Live capable)' },
+  { value: 'azure-speech', label: 'Azure Speech (API key, enterprise SLA)' },
+  { value: 'inworld',      label: 'Inworld (API key, character-oriented voices)' },
+  { value: 'gradium',      label: 'Gradium (API key)' },
+  { value: 'minimax',      label: 'MiniMax (API key, M2.x family)' },
+  { value: 'volcengine',   label: 'Volcengine Seed Speech (API key, ByteDance)' },
+  { value: 'vydra',        label: 'Vydra (API key)' },
+  { value: 'xai',          label: 'xAI (API key)' },
+  { value: 'xiaomi',       label: 'Xiaomi MiMo (API key)' },
 ];
+
+/**
+ * Inline hint shown under the selector for the active provider — typical
+ * model ids, where to put the API key, regional quirks. Keep each entry
+ * to one short line so the layout stays compact.
+ */
+const TTS_PROVIDER_DESCRIPTIONS: Record<string, string> = {
+  microsoft:     'Free, no API key needed. Microsoft neural voices via Edge TTS. Default voice: en-US-MichelleNeural.',
+  openai:        'API key required (Settings → AI → API Keys). Voices: alloy, echo, fable, onyx, nova, shimmer.',
+  elevenlabs:    'API key required. Custom voices + multilingual models (e.g. eleven_v3). Configure key in env or Secrets.',
+  google:        'API key required (Google AI Studio). Includes Gemini Live realtime endpoint. Multilingual.',
+  'azure-speech': 'Azure subscription key + region required. Enterprise SLA, neural voices.',
+  inworld:       'API key required. Character-oriented voices with persona support.',
+  gradium:       'API key required.',
+  minimax:       'API key required. M2.5 / M2.6 / M2.7 model families.',
+  volcengine:    'ByteDance Seed Speech. API key + region required. Strong Mandarin / multilingual.',
+  vydra:         'API key required.',
+  xai:           'xAI API key required. Same key as the Grok models.',
+  xiaomi:        'Xiaomi MiMo API key required. Regional — best for zh-CN / en-US voices.',
+};
 
 const ACK_REACTION_SCOPES = [
   { value: 'off', label: 'Off' },
@@ -180,7 +225,7 @@ export function ChannelBindingsSection() {
 
   // TTS state
   const [ttsAuto, setTtsAuto] = useState('off');
-  const [ttsProvider, setTtsProvider] = useState('edge');
+  const [ttsProvider, setTtsProvider] = useState('microsoft');
 
   const [sections, setSections] = useState<Record<string, boolean>>({
     queue: true, streaming: false, reactions: false, tts: false,
@@ -216,7 +261,7 @@ export function ChannelBindingsSection() {
       setAckReactionScope((data.ack_reaction_scope ?? 'group-mentions') as string);
 
       setTtsAuto((tts.auto ?? 'off') as string);
-      setTtsProvider((tts.provider ?? 'edge') as string);
+      setTtsProvider((tts.provider ?? 'microsoft') as string);
 
       setDirty(false);
     } catch {
@@ -379,20 +424,10 @@ export function ChannelBindingsSection() {
         onToggle={() => toggleSection('tts')}
       >
         <SelectRow label="Auto TTS" desc="When to convert replies to audio" value={ttsAuto} options={TTS_AUTO_MODES} onChange={markDirty(setTtsAuto)} />
-        <SelectRow label="TTS provider" desc="Edge TTS is free and requires no API key" value={ttsProvider} options={TTS_PROVIDERS} onChange={markDirty(setTtsProvider)} />
-        {ttsProvider === 'edge' && (
+        <SelectRow label="TTS provider" desc="Microsoft Edge TTS is free and requires no API key" value={ttsProvider} options={TTS_PROVIDERS} onChange={markDirty(setTtsProvider)} />
+        {TTS_PROVIDER_DESCRIPTIONS[ttsProvider] && (
           <div style={{ padding: '4px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-            Edge TTS uses Microsoft neural voices. No API key needed. Default voice: en-US-MichelleNeural.
-          </div>
-        )}
-        {ttsProvider === 'openai' && (
-          <div style={{ padding: '4px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-            Requires OpenAI API key. Voices: alloy, echo, fable, onyx, nova, shimmer. Configure in AI &rarr; API Keys.
-          </div>
-        )}
-        {ttsProvider === 'elevenlabs' && (
-          <div style={{ padding: '4px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-            Requires ElevenLabs API key. Supports custom voices and multilingual models. Configure key in environment.
+            {TTS_PROVIDER_DESCRIPTIONS[ttsProvider]}
           </div>
         )}
       </SettingsBlock>
