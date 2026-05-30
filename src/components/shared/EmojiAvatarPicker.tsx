@@ -15,6 +15,7 @@
 // adding a new one here propagates everywhere.
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export const AVATAR_EMOJIS = [
   '🤖', '🧪', '📊', '📧', '📅', '🎯', '💼', '🛡️', '🎨', '💰',
@@ -48,23 +49,59 @@ export function EmojiAvatarPicker({
   title = 'Change avatar',
 }: EmojiAvatarPickerProps) {
   const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const display = value || fallback;
+
+  // Capture anchor position when opening so the portal-rendered popover
+  // can position itself with `position: fixed`.
+  useEffect(() => {
+    if (!open) { setAnchorRect(null); return; }
+    if (triggerRef.current) {
+      setAnchorRect(triggerRef.current.getBoundingClientRect());
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (
+        (popoverRef.current && popoverRef.current.contains(target)) ||
+        (triggerRef.current && triggerRef.current.contains(target))
+      ) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // Compute popover position from anchor rect. Place below by default;
+  // flip to above if there's not enough room. Clamp horizontally to the
+  // viewport so it never gets cut off near the right edge.
+  const POPOVER_WIDTH = 336;
+  const POPOVER_HEIGHT_ESTIMATE = 320;
+  let popoverTop = 0;
+  let popoverLeft = 0;
+  if (anchorRect) {
+    const viewportH = window.innerHeight;
+    const viewportW = window.innerWidth;
+    const spaceBelow = viewportH - anchorRect.bottom;
+    const goesUp = spaceBelow < POPOVER_HEIGHT_ESTIMATE && anchorRect.top > spaceBelow;
+    popoverTop = goesUp
+      ? Math.max(8, anchorRect.top - POPOVER_HEIGHT_ESTIMATE - 8)
+      : anchorRect.bottom + 8;
+    popoverLeft = Math.min(
+      Math.max(8, anchorRect.left),
+      viewportW - POPOVER_WIDTH - 8,
+    );
+  }
+
   return (
-    <div ref={pickerRef} style={{ position: 'relative', display: 'inline-block' }}>
+    <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(!open)}
         title={title}
@@ -87,24 +124,26 @@ export function EmojiAvatarPicker({
       >
         {display}
       </button>
-      {open && (
-        <div style={{
-          position: 'absolute',
-          top: '100%',
-          left: 0,
-          marginTop: 6,
-          background: 'rgba(24, 24, 27, 0.95)',
-          backdropFilter: 'blur(16px)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.4))',
-          padding: 10,
-          zIndex: 1000,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
-          gap: 4,
-          minWidth: 200,
-        }}>
+      {open && anchorRect && createPortal(
+        <div
+          ref={popoverRef}
+          style={{
+            position: 'fixed',
+            top: popoverTop,
+            left: popoverLeft,
+            background: 'rgba(24, 24, 27, 0.96)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,0.4))',
+            padding: 14,
+            zIndex: 9999,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(6, 1fr)',
+            gap: 6,
+            width: POPOVER_WIDTH,
+          }}
+        >
           {AVATAR_EMOJIS.map(emoji => (
             <span
               key={emoji}
@@ -113,12 +152,12 @@ export function EmojiAvatarPicker({
                 setOpen(false);
               }}
               style={{
-                width: 30,
-                height: 30,
+                width: 46,
+                height: 46,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '1.125rem',
+                fontSize: '1.75rem',
                 cursor: 'pointer',
                 borderRadius: 'var(--radius-sm)',
                 border: emoji === value ? '1px solid var(--amber)' : '1px solid transparent',
@@ -131,8 +170,9 @@ export function EmojiAvatarPicker({
               {emoji}
             </span>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
