@@ -20,6 +20,7 @@ import {
   Layers,
   Wrench,
   RefreshCw,
+  History,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -105,6 +106,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'subagents', label: 'Sub-agents', icon: Users, category: 'info' },
   { name: 'tasks', label: 'Background Tasks', icon: Layers, category: 'info' },
   { name: 'tools', label: 'List Tools', icon: Wrench, category: 'info' },
+  { name: 'checkpoints', label: 'Restore Points', icon: History, category: 'info' },
   { name: 'help', label: 'Help', icon: HelpCircle, category: 'info' },
 
   // ── Control ── Gateway / process control

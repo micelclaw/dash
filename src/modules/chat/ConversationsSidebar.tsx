@@ -368,8 +368,25 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                             {conv.first_message}
                           </div>
                         )}
-                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-                          {formatRelativeDate(conv.created_at)}
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>{formatRelativeDate(conv.created_at)}</span>
+                          {conv.parent_conversation_id && (
+                            <span
+                              title="Forked from another conversation at a compaction checkpoint"
+                              style={{
+                                padding: '0 5px',
+                                background: 'var(--amber-dim, #5a430022)',
+                                color: 'var(--amber)',
+                                borderRadius: 3,
+                                fontSize: '0.625rem',
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.04em',
+                              }}
+                            >
+                              fork
+                            </span>
+                          )}
                         </div>
                       </div>
                       {(() => {

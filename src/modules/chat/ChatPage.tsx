@@ -12,7 +12,8 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
-import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX, History } from 'lucide-react';
+import { CheckpointsPanel } from '@/components/chat/CheckpointsPanel';
 import { useChatStore } from '@/stores/chat.store';
 import { useTtsChatState, nextTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -30,7 +31,11 @@ import type { InsightsWidgetHandle } from '@/components/shell/InsightsWidget';
 
 export function Component() {
   const isMobile = useIsMobile();
+  const activeConvId = useChatStore((s) => s.activeConversationId);
+  const conversations = useChatStore((s) => s.conversations);
+  const activeConv = activeConvId ? conversations.find(c => c.id === activeConvId) : null;
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const setChatState = useChatStore((s) => s.setChatState);
@@ -224,6 +229,13 @@ export function Component() {
           {/* Per-conv TTS toggle (G2) — visible on both desktop and mobile */}
           <TtsToggleButton />
 
+          {/* Checkpoints (G8) — only when there's an active conversation */}
+          <CheckpointsButton
+            disabled={!activeConvId}
+            active={checkpointsOpen}
+            onClick={() => setCheckpointsOpen(v => !v)}
+          />
+
           {/* Canvas toggle — hidden on mobile */}
           {!isMobile && (
             <button
@@ -291,6 +303,15 @@ export function Component() {
           {/* Canvas (50/50 split when open) — never shown on mobile */}
           {!isMobile && canvasOpen && <CanvasPanel onClose={() => setCanvasOpen(false)} />}
         </div>
+
+        {/* G8: Checkpoints drawer (fixed overlay, right side) */}
+        {checkpointsOpen && activeConvId && (
+          <CheckpointsPanel
+            conversationId={activeConvId}
+            conversationTitle={activeConv?.first_message?.slice(0, 60)}
+            onClose={() => setCheckpointsOpen(false)}
+          />
+        )}
 
         {/* Input */}
         <ChatInput
@@ -383,6 +404,31 @@ function TtsToggleButton() {
       aria-label={title}
     >
       <Icon size={16} />
+    </button>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────────────── */
+/*  CheckpointsButton (G8) — toolbar button that toggles the side drawer        */
+/* ───────────────────────────────────────────────────────────────────────────── */
+
+function CheckpointsButton({ disabled, active, onClick }: { disabled: boolean; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={disabled ? 'Start a conversation to access checkpoints' : 'Restore points'}
+      aria-label="Restore points"
+      style={{
+        ...TTS_TOGGLE_BUTTON_STYLE,
+        color: active ? 'var(--amber)' : 'var(--text-dim)',
+        background: active ? 'var(--surface-hover)' : 'transparent',
+        border: '1px solid var(--border)',
+        opacity: disabled ? 0.4 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
+    >
+      <History size={16} />
     </button>
   );
 }

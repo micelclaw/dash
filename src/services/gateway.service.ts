@@ -1107,3 +1107,45 @@ export async function updateSkillConfig(
 ): Promise<void> {
   await api.post('/gateway/skills-update', { skillKey, ...config });
 }
+
+// ─── G8: compaction checkpoints ─────────────────────────────────────
+
+export interface Checkpoint {
+  id: string;
+  ts?: string;
+  trigger?: string;
+  tokens_before?: number;
+  tokens_after?: number;
+  model?: string;
+  summary_excerpt?: string;
+}
+
+export async function listConversationCheckpoints(conversationId: string): Promise<Checkpoint[]> {
+  const res = await api.get<{ data: { checkpoints: Checkpoint[] } }>(
+    `/conversations/threads/${conversationId}/checkpoints`,
+  );
+  return res.data.checkpoints ?? [];
+}
+
+export async function branchFromCheckpoint(conversationId: string, checkpointId: string): Promise<{
+  new_conversation_id: string;
+  new_session_key?: string;
+  checkpoint_id: string;
+}> {
+  const res = await api.post<{ data: { new_conversation_id: string; new_session_key?: string; checkpoint_id: string } }>(
+    `/conversations/threads/${conversationId}/checkpoints/${checkpointId}/branch`,
+    {},
+  );
+  return res.data;
+}
+
+export async function restoreToCheckpoint(conversationId: string, checkpointId: string): Promise<{
+  restored_to_ts: string | null;
+  checkpoint_id: string;
+}> {
+  const res = await api.post<{ data: { restored_to_ts: string | null; checkpoint_id: string } }>(
+    `/conversations/threads/${conversationId}/checkpoints/${checkpointId}/restore`,
+    {},
+  );
+  return res.data;
+}

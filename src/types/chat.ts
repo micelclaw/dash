@@ -92,6 +92,9 @@ export interface Conversation {
   message_count: number;
   created_at: string;
   updated_at: string;
+  // G8: when set, this conv is a fork from another at a compaction checkpoint
+  parent_conversation_id?: string | null;
+  branched_from_checkpoint_id?: string | null;
 }
 
 export interface Agent {
