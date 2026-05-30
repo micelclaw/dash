@@ -86,7 +86,15 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
           boxShadow: hovered ? '0 4px 12px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.08)',
         }}
       >
-        <span style={{ fontSize: '1.75rem', lineHeight: 1 }}>👤</span>
+        <div onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
+          <EmojiAvatarPicker
+            value={userAvatar}
+            onChange={setUserAvatar}
+            size={36}
+            fallback="👤"
+            title="Change your avatar"
+          />
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{
             fontSize: '1.0625rem',
@@ -144,21 +152,9 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         gap: 12,
         minHeight: 32,
       }}>
-        {isOwner ? (
-          <div onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
-            <EmojiAvatarPicker
-              value={userAvatar}
-              onChange={setUserAvatar}
-              size={32}
-              fallback="👤"
-              title="Change your avatar"
-            />
-          </div>
-        ) : (
-          <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>
-            {agent.avatar || '🤖'}
-          </span>
-        )}
+        <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>
+          {agent.avatar || '🤖'}
+        </span>
         <span style={{
           fontSize: '1.0625rem',
           fontWeight: 600,
