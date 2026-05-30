@@ -14,6 +14,8 @@ import { useState, useEffect, useCallback, useRef, type CSSProperties } from 're
 import { useNavigate } from 'react-router';
 import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX, History } from 'lucide-react';
 import { CheckpointsPanel } from '@/components/chat/CheckpointsPanel';
+import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
+import { useUserAvatar } from '@/hooks/use-user-avatar';
 import { useChatStore } from '@/stores/chat.store';
 import { useTtsChatState, nextTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -34,6 +36,7 @@ export function Component() {
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
   const activeConv = activeConvId ? conversations.find(c => c.id === activeConvId) : null;
+  const [userAvatar, setUserAvatar] = useUserAvatar();
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -234,6 +237,15 @@ export function Component() {
             disabled={!activeConvId}
             active={checkpointsOpen}
             onClick={() => setCheckpointsOpen(v => !v)}
+          />
+
+          {/* G9: user avatar picker — appears in this user's bubbles */}
+          <EmojiAvatarPicker
+            value={userAvatar}
+            onChange={setUserAvatar}
+            size={28}
+            fallback="👤"
+            title="Your avatar"
           />
 
           {/* Canvas toggle — hidden on mobile */}

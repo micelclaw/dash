@@ -313,7 +313,7 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                       }}
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        {/* Agent name */}
+                        {/* Agent avatar + name (G9) */}
                         <div style={{
                           fontSize: '0.625rem',
                           fontWeight: 500,
@@ -321,8 +321,14 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                           marginBottom: 2,
                           textTransform: 'uppercase',
                           letterSpacing: '0.03em',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
                         }}>
-                          {agentName}
+                          <span style={{ fontSize: '0.875rem', lineHeight: 1, textTransform: 'none' }}>
+                            {agentInfo?.avatar ?? '🤖'}
+                          </span>
+                          <span>{agentName}</span>
                         </div>
                         {editingId === conv.id ? (
                           <input

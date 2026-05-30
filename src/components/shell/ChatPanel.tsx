@@ -14,12 +14,14 @@ import { useEffect, useRef } from 'react';
 import { useChatStore } from '@/stores/chat.store';
 import { ChatMessage } from './ChatMessage';
 import type { Message } from '@/types/chat';
+import { useUserAvatar } from '@/hooks/use-user-avatar';
 
 export function ChatPanel() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const messages = useChatStore((s) => s.messages);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [userAvatar] = useUserAvatar();
 
   const convMessages = activeConversationId
     ? (messages.get(activeConversationId) ?? [])
@@ -70,8 +72,13 @@ export function ChatPanel() {
         padding: '12px 16px',
       }}
     >
-      {convMessages.map((msg) => (
-        <ChatMessage key={msg.id} message={msg} />
+      {convMessages.map((msg, idx) => (
+        <ChatMessage
+          key={msg.id}
+          message={msg}
+          previousMessage={idx > 0 ? convMessages[idx - 1] : undefined}
+          userAvatar={userAvatar}
+        />
       ))}
       {streamingMsg && (
         <ChatMessage
@@ -80,6 +87,8 @@ export function ChatPanel() {
           thinkingText={streamingMessage?.thinking}
           isThinking={streamingMessage?.isThinking}
           tools={streamingMessage?.tools}
+          previousMessage={convMessages.length > 0 ? convMessages[convMessages.length - 1] : undefined}
+          userAvatar={userAvatar}
         />
       )}
     </div>

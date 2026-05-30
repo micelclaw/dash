@@ -92,6 +92,11 @@ interface ChatMessageProps {
   thinkingText?: string;
   isThinking?: boolean;
   tools?: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }[];
+  /** G9: previous message in the conv — used to compute `isFirstOfTurn` so
+   *  consecutive bubbles from the same sender don't repeat the avatar. */
+  previousMessage?: Message;
+  /** G9: user avatar emoji from `useUserAvatar()`. Default '👤'. */
+  userAvatar?: string;
 }
 
 /** Render a single line with **bold** segments (system-message chips). */
@@ -103,9 +108,23 @@ function renderInlineBold(text: string): ReactNode[] {
   );
 }
 
-export function ChatMessage({ message, isStreaming, thinkingText, isThinking, tools }: ChatMessageProps) {
+export function ChatMessage({ message, isStreaming, thinkingText, isThinking, tools, previousMessage, userAvatar = '👤' }: ChatMessageProps) {
   const navigate = useNavigate();
   const isUser = message.role === 'user';
+  const agents = useChatStore((s) => s.agents);
+
+  // G9: sticky avatar — show only when this is the first message of a turn
+  // (the previous message is either missing, a system chip, or from a
+  // different sender). For sub-agent mirroring we compare both role AND
+  // from_agent so two consecutive assistant messages from different agents
+  // each show their own avatar.
+  const previousSameSender = previousMessage
+    && previousMessage.role !== 'system'
+    && previousMessage.role === message.role
+    && (previousMessage.agent ?? null) === (message.agent ?? null);
+  const showAvatar = !previousSameSender;
+  const agentInfo = !isUser && message.agent ? agents.find(a => a.name === message.agent) : null;
+  const avatarEmoji = isUser ? userAvatar : (agentInfo?.avatar || '🤖');
 
   // Render approval card if this message carries an approval
   if (message.approval) {
@@ -177,6 +196,23 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     minute: '2-digit',
   });
 
+  // G9: avatar slot (24px circle). When `showAvatar` is true we render the
+  // emoji; when false we keep the same width as a transparent spacer so the
+  // bubble stays aligned with the previous one (sticky avatar pattern).
+  const avatarSize = 24;
+  const avatarSlot = (
+    <div style={{
+      width: avatarSize, height: avatarSize, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: Math.round(avatarSize * 0.72),
+      lineHeight: 1,
+      marginTop: 2,
+      visibility: showAvatar ? 'visible' : 'hidden',
+    }}>
+      {avatarEmoji}
+    </div>
+  );
+
   return (
     <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>
@@ -185,8 +221,11 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
             display: 'flex',
             justifyContent: isUser ? 'flex-end' : 'flex-start',
             padding: '4px 0',
+            gap: 8,
+            alignItems: 'flex-start',
           }}
         >
+          {!isUser && avatarSlot}
           <div
             style={{
               maxWidth: '85%',
@@ -447,6 +486,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
               />
             )}
           </div>
+          {isUser && avatarSlot}
         </div>
       </TooltipTrigger>
       <TooltipContent side={isUser ? 'left' : 'right'}>

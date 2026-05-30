@@ -20,6 +20,8 @@ import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { AgentActivity } from './AgentActivity';
 import { AgentToolAccess } from './AgentToolAccess';
+import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
+import { useChatStore } from '@/stores/chat.store';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
 import { AgentSandboxConfig } from './AgentSandboxConfig';
 import { getAgentColor, AGENT_PALETTE } from './agent-colors';
@@ -93,9 +95,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const [editingField, setEditingField] = useState<'display_name' | 'role' | null>(null);
   const [editValue, setEditValue] = useState('');
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
-  const avatarPickerRef = useRef<HTMLDivElement>(null);
 
   const handleInlineEdit = useCallback(async (field: 'display_name' | 'role' | 'color' | 'avatar', value: string) => {
     if (!agent) return;
@@ -103,6 +103,9 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
       await api.patch(`/managed-agents/${agent.id}`, { [field]: value });
       refetch();
       onAgentChanged?.();
+      // G9: refresh the chat store's agents list so the AgentSelector pill,
+      // ChatMessage avatars and ConversationsSidebar reflect the change.
+      void useChatStore.getState().refreshAgents();
     } catch { /* ignore */ }
   }, [agent, refetch, onAgentChanged]);
 
@@ -126,18 +129,6 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [colorPickerOpen]);
-
-  // Close avatar picker on outside click
-  useEffect(() => {
-    if (!avatarPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (avatarPickerRef.current && !avatarPickerRef.current.contains(e.target as Node)) {
-        setAvatarPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [avatarPickerOpen]);
 
   // Model dropdown
   const [modelOpen, setModelOpen] = useState(false);
@@ -225,60 +216,14 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           alignItems: 'flex-start',
           gap: 10,
         }}>
-          <div ref={avatarPickerRef} style={{ position: 'relative' }}>
-            <span
-              onClick={() => setAvatarPickerOpen(!avatarPickerOpen)}
-              style={{ fontSize: '1.5rem', marginTop: 2, cursor: 'pointer', display: 'inline-block' }}
+          <div style={{ marginTop: 2 }}>
+            <EmojiAvatarPicker
+              value={agent.avatar}
+              onChange={(emoji) => handleInlineEdit('avatar', emoji)}
+              size={32}
+              fallback="🤖"
               title="Change avatar"
-            >
-              {agent.avatar || '🤖'}
-            </span>
-            {avatarPickerOpen && (
-              <div style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: 6,
-                background: 'rgba(24, 24, 27, 0.95)',
-                backdropFilter: 'blur(16px)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                boxShadow: 'var(--shadow-lg)',
-                padding: 10,
-                zIndex: 50,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(6, 1fr)',
-                gap: 4,
-                minWidth: 200,
-              }}>
-                {['🤖', '🧪', '📊', '📧', '📅', '🎯', '💼', '🛡️', '🎨', '💰', '🧬', '🏠', '📂', '🐙', '🔍', '⚡', '🌐', '🧠', '🔬', '📡', '🎭', '🦊', '🐺', '🦉', '🐋', '🦅', '🔮', '💎', '🚀', '⭐'].map(emoji => (
-                  <span
-                    key={emoji}
-                    onClick={() => {
-                      handleInlineEdit('avatar', emoji);
-                      setAvatarPickerOpen(false);
-                    }}
-                    style={{
-                      width: 30,
-                      height: 30,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '1.125rem',
-                      cursor: 'pointer',
-                      borderRadius: 'var(--radius-sm)',
-                      border: emoji === agent.avatar ? '1px solid var(--amber)' : '1px solid transparent',
-                      background: emoji === agent.avatar ? 'var(--surface-hover)' : 'transparent',
-                      transition: 'var(--transition-fast)',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                    onMouseLeave={e => { if (emoji !== agent.avatar) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    {emoji}
-                  </span>
-                ))}
-              </div>
-            )}
+            />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Display Name — click to edit */}

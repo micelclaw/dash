@@ -41,6 +41,10 @@ interface ChatStore {
   startNewConversation: () => void;
   setConversations: (conversations: Conversation[]) => void;
   setAgents: (agents: Agent[]) => void;
+  /** G9: re-fetches `/managed-agents` and replaces the store's `agents`
+   *  list. Used by AgentDetail after a PATCH so the AgentSelector pill,
+   *  ChatMessage avatars and sidebar reflect the change immediately. */
+  refreshAgents: () => Promise<void>;
   addMessage: (message: Message) => void;
   setStreamingMessage: (state: StreamingState | null) => void;
   setBubbleMessage: (message: Message | null) => void;
@@ -175,6 +179,25 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   setConversations: (conversations: Conversation[]) => set({ conversations }),
 
   setAgents: (agents: Agent[]) => set({ agents }),
+  refreshAgents: async () => {
+    try {
+      type ManagedAgentResponse = {
+        name: string; display_name: string; role: string; model: string;
+        skills: string[]; avatar?: string | null; color: string;
+      };
+      const res = await api.get<{ data: ManagedAgentResponse[] }>('/managed-agents');
+      const mapped: Agent[] = res.data.map(a => ({
+        name: a.name,
+        display_name: a.display_name,
+        role: a.role,
+        model: a.model,
+        skills_count: Array.isArray(a.skills) ? a.skills.length : 0,
+        avatar: a.avatar ?? undefined,
+        color: a.color,
+      }));
+      set({ agents: mapped });
+    } catch { /* silent — store keeps old list */ }
+  },
 
   addMessage: (message: Message) => {
     set((state) => {
