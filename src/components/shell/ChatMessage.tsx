@@ -124,6 +124,16 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     && (previousMessage.agent ?? null) === (message.agent ?? null);
   const showAvatar = !previousSameSender;
   const agentInfo = !isUser && message.agent ? agents.find(a => a.name === message.agent) : null;
+
+  // G10: side question render. The user's `/btw <question>` bubble is tagged
+  // by chat.store.sendMessage. The assistant's reply that immediately follows
+  // inherits the treatment (the previous user message was a side question and
+  // there's been no other turn in between).
+  const ownSide = message.message_metadata?.is_side_question === true;
+  const inheritedSide = !isUser
+    && previousMessage?.role === 'user'
+    && previousMessage.message_metadata?.is_side_question === true;
+  const isSide = ownSide || inheritedSide;
   const avatarEmoji = isUser ? userAvatar : (agentInfo?.avatar || '🤖');
 
   // Render approval card if this message carries an approval
@@ -228,18 +238,43 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
           {!isUser && avatarSlot}
           <div
             style={{
+              position: 'relative',
               maxWidth: '85%',
               padding: '8px 12px',
-              background: isUser ? 'var(--amber-dim)' : 'var(--card)',
+              background: isSide
+                ? 'transparent'
+                : isUser ? 'var(--amber-dim)' : 'var(--card)',
               borderRadius: isUser
                 ? '12px 12px 4px 12px'
                 : '12px 12px 12px 4px',
-              border: isUser ? 'none' : '1px solid var(--border)',
+              border: isSide
+                ? '1px dashed var(--text-dim)'
+                : (isUser ? 'none' : '1px solid var(--border)'),
               fontSize: '0.875rem',
               lineHeight: 1.5,
               wordBreak: 'break-word',
+              opacity: isSide ? 0.85 : 1,
             }}
           >
+            {isSide && (
+              <span style={{
+                position: 'absolute',
+                bottom: -7,
+                [isUser ? 'right' : 'left' as 'right' | 'left']: 10,
+                fontSize: '0.5625rem',
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+                background: 'var(--surface)',
+                padding: '1px 6px',
+                borderRadius: 4,
+                border: '1px solid var(--border)',
+                lineHeight: 1.4,
+              }}>
+                side
+              </span>
+            )}
             {isUser ? (
               <>
                 {message.attachments && message.attachments.length > 0 && (

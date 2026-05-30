@@ -118,6 +118,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       set((s) => ({ conversations: [conv, ...s.conversations] }));
     }
 
+    // G10: detect /btw or /side (OpenClaw native side-question commands) so
+    // the bubble can be rendered with a "side" treatment. The command itself
+    // goes through to the agent unchanged — OpenClaw intercepts it server-side
+    // via auto-reply/reply/commands-btw.ts. We just tag the metadata so the
+    // UI knows this turn is ephemeral and doesn't belong to the main task.
+    const isSideQuestion = /^\s*\/(btw|side)\b/i.test(text);
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       conversation_id: convId,
@@ -125,6 +132,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       content: text,
       timestamp: new Date().toISOString(),
       attachments: attachments?.length ? attachments : undefined,
+      message_metadata: isSideQuestion ? { is_side_question: true } : undefined,
     };
 
     const existing = messages.get(convId) ?? [];
@@ -148,6 +156,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         conversation_id: convId,
         context: context ?? null,
         attachments: attachmentsMeta ?? null,
+        // G10: forward side-question tag to Core so it persists in
+        // agent_conversations.metadata and the assistant reply can be rendered
+        // with the same "side" treatment on re-navigation.
+        message_metadata: isSideQuestion ? { is_side_question: true } : null,
         // Echoed back by Core in `chat.stream.done` as `client_temp_id`.
         // `finalizeStream` uses it to find this local user message and
         // rewrite its id to the DB-assigned one, so `loadMessages` dedup
