@@ -13,6 +13,8 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { ManagedAgent } from './types';
+import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
+import { useUserAvatar } from '@/hooks/use-user-avatar';
 
 interface AgentTreeNodeProps {
   agent: ManagedAgent;
@@ -50,6 +52,7 @@ function formatModelName(model: string): string {
 }
 
 export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 0, expanded = true, onToggleExpand }: AgentTreeNodeProps) {
+  const [userAvatar, setUserAvatar] = useUserAvatar();
   const [hovered, setHovered] = useState(false);
   const [toggleHovered, setToggleHovered] = useState(false);
 
@@ -141,9 +144,21 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         gap: 12,
         minHeight: 32,
       }}>
-        <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>
-          {agent.avatar || '🤖'}
-        </span>
+        {isOwner ? (
+          <div onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
+            <EmojiAvatarPicker
+              value={userAvatar}
+              onChange={setUserAvatar}
+              size={32}
+              fallback="👤"
+              title="Change your avatar"
+            />
+          </div>
+        ) : (
+          <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>
+            {agent.avatar || '🤖'}
+          </span>
+        )}
         <span style={{
           fontSize: '1.0625rem',
           fontWeight: 600,
