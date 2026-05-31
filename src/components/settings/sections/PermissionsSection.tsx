@@ -22,7 +22,7 @@
 // Preview counts come from POST /admin/scope-preview (rewritten).
 
 import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
-import { Loader2, Shield, Eye, X } from 'lucide-react';
+import { Loader2, Shield, Eye, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import * as approvalsSvc from '@/services/approvals.service';
 import * as agentsAdmin from '@/services/agents-admin.service';
@@ -33,9 +33,15 @@ import { DATA_DOMAINS as DOMAINS, ALL_DOMAIN_IDS } from '@/config/domains';
 
 // ─── Types ──────────────────────────────────────────────
 
+type DomainTagFilter = { mode: 'include' | 'exclude'; tags: string[] };
+
 interface AgentPermissions {
   allowed_domains: string[];
-  tag_filter: { mode: 'include' | 'exclude'; tags: string[] } | null;
+  // Fase 3.6: filtro por etiqueta POR-DOMINIO.
+  tag_filters?: Record<string, DomainTagFilter>;
+  // Legacy: un filtro global (shape anterior). Se tolera al leer y se migra a
+  // tag_filters al abrir el editor.
+  tag_filter?: DomainTagFilter | null;
 }
 
 interface AgentRow {
@@ -56,11 +62,17 @@ function parsePermissions(raw: unknown): AgentPermissions {
   if (raw && typeof raw === 'object' && 'allowed_domains' in raw) {
     return raw as AgentPermissions;
   }
-  return { allowed_domains: [], tag_filter: null };
+  return { allowed_domains: [], tag_filters: {} };
+}
+
+function tagFilterCount(p: AgentPermissions): number {
+  const perDomain = Object.values(p.tag_filters ?? {}).filter((f) => f.tags?.length > 0).length;
+  const legacy = p.tag_filter?.tags?.length ? 1 : 0;
+  return perDomain + legacy;
 }
 
 function isFullAccess(p: AgentPermissions): boolean {
-  return p.allowed_domains.length === 0 && !p.tag_filter;
+  return p.allowed_domains.length === 0 && tagFilterCount(p) === 0;
 }
 
 function permissionsSummary(p: AgentPermissions): string {
@@ -69,9 +81,8 @@ function permissionsSummary(p: AgentPermissions): string {
   if (p.allowed_domains.length > 0 && p.allowed_domains.length < ALL_DOMAIN_IDS.length) {
     parts.push(`${p.allowed_domains.length} domain${p.allowed_domains.length === 1 ? '' : 's'}`);
   }
-  if (p.tag_filter && p.tag_filter.tags.length > 0) {
-    parts.push(`${p.tag_filter.mode} ${p.tag_filter.tags.length} tag${p.tag_filter.tags.length === 1 ? '' : 's'}`);
-  }
+  const tf = tagFilterCount(p);
+  if (tf > 0) parts.push(`${tf} tag filter${tf === 1 ? '' : 's'}`);
   return parts.length > 0 ? parts.join(' · ') : 'Full access to all data';
 }
 
@@ -103,9 +114,11 @@ function PermBadge({ permissions }: { permissions: AgentPermissions }) {
 function TagChipInput({
   tags,
   onChange,
+  inputId = 'tag-chip-input',
 }: {
   tags: string[];
   onChange: (tags: string[]) => void;
+  inputId?: string;
 }) {
   const [input, setInput] = useState('');
 
@@ -129,7 +142,7 @@ function TagChipInput({
     <div
       className="flex flex-wrap items-center gap-1.5 p-2 min-h-[36px] rounded-md border border-[var(--border)] bg-[var(--surface)]"
       onClick={() => {
-        const inp = document.getElementById('tag-chip-input');
+        const inp = document.getElementById(inputId);
         if (inp) inp.focus();
       }}
     >
@@ -158,7 +171,7 @@ function TagChipInput({
         </span>
       ))}
       <input
-        id="tag-chip-input"
+        id={inputId}
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -192,16 +205,26 @@ function ScopeEditor({
     return new Set(initialPermissions.allowed_domains);
   });
 
-  // Tag filter
-  const [tagMode, setTagMode] = useState<'include' | 'exclude'>(
-    initialPermissions.tag_filter?.mode ?? 'include',
-  );
-  const [tagValues, setTagValues] = useState<string[]>(
-    initialPermissions.tag_filter?.tags ?? [],
-  );
-  const [showTagFilter, setShowTagFilter] = useState(
-    !!initialPermissions.tag_filter && initialPermissions.tag_filter.tags.length > 0,
-  );
+  // Filtro por etiqueta POR-DOMINIO (Fase 3.6). Si llega el legacy global lo
+  // migramos al abrir: se aplica a cada dominio CON tags del set permitido.
+  const initialTagFilters: Record<string, DomainTagFilter> = (() => {
+    if (initialPermissions.tag_filters && Object.keys(initialPermissions.tag_filters).length > 0) {
+      return { ...initialPermissions.tag_filters };
+    }
+    const legacy = initialPermissions.tag_filter;
+    if (legacy && legacy.tags.length > 0) {
+      const allowed = initialPermissions.allowed_domains.length === 0 ? ALL_DOMAIN_IDS : initialPermissions.allowed_domains;
+      const out: Record<string, DomainTagFilter> = {};
+      for (const id of allowed) {
+        if (DOMAINS.find((d) => d.id === id)?.hasTagSupport) out[id] = { mode: legacy.mode, tags: [...legacy.tags] };
+      }
+      return out;
+    }
+    return {};
+  })();
+  const [tagFilters, setTagFilters] = useState<Record<string, DomainTagFilter>>(initialTagFilters);
+  // Filas con el editor de filtro abierto.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(Object.keys(initialTagFilters)));
 
   // Preview
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -209,7 +232,6 @@ function ScopeEditor({
   const [saving, setSaving] = useState(false);
 
   const allChecked = checkedDomains.size === ALL_DOMAIN_IDS.length;
-  const hasTaggableDomain = DOMAINS.some((d) => checkedDomains.has(d.id) && d.hasTagSupport);
 
   const toggleDomain = (id: string) => {
     setCheckedDomains((prev) => {
@@ -218,25 +240,48 @@ function ScopeEditor({
       else next.add(id);
       return next;
     });
+    // Al desmarcar, quitamos su filtro y lo colapsamos.
+    setTagFilters((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    setExpanded((prev) => { const n = new Set(prev); n.delete(id); return n; });
     setPreview(null);
   };
 
   const toggleAll = () => {
-    if (allChecked) {
-      setCheckedDomains(new Set());
-    } else {
-      setCheckedDomains(new Set(ALL_DOMAIN_IDS));
-    }
+    setCheckedDomains(allChecked ? new Set() : new Set(ALL_DOMAIN_IDS));
+    if (allChecked) { setTagFilters({}); setExpanded(new Set()); }
+    setPreview(null);
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) {
+        n.delete(id);
+      } else {
+        n.add(id);
+        // Al abrir por primera vez, inicializa un filtro include vacío.
+        setTagFilters((tf) => (tf[id] ? tf : { ...tf, [id]: { mode: 'include', tags: [] } }));
+      }
+      return n;
+    });
+  };
+
+  const setDomainFilter = (id: string, patch: Partial<DomainTagFilter>) => {
+    setTagFilters((prev) => ({
+      ...prev,
+      [id]: { mode: prev[id]?.mode ?? 'include', tags: prev[id]?.tags ?? [], ...patch },
+    }));
     setPreview(null);
   };
 
   const buildPermissions = (): AgentPermissions => {
     const allowed = allChecked ? [] : Array.from(checkedDomains);
-    const tagFilter =
-      showTagFilter && tagValues.length > 0
-        ? { mode: tagMode, tags: tagValues }
-        : null;
-    return { allowed_domains: allowed, tag_filter: tagFilter };
+    // Solo dominios marcados, con al menos una etiqueta.
+    const tag_filters: Record<string, DomainTagFilter> = {};
+    for (const [id, f] of Object.entries(tagFilters)) {
+      if (checkedDomains.has(id) && f.tags.length > 0) tag_filters[id] = f;
+    }
+    return { allowed_domains: allowed, tag_filters };
   };
 
   const fetchPreview = async () => {
@@ -245,7 +290,7 @@ function ScopeEditor({
       const perms = buildPermissions();
       setPreview(await approvalsSvc.previewScope({
         allowed_domains: perms.allowed_domains,
-        tag_filter: perms.tag_filter,
+        tag_filters: perms.tag_filters ?? {},
       }));
     } catch {
       toast.error('Failed to load preview');
@@ -320,106 +365,90 @@ function ScopeEditor({
                 {allChecked ? 'Clear all' : 'Select all'}
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {DOMAINS.map((d) => {
                 const Icon = d.icon;
                 const checked = checkedDomains.has(d.id);
+                const filter = tagFilters[d.id];
+                const isOpen = expanded.has(d.id);
+                const mode = filter?.mode ?? 'include';
                 return (
-                  <label
+                  <div
                     key={d.id}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '6px 8px', borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer', fontSize: '0.8125rem',
-                      color: checked ? 'var(--text)' : 'var(--text-muted)',
-                      background: checked ? 'var(--surface)' : 'transparent',
+                      borderRadius: 'var(--radius-sm)',
                       border: '1px solid',
                       borderColor: checked ? 'var(--border)' : 'transparent',
+                      background: checked ? 'var(--surface)' : 'transparent',
                       transition: 'all 0.1s',
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleDomain(d.id)}
-                      style={{ accentColor: 'var(--amber)', width: 14, height: 14 }}
-                    />
-                    <Icon size={14} />
-                    <span>{d.label}</span>
-                    {!d.hasTagSupport && checked && (
-                      <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-                        no tags
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flex: 1, fontSize: '0.8125rem', color: checked ? 'var(--text)' : 'var(--text-muted)' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleDomain(d.id)}
+                          style={{ accentColor: 'var(--amber)', width: 14, height: 14 }}
+                        />
+                        <Icon size={14} />
+                        <span>{d.label}</span>
+                      </label>
+                      {checked && d.hasTagSupport && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(d.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px',
+                            background: filter?.tags.length ? 'color-mix(in srgb, var(--amber) 14%, transparent)' : 'transparent',
+                            border: '1px solid',
+                            borderColor: filter?.tags.length ? 'color-mix(in srgb, var(--amber) 35%, transparent)' : 'var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: filter?.tags.length ? 'var(--amber)' : 'var(--text-muted)',
+                            fontSize: '0.625rem', fontFamily: 'var(--font-sans)', cursor: 'pointer',
+                          }}
+                        >
+                          {isOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+                          {filter?.tags.length ? `${mode} ${filter.tags.length}` : 'tag filter'}
+                        </button>
+                      )}
+                      {checked && !d.hasTagSupport && (
+                        <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)' }}>sin tags</span>
+                      )}
+                    </div>
+                    {checked && d.hasTagSupport && isOpen && (
+                      <div style={{ padding: '0 8px 10px 30px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                          {(['include', 'exclude'] as const).map((m) => (
+                            <label key={m} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.6875rem', color: 'var(--text-dim)', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                name={`mode-${d.id}`}
+                                checked={mode === m}
+                                onChange={() => setDomainFilter(d.id, { mode: m })}
+                                style={{ accentColor: 'var(--amber)', width: 12, height: 12 }}
+                              />
+                              {m}
+                            </label>
+                          ))}
+                        </div>
+                        <TagChipInput
+                          inputId={`tag-${d.id}`}
+                          tags={filter?.tags ?? []}
+                          onChange={(t) => setDomainFilter(d.id, { tags: t })}
+                        />
+                        <p style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                          {mode === 'include'
+                            ? `Solo registros de ${d.label} con alguna de estas etiquetas.`
+                            : `Todos los de ${d.label} EXCEPTO los de estas etiquetas.`}
+                        </p>
+                      </div>
                     )}
-                  </label>
+                  </div>
                 );
               })}
             </div>
           </div>
-
-          {/* Tag filter */}
-          {hasTaggableDomain && (
-            <div style={{ marginBottom: 16 }}>
-              <div
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  marginBottom: showTagFilter ? 10 : 0,
-                }}
-              >
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={showTagFilter}
-                    onChange={(e) => {
-                      setShowTagFilter(e.target.checked);
-                      if (!e.target.checked) setPreview(null);
-                    }}
-                    style={{ accentColor: 'var(--amber)', width: 14, height: 14 }}
-                  />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Tag filter
-                  </span>
-                </label>
-                <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
-                  Optional — applies to domains that support tags
-                </span>
-              </div>
-
-              {showTagFilter && (
-                <div style={{ padding: '12px', background: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Mode:</span>
-                    <select
-                      value={tagMode}
-                      onChange={(e) => {
-                        setTagMode(e.target.value as 'include' | 'exclude');
-                        setPreview(null);
-                      }}
-                      style={{
-                        height: 28, padding: '0 24px 0 8px',
-                        background: 'var(--bg)', border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-                        fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
-                        outline: 'none', appearance: 'none', cursor: 'pointer',
-                      }}
-                    >
-                      <option value="include">Include only</option>
-                      <option value="exclude">Exclude</option>
-                    </select>
-                  </div>
-                  <TagChipInput
-                    tags={tagValues}
-                    onChange={(t) => { setTagValues(t); setPreview(null); }}
-                  />
-                  <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6 }}>
-                    {tagMode === 'include'
-                      ? 'The agent will ONLY see records tagged with at least one of these tags.'
-                      : 'The agent will see everything EXCEPT records tagged with any of these tags.'}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Preview */}
           <div style={{ padding: '12px', background: 'var(--surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
@@ -451,7 +480,7 @@ function ScopeEditor({
                   const entry = preview[d.id];
                   const total = entry?.total ?? 0;
                   const filtered = entry?.filtered ?? 0;
-                  const hasFilter = showTagFilter && tagValues.length > 0 && d.hasTagSupport;
+                  const hasFilter = !!tagFilters[d.id]?.tags.length && d.hasTagSupport;
                   return (
                     <div key={d.id} style={{ textAlign: 'center', padding: '6px 0' }}>
                       <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
@@ -461,9 +490,6 @@ function ScopeEditor({
                         {d.label}
                         {hasFilter && total > 0 && (
                           <span> / {total}</span>
-                        )}
-                        {!d.hasTagSupport && showTagFilter && tagValues.length > 0 && (
-                          <span style={{ display: 'block', fontSize: '0.5rem', fontStyle: 'italic' }}>no tags</span>
                         )}
                       </div>
                     </div>

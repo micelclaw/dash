@@ -41,9 +41,9 @@ export const DATA_DOMAINS: DataDomain[] = [
   { id: 'events',    label: 'Calendar',  icon: Calendar,   hasTagSupport: true  },
   { id: 'emails',    label: 'Email',     icon: Mail,       hasTagSupport: true  },
   { id: 'files',     label: 'Files',     icon: FolderOpen, hasTagSupport: true  },
-  { id: 'photos',    label: 'Photos',    icon: Image,      hasTagSupport: false },
+  { id: 'photos',    label: 'Photos',    icon: Image,      hasTagSupport: true  },
   { id: 'kanban',    label: 'Projects',  icon: Columns,    hasTagSupport: true  },
-  { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark,   hasTagSupport: false },
+  { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark,   hasTagSupport: true  },
   { id: 'finance',   label: 'Finance',   icon: DollarSign, hasTagSupport: false },
 ];
 

@@ -36,7 +36,8 @@ export interface ScopePreviewResult {
 
 export interface ScopePreviewParams {
   allowed_domains: string[];
-  tag_filter: { mode: 'include' | 'exclude'; tags: string[] } | null;
+  // Fase 3.6: filtro por etiqueta por-dominio.
+  tag_filters: Record<string, { mode: 'include' | 'exclude'; tags: string[] }>;
 }
 
 export async function listHistory(): Promise<ApprovalHistoryEntry[]> {
