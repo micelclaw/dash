@@ -38,7 +38,7 @@ export const DATA_DOMAINS: DataDomain[] = [
   { id: 'notes',     label: 'Notes',     icon: StickyNote, hasTagSupport: true  },
   { id: 'contacts',  label: 'Contacts',  icon: Users,      hasTagSupport: true  },
   { id: 'diary',     label: 'Diary',     icon: BookOpen,   hasTagSupport: true  },
-  { id: 'events',    label: 'Calendar',  icon: Calendar,   hasTagSupport: false },
+  { id: 'events',    label: 'Calendar',  icon: Calendar,   hasTagSupport: true  },
   { id: 'emails',    label: 'Email',     icon: Mail,       hasTagSupport: true  },
   { id: 'files',     label: 'Files',     icon: FolderOpen, hasTagSupport: true  },
   { id: 'photos',    label: 'Photos',    icon: Image,      hasTagSupport: false },

@@ -23,6 +23,7 @@ export interface CalendarEvent {
   calendar_name: string;
   reminders: { type: string; minutes_before: number }[];
   attendees: { email: string; name?: string; status: string }[];
+  tags: string[] | null;
   custom_fields: Record<string, unknown> | null;
   source: string;
   source_id: string | null;
@@ -43,6 +44,7 @@ export interface EventCreateInput {
   calendar_name?: string;
   reminders?: { type: string; minutes_before: number }[];
   attendees?: { email: string; name?: string; status?: string }[];
+  tags?: string[];
 }
 
 export interface EventUpdateInput {
@@ -56,6 +58,7 @@ export interface EventUpdateInput {
   calendar_name?: string;
   reminders?: { type: string; minutes_before: number }[];
   attendees?: { email: string; name?: string; status?: string }[];
+  tags?: string[];
 }
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
