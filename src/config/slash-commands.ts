@@ -22,6 +22,7 @@ import {
   RefreshCw,
   History,
   MessageSquareQuote,
+  ArrowRightLeft,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -91,6 +92,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'send', label: 'Send Policy', icon: Send, category: 'session', options: ['on', 'off', 'inherit'] },
   { name: 'tts', label: 'TTS auto-play (chat)', icon: Volume2, category: 'session', options: ['chat on', 'chat off', 'chat default'] },
   { name: 'btw', label: 'Side question (/btw)', icon: MessageSquareQuote, category: 'session' },
+  { name: 'steer', label: 'Redirect run (/steer)', icon: ArrowRightLeft, category: 'session' },
 
   // ── Context ── instant actions on the conversation context
   { name: 'compact', label: 'Compact Context', icon: FileDown, category: 'context' },

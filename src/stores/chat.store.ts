@@ -110,7 +110,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const conv: Conversation = {
         id: convId,
         agent,
-        first_message: text,
+        first_message: text, // raw (with /steer prefix if any) — purely cosmetic for the sidebar
         message_count: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -125,11 +125,22 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     // UI knows this turn is ephemeral and doesn't belong to the main task.
     const isSideQuestion = /^\s*\/(btw|side)\b/i.test(text);
 
+    // G11: detect /steer — strip the prefix and set is_steer flag. Core will
+    // abort the active run (if any) and start a new turn with the stripped
+    // message. Equivalent to OpenClaw's `sessions.steer` RPC. If there's no
+    // active stream, behaves as a regular send.
+    const steerMatch = /^\s*\/steer\s+([\s\S]+)$/i.exec(text);
+    const isSteer = !!steerMatch;
+    const messageToSend = isSteer ? steerMatch![1].trim() : text;
+    // Skip silently if /steer was sent without a body (chat input may have a
+    // race where the user hits enter before typing).
+    if (isSteer && !messageToSend) return;
+
     const userMsg: Message = {
       id: crypto.randomUUID(),
       conversation_id: convId,
       role: 'user',
-      content: text,
+      content: messageToSend,
       timestamp: new Date().toISOString(),
       attachments: attachments?.length ? attachments : undefined,
       message_metadata: isSideQuestion ? { is_side_question: true } : undefined,
@@ -152,7 +163,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     } else {
       useWebSocketStore.getState().send('chat.send', {
         agent,
-        message: text,
+        message: messageToSend,
         conversation_id: convId,
         context: context ?? null,
         attachments: attachmentsMeta ?? null,
@@ -160,6 +171,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         // agent_conversations.metadata and the assistant reply can be rendered
         // with the same "side" treatment on re-navigation.
         message_metadata: isSideQuestion ? { is_side_question: true } : null,
+        // G11: when true, Core aborts the active run before starting the new
+        // turn (functional equivalent of OpenClaw's sessions.steer RPC).
+        is_steer: isSteer || undefined,
         // Echoed back by Core in `chat.stream.done` as `client_temp_id`.
         // `finalizeStream` uses it to find this local user message and
         // rewrite its id to the DB-assigned one, so `loadMessages` dedup
