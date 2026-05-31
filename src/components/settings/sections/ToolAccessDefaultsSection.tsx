@@ -8,6 +8,7 @@ import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import * as agentsAdmin from '@/services/agents-admin.service';
+import { api } from '@/services/api';
 import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
 
@@ -51,12 +52,15 @@ const PRESET_TOOLS: Record<string, Set<string>> = {
     'sessions_list', 'sessions_history', 'sessions_send',
     'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
     'cron', 'image',
+    // bundle-mcp: las claw_* se materializan en coding/messaging/full (no minimal).
+    'bundle-mcp',
   ]),
   messaging: new Set([
     'sessions_list', 'sessions_history', 'sessions_send',
     'session_status', 'message',
+    'bundle-mcp',
   ]),
-  full: new Set(ALL_TOOLS),
+  full: new Set([...ALL_TOOLS, 'bundle-mcp']),
 };
 
 const PROFILES = [
@@ -80,6 +84,14 @@ export function ToolAccessDefaultsSection() {
   const [deny, setDeny] = useState<Set<string>>(new Set());
 
   const [firstAgentId, setFirstAgentId] = useState<string | null>(null);
+  // Fase 3.6-B: tools MCP (claw_*) descubiertas del registro.
+  const [mcpTools, setMcpTools] = useState<{ name: string; domain: string; label: string; actions: string[] }[]>([]);
+
+  useEffect(() => {
+    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[] } }>('/managed-agents/available-tools')
+      .then((r) => setMcpTools(r.data.mcp_tools ?? []))
+      .catch(() => { /* la UI nativa sigue sin el grupo MCP */ });
+  }, []);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -282,6 +294,47 @@ export function ToolAccessDefaultsSection() {
           </button>
         )}
       </div>
+
+      {/* Fase 3.6-B: tools de Micelclaw OS (claw_*) desde el registro. */}
+      {mcpTools.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Micelclaw OS · bundle-mcp
+          </h3>
+          <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '0 0 10px' }}>
+            Habilita en bloque las {mcpTools.length} herramientas claw_*. El acceso por dominio/etiqueta de cada agente se ajusta en Agent Permissions.
+          </p>
+          <span
+            onClick={() => handleToolToggle('bundle-mcp')}
+            title="Agrupa todas las tools MCP (claw_*)"
+            style={{
+              display: 'inline-block', padding: '4px 10px', fontSize: '0.6875rem',
+              background: isToolEnabled('bundle-mcp') ? '#22c55e18' : 'var(--surface)',
+              color: isToolEnabled('bundle-mcp') ? '#22c55e' : 'var(--text-muted)',
+              border: `1px solid ${isToolEnabled('bundle-mcp') ? '#22c55e30' : 'var(--border)'}`,
+              borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono, var(--font-sans))',
+              cursor: 'pointer', userSelect: 'none',
+            }}
+          >
+            bundle-mcp
+          </span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.45 }}>
+            {mcpTools.map((t) => (
+              <span
+                key={t.name}
+                title={t.actions.join(', ')}
+                style={{
+                  padding: '3px 8px', fontSize: '0.625rem', background: 'var(--surface)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-dim)', fontFamily: 'var(--font-mono, var(--font-sans))',
+                }}
+              >
+                {t.name} ({t.actions.length})
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </SectionShell>
   );
 }

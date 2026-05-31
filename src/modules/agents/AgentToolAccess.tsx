@@ -83,12 +83,16 @@ const PRESET_TOOLS: Record<string, Set<string>> = {
     'sessions_list', 'sessions_history', 'sessions_send',
     'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
     'cron', 'image',
+    // bundle-mcp: las tools MCP (claw_*) se materializan en los perfiles
+    // coding/messaging/full del embedded Pi (no en minimal).
+    'bundle-mcp',
   ]),
   messaging: new Set([
     'sessions_list', 'sessions_history', 'sessions_send',
     'session_status', 'message',
+    'bundle-mcp',
   ]),
-  full: new Set(ALL_TOOLS),
+  full: new Set([...ALL_TOOLS, 'bundle-mcp']),
 };
 
 const PRESETS: { label: string; value: ToolProfile; desc: string }[] = [
@@ -129,6 +133,14 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
   const [activeProfile, setActiveProfile] = useState<ToolProfile>('inherit');
   const [customAllow, setCustomAllow] = useState<Set<string>>(new Set());
   const [customDeny, setCustomDeny] = useState<Set<string>>(new Set());
+  // Fase 3.6-B: tools MCP (claw_*) descubiertas dinámicamente del registro.
+  const [mcpTools, setMcpTools] = useState<{ name: string; domain: string; label: string; actions: string[] }[]>([]);
+
+  useEffect(() => {
+    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[] } }>('/managed-agents/available-tools')
+      .then((r) => setMcpTools(r.data.mcp_tools ?? []))
+      .catch(() => { /* opcional: la UI nativa sigue funcionando sin el grupo MCP */ });
+  }, []);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -376,6 +388,63 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
           </div>
         </div>
       ))}
+
+      {/* Fase 3.6-B: tools de Micelclaw OS (claw_*) descubiertas del registro.
+          Se controlan en bloque vía bundle-mcp; la lista es informativa. */}
+      {mcpTools.length > 0 && (
+        <div>
+          <h4 style={{
+            fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
+            margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em',
+          }}>
+            Micelclaw OS · bundle-mcp
+          </h4>
+          <div
+            onClick={() => handleToolToggle('bundle-mcp')}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+              opacity: activeProfile === 'inherit' ? 0.6 : 1,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>bundle-mcp</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                Habilita las {mcpTools.length} herramientas de Micelclaw OS (claw_*)
+              </div>
+            </div>
+            <div style={{
+              width: 32, height: 18, borderRadius: 9,
+              background: isToolEnabled('bundle-mcp') ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+              position: 'relative', flexShrink: 0, marginLeft: 8, transition: 'background 0.2s',
+            }}>
+              <div style={{
+                width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                position: 'absolute', top: 2, left: isToolEnabled('bundle-mcp') ? 16 : 2, transition: 'left 0.2s',
+              }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.45 }}>
+            {mcpTools.map((t) => (
+              <span
+                key={t.name}
+                title={t.actions.join(', ')}
+                style={{
+                  fontSize: '0.625rem', padding: '2px 6px', borderRadius: 'var(--radius-sm)',
+                  background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)',
+                }}
+              >
+                {t.name} <span style={{ color: 'var(--text-muted)' }}>({t.actions.length})</span>
+              </span>
+            ))}
+          </div>
+          <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6 }}>
+            Las claw_* se controlan en bloque (bundle-mcp). El acceso por dominio/etiqueta de
+            cada agente se ajusta en Settings → Agent Permissions.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
