@@ -13,10 +13,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Settings as SettingsIcon } from 'lucide-react';
+import { Activity as ActivityIcon, Bell, Radio, Container, Cpu, Zap, Settings as SettingsIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Adapter, TimeRange } from './adapters/types';
+import { LiveTab } from './tabs/LiveTab';
 import { EventsTab } from './tabs/EventsTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
 import { GatewayLogsTab } from './tabs/GatewayLogsTab';
@@ -35,7 +36,10 @@ interface TabDescriptor {
   bucket: 'events' | 'gateway' | 'containers' | 'core' | null;
 }
 
+// E3: 'live' is ephemeral (no DB snapshot, no bucket). Goes first so a
+// fresh Activity Center open lands on the "what's happening now" view.
 const TABS: TabDescriptor[] = [
+  { key: 'live',          label: 'Live',           icon: Zap,          bucket: null },
   { key: 'events',        label: 'Events',         icon: ActivityIcon, bucket: 'events' },
   { key: 'notifications', label: 'Notifications',  icon: Bell,         bucket: null },
   { key: 'gateway',       label: 'Gateway logs',   icon: Radio,        bucket: 'gateway' },
@@ -55,8 +59,8 @@ export function Component() {
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
-  const queryTab = (search.get('tab') ?? 'events') as TabKey;
-  const initialTab: TabKey = TABS.some((t) => t.key === queryTab) ? queryTab : 'events';
+  const queryTab = (search.get('tab') ?? 'live') as TabKey;
+  const initialTab: TabKey = TABS.some((t) => t.key === queryTab) ? queryTab : 'live';
   const initialSettingsOpen = search.get('settings') === 'open';
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
@@ -197,6 +201,7 @@ export function Component() {
 
       {/* Main column — dispatch by active tab */}
       <section className="flex-1 flex flex-col min-h-0">
+        {activeTab === 'live' && <LiveTab {...sharedProps} />}
         {activeTab === 'events' && <EventsTab {...sharedProps} />}
         {activeTab === 'notifications' && <NotificationsTab {...sharedProps} />}
         {activeTab === 'gateway' && <GatewayLogsTab {...sharedProps} />}

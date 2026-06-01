@@ -64,7 +64,7 @@ export interface AdapterFetchResult<Row> {
 }
 
 export interface Adapter<Row> {
-  tabKey: 'events' | 'notifications' | 'gateway' | 'containers' | 'core';
+  tabKey: 'live' | 'events' | 'notifications' | 'gateway' | 'containers' | 'core';
   title: string;
   /** Lucide icon component (rendered by the shell sidebar) */
   iconLabel: string; // emoji or 1-letter; kept stringly to avoid pulling icons here
