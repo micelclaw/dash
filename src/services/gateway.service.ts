@@ -1184,3 +1184,32 @@ export async function getUsageStatus(): Promise<UsageStatus> {
   const res = await api.get<{ data: UsageStatus }>('/gateway/usage-status');
   return res.data;
 }
+
+// ─── Token usage summary (F3.1 plan B) ──────────────────────────────
+// Aggregated over our own `token_usage` table — covers ALL providers
+// (raw API keys too), unlike the upstream `usage.status` RPC which is
+// subscription-only. The chat header badge consumes this.
+
+export type TokenUsageWindow = '1h' | '24h' | '7d' | '30d';
+
+export interface TokenUsageModelRow {
+  model: string;
+  requests: number;
+  tokens_input: number;
+  tokens_output: number;
+  tokens_total: number;
+  cost_usd: number;
+}
+
+export interface TokenUsageSummary {
+  window: TokenUsageWindow;
+  from: string;  // ISO
+  to: string;    // ISO
+  models: TokenUsageModelRow[];
+  totals: { tokens_total: number; cost_usd: number; requests: number };
+}
+
+export async function getTokenUsageSummary(window: TokenUsageWindow = '24h'): Promise<TokenUsageSummary> {
+  const res = await api.get<{ data: TokenUsageSummary }>(`/token-usage/summary?window=${window}`);
+  return res.data;
+}
