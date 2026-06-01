@@ -106,33 +106,16 @@ const TTS_PROVIDER_DESCRIPTIONS: Record<string, string> = {
 };
 
 // F3.4: messages.groupChat.{unmentionedInbound, visibleReplies} from
-// OpenClaw 5.17+. Controls how the agent treats group/channel chatter
-// where it wasn't directly mentioned, and whether normal replies are
-// posted to the room or stay private (requiring the message tool).
-const UNMENTIONED_INBOUND_MODES = [
-  {
-    value: 'user_request',
-    label: 'User request (default)',
-    desc: 'Treat unmentioned group messages as a user request — the agent replies to everything in the room',
-  },
-  {
-    value: 'room_event',
-    label: 'Room event',
-    desc: 'Submit as quiet context — visible output requires the message tool. Best for noisy rooms where the agent should mostly listen',
-  },
+// OpenClaw 5.17+. Surfaced as plain-language questions so users don't
+// have to know the upstream field names.
+const REPLY_FREQUENCY_OPTIONS = [
+  { value: 'user_request', label: 'Reply to every message in the group' },
+  { value: 'room_event',   label: 'Only reply when someone @-mentions the agent' },
 ];
 
-const VISIBLE_REPLIES_MODES = [
-  {
-    value: 'automatic',
-    label: 'Automatic (default)',
-    desc: 'Final text is posted to the room as a normal reply',
-  },
-  {
-    value: 'message_tool',
-    label: 'Message tool only',
-    desc: 'Final text stays private — the agent must call message(send) to make replies visible in the room',
-  },
+const REPLY_PUBLISHING_OPTIONS = [
+  { value: 'automatic',    label: 'Post replies automatically' },
+  { value: 'message_tool', label: 'Stay silent unless the agent explicitly decides to reply' },
 ];
 
 const ACK_REACTION_SCOPES = [
@@ -461,21 +444,22 @@ export function ChannelBindingsSection() {
         <SelectRow label="Ack reaction scope" value={ackReactionScope} options={ACK_REACTION_SCOPES} onChange={markDirty(setAckReactionScope)} />
       </SettingsBlock>
 
-      {/* F3.4: Group chat — applies to Telegram / Discord / Slack / WhatsApp
-          rooms where the agent listens in group mode. Has no effect on
-          one-to-one DMs or the dash WebChat. */}
+      {/* F3.4: Group chat behaviour. Applies only to Telegram / Discord /
+          Slack / WhatsApp rooms in group mode. No effect on one-to-one
+          DMs or the dash WebChat. */}
       <SettingsBlock
-        title="Group chat behaviour"
-        description="How the agent treats group/channel messages where it wasn't directly mentioned (OpenClaw 5.17+)"
+        title="When the agent is in a group chat"
+        description="Telegram, Discord, Slack or WhatsApp groups. Does not affect direct messages or this dashboard chat."
         expanded={sections.groupChat!}
         onToggle={() => toggleSection('groupChat')}
       >
         <SelectRow
-          label="Unmentioned inbound"
+          label="When should the agent reply?"
+          desc="Default: reply to every message — useful for small private groups. For busy public rooms, switch to mention-only."
           value={unmentionedInbound === '' ? '__inherit__' : unmentionedInbound}
           options={[
-            { value: '__inherit__', label: 'Inherit binary default (user_request)' },
-            ...UNMENTIONED_INBOUND_MODES,
+            { value: '__inherit__', label: 'Use default (reply to every message)' },
+            ...REPLY_FREQUENCY_OPTIONS,
           ]}
           onChange={(v) => {
             setUnmentionedInbound(v === '__inherit__' ? '' : v);
@@ -483,11 +467,12 @@ export function ChannelBindingsSection() {
           }}
         />
         <SelectRow
-          label="Visible replies"
+          label="How are replies sent?"
+          desc="Default: post automatically. The silent option keeps the agent's thinking private — it only writes to the group when it explicitly chooses to."
           value={visibleReplies === '' ? '__inherit__' : visibleReplies}
           options={[
-            { value: '__inherit__', label: 'Inherit binary default (automatic)' },
-            ...VISIBLE_REPLIES_MODES,
+            { value: '__inherit__', label: 'Use default (post replies automatically)' },
+            ...REPLY_PUBLISHING_OPTIONS,
           ]}
           onChange={(v) => {
             setVisibleReplies(v === '__inherit__' ? '' : v);
