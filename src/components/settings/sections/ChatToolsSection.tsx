@@ -10,8 +10,14 @@
  * https://micelclaw.com
  */
 
+import { useState, useEffect } from 'react';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
+import { api } from '@/services/api';
 import { TOOL_DEFS, type Preset, classify, shouldRenderTool } from '@/config/tool-rendering';
+
+// Las tools MCP llegan al chat con el nombre `<server>__<tool>`; nuestro server es
+// `claw-os`. Los overrides de visibilidad deben usar ese nombre completo para casar.
+const MCP_SERVER_PREFIX = 'claw-os__';
 
 const PRESET_OPTIONS: Array<{ id: Preset; label: string; desc: string }> = [
   { id: 'minimal',  label: 'Minimal',  desc: 'Only delegations and scheduled tasks (Tier 1).' },
@@ -22,6 +28,15 @@ const PRESET_OPTIONS: Array<{ id: Preset; label: string; desc: string }> = [
 
 export function ChatToolsSection() {
   const { visibility, setPreset, toggleTool, reset } = useToolVisibility();
+
+  // Fase 4 (auditoría): las tools MCP (claw_*) se descubren dinámicamente del registro
+  // para poder togglear su visibilidad aquí (antes no aparecían en esta pantalla).
+  const [mcpTools, setMcpTools] = useState<{ name: string; label: string; actions: string[] }[]>([]);
+  useEffect(() => {
+    api.get<{ data: { mcp_tools: { name: string; label: string; actions: string[] }[] } }>('/managed-agents/available-tools')
+      .then((r) => setMcpTools(r.data.mcp_tools ?? []))
+      .catch(() => { /* opcional */ });
+  }, []);
 
   // Group TOOL_DEFS by tier for the table.
   const byTier = new Map<number, typeof TOOL_DEFS>();
@@ -149,6 +164,28 @@ export function ChatToolsSection() {
             </div>
           );
         })}
+        {/* Fase 4: tools MCP de Micelclaw OS (claw_*), descubiertas del registro. */}
+        {mcpTools.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: '0.6875rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6, letterSpacing: '0.04em' }}>
+              Micelclaw OS · MCP tools — visible (default preset)
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {mcpTools.map((t) => {
+                const fullName = `${MCP_SERVER_PREFIX}${t.name}`;
+                const enabled = shouldRenderTool(fullName, visibility);
+                return (
+                  <label key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={enabled} onChange={(e) => toggleTool(fullName, e.target.checked)} />
+                    <span style={{ fontSize: '0.875rem' }}>🛠️</span>
+                    <span style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--text)' }}>{t.name} <span style={{ color: 'var(--text-muted)' }}>({t.actions.length})</span></span>
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono, monospace)' }}>{fullName}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <p style={{ margin: '12px 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
           Unknown tools (not in this list) are classified as Tier 3 by default. They follow the
           preset rules unless explicitly toggled here.

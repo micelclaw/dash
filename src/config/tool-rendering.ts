@@ -87,7 +87,15 @@ export function classify(toolName: string): ToolDef {
   const lower = toolName.toLowerCase();
   const direct = BY_NAME.get(lower);
   if (direct) return direct;
-  // Heuristic fallbacks for unknown tools — usually claw-* skills.
+  // Tools MCP de Micelclaw OS: `<server>__<tool>` (p.ej. `claw-os__claw_notes`) o
+  // `claw_<dominio>`. Son acciones de primer orden del agente sobre los datos del
+  // usuario → tier 2 (visibles bajo el preset por defecto, como bash/read/edit).
+  // Label = la parte de la tool sin el prefijo del server (claw_notes).
+  if (lower.includes('__') ? /(^|__)claw[_-]/.test(lower) : lower.startsWith('claw_')) {
+    const toolPart = lower.includes('__') ? lower.split('__').pop()! : lower;
+    return { name: lower, tier: 2, icon: '🛠️', label: toolPart, renderer: 'generic' };
+  }
+  // Heurística para otras tools desconocidas (claw-* skills antiguas, etc.).
   return {
     name: lower,
     tier: 3,
