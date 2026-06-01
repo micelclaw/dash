@@ -105,6 +105,36 @@ const TTS_PROVIDER_DESCRIPTIONS: Record<string, string> = {
   xiaomi:        'Xiaomi MiMo API key required. Regional — best for zh-CN / en-US voices.',
 };
 
+// F3.4: messages.groupChat.{unmentionedInbound, visibleReplies} from
+// OpenClaw 5.17+. Controls how the agent treats group/channel chatter
+// where it wasn't directly mentioned, and whether normal replies are
+// posted to the room or stay private (requiring the message tool).
+const UNMENTIONED_INBOUND_MODES = [
+  {
+    value: 'user_request',
+    label: 'User request (default)',
+    desc: 'Treat unmentioned group messages as a user request — the agent replies to everything in the room',
+  },
+  {
+    value: 'room_event',
+    label: 'Room event',
+    desc: 'Submit as quiet context — visible output requires the message tool. Best for noisy rooms where the agent should mostly listen',
+  },
+];
+
+const VISIBLE_REPLIES_MODES = [
+  {
+    value: 'automatic',
+    label: 'Automatic (default)',
+    desc: 'Final text is posted to the room as a normal reply',
+  },
+  {
+    value: 'message_tool',
+    label: 'Message tool only',
+    desc: 'Final text stays private — the agent must call message(send) to make replies visible in the room',
+  },
+];
+
 const ACK_REACTION_SCOPES = [
   { value: 'off', label: 'Off' },
   { value: 'group-mentions', label: 'Group mentions only' },
@@ -227,8 +257,12 @@ export function ChannelBindingsSection() {
   const [ttsAuto, setTtsAuto] = useState('off');
   const [ttsProvider, setTtsProvider] = useState('microsoft');
 
+  // F3.4: group chat state. '' = inherit (don't send the field).
+  const [unmentionedInbound, setUnmentionedInbound] = useState<string>('');
+  const [visibleReplies, setVisibleReplies] = useState<string>('');
+
   const [sections, setSections] = useState<Record<string, boolean>>({
-    queue: true, streaming: false, reactions: false, tts: false,
+    queue: true, streaming: false, reactions: false, groupChat: false, tts: false,
   });
 
   const toggleSection = (key: string) => {
@@ -262,6 +296,11 @@ export function ChannelBindingsSection() {
 
       setTtsAuto((tts.auto ?? 'off') as string);
       setTtsProvider((tts.provider ?? 'microsoft') as string);
+
+      // F3.4: group chat
+      const gc = (data.group_chat ?? {}) as Record<string, unknown>;
+      setUnmentionedInbound((gc.unmentioned_inbound ?? '') as string);
+      setVisibleReplies((gc.visible_replies ?? '') as string);
 
       setDirty(false);
     } catch {
@@ -304,6 +343,12 @@ export function ChannelBindingsSection() {
           humanDelay: { mode: humanDelay },
           typingMode,
           typingIntervalSeconds: typingInterval,
+        },
+        // F3.4: groupChat. Send '' as null so configPatch deletes the
+        // key (= inherit binary default). Concrete values land literally.
+        groupChat: {
+          unmentionedInbound: unmentionedInbound === '' ? null : (unmentionedInbound as 'user_request' | 'room_event'),
+          visibleReplies: visibleReplies === '' ? null : (visibleReplies as 'automatic' | 'message_tool'),
         },
       });
       toast.success('Channel Bindings saved');
@@ -414,6 +459,41 @@ export function ChannelBindingsSection() {
           </div>
         </div>
         <SelectRow label="Ack reaction scope" value={ackReactionScope} options={ACK_REACTION_SCOPES} onChange={markDirty(setAckReactionScope)} />
+      </SettingsBlock>
+
+      {/* F3.4: Group chat — applies to Telegram / Discord / Slack / WhatsApp
+          rooms where the agent listens in group mode. Has no effect on
+          one-to-one DMs or the dash WebChat. */}
+      <SettingsBlock
+        title="Group chat behaviour"
+        description="How the agent treats group/channel messages where it wasn't directly mentioned (OpenClaw 5.17+)"
+        expanded={sections.groupChat!}
+        onToggle={() => toggleSection('groupChat')}
+      >
+        <SelectRow
+          label="Unmentioned inbound"
+          value={unmentionedInbound === '' ? '__inherit__' : unmentionedInbound}
+          options={[
+            { value: '__inherit__', label: 'Inherit binary default (user_request)' },
+            ...UNMENTIONED_INBOUND_MODES,
+          ]}
+          onChange={(v) => {
+            setUnmentionedInbound(v === '__inherit__' ? '' : v);
+            setDirty(true);
+          }}
+        />
+        <SelectRow
+          label="Visible replies"
+          value={visibleReplies === '' ? '__inherit__' : visibleReplies}
+          options={[
+            { value: '__inherit__', label: 'Inherit binary default (automatic)' },
+            ...VISIBLE_REPLIES_MODES,
+          ]}
+          onChange={(v) => {
+            setVisibleReplies(v === '__inherit__' ? '' : v);
+            setDirty(true);
+          }}
+        />
       </SettingsBlock>
 
       {/* TTS */}

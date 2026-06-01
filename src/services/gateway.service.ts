@@ -146,6 +146,12 @@ export interface MessagesConfig {
   ack_reaction_scope: string;
   tts: Record<string, unknown>;
   streaming: Record<string, unknown>;
+  // F3.4: messages.groupChat (OpenClaw 5.17+). Either field may be
+  // absent — the binary falls back to defaults user_request / automatic.
+  group_chat?: {
+    unmentioned_inbound?: 'user_request' | 'room_event';
+    visible_replies?: 'automatic' | 'message_tool';
+  };
 }
 
 export async function getMessagesConfig(): Promise<MessagesConfig> {
