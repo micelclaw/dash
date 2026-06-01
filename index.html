@@ -29,6 +29,49 @@
       </picture>
     </div>
     <div id="root"></div>
+
+    <!-- Recovery panel (E4) — appears if React never mounts within 12s. -->
+    <section id="micelclaw-mount-fallback" data-mount-timeout-ms="12000" role="alert" aria-labelledby="micelclaw-mount-fallback-title" hidden style="
+      position:fixed;inset:0;z-index:10000;
+      display:none;align-items:center;justify-content:center;
+      padding:24px;background:#06060a;color:#eef4f8;
+      font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    ">
+      <div class="mount-fallback__panel" tabindex="-1" style="
+        box-sizing:border-box;width:min(100%,640px);
+        border:1px solid rgba(148,163,184,0.28);border-radius:8px;
+        background:#0e1116;box-shadow:0 24px 80px rgba(0,0,0,0.36);
+        padding:28px;
+      ">
+        <p style="margin:0 0 10px;color:#9fb0bd;font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Micelclaw OS</p>
+        <h1 id="micelclaw-mount-fallback-title" style="margin:0;color:inherit;font-size:clamp(1.5rem,3vw,2rem);line-height:1.15;">La aplicación no arrancó</h1>
+        <p style="margin:16px 0 0;color:#c8d3da;font-size:1rem;line-height:1.6;">
+          El navegador cargó la página pero el bundle de JavaScript no completó el arranque.
+          Suele ser una extensión que bloquea módulos, una caché del Service Worker en mal estado,
+          o un error de red cargando una pieza del código.
+        </p>
+        <ul style="margin:18px 0 0;padding-left:1.2rem;color:#c8d3da;line-height:1.6;">
+          <li>Reintenta con una ventana de incógnito o un perfil limpio.</li>
+          <li>Desactiva extensiones que actúen en todas las páginas y recarga.</li>
+          <li>Limpia caché y datos del sitio (DevTools → Application → Storage → Clear site data).</li>
+        </ul>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:24px;">
+          <button type="button" id="mount-retry" style="
+            min-height:42px;border:1px solid #66c2ff;border-radius:6px;padding:0 16px;
+            color:#061019;background:#8bd3ff;font:inherit;font-weight:700;cursor:pointer;
+          ">Reintentar</button>
+          <button type="button" id="mount-wait" style="
+            min-height:42px;border:1px solid rgba(148,163,184,0.36);border-radius:6px;padding:0 16px;
+            color:inherit;background:transparent;font:inherit;font-weight:700;cursor:pointer;
+          ">Seguir esperando</button>
+          <button type="button" id="mount-clear-sw" style="
+            min-height:42px;border:1px solid rgba(148,163,184,0.36);border-radius:6px;padding:0 16px;
+            color:inherit;background:transparent;font:inherit;font-weight:700;cursor:pointer;
+          ">Limpiar Service Worker</button>
+        </div>
+      </div>
+    </section>
+
     <script>
       // Only show splash in PWA mode (fullscreen or standalone), not in desktop browser
       if (window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
@@ -36,5 +79,79 @@
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>
+
+    <script>
+      // E4 recovery panel: detect if React never mounts the #root within N
+      // seconds (default 12s) and show a fallback panel with retry options.
+      // Pure vanilla — runs only when React fails, zero cost otherwise.
+      (function () {
+        var root = document.getElementById('root');
+        var fallback = document.getElementById('micelclaw-mount-fallback');
+        if (!root || !fallback) return;
+
+        var rawDelay = Number(fallback.getAttribute('data-mount-timeout-ms'));
+        var delay = Number.isFinite(rawDelay) && rawDelay > 0 ? rawDelay : 12000;
+        var timer, observer;
+
+        function appMounted() { return root.children.length > 0; }
+
+        function showFallback() {
+          if (appMounted()) return;
+          fallback.hidden = false;
+          fallback.style.display = 'flex';
+          // Hide splash if it was visible (PWA mode) — otherwise user sees splash + panel.
+          var splash = document.getElementById('splash');
+          if (splash) splash.style.display = 'none';
+          var panel = fallback.querySelector('.mount-fallback__panel');
+          if (panel && typeof panel.focus === 'function') {
+            try { panel.focus({ preventScroll: true }); } catch (e) { panel.focus(); }
+          }
+        }
+
+        function hideFallback() {
+          fallback.hidden = true;
+          fallback.style.display = 'none';
+        }
+
+        function armTimer() {
+          window.clearTimeout(timer);
+          timer = window.setTimeout(showFallback, delay);
+        }
+
+        armTimer();
+        observer = new MutationObserver(function () {
+          if (appMounted()) {
+            window.clearTimeout(timer);
+            observer.disconnect();
+            hideFallback();
+          }
+        });
+        observer.observe(root, { childList: true });
+
+        document.getElementById('mount-retry').addEventListener('click', function () {
+          window.location.reload();
+        });
+        document.getElementById('mount-wait').addEventListener('click', function () {
+          hideFallback();
+          armTimer();
+        });
+        document.getElementById('mount-clear-sw').addEventListener('click', async function () {
+          var btn = this;
+          btn.disabled = true;
+          btn.textContent = 'Limpiando…';
+          try {
+            if (navigator.serviceWorker) {
+              var regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map(function (r) { return r.unregister(); }));
+            }
+            if (window.caches) {
+              var keys = await caches.keys();
+              await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            }
+          } catch (e) {}
+          window.location.reload();
+        });
+      })();
+    </script>
   </body>
 </html>
