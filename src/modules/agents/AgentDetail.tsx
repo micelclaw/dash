@@ -24,6 +24,7 @@ import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
 import { useChatStore } from '@/stores/chat.store';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
 import { AgentSandboxConfig } from './AgentSandboxConfig';
+import { AgentBootstrapConfig } from './AgentBootstrapConfig';
 import { getAgentColor, AGENT_PALETTE } from './agent-colors';
 import type { ManagedAgent } from './types';
 
@@ -592,13 +593,14 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
 
       {activeTab === 'advanced' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Per-agent overrides (start with sandbox; more sections
+          {/* Per-agent overrides (sandbox + bootstrap; more sections
               can land here as they're implemented). */}
-          <div>
-            <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 -8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Per-agent overrides
             </h3>
             <AgentSandboxConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
+            <AgentBootstrapConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
           </div>
 
           {/* Global defaults. Editing here affects every agent that
