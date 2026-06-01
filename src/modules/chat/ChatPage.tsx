@@ -24,6 +24,7 @@ import { ChatPanel } from '@/components/shell/ChatPanel';
 import { ChatInput } from '@/components/shell/ChatInput';
 import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
+import { ProviderQuotaBadge } from './components/ProviderQuotaBadge';
 import { ContextCard } from '@/components/shell/ContextCard';
 import { ContextSignals } from '@/components/shell/ContextSignals';
 import { InsightsWidget } from '@/components/shell/InsightsWidget';
@@ -225,6 +226,9 @@ export function Component() {
               {showSidebar ? <X size={16} /> : <MessageSquare size={16} />}
             </button>
           )}
+
+          {/* Provider quota chip (F3.1) — hidden on mobile + when no data */}
+          {!isMobile && <ProviderQuotaBadge />}
 
           {/* Per-conv TTS toggle (G2) — visible on both desktop and mobile */}
           <TtsToggleButton />

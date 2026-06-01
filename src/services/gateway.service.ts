@@ -1149,3 +1149,38 @@ export async function restoreToCheckpoint(conversationId: string, checkpointId: 
   );
   return res.data;
 }
+
+// ─── Provider usage / quota (F3.1) ──────────────────────────────────
+// Wraps GET /gateway/usage-status which calls the OpenClaw 5.17+
+// `usage.status` RPC. Upstream tracks quota for subscription/OAuth
+// providers (Claude Pro, GitHub Copilot, Gemini CLI, MiniMax, OpenAI
+// Codex, Xiaomi, Z.AI). Raw-API-key providers don't have a public
+// quota endpoint and never appear in `providers`.
+
+export interface UsageWindow {
+  label?: string;       // human label ("Today", "This week", ...)
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  unit?: string;        // "tokens" | "requests" | "credits" | ...
+  resets_at?: string;   // ISO
+  // upstream sometimes nests extra fields here; we pass through raw
+  [key: string]: unknown;
+}
+
+export interface ProviderUsage {
+  provider: string;       // 'anthropic', 'openai-codex', 'google-gemini-cli', ...
+  display_name: string;
+  windows: UsageWindow[];
+  error?: string;
+}
+
+export interface UsageStatus {
+  updated_at: number;
+  providers: ProviderUsage[];
+}
+
+export async function getUsageStatus(): Promise<UsageStatus> {
+  const res = await api.get<{ data: UsageStatus }>('/gateway/usage-status');
+  return res.data;
+}
