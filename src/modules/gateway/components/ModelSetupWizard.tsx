@@ -31,7 +31,7 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
     label: 'Anthropic',
     signupUrl: 'https://console.anthropic.com/settings/keys',
     tokenPrefix: 'sk-ant-',
-    description: 'Get an API key from the Anthropic console. Pay-as-you-go billing.',
+    description: 'Claude models — Opus 4.8 for the hardest tasks, Sonnet 4.6 for everyday work, Haiku 4.5 for fast cheap turns. Pay-as-you-go.',
   },
   openai: {
     label: 'OpenAI',
@@ -55,7 +55,7 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
     label: 'xAI',
     signupUrl: 'https://console.x.ai/',
     tokenPrefix: 'xai-',
-    description: 'Grok models from xAI.',
+    description: 'Grok models (Grok 4, Grok Code) including web search and code execution tools. Sign in with your X account if you prefer not to manage an API key.',
   },
   deepseek: {
     label: 'DeepSeek',
@@ -95,7 +95,7 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
     label: 'NVIDIA',
     signupUrl: 'https://build.nvidia.com/',
     tokenPrefix: 'nvapi-',
-    description: 'NIM endpoints \u2014 Nemotron, Llama Nemotron, and curated open models.',
+    description: 'Featured catalog of hosted open models \u2014 Nemotron Ultra, Llama Nemotron, Qwen Coder, and others. Free credits to start.',
   },
   arcee: {
     label: 'Arcee AI',
@@ -108,6 +108,19 @@ const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPr
     signupUrl: 'https://deepinfra.com/dash/api_keys',
     tokenPrefix: '',
     description: 'Hosted open-source models (Llama, Mixtral, DeepSeek, BGE, etc.) at low cost.',
+  },
+  // ── Added in OpenClaw 2026.5.17 → 2026.5.28 ───────────────────
+  fal: {
+    label: 'Fal',
+    signupUrl: 'https://fal.ai/dashboard/keys',
+    tokenPrefix: '',
+    description: 'Image and video generation — Krea models, Flux family, SDXL, and more. Use when an agent needs to make visuals.',
+  },
+  minimax: {
+    label: 'MiniMax',
+    signupUrl: 'https://www.minimax.io/',
+    tokenPrefix: '',
+    description: 'M2 series (M2.5 reasoning, M2.6) plus Music — the only mainstream provider that streams full songs back. Strong on Chinese.',
   },
 };
 
