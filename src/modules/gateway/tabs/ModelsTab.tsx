@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2, Pencil } from 'lucide-react';
+import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2, Pencil, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -23,6 +23,9 @@ import { ModelSetupWizard } from '../components/ModelSetupWizard';
 import { getProviderIcon } from '@/config/provider-icons';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
 import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
+import { OllamaModelSettingsModal } from '../components/OllamaModelSettingsModal';
+import { AddModelPanel } from '../components/AddModelPanel';
+import { GpuCoordinationPanel } from '../components/GpuCoordinationPanel';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayModel, CatalogModel } from '../types';
 
@@ -191,6 +194,7 @@ export function ModelsTab() {
   const [customWizardType, setCustomWizardType] = useState<import('../components/ModelSetupWizard').ProviderType | null>(null);
   const [customProviderIds, setCustomProviderIds] = useState<string[]>([]);
   const [providersConfig, setProvidersConfig] = useState<gwService.ProvidersConfig | null>(null);
+  const [ollamaSettings, setOllamaSettings] = useState<{ modelId: string; modelName?: string; initialParams?: gwService.OllamaTuningParams } | null>(null);
   const [discoveredCounts, setDiscoveredCounts] = useState<Record<string, number>>({});
   const [customModelEditor, setCustomModelEditor] = useState<{
     mode: 'add' | 'edit';
@@ -451,6 +455,25 @@ export function ModelsTab() {
     fetchCustomProviders();
   };
 
+  // Abre el panel de ajustes Ollama por-modelo. Lee los params actuales de
+  // providers.ollama.models[].params (fetch fresco si no está cargado en esta vista).
+  const handleEditOllama = async (model: GatewayModel) => {
+    const full = model.model || model.id || '';
+    const tag = full.startsWith('ollama/') ? full.slice('ollama/'.length) : full;
+    let initialParams: gwService.OllamaTuningParams | undefined;
+    let name = tag;
+    try {
+      const cfg = providersConfig ?? (await gwService.getProvidersConfig());
+      const list = (cfg?.providers?.ollama?.models as Array<Record<string, unknown>> | undefined) ?? [];
+      const existing = list.find((m) => m.id === tag);
+      if (existing) {
+        initialParams = existing.params as gwService.OllamaTuningParams | undefined;
+        name = (existing.name as string | undefined) ?? tag;
+      }
+    } catch { /* sin params previos → el modal usa defaults */ }
+    setOllamaSettings({ modelId: tag, modelName: name, initialParams });
+  };
+
   // ── Delete custom provider ──
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
@@ -624,6 +647,7 @@ export function ModelsTab() {
                   onSetDefault={handleSetDefault}
                   mutatingModel={mutatingModel}
                   onRemove={handleRemoveModel}
+                  onEditOllama={handleEditOllama}
                 />
               ))}
             </div>
@@ -631,6 +655,8 @@ export function ModelsTab() {
         ) : catalogSubView === 'providers' ? (
           /* ── Catalog: Provider Grid (Step 1) ── */
           <>
+            <GpuCoordinationPanel />
+            <AddModelPanel onAdded={fetchCatalog} />
             <div style={{
               display: 'grid',
               gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? '160px' : '220px'}, 1fr))`,
@@ -689,6 +715,40 @@ export function ModelsTab() {
                 label="LM Studio"
                 description="Local LM Studio server"
                 onClick={() => setCustomWizardType('lm-studio')}
+              />
+
+              {/* U10: cloud-provider quickstarts. Each card opens the wizard
+                  pre-filled with the provider id; the binary already knows
+                  the baseUrl natively, so the user only needs an API key. */}
+              <AddProviderTypeCard
+                label="xAI"
+                description="Grok models (Grok 4, Grok Code) — sign in with X or paste an API key"
+                onClick={() => setCustomWizardType('xai')}
+              />
+              <AddProviderTypeCard
+                label="OpenRouter"
+                description="One key, hundreds of models from many providers"
+                onClick={() => setCustomWizardType('openrouter')}
+              />
+              <AddProviderTypeCard
+                label="MiniMax"
+                description="M2 series + the only mainstream Music streaming provider"
+                onClick={() => setCustomWizardType('minimax')}
+              />
+              <AddProviderTypeCard
+                label="Cohere"
+                description="Command R+ family + multilingual embeddings"
+                onClick={() => setCustomWizardType('cohere')}
+              />
+              <AddProviderTypeCard
+                label="Fal"
+                description="Image and video generation (Krea, Flux, SDXL)"
+                onClick={() => setCustomWizardType('fal')}
+              />
+              <AddProviderTypeCard
+                label="Arcee"
+                description="Small/medium specialised models (Trinity, Coder, Spark)"
+                onClick={() => setCustomWizardType('arcee')}
               />
             </div>
           </>
@@ -918,6 +978,15 @@ export function ModelsTab() {
           onSuccess={handleCustomModelEditorSuccess}
         />
       )}
+      {ollamaSettings && (
+        <OllamaModelSettingsModal
+          modelId={ollamaSettings.modelId}
+          modelName={ollamaSettings.modelName}
+          initialParams={ollamaSettings.initialParams}
+          onClose={() => setOllamaSettings(null)}
+          onSuccess={() => { fetchModels(); fetchCustomProviders(); }}
+        />
+      )}
     </ScrollArea>
   );
 }
@@ -1143,7 +1212,7 @@ function ProviderChip({ label, color, active, onClick }: {
 
 // ─── Configured Row ─────────────────────────────────────────────────
 
-function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, onSetDefault, mutatingModel, onRemove }: {
+function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, onSetDefault, mutatingModel, onRemove, onEditOllama }: {
   model: GatewayModel;
   isMobile: boolean;
   isHovered: boolean;
@@ -1152,6 +1221,7 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
   onSetDefault: (m: GatewayModel) => void;
   mutatingModel: string | null;
   onRemove: (key: string) => void;
+  onEditOllama?: (m: GatewayModel) => void;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(model.provider);
@@ -1243,6 +1313,13 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        {model.provider === 'ollama' && onEditOllama && (
+          <ActionButton
+            icon={<SlidersHorizontal size={12} />}
+            label="Editar"
+            onClick={() => onEditOllama(model)}
+          />
+        )}
         {!model.is_default && (
           <SetDefaultButton
             onClick={() => onSetDefault(model)}

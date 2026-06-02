@@ -10,7 +10,22 @@ import * as gwService from '@/services/gateway.service';
 import { getProviderIcon } from '@/config/provider-icons';
 import type { CatalogModel } from '../types';
 
-export type ProviderType = 'custom' | 'ollama' | 'sglang' | 'vllm' | 'lm-studio';
+// U10: 5 generic + 6 cloud-provider quickstarts. The cloud entries map
+// 1-to-1 to PROVIDER_INFO ids further below so the wizard can read the
+// signup URL / token prefix / description from the same source as the
+// `model.provider`-driven path.
+export type ProviderType =
+  | 'custom'
+  | 'ollama'
+  | 'sglang'
+  | 'vllm'
+  | 'lm-studio'
+  | 'xai'
+  | 'fal'
+  | 'minimax'
+  | 'cohere'
+  | 'openrouter'
+  | 'arcee';
 
 interface ModelSetupWizardProps {
   model: CatalogModel | null;
@@ -177,12 +192,28 @@ const FIXED_PROVIDER_DEFAULTS: Record<string, FixedProviderDefaults> = {
   },
 };
 
+// U10: providers cloud con API key + extensión nativa en el binario
+// (signup URL conocido, token prefix esperado, descripción enriquecida en
+// PROVIDER_INFO). El binario resuelve el baseUrl internamente — no le
+// pedimos al user que lo escriba como sí pasa con `custom`.
+const CLOUD_PROVIDER_QUICKSTART: ReadonlySet<ProviderType> = new Set([
+  'xai',
+  'fal',
+  'minimax',
+  'cohere',
+  'openrouter',
+  'arcee',
+]);
+
 export function ModelSetupWizard({ model, providerType, providerModels, onClose, onSuccess }: ModelSetupWizardProps) {
   // Standalone mode with specific provider type (user clicked a type card)
   if (!model && providerType) {
     const defaults = FIXED_PROVIDER_DEFAULTS[providerType];
     if (defaults) {
       return <FixedProviderForm defaults={defaults} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
+    }
+    if (CLOUD_PROVIDER_QUICKSTART.has(providerType)) {
+      return <CloudProviderForm providerId={providerType} onClose={onClose} onSuccess={onSuccess} />;
     }
     // 'custom' type falls through to CustomProviderForm
     return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
@@ -720,6 +751,163 @@ function ButtonRow({
         {confirmLabel}
       </button>
     </div>
+  );
+}
+
+// ─── Cloud provider quickstart (U10) ──────────────────────────────
+// Used when the user clicks one of the U10 quickstart cards in the
+// catalog grid (xAI, Fal, MiniMax, Cohere, OpenRouter, Arcee). Just
+// saves an API key under the provider id — the binary already knows
+// the baseUrl via its native extension. After save, discover models
+// in the background so they appear in the catalog grid next time.
+function CloudProviderForm({
+  providerId,
+  onClose,
+  onSuccess,
+}: {
+  providerId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const info = PROVIDER_INFO[providerId] ?? {
+    label: providerId,
+    description: `Configure an API key for ${providerId}.`,
+  };
+  const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const canSave = token.trim().length >= 8;
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      await gwService.setAuthToken({ provider: providerId, token: token.trim() });
+      toast.success(`${info.label} credentials saved`);
+      // Background-discover models so they show up in the catalog grid
+      // on the next mount. Fire-and-forget; the user can refresh manually
+      // if they want to see them sooner.
+      void gwService.discoverProviderModels(providerId).catch(() => {});
+      onSuccess();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save credentials';
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell
+      title={`Configure ${info.label}`}
+      titleIcon={(() => {
+        const Icon = getProviderIcon(providerId);
+        return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
+      })()}
+      onClose={onClose}
+    >
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
+        {info.description}
+      </p>
+
+      {info.signupUrl && (
+        <div style={{ marginBottom: 16 }}>
+          <a
+            href={info.signupUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: '0.75rem',
+              color: 'var(--amber)',
+              textDecoration: 'none',
+              padding: '6px 10px',
+              border: '1px solid var(--amber)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            Get an API key from {info.label} <ExternalLink size={12} />
+          </a>
+        </div>
+      )}
+
+      <label style={{
+        display: 'block',
+        fontSize: '0.75rem',
+        color: 'var(--text-dim)',
+        marginBottom: 6,
+        fontFamily: 'var(--font-sans)',
+      }}>
+        Paste your API key:
+      </label>
+
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input
+          type={showToken ? 'text' : 'password'}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={info.tokenPrefix ? `${info.tokenPrefix}...` : 'paste here'}
+          autoFocus
+          style={{
+            width: '100%',
+            background: 'var(--bg)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '10px 36px 10px 12px',
+            color: 'var(--text)',
+            fontSize: '0.8125rem',
+            fontFamily: 'var(--font-mono)',
+            outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setShowToken(!showToken)}
+          style={{
+            position: 'absolute',
+            right: 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-dim)',
+            display: 'flex',
+            padding: 4,
+          }}
+        >
+          {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+
+      <p style={{
+        fontSize: '0.6875rem',
+        color: 'var(--text-dim)',
+        background: 'var(--surface)',
+        padding: '8px 10px',
+        borderRadius: 'var(--radius-sm)',
+        border: '1px solid var(--border)',
+        marginBottom: 16,
+        lineHeight: 1.4,
+      }}>
+        🔒 The key is stored locally in your agents' auth profile files and never sent
+        anywhere except {info.label} when you make a model call. Models for this provider
+        will appear in the catalog next time you open it.
+      </p>
+
+      <ButtonRow
+        cancelLabel="Cancel"
+        confirmLabel={saving ? 'Saving…' : 'Save credentials'}
+        onCancel={onClose}
+        onConfirm={handleSave}
+        confirmDisabled={!canSave || saving}
+        loading={saving}
+      />
+    </ModalShell>
   );
 }
 
