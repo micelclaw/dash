@@ -25,6 +25,7 @@ import { ChatInput } from '@/components/shell/ChatInput';
 import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
 import { ProviderQuotaBadge } from './components/ProviderQuotaBadge';
+import { GpuVramBadge } from './components/GpuVramBadge';
 import { ContextCard } from '@/components/shell/ContextCard';
 import { ContextSignals } from '@/components/shell/ContextSignals';
 import { InsightsWidget } from '@/components/shell/InsightsWidget';
@@ -229,6 +230,9 @@ export function Component() {
 
           {/* Provider quota chip (F3.1) — hidden on mobile + when no data */}
           {!isMobile && <ProviderQuotaBadge />}
+
+          {/* GPU/VRAM indicator (F2) — transparencia del árbitro de VRAM */}
+          {!isMobile && <GpuVramBadge />}
 
           {/* Per-conv TTS toggle (G2) — visible on both desktop and mobile */}
           <TtsToggleButton />

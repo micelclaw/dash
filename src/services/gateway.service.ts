@@ -270,6 +270,80 @@ export async function removeModel(model: string): Promise<void> {
   await api.post('/gateway/models/remove', { model });
 }
 
+// Hard delete de un modelo local de Ollama (borra el blob de disco). `id` = tag
+// real de Ollama (p.ej. 'qwen3:14b' o 'hf.co/org/repo:latest'). Para desregistrarlo
+// como modelo de chat, llamar también a removeModel('ollama/<id>') (best-effort).
+export async function deleteOllamaModel(id: string): Promise<void> {
+  await api.post('/gateway/models/ollama-delete', { id });
+}
+
+// Metadatos de un modelo Ollama (de /api/show + /api/tags + nvidia-smi) para
+// estimar VRAM/RAM en el panel de ajustes por-modelo.
+export interface OllamaModelInfo {
+  id: string;
+  arch: string;
+  size_bytes: number | null;
+  block_count: number | null;
+  head_count_kv: number | null;
+  key_length: number | null;
+  value_length: number | null;
+  context_length_max: number | null;
+  quantization: string | null;
+  vram_total_mb: number | null;
+  ram_total_mb: number | null;
+  ram_available_mb: number | null;
+}
+
+// Params de tuning editables por-modelo Ollama (van a models.providers.ollama.models[].params).
+export interface OllamaTuningParams {
+  num_ctx?: number | null;
+  num_gpu?: number | null;
+  num_batch?: number | null;
+  num_thread?: number | null;
+  keep_alive?: string | number | null;
+}
+
+export async function getOllamaModelInfo(id: string): Promise<OllamaModelInfo> {
+  const res = await api.get<{ data: OllamaModelInfo }>('/gateway/models/ollama-info', { id });
+  return res.data;
+}
+
+export async function updateOllamaParams(id: string, params: OllamaTuningParams): Promise<void> {
+  await api.patch('/gateway/models/ollama-params', { id, params });
+}
+
+// ─── Árbitro de VRAM (Fase 2) ──────────────────────────────────────
+export interface GpuCoordConfig {
+  enabled: boolean;
+  priority: 'chat' | 'photos' | 'balanced';
+  idle_window_min: number;
+  pinned_model: string | null;
+  pause_photos_while_chat: boolean;
+}
+export interface GpuCoordState {
+  enabled: boolean;
+  vram_total_mb: number | null;
+  free_vram_mb: number | null;
+  loaded: Array<{ name: string; vram_gb: number }>;
+  chat_active: boolean;
+  photos_can_proceed: boolean;
+}
+
+export async function getGpuCoordination(): Promise<{ config: GpuCoordConfig; state: GpuCoordState }> {
+  const res = await api.get<{ data: { config: GpuCoordConfig; state: GpuCoordState } }>('/gateway/gpu-coordination');
+  return res.data;
+}
+
+export async function getGpuState(): Promise<GpuCoordState> {
+  const res = await api.get<{ data: GpuCoordState }>('/gateway/gpu-coordination/state');
+  return res.data;
+}
+
+export async function updateGpuCoordination(patch: Partial<GpuCoordConfig>): Promise<GpuCoordConfig> {
+  const res = await api.patch<{ data: { config: GpuCoordConfig } }>('/gateway/gpu-coordination', patch);
+  return res.data.config;
+}
+
 export async function setDefaultImageModel(model: string): Promise<void> {
   await api.post('/gateway/models/default-image', { model });
 }

@@ -655,8 +655,6 @@ export function ModelsTab() {
         ) : catalogSubView === 'providers' ? (
           /* ── Catalog: Provider Grid (Step 1) ── */
           <>
-            <GpuCoordinationPanel />
-            <AddModelPanel onAdded={fetchCatalog} />
             <div style={{
               display: 'grid',
               gridTemplateColumns: `repeat(auto-fill, minmax(${isMobile ? '160px' : '220px'}, 1fr))`,
@@ -695,26 +693,31 @@ export function ModelsTab() {
                 label="Custom Provider"
                 description="Any OpenAI or Anthropic-compatible endpoint"
                 onClick={() => setCustomWizardType('custom')}
+                provider="custom"
               />
               <AddProviderTypeCard
                 label="Ollama"
                 description="Local or cloud Ollama instance"
                 onClick={() => setCustomWizardType('ollama')}
+                provider="ollama"
               />
               <AddProviderTypeCard
                 label="SGLang"
                 description="Fast self-hosted server"
                 onClick={() => setCustomWizardType('sglang')}
+                provider="sglang"
               />
               <AddProviderTypeCard
                 label="vLLM"
                 description="Local/self-hosted OpenAI-compatible"
                 onClick={() => setCustomWizardType('vllm')}
+                provider="vllm"
               />
               <AddProviderTypeCard
                 label="LM Studio"
                 description="Local LM Studio server"
                 onClick={() => setCustomWizardType('lm-studio')}
+                provider="lm-studio"
               />
 
               {/* U10: cloud-provider quickstarts. Each card opens the wizard
@@ -724,32 +727,49 @@ export function ModelsTab() {
                 label="xAI"
                 description="Grok models (Grok 4, Grok Code) — sign in with X or paste an API key"
                 onClick={() => setCustomWizardType('xai')}
+                provider="xai"
               />
               <AddProviderTypeCard
                 label="OpenRouter"
                 description="One key, hundreds of models from many providers"
                 onClick={() => setCustomWizardType('openrouter')}
+                provider="openrouter"
               />
               <AddProviderTypeCard
                 label="MiniMax"
                 description="M2 series + the only mainstream Music streaming provider"
                 onClick={() => setCustomWizardType('minimax')}
+                provider="minimax"
               />
               <AddProviderTypeCard
                 label="Cohere"
                 description="Command R+ family + multilingual embeddings"
                 onClick={() => setCustomWizardType('cohere')}
+                provider="cohere"
               />
               <AddProviderTypeCard
                 label="Fal"
                 description="Image and video generation (Krea, Flux, SDXL)"
                 onClick={() => setCustomWizardType('fal')}
+                provider="fal"
               />
               <AddProviderTypeCard
                 label="Arcee"
                 description="Small/medium specialised models (Trinity, Coder, Spark)"
                 onClick={() => setCustomWizardType('arcee')}
+                provider="arcee"
               />
+            </div>
+
+            {/* ── Modelos locales (Ollama) — sub-sección separada al final.
+                 Solo relevante si usas Ollama/LM Studio local; va abajo para no
+                 tapar el catálogo de proveedores. ── */}
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 24, paddingTop: 16 }}>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Cpu size={14} /> Modelos locales (Ollama)
+              </div>
+              <GpuCoordinationPanel />
+              <AddModelPanel onAdded={fetchCatalog} />
             </div>
           </>
         ) : (
@@ -1083,12 +1103,15 @@ function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
   );
 }
 
-function AddProviderTypeCard({ label, description, onClick }: {
+function AddProviderTypeCard({ label, description, onClick, provider }: {
   label: string;
   description: string;
   onClick: () => void;
+  provider: string;
 }) {
   const [hovered, setHovered] = useState(false);
+  const ProviderIcon = getProviderIcon(provider);
+  const color = PROVIDER_COLORS[provider?.toLowerCase()] ?? 'var(--text-dim)';
   return (
     <button
       onClick={onClick}
@@ -1097,8 +1120,8 @@ function AddProviderTypeCard({ label, description, onClick }: {
       style={{
         display: 'flex', flexDirection: 'column', gap: 8,
         padding: '16px 14px',
-        background: hovered ? 'var(--surface-hover)' : 'transparent',
-        border: '1px dashed var(--border)',
+        background: hovered ? 'var(--surface-hover)' : 'var(--card)',
+        border: '1px solid var(--border)',
         borderRadius: 'var(--radius-md)',
         cursor: 'pointer',
         transition: 'var(--transition-fast)',
@@ -1110,11 +1133,13 @@ function AddProviderTypeCard({ label, description, onClick }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
         <div style={{
           width: 32, height: 32, borderRadius: 'var(--radius-sm)',
-          border: '1px dashed var(--border)',
+          background: ProviderIcon ? `${color}15` : 'var(--surface)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <Plus size={14} style={{ color: 'var(--text-dim)' }} />
+          {ProviderIcon
+            ? <ProviderIcon size={24} style={{ color }} />
+            : <Cpu size={14} style={{ color: 'var(--text-dim)' }} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
