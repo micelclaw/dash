@@ -16,7 +16,6 @@ import {
   Hand,
   Clock,
   Bell,
-  Activity,
   Globe,
   Brain,
   Copy,
@@ -69,14 +68,6 @@ const TRIGGER_CARDS: TriggerCard[] = [
     description: "Fires when something is created or modified in your data.",
     example: 'A new email arrives, a contact is added, a note is updated…',
     color: '#10b981',
-  },
-  {
-    value: 'sensor',
-    label: 'Home Assistant',
-    icon: Activity,
-    description: 'Reacts to a Home Assistant entity changing state.',
-    example: 'binary_sensor.office_presence turns on, light.kitchen reaches 100%.',
-    color: '#06b6d4',
   },
   {
     value: 'webhook',
@@ -192,7 +183,6 @@ export function TriggerSelector({ triggerType, triggerConfig, webhookSecret, flo
       {triggerType === 'manual' && <ManualConfig />}
       {triggerType === 'cron' && <CronConfig triggerConfig={triggerConfig} onChange={onChange} />}
       {triggerType === 'event' && <EventConfig triggerConfig={triggerConfig} onChange={onChange} />}
-      {triggerType === 'sensor' && <SensorConfig triggerConfig={triggerConfig} onChange={onChange} />}
       {triggerType === 'webhook' && <WebhookConfig flowId={flowId} secret={webhookSecret} />}
       {triggerType === 'context' && <ContextConfig triggerConfig={triggerConfig} onChange={onChange} />}
     </div>
@@ -335,34 +325,7 @@ function EventConfig({ triggerConfig, onChange }: {
   );
 }
 
-function SensorConfig({ triggerConfig, onChange }: {
-  triggerConfig: Record<string, unknown>;
-  onChange: (type: string, config: Record<string, unknown>) => void;
-}) {
-  const entityId = (triggerConfig.entity_id as string) ?? '';
-  const state = (triggerConfig.state as string) ?? '';
-  return (
-    <div style={configBlockStyle}>
-      <label style={labelStyle}>Home Assistant entity ID</label>
-      <input
-        value={entityId}
-        onChange={(e) => onChange('sensor', { entity_id: e.target.value, state })}
-        placeholder="binary_sensor.office_presence"
-        style={{ ...inputStyle, fontFamily: 'var(--font-mono)' }}
-      />
-      <label style={{ ...labelStyle, marginTop: 8 }}>Trigger when state becomes</label>
-      <input
-        value={state}
-        onChange={(e) => onChange('sensor', { entity_id: entityId, state: e.target.value })}
-        placeholder="on"
-        style={inputStyle}
-      />
-      <p style={hintBoxStyle}>
-        Leave state empty to fire on <em>any</em> state change of the entity.
-      </p>
-    </div>
-  );
-}
+// SensorConfig retirado 2026-06-05 (trigger 'sensor' eliminado con sensor-fusion).
 
 function WebhookConfig({ flowId, secret }: { flowId?: string; secret?: string }) {
   const url = flowId ? `${window.location.origin}/api/v1/flows/${flowId}/webhook` : '';

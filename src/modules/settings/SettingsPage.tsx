@@ -47,7 +47,6 @@ import { ChannelObserversSection } from '@/components/settings/sections/ChannelO
 import { ServicesSection } from '@/components/settings/sections/ServicesSection';
 import { DatabaseSection } from '@/components/settings/sections/DatabaseSection';
 import { VoiceSection } from '@/components/settings/sections/VoiceSection';
-import { SensorFusionSection } from '@/components/settings/sections/SensorFusionSection';
 import { PermissionsSection } from '@/components/settings/sections/PermissionsSection';
 import { AgentTokensSection } from '@/components/settings/sections/AgentTokensSection';
 import { AccountSection } from '@/components/settings/sections/AccountSection';
@@ -199,7 +198,6 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'database', label: 'Database', icon: Database },
         { id: 'energy', label: 'Energy', icon: Zap },
         { id: 'services', label: 'Services', icon: Server },
-        { id: 'sensor-fusion', label: 'Sensor Fusion', icon: Radio },
         { id: 'automation', label: 'Automation', icon: Zap },
       ],
     },
@@ -316,7 +314,6 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'env':                  () => <EnvSection />,
   'secrets':              () => <SecretsSection />,
   'services':             () => <ServicesSection />,
-  'sensor-fusion':        () => <SensorFusionSection />,
   'permissions':          () => <PermissionsSection />,
   'agent-tokens':         () => <AgentTokensSection />,
   'duplicates':           () => <DuplicatesSection />,

@@ -11,20 +11,23 @@
  */
 
 /**
- * Single source of truth for the data domains the dash knows about.
+ * Single source of truth for the domains the dash knows about.
  *
- * Both PermissionsSection (which records can each agent see) and
- * DigestSection (which domains feed into the daily digest) read from
- * here so adding a new domain only requires editing this file.
+ * - DATA_DOMAINS: dominios de DATOS con registros (tags filtrables). Alimentan
+ *   tanto PermissionsSection como DigestSection.
+ * - CAPABILITY_DOMAINS: dominios de CAPACIDAD migrados a la fachada MCP en Fase 4.2
+ *   (sensors, feeds, diagrams, office, flows, graph, insights, hal). Se gobiernan en
+ *   Agent Permissions (concesión de scope por-agente) pero NO entran en el Digest.
+ *   Añadidos al cerrar el gap de concesión (2026-06-01).
  *
- * `hasTagSupport` controls whether the domain's records have a tags
- * column the user can filter by.
+ * `hasTagSupport` controla si el dominio tiene columna de tags para filtrar.
  */
 
 import type { LucideIcon } from 'lucide-react';
 import {
   StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
   Image, Columns, Bookmark, DollarSign,
+  Rss, GitBranch, FileText, Workflow, Cpu,
 } from 'lucide-react';
 
 export interface DataDomain {
@@ -47,4 +50,19 @@ export const DATA_DOMAINS: DataDomain[] = [
   { id: 'finance',   label: 'Finance',   icon: DollarSign, hasTagSupport: false },
 ];
 
+/** Dominios de capacidad (Fase 4.2) — gobernables en Permissions, fuera del Digest. */
+export const CAPABILITY_DOMAINS: DataDomain[] = [
+  // sensors/graph/insights retirados 2026-06-05 (dominios eliminados del backend).
+  { id: 'feeds',    label: 'Feeds',    icon: Rss,       hasTagSupport: false },
+  { id: 'diagrams', label: 'Diagrams', icon: GitBranch, hasTagSupport: false },
+  { id: 'office',   label: 'Office',   icon: FileText,  hasTagSupport: false },
+  { id: 'flows',    label: 'Flows',    icon: Workflow,  hasTagSupport: false },
+  { id: 'hal',      label: 'Hardware', icon: Cpu,       hasTagSupport: false },
+];
+
+// Digest solo sobre dominios de datos.
 export const ALL_DOMAIN_IDS = DATA_DOMAINS.map((d) => d.id);
+
+// Permissions gobierna datos + capacidad.
+export const PERMISSION_DOMAINS: DataDomain[] = [...DATA_DOMAINS, ...CAPABILITY_DOMAINS];
+export const ALL_PERMISSION_DOMAIN_IDS = PERMISSION_DOMAINS.map((d) => d.id);

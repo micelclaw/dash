@@ -1755,44 +1755,7 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
     return new Blob([new Uint8Array(100)], { type: 'audio/ogg' });
   }
 
-  // ── Sensor Fusion ──
-
-  if (method === 'GET' && route === '/sensor-fusion/status') {
-    return { data: { haConnected: true, rulesActive: 3, lastEvent: new Date().toISOString() } };
-  }
-  if (method === 'GET' && route === '/sensor-fusion/rules') {
-    return {
-      data: [
-        { id: 'rule-1', name: 'Meeting Mode', description: 'Dim lights and mute speakers when a meeting starts', enabled: true, conditions: [{ type: 'context_temporal', field: 'current_event', operator: 'exists' }], actions: [{ type: 'ha_service', domain: 'light', service: 'turn_on', entity_id: 'light.office', data: { brightness: 80 } }], cooldownMinutes: 15, lastTriggered: new Date(Date.now() - 3600_000).toISOString(), source: 'built-in', createdAt: daysAgo(7), updatedAt: daysAgo(1) },
-        { id: 'rule-2', name: 'Rain Alert', description: 'Notify when rain is detected and windows might be open', enabled: false, conditions: [{ type: 'weather', field: 'condition', operator: 'contains', value: 'rain' }], actions: [{ type: 'notify', message: 'Rain detected! Check windows.' }], cooldownMinutes: 60, lastTriggered: null, source: 'built-in', createdAt: daysAgo(7), updatedAt: daysAgo(3) },
-        { id: 'rule-3', name: 'Morning Briefing', description: 'Play a morning briefing on the kitchen speaker at 7:30', enabled: true, conditions: [{ type: 'time_window', start: '07:30', end: '07:35', days: ['mon', 'tue', 'wed', 'thu', 'fri'] }], actions: [{ type: 'voice_tts', message: 'Good morning! Here is your briefing.', voice: 'es_ES-mls-medium' }], cooldownMinutes: 1440, lastTriggered: new Date(Date.now() - 14400_000).toISOString(), source: 'user', createdAt: daysAgo(14), updatedAt: daysAgo(2) },
-      ],
-    };
-  }
-  if (method === 'POST' && route === '/sensor-fusion/rules') {
-    return { data: { id: `rule-new-${Date.now()}`, ...(body as Record<string, unknown>), created_at: new Date().toISOString() } };
-  }
-  if (route.match(/^\/sensor-fusion\/rules\/[\w-]+$/) && method === 'PUT') {
-    return { data: body };
-  }
-  if (route.match(/^\/sensor-fusion\/rules\/[\w-]+$/) && method === 'DELETE') {
-    return undefined;
-  }
-  if (method === 'GET' && route === '/sensor-fusion/zones') {
-    return {
-      data: [
-        { name: 'Office', entities: ['binary_sensor.office_motion', 'light.office'] },
-        { name: 'Kitchen', entities: ['binary_sensor.kitchen_motion', 'light.kitchen'] },
-        { name: 'Bedroom', entities: ['binary_sensor.bedroom_motion', 'light.bedroom'] },
-      ],
-    };
-  }
-  if (method === 'PUT' && route === '/sensor-fusion/zones') {
-    return { data: body };
-  }
-  if (method === 'POST' && route === '/sensor-fusion/rules/import-built-in') {
-    return { data: { imported: 6 } };
-  }
+  // ── Sensor Fusion ── RETIRADO 2026-06-05 (módulo eliminado).
 
   // ── Apps ──
 

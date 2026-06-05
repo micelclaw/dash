@@ -270,7 +270,6 @@ export function Shell() {
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const changeEvent = useWebSocket('change.*');
   const mediaEvent = useWebSocket('media.download.*');
-  const sensorEvent = useWebSocket('sensor.*');
   const workflowEvent = useWebSocket('workflow.*');
   const notificationEvent = useWebSocket('notification.new');
   const postYieldEvent = useWebSocket('chat.post_yield_message');
@@ -740,27 +739,7 @@ export function Shell() {
     });
   }, [notificationEvent, addNotification]);
 
-  // Sensor fusion events
-  useEffect(() => {
-    if (!sensorEvent) return;
-    if (sensorEvent.event === 'sensor.rule_triggered') {
-      const ruleName = sensorEvent.data.rule_name as string;
-      const actions = sensorEvent.data.actions_executed as number;
-      toast(`${ruleName} activated`, {
-        description: `${actions} action${actions === 1 ? '' : 's'} executed`,
-        duration: 5000,
-      });
-      addNotification({
-        type: 'system',
-        title: `Rule triggered: ${ruleName}`,
-        action: { label: 'View', route: '/settings/sensor-fusion' },
-      });
-    } else if (sensorEvent.event === 'sensor.ha_connected') {
-      toast.success('Home Assistant connected');
-    } else if (sensorEvent.event === 'sensor.ha_disconnected') {
-      toast.error('Home Assistant disconnected');
-    }
-  }, [sensorEvent, addNotification]);
+  // Sensor fusion events RETIRADOS 2026-06-05 (módulo sensor-fusion eliminado).
 
   // ── Workflow events ──
   useEffect(() => {
