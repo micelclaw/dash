@@ -182,6 +182,35 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     );
   }
 
+  // U1: los comandos `/goal …` se gestionan desde el GoalChip del toolbar, no se
+  // escriben. Si uno llega al historial, NO lo mostramos como burbuja de usuario
+  // (texto crudo): lo renderizamos como un chip discreto centrado con contexto.
+  if (isUser && /^\s*\/goal\b/i.test(message.content ?? '')) {
+    const gm = /^\s*\/goal(?:\s+(\S+))?(?:\s+([\s\S]*?))?\s*$/i.exec(message.content ?? '');
+    const sub = (gm?.[1] ?? 'status').toLowerCase();
+    const rest = (gm?.[2] ?? '').trim();
+    const labelMap: Record<string, string> = {
+      start: 'Objetivo definido', set: 'Objetivo definido', create: 'Objetivo definido',
+      pause: 'Objetivo pausado', resume: 'Objetivo reanudado',
+      complete: 'Objetivo completado', done: 'Objetivo completado',
+      block: 'Objetivo bloqueado', blocked: 'Objetivo bloqueado',
+      clear: 'Objetivo borrado', status: 'Objetivo',
+    };
+    const label = labelMap[sub] ?? 'Objetivo';
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, maxWidth: '85%',
+          padding: '4px 10px', borderRadius: 12, fontSize: '0.7rem',
+          color: 'var(--text-muted)',
+          background: 'color-mix(in srgb, #3b82f6 10%, transparent)',
+        }}>
+          <span>🎯 {label}{rest ? `: ${rest}` : ''}</span>
+        </div>
+      </div>
+    );
+  }
+
   const handleLinkClick = useCallback(
     (href: string) => {
       if (href.startsWith('/')) {

@@ -2,19 +2,19 @@
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
  *
- * GoalChip (U1, OpenClaw 6.1) — chip en el toolbar del chat que muestra el
- * "objetivo de sesión" activo de la conversación.
+ * GoalChip (U1, OpenClaw 6.1) — el objetivo de sesión se GESTIONA desde aquí, no
+ * se escribe como comando. Un chip en el toolbar del chat abre un popover:
+ *   - sin objetivo  → compositor (escribe el objetivo + Crear)
+ *   - con objetivo  → estado + acciones (Pausar/Reanudar/Completar/Bloquear/Borrar)
  *
- * OpenClaw 6.1 añade Session goals (`/goal`, tools get/create/update_goal). El
- * comando `/goal` es pass-through: Core NO lo intercepta y OpenClaw lo procesa
- * nativamente. Como 6.1 NO emite un evento WS `goal.*`, el chip DERIVA el estado
- * (read-only) de los propios mensajes `/goal` del usuario en el store del chat —
- * instantáneo, robusto y sin tocar `chat.store`. (Limitación conocida: si el
- * AGENTE cambia el goal vía update_goal, el chip no lo refleja hasta el próximo
- * `/goal` del usuario.)
+ * El usuario NUNCA escribe `/goal …`. El chip dispara los comandos por su cuenta
+ * (vía `sendMessage`), y los mensajes `/goal …` se OCULTAN del historial
+ * (ChatMessage.tsx) para que no aparezcan como texto crudo. El estado se deriva
+ * (read-only) de esos mensajes en el store del chat.
  */
-import { useMemo } from 'react';
-import { Target, Pause, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Target, Pause, Play, AlertTriangle, CheckCircle2, Trash2, Plus } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useChatStore } from '@/stores/chat.store';
 import type { Message } from '@/types/chat';
 
@@ -24,11 +24,7 @@ interface Goal { text: string; state: GoalState; }
 // `/goal <sub> <resto>` — sub y resto opcionales.
 const GOAL_RE = /^\s*\/goal(?:\s+(\S+))?(?:\s+([\s\S]*?))?\s*$/i;
 
-/**
- * Reduce los mensajes `/goal` del usuario (en orden) a un estado de goal.
- * `start|set|create <texto>` fija el objetivo; `pause|resume|complete|block`
- * cambian el estado; `clear` lo borra; `status`/sin-sub no cambian nada.
- */
+/** Reduce los mensajes `/goal` del usuario (en orden) a un estado de goal. */
 export function deriveGoal(messages: Message[] | undefined): Goal | null {
   if (!messages?.length) return null;
   let goal: Goal | null = null;
@@ -60,41 +56,117 @@ const PRESENTATION: Record<GoalState, { Icon: typeof Target; color: string; labe
   complete: { Icon: CheckCircle2,  color: '#22c55e', label: 'completado' },
 };
 
+const chipBase: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 4,
+  maxWidth: 220, padding: '4px 8px',
+  borderRadius: 'var(--radius-md)', background: 'transparent',
+  fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer',
+  whiteSpace: 'nowrap', overflow: 'hidden',
+  transition: 'border-color var(--transition-fast), color var(--transition-fast)',
+};
+
+const actBtn: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+  flex: 1, padding: '6px 8px', fontSize: '0.75rem',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+  background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer',
+};
+
 export function GoalChip() {
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const messages = useChatStore((s) => (activeConvId ? s.messages.get(activeConvId) : undefined));
   const sendMessage = useChatStore((s) => s.sendMessage);
 
   const goal = useMemo(() => deriveGoal(messages), [messages]);
-  if (!goal) return null;
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
 
-  const { Icon, color, label } = PRESENTATION[goal.state];
+  // Despacha un comando /goal sin que el usuario lo escriba. ChatMessage.tsx
+  // oculta estos mensajes del historial.
+  const run = (cmd: string) => { sendMessage(cmd); setOpen(false); setDraft(''); };
+  const create = () => { const t = draft.trim(); if (t) run(`/goal start ${t}`); };
+
+  const pres = goal ? PRESENTATION[goal.state] : null;
+
   return (
-    <button
-      onClick={() => sendMessage('/goal status')}
-      title={`Objetivo de la sesión (${label}) — clic para ver el estado`}
-      aria-label={`Objetivo de la sesión: ${goal.text} (${label})`}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        maxWidth: 220,
-        padding: '4px 8px',
-        border: `1px solid ${color}`,
-        borderRadius: 'var(--radius-md)',
-        background: 'transparent',
-        color,
-        fontSize: '0.75rem',
-        fontFamily: 'var(--font-sans)',
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        opacity: goal.state === 'complete' ? 0.7 : 1,
-        transition: 'border-color var(--transition-fast), color var(--transition-fast)',
-      }}
-    >
-      <Icon size={14} style={{ flexShrink: 0 }} />
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.text}</span>
-    </button>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setDraft(goal?.text ?? ''); }}>
+      <PopoverTrigger asChild>
+        {goal && pres ? (
+          <button
+            style={{ ...chipBase, border: `1px solid ${pres.color}`, color: pres.color, opacity: goal.state === 'complete' ? 0.7 : 1 }}
+            title={`Objetivo de la sesión (${pres.label})`}
+            aria-label={`Objetivo: ${goal.text} (${pres.label})`}
+          >
+            <pres.Icon size={14} style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.text}</span>
+          </button>
+        ) : (
+          <button
+            style={{ ...chipBase, border: '1px solid var(--border)', color: 'var(--text-dim)' }}
+            title="Definir el objetivo de la sesión"
+            aria-label="Definir objetivo de la sesión"
+          >
+            <Plus size={14} style={{ flexShrink: 0 }} />
+            <span>Objetivo</span>
+          </button>
+        )}
+      </PopoverTrigger>
+
+      <PopoverContent align="end" sideOffset={6} style={{ width: 320, padding: 12 }}>
+        {!goal ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Objetivo de la sesión</div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>¿Qué quieres lograr en este chat?</div>
+            <input
+              autoFocus value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); create(); } }}
+              placeholder="p. ej. Implementar el login con OAuth"
+              style={{
+                padding: '6px 8px', fontSize: '0.8125rem', width: '100%', boxSizing: 'border-box',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-sans)',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+              <button onClick={() => setOpen(false)} style={{ ...actBtn, flex: 'none', padding: '6px 12px' }}>Cancelar</button>
+              <button onClick={create} disabled={!draft.trim()}
+                style={{ ...actBtn, flex: 'none', padding: '6px 12px', background: '#3b82f6', color: '#fff', borderColor: '#3b82f6', opacity: draft.trim() ? 1 : 0.5 }}>
+                Crear
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {pres && <pres.Icon size={15} color={pres.color} />}
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{goal.text}</span>
+              <span style={{ fontSize: '0.6875rem', color: pres?.color }}>{pres?.label}</span>
+            </div>
+            {/* Editar objetivo (re-start) */}
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim() && draft.trim() !== goal.text) { e.preventDefault(); run(`/goal start ${draft.trim()}`); } }}
+              style={{
+                padding: '6px 8px', fontSize: '0.8125rem', width: '100%', boxSizing: 'border-box',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-sans)',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 6 }}>
+              {goal.state === 'paused'
+                ? <button onClick={() => run('/goal resume')} style={actBtn}><Play size={13} />Reanudar</button>
+                : <button onClick={() => run('/goal pause')} style={actBtn}><Pause size={13} />Pausar</button>}
+              <button onClick={() => run('/goal complete')} style={actBtn}><CheckCircle2 size={13} />Completar</button>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => run('/goal block')} style={actBtn}><AlertTriangle size={13} />Bloquear</button>
+              <button onClick={() => run('/goal clear')} style={{ ...actBtn, color: '#ef4444', borderColor: '#ef4444' }}><Trash2 size={13} />Borrar</button>
+            </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
