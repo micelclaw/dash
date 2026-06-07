@@ -26,6 +26,7 @@ import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
 import { ProviderQuotaBadge } from './components/ProviderQuotaBadge';
 import { GpuVramBadge } from './components/GpuVramBadge';
+import { GoalChip } from './components/GoalChip';
 import { ContextCard } from '@/components/shell/ContextCard';
 import { ContextSignals } from '@/components/shell/ContextSignals';
 import { InsightsWidget } from '@/components/shell/InsightsWidget';
@@ -233,6 +234,9 @@ export function Component() {
 
           {/* GPU/VRAM indicator (F2) — transparencia del árbitro de VRAM */}
           {!isMobile && <GpuVramBadge />}
+
+          {/* Session goal chip (U1, OpenClaw 6.1) — se auto-oculta sin goal */}
+          <GoalChip />
 
           {/* Per-conv TTS toggle (G2) — visible on both desktop and mobile */}
           <TtsToggleButton />

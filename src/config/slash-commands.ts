@@ -23,6 +23,7 @@ import {
   History,
   MessageSquareQuote,
   ArrowRightLeft,
+  Target,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -93,6 +94,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'tts', label: 'TTS auto-play (chat)', icon: Volume2, category: 'session', options: ['chat on', 'chat off', 'chat default'] },
   { name: 'btw', label: 'Side question (/btw)', icon: MessageSquareQuote, category: 'session' },
   { name: 'steer', label: 'Redirect run (/steer)', icon: ArrowRightLeft, category: 'session' },
+  // U1 (OpenClaw 6.1): Session goals. Pass-through al agente — Core NO intercepta
+  // `/goal` (no está en KNOWN_COMMANDS), OpenClaw lo procesa nativamente. `start`
+  // lleva el objetivo como texto libre (/goal start <objetivo>); el resto son
+  // subcomandos sin arg. El GoalChip del toolbar refleja el estado.
+  { name: 'goal', label: 'Session Goal (/goal)', icon: Target, category: 'session', options: ['status', 'start', 'pause', 'resume', 'complete', 'block', 'clear'] },
 
   // ── Context ── instant actions on the conversation context
   { name: 'compact', label: 'Compact Context', icon: FileDown, category: 'context' },
