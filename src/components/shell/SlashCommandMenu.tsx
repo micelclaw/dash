@@ -24,7 +24,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface SlashCommandMenuProps {
-  onSelect: (commandText: string) => void;
+  /** opts.prefill=true → el caller debe PRE-RELLENAR el composer (no enviar). */
+  onSelect: (commandText: string, opts?: { prefill?: boolean }) => void;
   /** When set, filters commands by name prefix (for textarea "/" detection) */
   filter?: string;
 }
@@ -96,7 +97,7 @@ function DynamicModelSubmenu({ cmd, onSelect }: { cmd: SlashCommand; onSelect: (
   );
 }
 
-function CommandItem({ cmd, onSelect }: { cmd: SlashCommand; onSelect: (text: string) => void }) {
+function CommandItem({ cmd, onSelect }: { cmd: SlashCommand; onSelect: (text: string, opts?: { prefill?: boolean }) => void }) {
   const Icon = cmd.icon;
 
   if (cmd.dynamicOptions === 'models') {
@@ -130,7 +131,7 @@ function CommandItem({ cmd, onSelect }: { cmd: SlashCommand; onSelect: (text: st
   }
 
   return (
-    <DropdownMenuItem onClick={() => onSelect(cmd.directText ?? `/${cmd.name}`)}>
+    <DropdownMenuItem onClick={() => onSelect(cmd.directText ?? `/${cmd.name}`, { prefill: cmd.prefill })}>
       <Icon size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
       <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem' }}>
         /{cmd.name}

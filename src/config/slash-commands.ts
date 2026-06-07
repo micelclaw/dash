@@ -23,7 +23,6 @@ import {
   History,
   MessageSquareQuote,
   ArrowRightLeft,
-  Target,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -56,6 +55,12 @@ export interface SlashCommand {
   dynamicOptions?: 'models';
   /** Text to send when no suboption is selected (defaults to `/${name}`) */
   directText?: string;
+  /**
+   * Si true, al elegir el comando NO se envía: se PRE-RELLENA el composer con
+   * `/${name} ` (con foco) para que el usuario complete el argumento libre.
+   * Para comandos que requieren texto (ej. /btw, /steer).
+   */
+  prefill?: boolean;
 }
 
 export const CATEGORY_COLORS: Record<CommandCategory, string> = {
@@ -92,13 +97,11 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'verbose', label: 'Verbose', icon: MessageSquare, category: 'session', options: ['on', 'off', 'full'] },
   { name: 'send', label: 'Send Policy', icon: Send, category: 'session', options: ['on', 'off', 'inherit'] },
   { name: 'tts', label: 'TTS auto-play (chat)', icon: Volume2, category: 'session', options: ['chat on', 'chat off', 'chat default'] },
-  { name: 'btw', label: 'Side question (/btw)', icon: MessageSquareQuote, category: 'session' },
-  { name: 'steer', label: 'Redirect run (/steer)', icon: ArrowRightLeft, category: 'session' },
-  // U1 (OpenClaw 6.1): Session goals. Pass-through al agente — Core NO intercepta
-  // `/goal` (no está en KNOWN_COMMANDS), OpenClaw lo procesa nativamente. `start`
-  // lleva el objetivo como texto libre (/goal start <objetivo>); el resto son
-  // subcomandos sin arg. El GoalChip del toolbar refleja el estado.
-  { name: 'goal', label: 'Session Goal (/goal)', icon: Target, category: 'session', options: ['status', 'start', 'pause', 'resume', 'complete', 'block', 'clear'] },
+  { name: 'btw', label: 'Side question (/btw)', icon: MessageSquareQuote, category: 'session', prefill: true },
+  { name: 'steer', label: 'Redirect run (/steer)', icon: ArrowRightLeft, category: 'session', prefill: true },
+  // U1 (OpenClaw 6.1): el objetivo de sesión (/goal) se gestiona desde el GoalChip
+  // del toolbar (componer/pausar/completar/borrar), NO como comando de texto que
+  // se auto-enviaría incompleto. Por eso /goal NO está en este menú.
 
   // ── Context ── instant actions on the conversation context
   { name: 'compact', label: 'Compact Context', icon: FileDown, category: 'context' },

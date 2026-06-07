@@ -270,7 +270,14 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     >
       <AgentSelector compact={compactAgent} />
 
-      <SlashCommandMenu onSelect={(cmd) => {
+      <SlashCommandMenu onSelect={(cmd, opts) => {
+        // Comandos con argumento libre (prefill) → pre-rellenar el composer y dar
+        // foco para que el usuario complete el texto, en vez de auto-enviar incompleto.
+        if (opts?.prefill) {
+          setText(cmd.endsWith(' ') ? cmd : `${cmd} `);
+          textareaRef.current?.focus();
+          return;
+        }
         sendMessage(cmd, {
           module: moduleContext.moduleId,
           active_item: moduleContext.activeItem,
