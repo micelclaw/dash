@@ -193,6 +193,39 @@ function NumberRow({ label, desc, value, min, max, suffix, onChange }: {
   );
 }
 
+// U2 (OpenClaw 6.1): fila con slider float (NumberRow es integer). Para TTS speed.
+function SliderRow({ label, desc, value, min, max, step, format, onChange }: {
+  label: string;
+  desc?: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  format?: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{label}</span>
+          {desc && <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            type="range" value={value} min={min} max={max} step={step}
+            onChange={e => onChange(parseFloat(e.target.value))}
+            style={{ width: 140, cursor: 'pointer', accentColor: '#3b82f6' }}
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text)', minWidth: 44, textAlign: 'right', fontFamily: 'var(--font-mono, var(--font-sans))' }}>
+            {format ? format(value) : String(value)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ToggleRow({ label, desc, value, onChange }: {
   label: string;
   desc?: string;
@@ -239,6 +272,9 @@ export function ChannelBindingsSection() {
   // TTS state
   const [ttsAuto, setTtsAuto] = useState('off');
   const [ttsProvider, setTtsProvider] = useState('microsoft');
+  const [ttsSpeed, setTtsSpeed] = useState(1); // U2 (6.1): velocidad de lectura, per-provider
+  // Providers que soportan `speed` (claves lowercase-safe para configPatch).
+  const SPEED_PROVIDERS = ['openai', 'elevenlabs', 'google'];
 
   // F3.4: group chat state. '' = inherit (don't send the field).
   const [unmentionedInbound, setUnmentionedInbound] = useState<string>('');
@@ -278,7 +314,10 @@ export function ChannelBindingsSection() {
       setAckReactionScope((data.ack_reaction_scope ?? 'group-mentions') as string);
 
       setTtsAuto((tts.auto ?? 'off') as string);
-      setTtsProvider((tts.provider ?? 'microsoft') as string);
+      const ttsProv = (tts.provider ?? 'microsoft') as string;
+      setTtsProvider(ttsProv);
+      const ttsProvs = (tts.providers ?? {}) as Record<string, { speed?: number }>;
+      setTtsSpeed(ttsProvs[ttsProv]?.speed ?? 1);
 
       // F3.4: group chat
       const gc = (data.group_chat ?? {}) as Record<string, unknown>;
@@ -320,6 +359,11 @@ export function ChannelBindingsSection() {
         tts: {
           auto: ttsAuto,
           provider: ttsProvider,
+          // U2: speed per-provider (solo para los que lo soportan). configPatch hace
+          // merge recursivo → no clobbea otros campos/providers del bloque tts.
+          ...(SPEED_PROVIDERS.includes(ttsProvider)
+            ? { providers: { [ttsProvider]: { speed: ttsSpeed } } }
+            : {}),
         },
         streaming: {
           blockStreamingDefault: blockStreaming,
@@ -494,6 +538,18 @@ export function ChannelBindingsSection() {
           <div style={{ padding: '4px 0', fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
             {TTS_PROVIDER_DESCRIPTIONS[ttsProvider]}
           </div>
+        )}
+        {SPEED_PROVIDERS.includes(ttsProvider) && (
+          <SliderRow
+            label="Velocidad"
+            desc={`Velocidad de lectura para ${ttsProvider} (0.5x–2.0x)`}
+            value={ttsSpeed}
+            min={0.5}
+            max={2}
+            step={0.1}
+            format={(v) => `${v.toFixed(1)}x`}
+            onChange={markDirty(setTtsSpeed)}
+          />
         )}
       </SettingsBlock>
     </SectionShell>
