@@ -48,6 +48,23 @@ export async function getSnapshot(): Promise<GatewaySnapshot> {
   return res.data;
 }
 
+// ─── Context usage (para el anillo de % en la toolbar del chat) ─────
+// Wrappea `sessions.describe` server-side (user-scoped, endpoint en
+// /conversations/threads/:id/context porque /gateway/* es admin-only).
+// `window`/`pct` null = sin sesión todavía o el describe falló → anillo oculto.
+export interface SessionContext {
+  used: number;
+  window: number | null;
+  pct: number | null;
+}
+
+export async function getConversationContext(conversationId: string): Promise<SessionContext> {
+  const res = await api.get<{ data: SessionContext }>(
+    `/conversations/threads/${encodeURIComponent(conversationId)}/context`,
+  );
+  return res.data;
+}
+
 // ─── Status & Health ────────────────────────────────────────────────
 
 export async function getGatewayStatus(): Promise<GatewayStatus> {

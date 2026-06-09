@@ -26,6 +26,7 @@ import { ConversationsSidebar } from './ConversationsSidebar';
 import { CanvasPanel } from './CanvasPanel';
 import { ProviderQuotaBadge } from './components/ProviderQuotaBadge';
 import { GpuVramBadge } from './components/GpuVramBadge';
+import { ContextRing } from './components/ContextRing';
 import { GoalChip } from './components/GoalChip';
 import { ContextCard } from '@/components/shell/ContextCard';
 import { ContextSignals } from '@/components/shell/ContextSignals';
@@ -169,6 +170,10 @@ export function Component() {
               {showSidebar ? <X size={16} /> : <MessageSquare size={16} />}
             </button>
           )}
+
+          {/* Context % ring — a la izquierda del token usage; color por umbral,
+              se auto-oculta sin sesión. Avisa antes de la auto-compactación. */}
+          {!isMobile && <ContextRing />}
 
           {/* Provider quota chip (F3.1) — hidden on mobile + when no data */}
           {!isMobile && <ProviderQuotaBadge />}
