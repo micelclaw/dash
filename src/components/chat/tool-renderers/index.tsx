@@ -21,6 +21,7 @@ import { SearchToolBlock } from './SearchToolBlock';
 import { MemoryToolBlock } from './MemoryToolBlock';
 import { PluginStatusToolBlock } from './PluginStatusToolBlock';
 import { GenericToolBlock } from './GenericToolBlock';
+import { EntityRefChips } from './EntityRefChips';
 
 interface Props { tool: ToolCallRecord }
 
@@ -33,7 +34,7 @@ interface Props { tool: ToolCallRecord }
  * BEFORE classify so future plugins work without any TOOL_DEFS entry — the
  * featured ones (active-memory, memory-core) just get nicer icon/label.
  */
-export function ToolRenderer({ tool }: Props) {
+function renderToolBlock(tool: ToolCallRecord) {
   if (typeof tool.tool === 'string' && tool.tool.toLowerCase().startsWith('plugin:')) {
     return <PluginStatusToolBlock tool={tool} />;
   }
@@ -49,4 +50,23 @@ export function ToolRenderer({ tool }: Props) {
     case 'generic':
     default:        return <GenericToolBlock tool={tool} />;
   }
+}
+
+/**
+ * Renders the tool block and, ADDITIVELY, any entity-reference chips the
+ * backend attached (`entity_refs`, pilot: notes). The chips appear just below
+ * the normal block — the block is never replaced. No `entity_refs` → only the
+ * block (zero regression).
+ */
+export function ToolRenderer({ tool }: Props) {
+  const block = renderToolBlock(tool);
+  if (tool.entity_refs && tool.entity_refs.length > 0) {
+    return (
+      <>
+        {block}
+        <EntityRefChips refs={tool.entity_refs} />
+      </>
+    );
+  }
+  return block;
 }

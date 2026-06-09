@@ -21,6 +21,8 @@ import * as gw from '@/services/gateway.service';
 import type { GpuCoordState } from '@/services/gateway.service';
 import { useWebSocketStore } from '@/stores/websocket.store';
 
+const ROLE_TAG: Record<string, string> = { chat: '💬', embed: '🔢', extract: '🧩', multimodal: '🖼', vision: '👁', other: '▒' };
+
 export function GpuVramBadge() {
   const [s, setS] = useState<GpuCoordState | null>(null);
   const [hover, setHover] = useState(false);
@@ -44,6 +46,7 @@ export function GpuVramBadge() {
     refresh();
     if (d.action === 'unload') toast.info(`🧹 VRAM liberada para visión${d.model ? ` · ${d.model.replace(/:latest$/, '')} descargado` : ''}`);
     else if (d.action === 'photos.yield') toast.info('⏸ Análisis de fotos cediendo la GPU al chat');
+    else if (d.action === 'free_all') toast.info('⟲ VRAM liberada — todos los modelos descargados');
   }, [lastEvent, refresh]);
 
   if (!s || s.vram_total_mb == null) return null; // sin GPU NVIDIA → sin badge
@@ -53,19 +56,23 @@ export function GpuVramBadge() {
   const usedGb = Math.max(0, totalGb - freeGb);
   const pct = Math.min(100, (usedGb / totalGb) * 100);
   const tight = pct > 88;
-  const color = !s.enabled
-    ? 'var(--text-muted)'
-    : s.chat_active
-      ? 'var(--amber)'
-      : tight ? 'var(--amber)' : 'var(--green, #3fb950)';
+  const color = s.paused
+    ? 'var(--amber)'
+    : !s.enabled
+      ? 'var(--text-muted)'
+      : s.chat_active
+        ? 'var(--amber)'
+        : tight ? 'var(--amber)' : 'var(--green, #3fb950)';
 
-  const statusLine = !s.enabled
-    ? 'Árbitro de VRAM desactivado'
-    : s.chat_active
-      ? '💬 Chateando → análisis de fotos en espera'
-      : s.photos_can_proceed
-        ? '✓ GPU disponible para fotos/visión'
-        : 'GPU ocupada';
+  const statusLine = s.paused
+    ? '⏸ GPU pausada (uso externo) — reanuda en Ajustes'
+    : !s.enabled
+      ? 'Árbitro de VRAM desactivado'
+      : s.chat_active
+        ? '💬 Chateando → análisis de fotos en espera'
+        : s.photos_can_proceed
+          ? '✓ GPU disponible para fotos/visión'
+          : 'GPU ocupada';
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
@@ -100,18 +107,31 @@ export function GpuVramBadge() {
             <div style={{ width: `${pct}%`, height: '100%', background: color, transition: 'width .5s' }} />
           </div>
 
-          {s.loaded.length > 0 ? (
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: 3 }}>EN GPU</div>
-              {s.loaded.map((m) => (
-                <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)' }}>{m.name.replace(/:latest$/, '')}</span>
-                  <span style={{ color: 'var(--text-dim)', flexShrink: 0 }}>{m.vram_gb.toFixed(1)} GB</span>
-                </div>
-              ))}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: 3 }}>EN VRAM</div>
+            {s.loaded.map((m) => (
+              <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-dim)' }}>{ROLE_TAG[m.role] ?? '·'} {m.name.replace(/:latest$/, '')}{m.pinned ? ' 📌' : ''}</span>
+                <span style={{ color: 'var(--text-dim)', flexShrink: 0 }}>{m.vram_gb.toFixed(1)} GB</span>
+              </div>
+            ))}
+            {(s.other_gb ?? 0) > 0.1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: 'var(--font-mono)', fontSize: '0.68rem' }}>
+                <span style={{ color: 'var(--text-muted)' }}>▒ otros (visión/sistema)</span>
+                <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{(s.other_gb ?? 0).toFixed(1)} GB</span>
+              </div>
+            )}
+            {s.loaded.length === 0 && (s.other_gb ?? 0) <= 0.1 && (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem' }}>GPU libre · {freeGb.toFixed(1)} GB</div>
+            )}
+          </div>
+
+          {s.queue && s.queue.total > 0 && (
+            <div style={{ marginBottom: 8, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.65rem', marginBottom: 3 }}>EN COLA (aplazadas por chat)</div>
+              {s.queue.embed > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--amber)' }}>🔢 embedding ×{s.queue.embed} ⏸ → al quedar libre</div>}
+              {s.queue.extract > 0 && <div style={{ fontSize: '0.68rem', color: 'var(--amber)' }}>🧩 extracción ×{s.queue.extract} ⏸</div>}
             </div>
-          ) : (
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.68rem', marginBottom: 8 }}>Sin modelos cargados · {freeGb.toFixed(1)} GB libres</div>
           )}
 
           <div style={{ color, fontWeight: 500, borderTop: '1px solid var(--border)', paddingTop: 6 }}>{statusLine}</div>

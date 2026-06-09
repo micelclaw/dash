@@ -11,13 +11,16 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Plus, Search, Pencil, Trash2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, PanelLeftClose, PanelLeftOpen, Info, Copy, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat.store';
 import { getMockConversations, getMockMessages } from '@/services/mock';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import type { Conversation } from '@/types/chat';
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -94,6 +97,8 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
+  // Details modal — set to the conversation whose IDs the user wants to inspect.
+  const [detailsConv, setDetailsConv] = useState<Conversation | null>(null);
 
   // Build agent color/name lookup
   const agentLookup = useMemo(() => {
@@ -270,6 +275,11 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                       setEditingTitle(conv.first_message);
                       setTimeout(() => editInputRef.current?.focus(), 0);
                     },
+                  },
+                  {
+                    label: 'Details',
+                    icon: Info,
+                    onClick: () => setDetailsConv(conv),
                   },
                   { label: '', onClick: () => {}, separator: true },
                   {
@@ -463,6 +473,139 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
           New chat
         </button>
       </div>
+
+      <DetailsModal conv={detailsConv} onClose={() => setDetailsConv(null)} />
+    </div>
+  );
+}
+
+// ─── Details modal ────────────────────────────────────────────────
+// Shown when the user clicks "Details" in a chat card's context menu.
+// Exposes the two IDs power users need when correlating a dash
+// conversation with backend artifacts:
+//   - Conversation ID — the `agent_conversations.conversation_id` UUID
+//     (= the row in the database; appears in every Core route).
+//   - OpenClaw Session — the deterministic session key
+//     `agent:<prefix>--<agentName>:webchat:<convId>`. This is what
+//     surfaces in `/tmp/openclaw/*.log` and the agent JSONL transcript.
+//     Null when the conv has no webchat row yet.
+function DetailsModal({ conv, onClose }: { conv: Conversation | null; onClose: () => void }) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copy = async (label: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(label);
+      window.setTimeout(() => setCopiedKey((k) => (k === label ? null : k)), 1500);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Clipboard unavailable');
+    }
+  };
+
+  return (
+    <Dialog open={!!conv} onOpenChange={(open) => { if (!open) onClose(); }}>
+      {/* className passes through cn() in DialogContent; do NOT pass `style`
+          here — shadcn's DialogContent inlines its background/border in
+          `style={...}` BEFORE spreading props, so any `style` we pass would
+          clobber the opaque background and the modal would render see-through. */}
+      <DialogContent className="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>Conversation details</DialogTitle>
+          <DialogDescription>
+            Internal identifiers for this chat. Useful when correlating the
+            conversation with Core logs or the OpenClaw transcript.
+          </DialogDescription>
+        </DialogHeader>
+
+        {conv && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4 }}>
+            <DetailRow
+              label="Conversation ID"
+              value={conv.id}
+              hint="The row id in agent_conversations (DB)."
+              copied={copiedKey === 'Conversation ID'}
+              onCopy={() => copy('Conversation ID', conv.id)}
+            />
+            <DetailRow
+              label="OpenClaw Session"
+              value={conv.session_id ?? null}
+              fallback="Not assigned yet — send a message in this conversation first."
+              hint="Deterministic session key as it appears in OpenClaw logs and the agent JSONL transcript."
+              copied={copiedKey === 'OpenClaw Session'}
+              onCopy={conv.session_id ? () => copy('OpenClaw Session', conv.session_id!) : undefined}
+            />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  fallback,
+  hint,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string | null;
+  fallback?: string;
+  hint?: string;
+  copied: boolean;
+  onCopy?: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+        <code
+          style={{
+            flex: 1,
+            padding: '8px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.75rem',
+            color: value ? 'var(--text)' : 'var(--text-dim)',
+            wordBreak: 'break-all',
+            lineHeight: 1.5,
+          }}
+        >
+          {value ?? fallback ?? '—'}
+        </code>
+        {onCopy && (
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label={`Copy ${label}`}
+            title={`Copy ${label}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 10px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              color: copied ? 'var(--accent, #d4a017)' : 'var(--text-dim)',
+              cursor: 'pointer',
+            }}
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+        )}
+      </div>
+      {hint && (
+        <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

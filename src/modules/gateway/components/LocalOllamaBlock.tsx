@@ -15,6 +15,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { Loader2, RotateCw, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
+import * as gw from '@/services/gateway.service';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '';
 
@@ -190,6 +191,9 @@ export function LocalOllamaBlock() {
   const [ollamaUrl, setOllamaUrl] = useState(local?.ollama_url ?? '');
   const [embeddingModel, setEmbeddingModel] = useState(local?.embedding_model ?? '');
   const [saving, setSaving] = useState(false);
+  // "Embeddings en CPU" — vive en la config del árbitro de VRAM (gpu-coordination), no en ai.local_models.
+  const [embedCpu, setEmbedCpu] = useState(false);
+  const [embedCpuSaving, setEmbedCpuSaving] = useState(false);
 
   // Sync local state when settings load
   useEffect(() => {
@@ -198,6 +202,24 @@ export function LocalOllamaBlock() {
       setEmbeddingModel(local.embedding_model);
     }
   }, [local?.ollama_url, local?.embedding_model]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lee el estado actual del num_gpu del embedding (0 = CPU) del árbitro de VRAM.
+  useEffect(() => {
+    gw.getGpuCoordination().then(({ config }) => setEmbedCpu(config.embed_num_gpu === 0)).catch(() => {});
+  }, []);
+
+  const toggleEmbedCpu = async (v: boolean) => {
+    setEmbedCpuSaving(true);
+    try {
+      await gw.updateGpuCoordination({ embed_num_gpu: v ? 0 : null });
+      setEmbedCpu(v);
+      toast.success(v ? 'Embeddings en CPU (VRAM liberada)' : 'Embeddings en GPU');
+    } catch {
+      toast.error('No se pudo cambiar el modo de embeddings');
+    } finally {
+      setEmbedCpuSaving(false);
+    }
+  };
 
   if (!local) {
     return (
@@ -338,6 +360,18 @@ export function LocalOllamaBlock() {
           }}>ollama pull qwen3-embedding:0.6b</code>
         </div>
       )}
+
+      {/* Embeddings en CPU — libera VRAM (gpu-coordination.embed_num_gpu) */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 12 }}>
+        <span style={{ fontSize: '0.875rem', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
+          Embeddings en CPU
+          <span style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', maxWidth: 380 }}>Ejecuta el modelo de embeddings en CPU en vez de GPU (num_gpu 0). Libera ~2.4 GB de VRAM y no compite con el chat; algo más lento por embedding.</span>
+        </span>
+        <button type="button" role="switch" aria-checked={embedCpu} disabled={embedCpuSaving} onClick={() => toggleEmbedCpu(!embedCpu)}
+          style={{ width: 40, height: 22, borderRadius: 999, border: 'none', cursor: embedCpuSaving ? 'default' : 'pointer', background: embedCpu ? 'var(--amber)' : 'var(--border)', position: 'relative', flexShrink: 0, opacity: embedCpuSaving ? 0.5 : 1, padding: 0 }}>
+          <span style={{ position: 'absolute', top: 2, left: embedCpu ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s', boxShadow: '0 1px 2px rgba(0,0,0,.4)' }} />
+        </button>
+      </div>
 
       {/* Save button (only when dirty) */}
       {dirty && (

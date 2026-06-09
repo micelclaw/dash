@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import { Layout, FileText, Image as ImageIcon, File, Terminal, Check, Loader2, ChevronDown, ChevronRight, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
+import { Layout, FileText, Image as ImageIcon, File, Loader2, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
 import type { Message, MessageApproval, ChatAttachment, ToolCallRecord } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
@@ -27,62 +27,136 @@ import { ReasoningChip } from '@/components/chat/ReasoningChip';
 import { shouldRenderTool } from '@/config/tool-rendering';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 
-function ToolBlock({ tool }: { tool: { id: string; tool: string; status: string; summary: string; input?: string; output?: string } }) {
-  const [expanded, setExpanded] = useState(false);
-  const isRunning = tool.status === 'running';
-  return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)',
-    }}>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-          padding: '6px 8px', background: 'none', border: 'none',
-          color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit',
-          textAlign: 'left',
-        }}
-      >
-        {isRunning
-          ? <Loader2 size={12} style={{ color: 'var(--amber)', animation: 'spin 1s linear infinite' }} />
-          : <Check size={12} style={{ color: 'var(--success, #22c55e)' }} />
-        }
-        <Terminal size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tool.summary || tool.tool}
-        </span>
-        {(tool.input || tool.output) && (
-          expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />
-        )}
-      </button>
-      {expanded && (tool.input || tool.output) && (
-        <div style={{
-          padding: '4px 8px 6px', borderTop: '1px solid var(--border)',
-          maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-          color: 'var(--text-muted)', fontSize: '0.6875rem', lineHeight: 1.4,
-        }}>
-          {tool.input && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text-dim)' }}>Input:</strong> {tool.input}</div>}
-          {tool.output && <div><strong style={{ color: 'var(--text-dim)' }}>Output:</strong> {tool.output}</div>}
-        </div>
-      )}
-    </div>
-  );
+/** Convert a live streaming ToolExecution into the ToolCallRecord shape the
+ *  per-tool renderers expect, so a streaming pill looks IDENTICAL to its
+ *  finalized form (same per-tool component, same chrome). Unifies the two. */
+function streamingToolToRecord(t: { id: string; tool: string; status: string; summary?: string; input?: unknown; output?: unknown; text_offset?: number }): ToolCallRecord {
+  return {
+    id: t.id,
+    tool: t.tool,
+    status: t.status === 'completed' || t.status === 'success' ? 'success'
+      : t.status === 'error' ? 'error' : 'running',
+    summary: t.summary,
+    input: (t.input as ToolCallRecord['input']) ?? undefined,
+    output: typeof t.output === 'string' ? t.output : (t.output != null ? JSON.stringify(t.output) : undefined),
+    text_offset: t.text_offset,
+  };
 }
 
-/**
- * Renders persisted tool calls (from a finalized assistant message)
- * filtered by the user's tool-visibility preferences. Each tool gets
- * a per-type renderer (delegation, bash, read, edit, etc.).
- */
-function PersistedToolCalls({ toolCalls }: { toolCalls: ToolCallRecord[] }) {
-  const { visibility } = useToolVisibility();
-  const visible = toolCalls.filter((t) => shouldRenderTool(t.tool, visibility));
-  if (visible.length === 0) return null;
+type Segment = { type: 'text'; text: string } | { type: 'tool'; tool: ToolCallRecord };
+
+/** Split the assistant text by each tool's `text_offset` so the tool pills
+ *  render interleaved between the text segments (like the OpenClaw chat).
+ *  Tools without an offset (legacy rows / yield path) fall back to the end. */
+function buildSegments(content: string, tools: ToolCallRecord[]): Segment[] {
+  const withOffset = tools
+    .filter((t) => typeof t.text_offset === 'number')
+    .sort((a, b) => (a.text_offset! - b.text_offset!));
+  const noOffset = tools.filter((t) => typeof t.text_offset !== 'number');
+  const segs: Segment[] = [];
+  if (withOffset.length === 0) {
+    if (content.trim()) segs.push({ type: 'text', text: content });
+    for (const t of tools) segs.push({ type: 'tool', tool: t });
+    return segs;
+  }
+  let cursor = 0;
+  for (const t of withOffset) {
+    const off = Math.max(cursor, Math.min(t.text_offset!, content.length));
+    if (off > cursor) {
+      const slice = content.slice(cursor, off);
+      if (slice.trim()) segs.push({ type: 'text', text: slice });
+      cursor = off;
+    }
+    segs.push({ type: 'tool', tool: t });
+  }
+  if (cursor < content.length) {
+    const tail = content.slice(cursor);
+    if (tail.trim()) segs.push({ type: 'text', text: tail });
+  }
+  for (const t of noOffset) segs.push({ type: 'tool', tool: t });
+  return segs;
+}
+
+/** Assistant markdown, extracted so each interleaved text segment renders with
+ *  the same component set. */
+function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkClick: (href: string) => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
-      {visible.map((t) => <ToolRenderer key={t.id} tool={t} />)}
-    </div>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeHighlight]}
+      components={{
+        a: ({ href, children }) => {
+          if (!href) return <>{children}</>;
+          const isInternal = href.startsWith('/');
+          if (isInternal) {
+            return (
+              <button
+                onClick={() => onLinkClick(href)}
+                style={{
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-md)', padding: '2px 8px', cursor: 'pointer',
+                  color: 'var(--amber)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  transition: 'background var(--transition-fast)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+              >
+                {children}
+              </button>
+            );
+          }
+          return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--amber)' }}>{children}</a>;
+        },
+        pre: ({ children }) => (
+          <div style={{ position: 'relative', margin: '8px 0' }}>
+            <pre style={{
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-lg)', padding: '12px 16px', overflow: 'auto',
+              fontSize: '0.8125rem', fontFamily: 'var(--font-mono)', margin: 0,
+            }}>
+              {children}
+            </pre>
+            <CopyButton getContent={() => {
+              const el = document.createElement('div');
+              el.innerHTML = typeof children === 'string' ? children : '';
+              return el.textContent ?? '';
+            }} />
+          </div>
+        ),
+        code: ({ className, children, ...props }) => {
+          const isBlock = className?.startsWith('language-');
+          if (isBlock) return <code className={className} {...props}>{children}</code>;
+          return (
+            <code style={{
+              background: 'var(--surface)', padding: '1px 4px', borderRadius: 'var(--radius-sm)',
+              fontSize: '0.8125rem', fontFamily: 'var(--font-mono)',
+            }} {...props}>{children}</code>
+          );
+        },
+        p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
+        ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 20 }}>{children}</ul>,
+        ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 20 }}>{children}</ol>,
+        li: ({ children }) => <li style={{ margin: '2px 0' }}>{children}</li>,
+        h1: ({ children }) => <h3 style={{ margin: '8px 0 4px', fontSize: '1rem', fontWeight: 600 }}>{children}</h3>,
+        h2: ({ children }) => <h3 style={{ margin: '8px 0 4px', fontSize: '1rem', fontWeight: 600 }}>{children}</h3>,
+        h3: ({ children }) => <h3 style={{ margin: '6px 0 4px', fontSize: '0.9375rem', fontWeight: 600 }}>{children}</h3>,
+        blockquote: ({ children }) => (
+          <blockquote style={{ borderLeft: '2px solid var(--amber)', paddingLeft: 12, margin: '4px 0', color: 'var(--text-dim)' }}>
+            {children}
+          </blockquote>
+        ),
+        table: ({ children }) => (
+          <div style={{ overflowX: 'auto', margin: '8px 0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>{children}</table>
+          </div>
+        ),
+        th: ({ children }) => <th style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)', textAlign: 'left', fontWeight: 600 }}>{children}</th>,
+        td: ({ children }) => <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>{children}</td>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
   );
 }
 
@@ -91,7 +165,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   thinkingText?: string;
   isThinking?: boolean;
-  tools?: { id: string; tool: string; status: string; summary: string; input?: string; output?: string }[];
+  tools?: { id: string; tool: string; status: string; summary: string; input?: unknown; output?: unknown }[];
   /** G9: previous message in the conv — used to compute `isFirstOfTurn` so
    *  consecutive bubbles from the same sender don't repeat the avatar. */
   previousMessage?: Message;
@@ -112,6 +186,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   const navigate = useNavigate();
   const isUser = message.role === 'user';
   const agents = useChatStore((s) => s.agents);
+  const { visibility } = useToolVisibility();
 
   // G9: sticky avatar — show only when this is the first message of a turn
   // (the previous message is either missing, a system chip, or from a
@@ -338,138 +413,21 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
               </>
             ) : (
               <div className="chat-markdown">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
-                  components={{
-                    a: ({ href, children }) => {
-                      if (!href) return <>{children}</>;
-                      const isInternal = href.startsWith('/');
-                      if (isInternal) {
-                        return (
-                          <button
-                            onClick={() => handleLinkClick(href)}
-                            style={{
-                              background: 'var(--surface)',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-md)',
-                              padding: '2px 8px',
-                              cursor: 'pointer',
-                              color: 'var(--amber)',
-                              fontSize: '0.8125rem',
-                              fontFamily: 'var(--font-sans)',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              transition: 'background var(--transition-fast)',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
-                          >
-                            {children}
-                          </button>
-                        );
-                      }
-                      return (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: 'var(--amber)' }}
-                        >
-                          {children}
-                        </a>
-                      );
-                    },
-                    pre: ({ children }) => (
-                      <div style={{ position: 'relative', margin: '8px 0' }}>
-                        <pre
-                          style={{
-                            background: 'var(--surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-lg)',
-                            padding: '12px 16px',
-                            overflow: 'auto',
-                            fontSize: '0.8125rem',
-                            fontFamily: 'var(--font-mono)',
-                            margin: 0,
-                          }}
-                        >
-                          {children}
-                        </pre>
-                        <CopyButton getContent={() => {
-                          const el = document.createElement('div');
-                          el.innerHTML = typeof children === 'string' ? children : '';
-                          return el.textContent ?? '';
-                        }} />
-                      </div>
-                    ),
-                    code: ({ className, children, ...props }) => {
-                      const isBlock = className?.startsWith('language-');
-                      if (isBlock) {
-                        return <code className={className} {...props}>{children}</code>;
-                      }
-                      return (
-                        <code
-                          style={{
-                            background: 'var(--surface)',
-                            padding: '1px 4px',
-                            borderRadius: 'var(--radius-sm)',
-                            fontSize: '0.8125rem',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      );
-                    },
-                    p: ({ children }) => <p style={{ margin: '4px 0' }}>{children}</p>,
-                    ul: ({ children }) => <ul style={{ margin: '4px 0', paddingLeft: 20 }}>{children}</ul>,
-                    ol: ({ children }) => <ol style={{ margin: '4px 0', paddingLeft: 20 }}>{children}</ol>,
-                    li: ({ children }) => <li style={{ margin: '2px 0' }}>{children}</li>,
-                    h1: ({ children }) => <h3 style={{ margin: '8px 0 4px', fontSize: '1rem', fontWeight: 600 }}>{children}</h3>,
-                    h2: ({ children }) => <h3 style={{ margin: '8px 0 4px', fontSize: '1rem', fontWeight: 600 }}>{children}</h3>,
-                    h3: ({ children }) => <h3 style={{ margin: '6px 0 4px', fontSize: '0.9375rem', fontWeight: 600 }}>{children}</h3>,
-                    blockquote: ({ children }) => (
-                      <blockquote
-                        style={{
-                          borderLeft: '2px solid var(--amber)',
-                          paddingLeft: 12,
-                          margin: '4px 0',
-                          color: 'var(--text-dim)',
-                        }}
-                      >
-                        {children}
-                      </blockquote>
-                    ),
-                    table: ({ children }) => (
-                      <div style={{ overflowX: 'auto', margin: '8px 0' }}>
-                        <table
-                          style={{
-                            width: '100%',
-                            borderCollapse: 'collapse',
-                            fontSize: '0.8125rem',
-                          }}
-                        >
-                          {children}
-                        </table>
-                      </div>
-                    ),
-                    th: ({ children }) => (
-                      <th style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)', textAlign: 'left', fontWeight: 600 }}>
-                        {children}
-                      </th>
-                    ),
-                    td: ({ children }) => (
-                      <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>
-                        {children}
-                      </td>
-                    ),
-                  }}
-                >
-                  {displayContent}
-                </ReactMarkdown>
+                {/* Interleave the tool pills between the text segments by each
+                    tool's text_offset (like OpenClaw) — same per-tool renderer
+                    for streaming AND finalized, filtered by visibility prefs. */}
+                {(() => {
+                  const rawTools: ToolCallRecord[] = isStreaming
+                    ? (tools ?? []).map(streamingToolToRecord)
+                    : (message.tool_calls ?? []);
+                  const visibleTools = rawTools.filter((t) => shouldRenderTool(t.tool, visibility));
+                  const segments = buildSegments(displayContent, visibleTools);
+                  return segments.map((seg, i) =>
+                    seg.type === 'text'
+                      ? <AssistantMarkdown key={`txt-${i}`} content={seg.text} onLinkClick={handleLinkClick} />
+                      : <div key={`tool-${seg.tool.id}`} style={{ margin: '4px 0' }}><ToolRenderer tool={seg.tool} /></div>,
+                  );
+                })()}
                 {canvasReadyDesc && (
                   <button
                     onClick={() => setActiveMode('canvas')}
@@ -500,24 +458,8 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                 )}
               </div>
             )}
-            {/* Tool executions — STREAMING phase: live tool blocks
-                from the streamingMessage.tools (legacy, no visibility
-                filtering during streaming so the user sees what's
-                happening in real time). */}
-            {isStreaming && tools && tools.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
-                {tools.map(t => (
-                  <ToolBlock key={t.id} tool={t} />
-                ))}
-              </div>
-            )}
-            {/* Tool executions — FINALIZED phase: persisted tool_calls
-                from agent_conversations.tool_calls. Filtered by user's
-                tool visibility preferences and rendered via per-tool
-                renderer (delegation, bash, read, edit, etc). */}
-            {!isStreaming && message.tool_calls && message.tool_calls.length > 0 && (
-              <PersistedToolCalls toolCalls={message.tool_calls} />
-            )}
+            {/* Tool pills now render INTERLEAVED inside the markdown block
+                above (by text_offset), for both streaming and finalized. */}
             {/* Reasoning: animated dots while streaming with no text yet, then
                 a collapsible chip (expanded while live, collapsed once done).
                 Live thinkingText wins over persisted message.thinking until

@@ -52,6 +52,17 @@ export const CHAT_MODEL_CATALOG: CatalogModel[] = [
 
 export const CATALOG_COMPANIES = [...new Set(CHAT_MODEL_CATALOG.map((m) => m.company))].sort();
 
+/**
+ * Subconjunto curado para los chips "populares" del modal de añadir modelo
+ * (AddOllamaModelModal). Modelos pequeños/medianos con buen tool-calling que
+ * caben en una GPU típica — pensado para arrancar a un usuario novato.
+ */
+export const POPULAR_OLLAMA_SUGGESTIONS: CatalogModel[] = (
+  ['qwen3:8b', 'qwen3:14b', 'llama3.1:8b', 'mistral:7b', 'gemma3:12b'] as const
+)
+  .map((id) => CHAT_MODEL_CATALOG.find((m) => m.id === id))
+  .filter((m): m is CatalogModel => m != null);
+
 export const SIZE_BUCKETS: Array<{ label: string; test: (gb: number) => boolean }> = [
   { label: '≤4GB',  test: (g) => g <= 4 },
   { label: '5-9GB', test: (g) => g >= 5 && g <= 9 },

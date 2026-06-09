@@ -48,6 +48,20 @@ export interface ToolCallRecord {
   output?: string;
   /** Free-form metadata: exit code, duration, etc. */
   metadata?: Record<string, unknown>;
+  /**
+   * Character offset in the assistant message text where this tool fired.
+   * Lets ChatMessage interleave the pill between text segments (like OpenClaw)
+   * instead of dumping all tools at the end. Absent on legacy rows → those
+   * render at the end (fallback). Set by the backend (persisted) and by the
+   * store during streaming (= length of streamed text when the event arrived).
+   */
+  text_offset?: number;
+  /**
+   * Typed references to domain records the backend extracted from the tool
+   * output (pilot: notes only). Rendered as clickable chips below the tool
+   * block. mirrors core/src/services/jsonl-tool-calls.ts — keep both in sync.
+   */
+  entity_refs?: Array<{ type: string; id: string; title: string | null }>;
 }
 
 export interface Message {
@@ -95,6 +109,14 @@ export interface Conversation {
   // G8: when set, this conv is a fork from another at a compaction checkpoint
   parent_conversation_id?: string | null;
   branched_from_checkpoint_id?: string | null;
+  /**
+   * Deterministic OpenClaw session key (`agent:<prefix>--<name>:webchat:<convId>`).
+   * Populated by `repo.listSummaries`. Surfaced in the chat card "Details" popup
+   * so power users can correlate a conversation with its JSONL transcript /
+   * Gateway logs without leaving the dash. Null when the conv has no webchat
+   * row yet (e.g. brand-new before first send).
+   */
+  session_id?: string | null;
 }
 
 export interface Agent {
@@ -116,6 +138,8 @@ export interface ToolExecution {
   summary: string;
   input?: string;
   output?: string;
+  /** Streamed-text length when this tool first appeared — for interleaving. */
+  text_offset?: number;
 }
 
 export interface StreamingState {

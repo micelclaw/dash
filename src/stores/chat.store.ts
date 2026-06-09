@@ -296,9 +296,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       const tools = [...current.tools];
       const existing = tools.findIndex(t => t.id === event.id);
       if (existing >= 0) {
-        tools[existing] = { ...tools[existing], ...event } as ToolExecution;
+        // Preserve the offset captured when the tool first appeared.
+        tools[existing] = { ...tools[existing], ...event, text_offset: tools[existing].text_offset } as ToolExecution;
       } else {
-        tools.push(event as ToolExecution);
+        // Stamp the position = length of text streamed so far → the pill
+        // renders interleaved at that point, not lumped at the end.
+        tools.push({ ...event, text_offset: current.tokens.length } as ToolExecution);
       }
       return { streamingMessage: { ...current, tools } };
     });
@@ -368,6 +371,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         message_count: number;
         last_message_at: string;
         created_at: string;
+        session_id: string | null;
       }> }>('/conversations/threads', { limit: 50 });
 
       const conversations: Conversation[] = (res.data ?? []).map((t) => ({
@@ -377,9 +381,23 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         message_count: t.message_count,
         created_at: t.created_at,
         updated_at: t.last_message_at ?? t.created_at,
+        session_id: t.session_id ?? null,
       }));
 
-      set({ conversations });
+      // Preserve local-only conversations the server hasn't surfaced yet.
+      // The user message is persisted fire-and-forget (no await) in sendMessage,
+      // so a concurrent loadConversations (e.g. triggered by chat.subagent_message
+      // when the agent spawns/delegates) can race AHEAD of the DB commit and return
+      // a list WITHOUT the just-created conversation. A blind `set({ conversations })`
+      // then wipes the optimistic sidebar card → the chat the user just opened
+      // "disappears" and can't be reopened (selectConversation doesn't refetch).
+      // Mirror loadMessages' merge: keep any local conv (esp. the active one) that
+      // the server response is missing, newest-first.
+      set((state) => {
+        const serverIds = new Set(conversations.map((c) => c.id));
+        const localOnly = state.conversations.filter((c) => !serverIds.has(c.id));
+        return { conversations: [...localOnly, ...conversations] };
+      });
     } catch (err) {
       console.error('[chat] Failed to load conversations:', err);
     }
@@ -425,6 +443,17 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           })(),
           output: typeof t.output === 'string' ? t.output : undefined,
           metadata: t.metadata as Record<string, unknown> | undefined,
+          text_offset: typeof t.text_offset === 'number' ? t.text_offset : undefined,
+          // Entity refs persisted by the backend (pilot: notes) → chips on reload.
+          entity_refs: Array.isArray(t.entity_refs)
+            ? (t.entity_refs as Array<Record<string, unknown>>)
+                .filter((r) => r && typeof r.id === 'string')
+                .map((r) => ({
+                  type: typeof r.type === 'string' ? r.type : 'note',
+                  id: String(r.id),
+                  title: typeof r.title === 'string' ? r.title : null,
+                }))
+            : undefined,
         }));
         return {
           id: m.id,
@@ -447,14 +476,33 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         // not yet flushed, or assistant msg materialised by finalizeStream)
         // are preserved at the tail, then sorted by timestamp.
         //
-        // Dedup by id only — the previous content-fingerprint fallback is
-        // gone now that backend echoes `client_temp_id` / `user_message_id`
-        // / `assistant_message_id` in `chat.stream.done` and `finalizeStream`
-        // rewrites local UUIDs to the DB ids. If we ever see dups here it
-        // means the round-trip is broken; the right fix is upstream.
+        // Dedup por id Y por fingerprint. El id es primario (el backend hace
+        // echo de client_temp_id/user_message_id/assistant_message_id y
+        // finalizeStream reescribe el id local→DB). PERO si el `done` se perdió
+        // (p.ej. navegaste fuera del chat antes de este fix global), el id local
+        // temp NUNCA se reescribió → quedaría como "local-only" y se duplicaría
+        // con la fila DB al reconciliar. El fingerprint (role + contenido
+        // normalizado + ventana temporal ±120s) colapsa ese huérfano contra la
+        // fila DB. La ventana evita borrar dos mensajes idénticos legítimos
+        // enviados con minutos de diferencia.
         const existing = state.messages.get(conversationId) ?? [];
         const dbIds = new Set(msgs.map((m) => m.id));
-        const localOnly = existing.filter((m) => !dbIds.has(m.id));
+        const normContent = (s: string) => (s ?? '').replace(/\s+/g, ' ').trim();
+        const FINGERPRINT_WINDOW_MS = 120_000;
+        const dbPrints = msgs.map((m) => ({
+          role: m.role,
+          content: normContent(m.content),
+          t: new Date(m.timestamp).getTime(),
+        }));
+        const localOnly = existing.filter((m) => {
+          if (dbIds.has(m.id)) return false; // ya presente por id
+          const mc = normContent(m.content);
+          const mt = new Date(m.timestamp).getTime();
+          const dup = dbPrints.some(
+            (p) => p.role === m.role && p.content === mc && Math.abs(p.t - mt) < FINGERPRINT_WINDOW_MS,
+          );
+          return !dup; // descarta el optimista temp que ya está en DB con otro id
+        });
         const merged = [...msgs, ...localOnly].sort(
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
         );
@@ -504,6 +552,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
             summary: t.summary,
             input: t.input,
             output: t.output,
+            text_offset: t.text_offset,
           }))
         : undefined;
     // Reasoning persisted to DB when visibility != 'off'. Prefer the

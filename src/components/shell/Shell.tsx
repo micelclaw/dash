@@ -51,6 +51,8 @@ import { useExtractionStore } from '@/stores/extraction.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
+import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
+import { useChatReconcile } from '@/hooks/use-chat-reconcile';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -165,6 +167,12 @@ export function Shell() {
   // Studio doc-phase generation streams — single global subscription
   // so navigating between phases doesn't drop tokens / done events.
   useStudioGenerationStreamsSubscription();
+
+  // Chat stream — ÚNICA suscripción global a chat.stream.* (antes vivía en
+  // ChatPage/BottomBar, que se desmontan al navegar → done perdido → F5).
+  // + reconciliación desde DB al reconectar/volver-a-pestaña. DB-authoritative.
+  useChatStreamSubscription();
+  useChatReconcile();
 
   // Fetch services on mount
   const fetchServices = useServicesStore((s) => s.fetchServices);

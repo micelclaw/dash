@@ -14,7 +14,6 @@ import { useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
-import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { usePlayerStore } from '@/stores/player.store';
 import { useMediaKeys } from '@/hooks/use-media-keys';
@@ -30,70 +29,12 @@ export function BottomBar() {
   const setChatState = useChatStore((s) => s.setChatState);
   const bubbleMessage = useChatStore((s) => s.bubbleMessage);
   const setBubbleMessage = useChatStore((s) => s.setBubbleMessage);
-  const appendStreamToken = useChatStore((s) => s.appendStreamToken);
-  const addToolEvent = useChatStore((s) => s.addToolEvent);
-  const finalizeStream = useChatStore((s) => s.finalizeStream);
-  const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
-  const addSystemMessage = useChatStore((s) => s.addSystemMessage);
-  const clearConversationMessages = useChatStore((s) => s.clearConversationMessages);
-  const startNewConversation = useChatStore((s) => s.startNewConversation);
   const navigate = useNavigate();
 
-  // Listen to chat stream events
-  const streamEvent = useWebSocket('chat.stream.*');
-
-  useEffect(() => {
-    if (!streamEvent) return;
-    const data = streamEvent.data;
-    const convId = data.conversation_id as string;
-
-    switch (streamEvent.event) {
-      case 'chat.stream.start':
-        setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
-        break;
-      case 'chat.stream.token':
-        appendStreamToken(convId, data.token as string);
-        break;
-      case 'chat.stream.thinking':
-        appendStreamToken(convId, data.token as string, 'thinking');
-        break;
-      case 'chat.stream.tool':
-        addToolEvent(convId, data as any);
-        break;
-      case 'chat.stream.gateway_down':
-        finalizeStream(convId, '', '__gateway_down__', 0);
-        break;
-      case 'chat.stream.system_message':
-        // Slash-command confirmation chip (e.g. "Nivel de pensamiento → medium").
-        addSystemMessage(convId, data.text as string);
-        break;
-      case 'chat.stream.cleared':
-        // /clear — wipe the dash conversation view (does not touch DB).
-        clearConversationMessages(convId);
-        break;
-      case 'chat.stream.new_session':
-        // /new — drop the active conversation pointer so the next send starts
-        // a fresh one (parity with the "New chat" button in the sidebar).
-        startNewConversation();
-        break;
-      case 'chat.stream.done':
-        finalizeStream(
-          convId,
-          data.full_text as string,
-          data.model as string | undefined,
-          data.tokens_used as number | undefined,
-          data.error_type as string | undefined,
-          Array.isArray(data.tool_calls) ? (data.tool_calls as import('@/types/chat').ToolCallRecord[]) : undefined,
-          typeof data.thinking === 'string' ? (data.thinking as string) : null,
-          {
-            clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
-            userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
-            assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
-          },
-        );
-        break;
-    }
-  }, [streamEvent, appendStreamToken, addToolEvent, finalizeStream, setStreamingMessage, addSystemMessage, clearConversationMessages, startNewConversation]);
+  // `chat.stream.*` se maneja en una ÚNICA suscripción global (Shell,
+  // useChatStreamSubscription). Antes vivía aquí Y en ChatPage (duplicado), y
+  // ambos se desmontaban al navegar → el `done` se perdía. BottomBar ahora solo
+  // renderiza del store.
 
   // Auto-dismiss bubble after 8s
   useEffect(() => {

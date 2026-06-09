@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -132,6 +132,9 @@ export function Component() {
     selectedEvent?.id ?? null,
   );
 
+  // Guard: evita re-fetch del deep-link en cada cambio de `events`.
+  const deepLinkFetchedId = useRef<string | null>(null);
+
   // Handle ?action=new and ?id=eventId from URL
   useEffect(() => {
     const action = searchParams.get('action');
@@ -160,6 +163,26 @@ export function Component() {
         setSelectedEvent(target);
         setModalOpen(true);
         setSearchParams({}, { replace: true });
+        deepLinkFetchedId.current = null;
+      } else if (deepLinkFetchedId.current !== targetId) {
+        // El evento no está en el rango cargado (p.ej. en otra fecha — el chip
+        // del chat puede enlazar a cualquier evento). Lo traemos por id, saltamos
+        // a su fecha y lo abrimos. Sin esto el deep-link solo abría eventos de la
+        // vista actual; los demás dejaban la vista en la semana/mes actual.
+        deepLinkFetchedId.current = targetId; // guard anti re-fetch al cambiar `events`
+        api.get<{ data: CalendarEvent }>(`/events/${targetId}`)
+          .then((res) => {
+            const ev = res.data;
+            if (!ev?.id) return;
+            if (ev.start_at) {
+              const d = new Date(ev.start_at);
+              if (!isNaN(d.getTime())) setCurrentDate(d);
+            }
+            setSelectedEvent(ev);
+            setModalOpen(true);
+            setSearchParams({}, { replace: true });
+          })
+          .catch(() => { /* evento borrado/no accesible — no romper la vista */ });
       }
     }
   }, [searchParams, setSearchParams, events]);

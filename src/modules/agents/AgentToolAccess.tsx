@@ -17,10 +17,20 @@ type ToolProfile = 'inherit' | 'minimal' | 'coding' | 'messaging' | 'full' | 'cu
 
 interface ToolAccessResponse {
   data: {
-    global: { profile: string | null; allow: string[] | null; deny: string[] | null };
-    agent: { profile: string | null; allow: string[] | null; deny: string[] | null };
+    global: { profile: string | null; allow: string[] | null; alsoAllow?: string[] | null; deny: string[] | null };
+    agent: { profile: string | null; allow: string[] | null; alsoAllow?: string[] | null; deny: string[] | null };
     openclaw_agent_id: string;
   };
+}
+
+// Las entradas de la FACHADA MCP (`claw-os__*`) las gestiona el backend según las
+// skills del agente (agent-tool-visibility): son la restricción por-app de los
+// `claw_*`, NO tools nativos editables en esta matriz. Se filtran de allow/deny para
+// que su `deny` no fuerce "custom" ni apague los 26 toggles nativos (era el bug
+// "custom + todo OFF"). El backend re-aplica esta restricción en cada PATCH, así que
+// el dash nunca necesita tocarlas.
+function stripFacade(list: string[] | null | undefined): string[] {
+  return (list ?? []).filter((t) => !t.startsWith('claw-os__'));
 }
 
 const TOOL_GROUPS: { label: string; tools: { name: string; desc: string }[] }[] = [
@@ -105,8 +115,9 @@ const PRESETS: { label: string; value: ToolProfile; desc: string }[] = [
 ];
 
 function getActiveProfile(agent: { profile: string | null; allow: string[] | null; deny: string[] | null }): ToolProfile {
-  // If agent has explicit allow/deny lists → custom
-  if (agent.allow || agent.deny) return 'custom';
+  // If agent has explicit allow/deny lists of NATIVE tools → custom. El deny de
+  // fachada (claw-os__*) se ignora aquí (lo gestiona el backend, no es nativo).
+  if (stripFacade(agent.allow).length > 0 || stripFacade(agent.deny).length > 0) return 'custom';
   // If agent has a profile set → that profile
   if (agent.profile && ['minimal', 'coding', 'messaging', 'full'].includes(agent.profile)) {
     return agent.profile as ToolProfile;
@@ -150,8 +161,9 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
       const profile = getActiveProfile(res.data.agent);
       setActiveProfile(profile);
       if (profile === 'custom') {
-        setCustomAllow(new Set(res.data.agent.allow ?? []));
-        setCustomDeny(new Set(res.data.agent.deny ?? []));
+        // Solo tools nativos: las claw-os__* las re-aplica el backend.
+        setCustomAllow(new Set(stripFacade(res.data.agent.allow)));
+        setCustomDeny(new Set(stripFacade(res.data.agent.deny)));
       }
       setDirty(false);
     } catch {

@@ -188,6 +188,7 @@ export interface CatalogModel {
   configured: boolean;
   is_default: boolean;
   local: boolean;
+  size_bytes?: number | null; // Ollama: tamaño en disco (badge "espacio en disco")
 }
 
 // ─── Models: status (CLI: openclaw models status --json) ────────────

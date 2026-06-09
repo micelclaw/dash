@@ -33,3 +33,7 @@ CLAUDE.md
 playwright-report/
 test-results/
 contract-results*.txt
+
+# Playwright MCP
+tests/mcp/.auth/
+tests/mcp/.runs/

@@ -15,7 +15,9 @@
 // resto (weights+KV) cae a RAM. Marca 🔴 'over' si las capas forzadas no caben en
 // VRAM o si la parte en RAM supera la RAM disponible (no arrancará).
 //
-// KV (f16): bytes/token = block_count × head_count_kv × (key_length + value_length) × 2.
+// KV (f16): bytes/token = kvLayers × head_count_kv × (key_length + value_length) × 2,
+// donde kvLayers = block_count / full_attention_interval para híbridos SSM (qwen35),
+// o block_count para modelos densos clásicos.
 // Aproximado: no modela cuantización del KV ni flash-attention; weights tratados
 // como repartidos uniformemente por capa (embeddings/output se aproximan).
 // Snapshot: vram_total_mb / ram_available_mb se leen UNA vez al abrir el modal.
@@ -47,13 +49,24 @@ export function estimateVram(info: OllamaModelInfo, numCtx: number, numGpu: numb
   const kvh = info.head_count_kv ?? 0;
   const kl = info.key_length ?? 0;
   const vl = info.value_length ?? 0;
-  const kvGb = (bc * kvh * (kl + vl) * 2 * Math.max(0, numCtx)) / 1e9;
+  // KV: el backend ya calcula el modelo arch-aware (dense / SSM híbrido /
+  // sliding-window tipo gemma con head_count_kv por-capa) y expone dos escalares.
+  // kv = grow_per_token × num_ctx + fixed (capas sliding topadas en su ventana).
+  // Fallback al modelo simple (denso) si el backend no los aporta.
+  let kvGb: number;
+  if (info.kv_grow_bytes_per_token != null) {
+    kvGb = (info.kv_grow_bytes_per_token * Math.max(0, numCtx) + (info.kv_fixed_bytes ?? 0)) / 1e9;
+  } else {
+    const fai = info.full_attention_interval ?? 0;
+    const kvLayers = fai > 1 ? bc / fai : bc;
+    kvGb = (kvLayers * kvh * (kl + vl) * 2 * Math.max(0, numCtx)) / 1e9;
+  }
   const modelGb = weightsGb + kvGb; // parte repartible por capas
   const totalGb = modelGb + COMPUTE_BUFFER_GB;
 
   const vramTotalGb = info.vram_total_mb != null ? info.vram_total_mb / 1024 : null;
   const ramAvailGb = info.ram_available_mb != null ? info.ram_available_mb / 1024 : null;
-  const partial = info.size_bytes == null || bc === 0 || kvh === 0;
+  const partial = info.size_bytes == null || bc === 0 || (info.kv_grow_bytes_per_token == null && kvh === 0);
 
   // Sin metadatos de capas → no se puede repartir; estimación simple (todo-o-nada).
   if (bc === 0) {

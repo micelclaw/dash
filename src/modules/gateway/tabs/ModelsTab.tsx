@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2, Pencil, SlidersHorizontal } from 'lucide-react';
+import { Star, Cpu, RefreshCw, Search as SearchIcon, Image, Plus, X, Check, Key, ArrowLeft, ChevronRight, Trash2, Loader2, Pencil, SlidersHorizontal, Download, HardDrive } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -24,8 +24,7 @@ import { getProviderIcon } from '@/config/provider-icons';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
 import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
 import { OllamaModelSettingsModal } from '../components/OllamaModelSettingsModal';
-import { AddModelPanel } from '../components/AddModelPanel';
-import { GpuCoordinationPanel } from '../components/GpuCoordinationPanel';
+import { AddOllamaModelModal } from '../components/AddOllamaModelModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { GatewayModel, CatalogModel } from '../types';
 
@@ -152,6 +151,14 @@ function isUserManagedProvider(id: string): boolean {
   return id.startsWith('custom-api-') || USER_MANAGED_FIXED_PROVIDERS.has(id);
 }
 
+// Solo los modelos locales (Ollama) cargan en VRAM al añadirlos → barra de
+// progreso "Cargando en VRAM…" en toda la tarjeta. Los proveedores cloud
+// (openrouter, anthropic, custom-api-*…) solo escriben config: spinner simple
+// en el botón, sin animación de carga.
+function loadsIntoVram(provider: string): boolean {
+  return provider === 'ollama';
+}
+
 interface ProviderEntry {
   provider: string;
   label: string;
@@ -195,6 +202,9 @@ export function ModelsTab() {
   const [customProviderIds, setCustomProviderIds] = useState<string[]>([]);
   const [providersConfig, setProvidersConfig] = useState<gwService.ProvidersConfig | null>(null);
   const [ollamaSettings, setOllamaSettings] = useState<{ modelId: string; modelName?: string; initialParams?: gwService.OllamaTuningParams } | null>(null);
+  const [addModelOpen, setAddModelOpen] = useState(false);          // modal "Añadir modelo local (Ollama)"
+  const [addingKey, setAddingKey] = useState<string | null>(null);  // +Add en curso → la tarjeta se vuelve barra de carga (VRAM)
+  const [addProgress, setAddProgress] = useState(0);                // 0..100 fake-progress de esa barra
   const [discoveredCounts, setDiscoveredCounts] = useState<Record<string, number>>({});
   const [customModelEditor, setCustomModelEditor] = useState<{
     mode: 'add' | 'edit';
@@ -212,8 +222,18 @@ export function ModelsTab() {
   }, [models.length, fetchModels]);
 
   useEffect(() => {
-    if (view === 'catalog' && catalog.length === 0 && !catalogLoading) fetchCatalog();
+    // El catalog se cruza con los modelos configurados para mostrar sus tags de
+    // contexto/tamaño en la pestaña Configured → cargarlo también ahí.
+    if ((view === 'catalog' || view === 'configured') && catalog.length === 0 && !catalogLoading) fetchCatalog();
   }, [view, catalog.length, catalogLoading, fetchCatalog]);
+
+  // Índice del catalog por key, para enriquecer las filas Configured (que sólo
+  // traen id/provider/model/status) con context_window y size_bytes.
+  const catalogByKey = useMemo(() => {
+    const m = new Map<string, CatalogModel>();
+    for (const c of catalog) m.set(c.key, c);
+    return m;
+  }, [catalog]);
 
   // Fetch custom provider IDs and full config (so the grid shows them
   // even with 0 catalog models, and the Edit modal can read existing
@@ -259,8 +279,24 @@ export function ModelsTab() {
     }
   };
 
+  // Barra de carga (tarjeta entera) durante un +Add que carga el modelo en VRAM.
+  // Ollama no expone % de carga en VRAM → fake-progress suave 0→90% + remate a 100%.
+  const startAddProgress = (key: string): ReturnType<typeof setInterval> => {
+    setAddingKey(key);
+    setAddProgress(8);
+    return setInterval(() => setAddProgress((p) => (p >= 90 ? 90 : p + 6)), 350);
+  };
+  const stopAddProgress = (iv: ReturnType<typeof setInterval>) => {
+    clearInterval(iv);
+    setAddProgress(100);
+    setTimeout(() => { setAddingKey(null); setAddProgress(0); }, 300);
+  };
+
   const handleAddModel = async (key: string) => {
+    const provider = key.split('/')[0] ?? '';
+    const vram = loadsIntoVram(provider);
     setMutatingModel(key);
+    const iv = vram ? startAddProgress(key) : null;
     try {
       await addModel(key);
       toast.success(`Added ${key}`);
@@ -268,6 +304,7 @@ export function ModelsTab() {
       toast.error(err instanceof Error ? err.message : 'Failed to add model');
     } finally {
       setMutatingModel(null);
+      if (iv) stopAddProgress(iv);
     }
   };
 
@@ -278,6 +315,34 @@ export function ModelsTab() {
       toast.success(`Removed ${key}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to remove model');
+    } finally {
+      setMutatingModel(null);
+    }
+  };
+
+  // Borrado HARD del modelo Ollama en disco (libera espacio). Recupera
+  // gwService.deleteOllamaModel. El tag es el key sin el prefijo 'ollama/'.
+  // Si estaba Configured, lo quita además de la config de chat (best-effort).
+  const handleDeleteFromDisk = async (model: CatalogModel) => {
+    const tag = model.key.replace(/^ollama\//, '');
+    // Tamaño para el confirm (best-effort; getOllamaModelInfo lo trae de /api/tags).
+    let sizeStr = '';
+    try {
+      const info = await gwService.getOllamaModelInfo(tag);
+      if (info.size_bytes) sizeStr = ` Libera ~${(info.size_bytes / 1e9).toFixed(1)} GB.`;
+    } catch { /* tamaño opcional */ }
+    if (!window.confirm(`¿Borrar "${model.name || tag}" del disco?${sizeStr}\n\nTendrás que volver a descargarlo para usarlo.`)) return;
+    setMutatingModel(model.key);
+    try {
+      await gwService.deleteOllamaModel(tag);
+      if (model.configured) {
+        try { await removeModel(model.key); } catch { /* no estaba registrado como modelo de chat */ }
+      }
+      toast.success(`Borrado del disco: ${model.name || tag}`);
+      fetchCatalog();
+      fetchModels();
+    } catch (err) {
+      toast.error(`No se pudo borrar ${model.name || tag}: ${err instanceof Error ? err.message : 'error'}`);
     } finally {
       setMutatingModel(null);
     }
@@ -399,7 +464,9 @@ export function ModelsTab() {
   // for info they don't have. One-click Add + Edit-when-needed is simpler.
   const handleAddCustomModelDirect = async (provider: string, modelId: string) => {
     const key = `${provider}/${modelId}`;
+    const vram = loadsIntoVram(provider);
     setMutatingModel(key);
+    const iv = vram ? startAddProgress(key) : null;
     try {
       await gwService.addModelWithConfig({
         model: key,
@@ -425,6 +492,7 @@ export function ModelsTab() {
       toast.error(msg + hint);
     } finally {
       setMutatingModel(null);
+      if (iv) stopAddProgress(iv);
     }
   };
 
@@ -457,9 +525,8 @@ export function ModelsTab() {
 
   // Abre el panel de ajustes Ollama por-modelo. Lee los params actuales de
   // providers.ollama.models[].params (fetch fresco si no está cargado en esta vista).
-  const handleEditOllama = async (model: GatewayModel) => {
-    const full = model.model || model.id || '';
-    const tag = full.startsWith('ollama/') ? full.slice('ollama/'.length) : full;
+  const openOllamaSettings = async (tagOrFull: string) => {
+    const tag = tagOrFull.replace(/^ollama\//, '');
     let initialParams: gwService.OllamaTuningParams | undefined;
     let name = tag;
     try {
@@ -473,6 +540,8 @@ export function ModelsTab() {
     } catch { /* sin params previos → el modal usa defaults */ }
     setOllamaSettings({ modelId: tag, modelName: name, initialParams });
   };
+  // Wrapper para ConfiguredRow (recibe GatewayModel); el Catalog llama directo con el key.
+  const handleEditOllama = (model: GatewayModel) => openOllamaSettings(model.model || model.id || '');
 
   // ── Delete custom provider ──
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
@@ -636,7 +705,13 @@ export function ModelsTab() {
             <EmptyState text={search ? 'No models match your search' : 'No models configured'} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {filteredModels.map((model) => (
+              {filteredModels.map((model) => {
+                // GatewayModel.model viene SIN prefijo de provider para Ollama
+                // ("qwen3:8b"), pero el catalog usa key con prefijo ("ollama/qwen3:8b").
+                // Probar ambas formas para cruzar contexto/tamaño en todos los casos.
+                const cat = catalogByKey.get(model.model)
+                  ?? catalogByKey.get(`${model.provider}/${model.model}`);
+                return (
                 <ConfiguredRow
                   key={model.id || model.model}
                   model={model}
@@ -648,8 +723,11 @@ export function ModelsTab() {
                   mutatingModel={mutatingModel}
                   onRemove={handleRemoveModel}
                   onEditOllama={handleEditOllama}
+                  contextWindow={cat?.context_window ?? null}
+                  sizeBytes={cat?.size_bytes ?? null}
                 />
-              ))}
+                );
+              })}
             </div>
           )
         ) : catalogSubView === 'providers' ? (
@@ -759,17 +837,6 @@ export function ModelsTab() {
                 onClick={() => setCustomWizardType('arcee')}
                 provider="arcee"
               />
-            </div>
-
-            {/* ── Modelos locales (Ollama) — sub-sección separada al final.
-                 Solo relevante si usas Ollama/LM Studio local; va abajo para no
-                 tapar el catálogo de proveedores. ── */}
-            <div style={{ borderTop: '1px solid var(--border)', marginTop: 24, paddingTop: 16 }}>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Cpu size={14} /> Modelos locales (Ollama)
-              </div>
-              <GpuCoordinationPanel />
-              <AddModelPanel onAdded={fetchCatalog} />
             </div>
           </>
         ) : (
@@ -894,8 +961,21 @@ export function ModelsTab() {
                 configured: false,
                 is_default: false,
                 local: false,
+                size_bytes: dm.size_bytes ?? null,
               }));
-              const unifiedList: CatalogModel[] = [...providerModels, ...discoveredAsCatalog];
+              // Tamaño en disco por tag (de /api/tags vía discover). Los modelos
+              // Configured vienen del catálogo (sin size); se lo inyectamos cruzando
+              // por tag con los descubiertos. Normaliza `:latest`.
+              const sizeByTag = new Map(
+                discoveredModels.map((d) => [d.id.replace(/:latest$/, ''), d.size_bytes ?? null]),
+              );
+              const withSize = (m: CatalogModel): CatalogModel => {
+                if (m.size_bytes != null) return m;
+                const tag = m.key.replace(/^ollama\//, '').replace(/:latest$/, '');
+                const s = sizeByTag.get(tag);
+                return s != null ? { ...m, size_bytes: s } : m;
+              };
+              const unifiedList: CatalogModel[] = [...providerModels, ...discoveredAsCatalog].map(withSize);
 
               // Count "added" from the source-of-truth `configured` flag, not
               // from `providerModels.length`. The catalog can list entries that
@@ -906,8 +986,8 @@ export function ModelsTab() {
               const addedCount = unifiedList.filter((m) => m.configured).length;
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {/* Single header with counts */}
-                  {unifiedList.length > 0 && (
+                  {/* Single header with counts (+ botón Añadir solo para Ollama) */}
+                  {(unifiedList.length > 0 || selectedProvider === 'ollama') && (
                     <div style={{
                       marginBottom: 4,
                       display: 'flex', alignItems: 'center', gap: 8,
@@ -926,6 +1006,20 @@ export function ModelsTab() {
                         </span>
                       )}
                       {discovering && <Loader2 size={11} className="spin" style={{ color: 'var(--text-dim)' }} />}
+                      {selectedProvider === 'ollama' && (
+                        <button
+                          onClick={() => setAddModelOpen(true)}
+                          title="Descargar y añadir un modelo local (tag de Ollama o repo GGUF de HuggingFace)"
+                          style={{
+                            marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '4px 10px', fontSize: '0.75rem', fontWeight: 600,
+                            borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                            border: '1px solid var(--amber)', background: 'transparent', color: 'var(--text)',
+                          }}
+                        >
+                          <Plus size={13} /> Añadir
+                        </button>
+                      )}
                     </div>
                   )}
                   {unifiedList.map((model) => (
@@ -936,6 +1030,8 @@ export function ModelsTab() {
                       isHovered={hoveredRow === model.key}
                       onHover={setHoveredRow}
                       mutatingModel={mutatingModel}
+                      isAdding={addingKey === model.key}
+                      addProgress={addProgress}
                       // Dispatch del Add según el tipo de provider:
                       //   - Custom (en `models.providers.<id>`: nvidia, ollama,
                       //     custom-api-*, lm-studio, etc.) → llama directamente
@@ -958,11 +1054,20 @@ export function ModelsTab() {
                       }}
                       onRemove={handleRemoveModel}
                       onConfigure={(m) => setWizardModel(m)}
-                      onEdit={isUserManagedProvider(model.provider) && model.configured
-                        ? handleEditCustomModel
-                        : undefined}
+                      onEdit={!model.configured
+                        ? undefined
+                        : model.provider === 'ollama'
+                          // Ollama → modal de VRAM/offload (num_ctx, num_gpu, keep_alive, estimación).
+                          ? (m) => { void openOllamaSettings(m.key); }
+                          // Otros user-managed (custom-api, vllm…) → editor genérico (ctx + maxTokens).
+                          : isUserManagedProvider(model.provider)
+                            ? handleEditCustomModel
+                            : undefined}
+                      onDeleteFromDisk={handleDeleteFromDisk}
                     />
                   ))}
+                  {/* El árbitro de VRAM (estado de la GPU, modelos cargados, prioridad,
+                      pausar/liberar) vive ahora en Settings → AI & Agents → GPU & VRAM. */}
                 </div>
               );
             })()}
@@ -1005,6 +1110,12 @@ export function ModelsTab() {
           initialParams={ollamaSettings.initialParams}
           onClose={() => setOllamaSettings(null)}
           onSuccess={() => { fetchModels(); fetchCustomProviders(); }}
+        />
+      )}
+      {addModelOpen && (
+        <AddOllamaModelModal
+          onClose={() => setAddModelOpen(false)}
+          onAdded={() => { fetchCatalog(); fetchModels(); }}
         />
       )}
     </ScrollArea>
@@ -1237,7 +1348,7 @@ function ProviderChip({ label, color, active, onClick }: {
 
 // ─── Configured Row ─────────────────────────────────────────────────
 
-function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, onSetDefault, mutatingModel, onRemove, onEditOllama }: {
+function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, onSetDefault, mutatingModel, onRemove, onEditOllama, contextWindow, sizeBytes }: {
   model: GatewayModel;
   isMobile: boolean;
   isHovered: boolean;
@@ -1247,6 +1358,10 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
   mutatingModel: string | null;
   onRemove: (key: string) => void;
   onEditOllama?: (m: GatewayModel) => void;
+  /** Contexto (ventana) del modelo — se muestra para todos los providers. */
+  contextWindow?: number | null;
+  /** Tamaño en disco — solo modelos locales (Ollama/LM Studio); null en el resto. */
+  sizeBytes?: number | null;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(model.provider);
@@ -1290,6 +1405,29 @@ function ConfiguredRow({ model, isMobile, isHovered, onHover, settingDefault, on
           }}>
             {model.model || model.id}
           </span>
+          {/* Tamaño en disco — solo local (Ollama/LM Studio; sizeBytes null en el resto) */}
+          {sizeBytes != null && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: '0.625rem', color: 'var(--text-dim)',
+              fontFamily: 'var(--font-sans)', fontWeight: 500,
+              background: 'var(--surface)', padding: '1px 6px',
+              borderRadius: 'var(--radius-sm)',
+            }} title="Espacio en disco">
+              <HardDrive size={9} /> {formatBytes(sizeBytes)}
+            </span>
+          )}
+          {/* Contexto — para todos los providers */}
+          {contextWindow != null && (
+            <span style={{
+              fontSize: '0.625rem', color: 'var(--text-dim)',
+              fontFamily: 'var(--font-sans)', fontWeight: 500,
+              background: 'var(--surface)', padding: '1px 6px',
+              borderRadius: 'var(--radius-sm)',
+            }} title="Contexto (ventana del modelo)">
+              {formatCtx(contextWindow)}
+            </span>
+          )}
           {model.is_default && (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -1372,22 +1510,60 @@ function formatCtx(ctx: number | null): string {
   return `${ctx} ctx`;
 }
 
-function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd, onRemove, onConfigure, onEdit }: {
+function formatBytes(b: number): string {
+  return b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`;
+}
+
+function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, isAdding, addProgress, onAdd, onRemove, onConfigure, onEdit, onDeleteFromDisk }: {
   model: CatalogModel;
   isMobile: boolean;
   isHovered: boolean;
   onHover: (id: string | null) => void;
   mutatingModel: string | null;
+  /** El +Add está en curso y carga el modelo en VRAM → la tarjeta entera se vuelve barra de carga. */
+  isAdding: boolean;
+  /** 0..100 — progreso (fake-progress por tiempo) de esa barra. */
+  addProgress: number;
   onAdd: (key: string) => void;
   onRemove: (key: string) => void;
   onConfigure: (model: CatalogModel) => void;
   /** Set for user-managed (custom-api-*, ollama, vllm, sglang, lm-studio)
    *  configured models — opens the modal to edit contextWindow / maxTokens. */
   onEdit?: (model: CatalogModel) => void;
+  /** Solo Ollama: borrado HARD del modelo en disco (libera espacio). */
+  onDeleteFromDisk?: (model: CatalogModel) => void;
 }) {
   const providerColor = PROVIDER_COLORS[model.provider?.toLowerCase()] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(model.provider);
   const isMutating = mutatingModel === model.key;
+
+  // Mientras se añade (carga en VRAM), la tarjeta ENTERA es una barra de progreso.
+  if (isAdding) {
+    return (
+      <div style={{
+        position: 'relative', overflow: 'hidden',
+        padding: '10px 14px', minHeight: 56, boxSizing: 'border-box',
+        background: 'var(--card)', border: '1px solid var(--amber)',
+        borderRadius: 'var(--radius-md)',
+        display: 'flex', alignItems: 'center',
+      }}>
+        <div style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${addProgress}%`, background: 'var(--amber)', opacity: 0.18,
+          transition: 'width 0.3s ease',
+        }} />
+        <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+          <Download size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, fontSize: '0.8125rem', color: 'var(--text)', fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Cargando en VRAM… {model.name || model.key}
+          </span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--amber)', flexShrink: 0 }}>
+            {Math.round(addProgress)}%
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1428,14 +1604,31 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
           }}>
             {model.name || model.key}
           </span>
-          {model.context_window && (
+          {/* Tag 1: espacio en disco (solo Ollama) */}
+          {model.provider === 'ollama' && model.size_bytes != null && (
             <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
               fontSize: '0.625rem', color: 'var(--text-dim)',
               fontFamily: 'var(--font-sans)', fontWeight: 500,
               background: 'var(--surface)', padding: '1px 6px',
               borderRadius: 'var(--radius-sm)',
-            }}>
-              {formatCtx(model.context_window)}
+            }} title="Espacio en disco">
+              <HardDrive size={9} /> {formatBytes(model.size_bytes)}
+            </span>
+          )}
+          {/* Tag 2: contexto. Asignado (num_ctx) o, en Ollama sin configurar, por defecto. */}
+          {(model.context_window || model.provider === 'ollama') && (
+            <span style={{
+              fontSize: '0.625rem',
+              color: model.context_window ? 'var(--text-dim)' : 'var(--text-muted)',
+              fontFamily: 'var(--font-sans)', fontWeight: 500,
+              background: 'var(--surface)', padding: '1px 6px',
+              borderRadius: 'var(--radius-sm)',
+              fontStyle: model.context_window ? 'normal' : 'italic',
+            }} title={model.context_window
+              ? 'Contexto asignado (num_ctx)'
+              : 'Sin asignar — Ollama usaría su contexto por defecto. Añádelo y ajústalo con ⚙ Editar.'}>
+              {model.context_window ? formatCtx(model.context_window) : 'ctx def'}
             </span>
           )}
           {model.configured && (
@@ -1520,6 +1713,18 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, onAdd,
             />
           )
         )}
+        {/* Borrar de disco (hard delete) — solo Ollama. Distinto del Remove
+            (que solo quita de la config de chat). */}
+        {onDeleteFromDisk && model.provider === 'ollama' && (
+          <ActionButton
+            icon={<Trash2 size={12} />}
+            label=""
+            title="Borrar del disco (libera espacio; tendrás que volver a descargarlo)"
+            loading={isMutating}
+            onClick={() => onDeleteFromDisk(model)}
+            variant="danger"
+          />
+        )}
       </div>
     </div>
   );
@@ -1556,12 +1761,13 @@ function SetDefaultButton({ onClick, loading }: { onClick: () => void; loading: 
   );
 }
 
-function ActionButton({ icon, label, loading, onClick, variant }: {
+function ActionButton({ icon, label, loading, onClick, variant, title }: {
   icon: React.ReactNode;
   label: string;
   loading: boolean;
   onClick: () => void;
   variant: 'primary' | 'danger' | 'secondary';
+  title?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   const colors = variant === 'primary'
@@ -1574,6 +1780,7 @@ function ActionButton({ icon, label, loading, onClick, variant }: {
     <button
       onClick={onClick}
       disabled={loading}
+      title={title}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{

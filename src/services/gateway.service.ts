@@ -287,6 +287,12 @@ export interface OllamaModelInfo {
   head_count_kv: number | null;
   key_length: number | null;
   value_length: number | null;
+  full_attention_interval: number | null; // híbridos SSM (qwen35): KV solo en 1 de cada N capas
+  // Modelo KV calculado en el backend (arch-aware: dense / SSM / sliding-window
+  // tipo gemma con head_count_kv por-capa). El dash combina:
+  //   kv_bytes = kv_grow_bytes_per_token × num_ctx + kv_fixed_bytes
+  kv_grow_bytes_per_token: number | null; // KV que crece con el contexto (capas full-attention)
+  kv_fixed_bytes: number | null;          // KV fijo (capas sliding-window, topadas en sliding_window)
   context_length_max: number | null;
   quantization: string | null;
   vram_total_mb: number | null;
@@ -313,20 +319,34 @@ export async function updateOllamaParams(id: string, params: OllamaTuningParams)
 }
 
 // ─── Árbitro de VRAM (Fase 2) ──────────────────────────────────────
+export interface GpuModelOverride { pinned?: boolean; force_cpu?: boolean }
 export interface GpuCoordConfig {
   enabled: boolean;
-  priority: 'chat' | 'photos' | 'balanced';
+  priority: 'chat' | 'multimodal';
   idle_window_min: number;
   pinned_model: string | null;
   pause_photos_while_chat: boolean;
+  paused: boolean;
+  model_overrides: Record<string, GpuModelOverride>;
+  embed_num_gpu: number | null;
 }
+export type GpuRole = 'chat' | 'embed' | 'extract' | 'multimodal' | 'vision' | 'other';
+export type GpuModelStatus = 'loaded' | 'idle';
+export interface GpuLoadedModel { name: string; role: GpuRole; vram_gb: number; pinned: boolean }
+export interface GpuCatalogModel { id: string; name: string; role: GpuRole; vram_gb: number; loaded: boolean; pinned: boolean; status: GpuModelStatus; external?: boolean }
 export interface GpuCoordState {
   enabled: boolean;
+  paused: boolean;
   vram_total_mb: number | null;
   free_vram_mb: number | null;
-  loaded: Array<{ name: string; vram_gb: number }>;
+  used_mb: number | null;
+  loaded: GpuLoadedModel[];
+  onnx_loaded: string[];
+  other_gb: number | null;
   chat_active: boolean;
   photos_can_proceed: boolean;
+  queue: { embed: number; extract: number; total: number };
+  models: GpuCatalogModel[];
 }
 
 export async function getGpuCoordination(): Promise<{ config: GpuCoordConfig; state: GpuCoordState }> {
@@ -342,6 +362,12 @@ export async function getGpuState(): Promise<GpuCoordState> {
 export async function updateGpuCoordination(patch: Partial<GpuCoordConfig>): Promise<GpuCoordConfig> {
   const res = await api.patch<{ data: { config: GpuCoordConfig } }>('/gateway/gpu-coordination', patch);
   return res.data.config;
+}
+
+/** "Liberar VRAM": descarga TODO lo cargado (Ollama + ONNX). Devuelve el estado tras la acción. */
+export async function freeGpuVram(): Promise<{ unloaded: string[]; state: GpuCoordState }> {
+  const res = await api.post<{ data: { unloaded: string[]; state: GpuCoordState } }>('/gateway/gpu-coordination/free-vram', {});
+  return res.data;
 }
 
 export async function setDefaultImageModel(model: string): Promise<void> {
@@ -887,6 +913,7 @@ export interface DiscoveredModel {
   id: string;
   name: string;
   input: string[];
+  size_bytes?: number | null; // Ollama: tamaño en disco (de /api/tags)
 }
 
 export interface DiscoverResult {

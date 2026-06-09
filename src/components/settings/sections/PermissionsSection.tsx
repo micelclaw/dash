@@ -27,9 +27,9 @@ import { toast } from 'sonner';
 import * as approvalsSvc from '@/services/approvals.service';
 import * as agentsAdmin from '@/services/agents-admin.service';
 import { SettingSection } from '../SettingSection';
-// Domain registry is shared with DigestSection — extending it in
-// `config/domains.ts` updates both sections automatically.
-import { DATA_DOMAINS as DOMAINS, ALL_DOMAIN_IDS } from '@/config/domains';
+// Permissions gobierna datos + capacidad (Fase 4.2); el Digest solo datos.
+// Ver `config/domains.ts` (PERMISSION_DOMAINS = DATA_DOMAINS + CAPABILITY_DOMAINS).
+import { PERMISSION_DOMAINS as DOMAINS, ALL_PERMISSION_DOMAIN_IDS as ALL_DOMAIN_IDS } from '@/config/domains';
 
 // ─── Types ──────────────────────────────────────────────
 

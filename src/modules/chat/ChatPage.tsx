@@ -42,13 +42,7 @@ export function Component() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const setChatState = useChatStore((s) => s.setChatState);
-  const appendStreamToken = useChatStore((s) => s.appendStreamToken);
-  const addToolEvent = useChatStore((s) => s.addToolEvent);
-  const finalizeStream = useChatStore((s) => s.finalizeStream);
-  const setStreamingMessage = useChatStore((s) => s.setStreamingMessage);
-  const addSystemMessage = useChatStore((s) => s.addSystemMessage);
-  const clearConversationMessages = useChatStore((s) => s.clearConversationMessages);
-  const startNewConversation = useChatStore((s) => s.startNewConversation);
+  const loadMessages = useChatStore((s) => s.loadMessages);
   const navigate = useNavigate();
   const insightsRef = useRef<InsightsWidgetHandle>(null);
   const [insightsCollapsed, setInsightsCollapsed] = useState(() => {
@@ -66,67 +60,14 @@ export function Component() {
     return () => setChatState(1);
   }, [setChatState]);
 
-  // Listen to chat stream events (same as BottomBar but for State 3)
-  const streamEvent = useWebSocket('chat.stream.*');
-
+  // `chat.stream.*` ahora se maneja en una ÚNICA suscripción global (Shell,
+  // useChatStreamSubscription) → no se pierde el `done` al navegar fuera del chat.
+  // Aquí solo reconciliamos desde DB al montar/volver al chat (P2): si la
+  // respuesta se completó mientras el chat estaba desmontado, este refetch la
+  // trae (y `loadMessages` mergea idempotente con lo que ya haya en el store).
   useEffect(() => {
-    if (!streamEvent) return;
-    const data = streamEvent.data;
-    const convId = data.conversation_id as string;
-
-    switch (streamEvent.event) {
-      case 'chat.stream.start':
-        setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
-        break;
-      case 'chat.stream.token':
-        appendStreamToken(convId, data.token as string);
-        break;
-      case 'chat.stream.thinking':
-        appendStreamToken(convId, data.token as string, 'thinking');
-        break;
-      case 'chat.stream.tool':
-        addToolEvent(convId, data as any);
-        break;
-      case 'chat.stream.gateway_down':
-        finalizeStream(convId, '', '__gateway_down__', 0);
-        break;
-      case 'chat.stream.system_message':
-        // Slash-command confirmation (e.g. "Nivel de pensamiento → medium").
-        addSystemMessage(convId, data.text as string);
-        break;
-      case 'chat.stream.cleared':
-        // /clear — wipe the dash conversation view.
-        clearConversationMessages(convId);
-        break;
-      case 'chat.stream.new_session':
-        // /new — drop the active conversation pointer so the next send starts
-        // a fresh one (matches the "New chat" button behaviour).
-        startNewConversation();
-        break;
-      case 'chat.stream.done':
-        finalizeStream(
-          convId,
-          data.full_text as string,
-          data.model as string | undefined,
-          data.tokens_used as number | undefined,
-          data.error_type as string | undefined,
-          Array.isArray(data.tool_calls) ? (data.tool_calls as import('@/types/chat').ToolCallRecord[]) : undefined,
-          typeof data.thinking === 'string' ? (data.thinking as string) : null,
-          {
-            clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
-            userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
-            assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
-          },
-        );
-        // Dispatch event for TTS auto-play (ChatInput listens)
-        if (data.model !== 'error') {
-          window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
-            detail: { text: data.full_text as string },
-          }));
-        }
-        break;
-    }
-  }, [streamEvent, appendStreamToken, addToolEvent, finalizeStream, setStreamingMessage, addSystemMessage, clearConversationMessages, startNewConversation]);
+    if (activeConvId) void loadMessages(activeConvId);
+  }, [activeConvId, loadMessages]);
 
   // Listen for dash.navigate events
   const navEvent = useWebSocket('dash.navigate');

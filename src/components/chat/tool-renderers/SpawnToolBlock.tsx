@@ -28,17 +28,34 @@ interface SpawnArgs {
 }
 
 function parseInput(input: ToolCallRecord['input']): SpawnArgs {
-  if (typeof input === 'object' && input != null) return input as SpawnArgs;
-  if (typeof input === 'string') {
-    try { return JSON.parse(input) as SpawnArgs; } catch { return {}; }
+  let raw: Record<string, unknown> = {};
+  if (typeof input === 'object' && input != null) raw = input as Record<string, unknown>;
+  else if (typeof input === 'string') {
+    try { raw = JSON.parse(input) as Record<string, unknown>; } catch { raw = {}; }
   }
-  return {};
+  // El input del tool-call llega snake_case por el case-transform del API/WS
+  // (agent_id, task_name), pero el modelo lo emite camelCase (agentId, task).
+  // Aceptamos ambos para que la chip muestre "Dalí" y no el fallback "sub-agent".
+  const pick = (...keys: string[]): string | undefined => {
+    for (const k of keys) { const v = raw[k]; if (typeof v === 'string' && v) return v; }
+    return undefined;
+  };
+  return {
+    agentId: pick('agentId', 'agent_id'),
+    task: pick('task', 'task_name', 'message'),
+    mode: pick('mode'),
+    model: pick('model'),
+    thinking: pick('thinking'),
+  };
 }
 
 function shortAgentName(agentId: string | undefined): string {
-  // "paco--sentinel" → "Sentinel"
+  // "<prefix>--<name>" → "Name" (prefix es el agent_prefix del usuario:
+  // letras/dígitos/guiones, p.ej. "paco--dali", "admin--atlas"). El regex viejo
+  // exigía 8 hex (formato legacy "dd4d75fb--dali") y NO casaba "paco--dali" → de
+  // ahí que la chip cayera al fallback "sub-agent".
   if (!agentId) return 'sub-agent';
-  const m = agentId.match(/^[a-f0-9]{8}--(.+)$/);
+  const m = agentId.match(/^[a-z0-9-]+--(.+)$/i);
   const name = m?.[1] ?? agentId;
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
@@ -51,6 +68,7 @@ export function SpawnToolBlock({ tool }: Props) {
   const agents = useChatStore((s) => s.agents);
   const agentMatch = agents.find((a) => a.name.toLowerCase() === agentName.toLowerCase());
   const agentColor = getAgentColor(agentName, (agentMatch as { color?: string } | undefined)?.color);
+  const agentAvatar = (agentMatch as { avatar?: string } | undefined)?.avatar ?? '🤖';
 
   const status = tool.status ?? 'success';
   const statusBadge =
@@ -71,7 +89,8 @@ export function SpawnToolBlock({ tool }: Props) {
       >
         <span style={ICON_STYLE}>🔀</span>
         <span style={SUMMARY_STYLE}>
-          Delegado a <strong style={{ color: agentColor }}>{agentName}</strong>
+          Delegado a <span aria-hidden style={{ marginRight: 2 }}>{agentAvatar}</span>
+          <strong style={{ color: agentColor }}>{agentName}</strong>
           {taskPreview && <span style={{ color: 'var(--text-dim)' }}> · "{taskPreview}"</span>}
         </span>
         {statusBadge}

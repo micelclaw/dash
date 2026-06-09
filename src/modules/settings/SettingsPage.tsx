@@ -17,7 +17,7 @@ import {
   Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
-  Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code,
+  Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code, MemoryStick,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -64,6 +64,7 @@ import { ApprovalsForwardingSection } from '@/components/settings/sections/Appro
 import { MemorySearchSection } from '@/components/settings/sections/MemorySearchSection';
 import { ActiveMemorySection } from '@/components/settings/sections/ActiveMemorySection';
 import { SessionSection } from '@/components/settings/sections/SessionSection';
+import { GpuVramSection } from '@/components/settings/sections/GpuVramSection';
 import { CronConfigSection } from '@/components/settings/sections/CronConfigSection';
 import { HooksSection } from '@/components/settings/sections/HooksSection';
 import { CommandsSection } from '@/components/settings/sections/CommandsSection';
@@ -149,6 +150,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       description: 'AI models, voice, tools, memory, sessions, learned preferences and channel behavior.',
       sections: [
         { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
+        { id: 'gpu-vram', label: 'GPU & VRAM', icon: MemoryStick },
         { id: 'voice', label: 'Voice', icon: Mic },
         { id: 'tool-access-defaults', label: 'Tool Access', icon: Wrench },
         { id: 'chat-tools', label: 'Chat Tools Display', icon: Wrench },
@@ -276,6 +278,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'account':              () => <AccountSection />,
   'general':              () => <GeneralSection />,
   'ai':                   () => <AISection />,
+  'gpu-vram':             () => <GpuVramSection />,
   'voice':                () => <VoiceSection />,
   'sync':                 () => <SyncSection />,
   'mail':                 () => <MailSection />,
