@@ -280,6 +280,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
 
   appendStreamToken: (conversationId: string, token: string, type?: 'thinking' | 'text') => {
     set((state) => {
+      // Guard por conversación: con entrega conversation-scoped (a todas las
+      // pestañas del usuario) pueden llegar tokens de OTRA conversación en curso;
+      // sin esto se mezclarían en el único slot streamingMessage (cross-talk).
+      // Igual que addToolEvent. Si el slot es de otra conv, lo ignoramos (su
+      // mensaje final llega por done + loadMessages).
+      if (state.streamingMessage && state.streamingMessage.conversationId !== conversationId) return {};
       const current = state.streamingMessage ?? { conversationId, tokens: '', thinking: '', isThinking: false, tools: [] };
       if (type === 'thinking') {
         return { streamingMessage: { ...current, conversationId, thinking: current.thinking + token, isThinking: true } };
