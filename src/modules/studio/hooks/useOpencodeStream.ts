@@ -582,13 +582,25 @@ export function useOpencodeStream(
     const messageId = String(d.message_id ?? '');
     setMessages((prev) => {
       const next = [...prev];
-      // Mark the last streaming bubble as final and rebrand its id.
+      // Find the trailing streaming bubble (the live one being finalized).
+      let streamIdx = -1;
       for (let i = next.length - 1; i >= 0; i -= 1) {
-        const m = next[i];
-        if (!m || !m.streaming) continue;
-        next[i] = { ...m, streaming: false, id: messageId || m.id };
-        break;
+        if (next[i]?.streaming) { streamIdx = i; break; }
       }
+      if (streamIdx === -1) return next;
+      // Backfill-replay guard: on mount we hydrate completed messages from
+      // the DB AND replay the recent-events ring with since=0. If that ring
+      // still holds this message's token+complete events, rebranding the
+      // streaming bubble to `messageId` would create a DUPLICATE of the
+      // already-hydrated message (same opencode_message_id). When the id is
+      // already present, drop the transient streaming bubble instead. Normal
+      // live streaming never hits this (the real id isn't in the list until
+      // this very call rebrands it).
+      if (messageId && next.some((m, i) => i !== streamIdx && m.id === messageId)) {
+        next.splice(streamIdx, 1);
+        return next;
+      }
+      next[streamIdx] = { ...next[streamIdx]!, streaming: false, id: messageId || next[streamIdx]!.id };
       return next;
     });
     setActiveTool(null);

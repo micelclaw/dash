@@ -54,8 +54,13 @@ export function ActivityFeed({ toolHistory, recentEdits }: Props) {
       fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
       padding: '4px 0',
     }}>
-      {entries.map((entry, i) => (
-        <ActivityRow key={`${entry.ts}-${i}`} entry={entry} />
+      {entries.map((entry) => (
+        <ActivityRow
+          key={entry.kind === 'tool'
+            ? `tool-${entry.tool.callId || entry.ts}`
+            : `edit-${entry.edit.path}-${entry.ts}`}
+          entry={entry}
+        />
       ))}
     </div>
   );

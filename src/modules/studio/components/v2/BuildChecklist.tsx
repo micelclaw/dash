@@ -22,6 +22,7 @@
 // PATCH call on click; everything else is upstream.
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { ChevronRight, ChevronDown, Check, Circle, CircleDot, RotateCcw } from 'lucide-react';
 import { useStudioStore, type StudioChecklistItem, type StudioChecklistStatus } from '@/stores/studio.store';
 
@@ -70,8 +71,14 @@ export function BuildChecklist({ projectId, items, defaultExpanded }: Props) {
       // The WS event 'studio.opencode.checklist_updated' will refresh
       // the items prop from upstream — no local mutation needed.
     } catch (err) {
+      // The status is store/WS-derived (no local optimistic mutation), so
+      // on failure the checkbox simply stays where it was — surface the
+      // error so the user knows the change didn't stick instead of silently
+      // swallowing it.
+      const msg = err instanceof Error ? err.message : String(err);
       // eslint-disable-next-line no-console
       console.warn('[checklist] patch failed', err);
+      toast.error(`No se pudo actualizar "${item.text}": ${msg}`);
     } finally {
       setBusyIds((prev) => {
         const next_ = new Set(prev);
