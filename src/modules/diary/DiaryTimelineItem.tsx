@@ -12,6 +12,7 @@
 
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
+import { TagChip } from '@/components/shared/TagChip';
 import { MOOD_CONFIG, type MoodLevel } from './types';
 import { getPreview } from '@/lib/text';
 
@@ -21,12 +22,13 @@ interface DiaryTimelineItemProps {
   content: string;
   mood: MoodLevel | null;
   heatScore?: number;
+  tags?: string[];
   selected: boolean;
   onClick: () => void;
   onDelete?: () => void;
 }
 
-export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, selected, onClick, onDelete }: DiaryTimelineItemProps) {
+export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, tags, selected, onClick, onDelete }: DiaryTimelineItemProps) {
   const d = new Date(entryDate + 'T12:00:00');
   const dayNum = d.getDate();
   const dayName = d.toLocaleDateString('en-GB', { weekday: 'short' });
@@ -83,18 +85,29 @@ export function DiaryTimelineItem({ id, entryDate, content, mood, heatScore, sel
 
           <HeatBadge score={heatScore ?? 0} />
 
-          {/* Preview */}
-          <span style={{
-            fontSize: '0.8125rem',
-            color: 'var(--text-dim)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            marginTop: 2,
-          }}>
-            {preview || 'Empty entry'}
-          </span>
+          {/* Preview + tags */}
+          <div style={{ flex: 1, minWidth: 0, marginTop: 2 }}>
+            <span style={{
+              display: 'block',
+              fontSize: '0.8125rem',
+              color: 'var(--text-dim)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {preview || 'Empty entry'}
+            </span>
+            {(tags?.length ?? 0) > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                {tags!.slice(0, 3).map(t => (
+                  <TagChip key={t} tag={t} size="xs" />
+                ))}
+                {tags!.length > 3 && (
+                  <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>+{tags!.length - 3}</span>
+                )}
+              </div>
+            )}
+          </div>
         </button>
       }
     />

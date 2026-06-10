@@ -194,6 +194,7 @@ export function DiaryTimeline({
                 entryDate={entry.entry_date}
                 content={entry.content}
                 mood={entry.mood}
+                tags={entry.tags}
                 selected={entry.id === selectedId}
                 onClick={() => onSelect(entry.id)}
               />

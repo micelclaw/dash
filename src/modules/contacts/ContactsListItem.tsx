@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
+import { TagChip } from '@/components/shared/TagChip';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Contact } from './types';
 
@@ -127,6 +128,16 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
                 fontFamily: 'var(--font-sans)',
               }}>
                 {subtitle}
+              </div>
+            )}
+            {(contact.tags?.length ?? 0) > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                {contact.tags!.slice(0, 3).map(t => (
+                  <TagChip key={t} tag={t} size="xs" />
+                ))}
+                {contact.tags!.length > 3 && (
+                  <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>+{contact.tags!.length - 3}</span>
+                )}
               </div>
             )}
           </div>

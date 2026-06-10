@@ -20,7 +20,8 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
-import { ChevronLeft, Sparkles, X, Loader2 } from 'lucide-react';
+import { ChevronLeft, Sparkles, Loader2 } from 'lucide-react';
+import { TagInput } from '@/components/shared/TagInput';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth.store';
@@ -59,7 +60,6 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   const dayCtx = useDayContext(entry.entry_date);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [tagInput, setTagInput] = useState('');
   const isDirtyRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -118,15 +118,8 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
     await onUpdate(entry.id, { mood });
   };
 
-  const handleAddTag = () => {
-    const tag = tagInput.trim();
-    if (!tag || entry.tags.includes(tag)) { setTagInput(''); return; }
-    onUpdate(entry.id, { tags: [...entry.tags, tag] });
-    setTagInput('');
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    onUpdate(entry.id, { tags: entry.tags.filter(t => t !== tag) });
+  const handleTagsChange = (newTags: string[]) => {
+    onUpdate(entry.id, { tags: newTags });
   };
 
   const photoCount = dayCtx?.photoCount ?? 0;
@@ -205,48 +198,8 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
 
           <div style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 4px' }} />
 
-          {/* Tags */}
-          {entry.tags.map(tag => (
-            <span
-              key={tag}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '0.75rem',
-                color: 'var(--text-dim)',
-              }}
-            >
-              {tag}
-              <button
-                onClick={() => handleRemoveTag(tag)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)', display: 'flex' }}
-              >
-                <X size={10} />
-              </button>
-            </span>
-          ))}
-          <input
-            value={tagInput}
-            onChange={e => setTagInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
-            placeholder="Add tag"
-            style={{
-              width: 72,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '2px 8px',
-              outline: 'none',
-              color: 'var(--text-muted)',
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-sans)',
-            }}
-          />
+          {/* Tags unificados */}
+          <TagInput tags={entry.tags} onChange={handleTagsChange} />
 
           {/* Auto-generate narrative */}
           <button

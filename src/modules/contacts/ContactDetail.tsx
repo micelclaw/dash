@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { TagChip } from '@/components/shared/TagChip';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityContactPanel } from '@/components/shared/GraphProximityContactPanel';
 import { AvatarCropModal } from '@/components/shared/AvatarCropModal';
@@ -513,28 +514,14 @@ export function ContactDetail({
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {contact.tags.map(tag => (
-                <span
+                <TagChip
                   key={tag}
+                  tag={tag}
                   onClick={() => {
                     onBack?.();
                     navigate(`/contacts?tag=${encodeURIComponent(tag)}`);
                   }}
-                  style={{
-                    padding: '2px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: '0.75rem',
-                    fontFamily: 'var(--font-sans)',
-                    background: 'var(--amber-dim)',
-                    border: '1px solid var(--amber)',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    transition: 'background var(--transition-fast)',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--amber)'; e.currentTarget.style.color = '#06060a'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--amber-dim)'; e.currentTarget.style.color = 'var(--text)'; }}
-                >
-                  {tag}
-                </span>
+                />
               ))}
             </div>
           </div>

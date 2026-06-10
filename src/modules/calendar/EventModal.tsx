@@ -12,6 +12,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { X, MapPin, Calendar, Users, Pencil, Trash2, Link2, Tag } from 'lucide-react';
+import { TagInput } from '@/components/shared/TagInput';
+import { TagChip } from '@/components/shared/TagChip';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
@@ -62,7 +64,7 @@ export function EventModal({
   const [calendarName, setCalendarName] = useState('');
   const [description, setDescription] = useState('');
   const [attendeesStr, setAttendeesStr] = useState('');
-  const [tagsStr, setTagsStr] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
 
   // Sync form from event (or reset for create mode)
   useEffect(() => {
@@ -77,7 +79,7 @@ export function EventModal({
       setAttendeesStr(
         event.attendees?.map((a) => a.email).join(', ') ?? '',
       );
-      setTagsStr(event.tags?.join(', ') ?? '');
+      setTags(event.tags ?? []);
       setMode('view');
       setConfirmingDelete(false);
     } else if (open) {
@@ -96,7 +98,7 @@ export function EventModal({
       setCalendarName('Personal');
       setDescription('');
       setAttendeesStr('');
-      setTagsStr('');
+      setTags([]);
       setMode('create');
       setConfirmingDelete(false);
     }
@@ -124,9 +126,7 @@ export function EventModal({
       attendees: attendeesStr
         ? attendeesStr.split(',').map((e) => ({ email: e.trim() }))
         : [],
-      tags: tagsStr
-        ? tagsStr.split(',').map((t) => t.trim()).filter(Boolean)
-        : [],
+      tags,
     };
     if (mode === 'create') {
       await onCreate?.(input as EventCreateInput);
@@ -135,7 +135,7 @@ export function EventModal({
       await onUpdate(event.id, input);
       setMode('view');
     }
-  }, [mode, event, title, startAt, endAt, allDay, location, calendarName, description, attendeesStr, tagsStr, onCreate, onUpdate, onClose]);
+  }, [mode, event, title, startAt, endAt, allDay, location, calendarName, description, attendeesStr, tags, onCreate, onUpdate, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!event) return;
@@ -244,8 +244,8 @@ export function EventModal({
               setDescription={setDescription}
               attendeesStr={attendeesStr}
               setAttendeesStr={setAttendeesStr}
-              tagsStr={tagsStr}
-              setTagsStr={setTagsStr}
+              tags={tags}
+              setTags={setTags}
             />
           )}
         </div>
@@ -419,19 +419,8 @@ function ViewMode({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.8125rem' }}>
           <Tag size={14} style={{ color: 'var(--text-dim)', flexShrink: 0, marginTop: 2 }} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {event.tags!.map((t, i) => (
-              <span
-                key={i}
-                style={{
-                  background: 'var(--surface)',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '0.75rem',
-                  color: 'var(--text)',
-                }}
-              >
-                {t}
-              </span>
+            {event.tags!.map((t) => (
+              <TagChip key={t} tag={t} />
             ))}
           </div>
         </div>
@@ -484,8 +473,8 @@ interface EditModeProps {
   setDescription: (v: string) => void;
   attendeesStr: string;
   setAttendeesStr: (v: string) => void;
-  tagsStr: string;
-  setTagsStr: (v: string) => void;
+  tags: string[];
+  setTags: (v: string[]) => void;
 }
 
 function EditMode({
@@ -505,8 +494,8 @@ function EditMode({
   setDescription,
   attendeesStr,
   setAttendeesStr,
-  tagsStr,
-  setTagsStr,
+  tags,
+  setTags,
 }: EditModeProps) {
   const calendarOptions = Object.keys(DEFAULT_CALENDAR_COLORS).filter((k) => k !== 'default');
 
@@ -627,13 +616,10 @@ function EditMode({
 
       {/* Tags */}
       <div>
-        <label style={labelStyle}>Tags (comma-separated)</label>
-        <input
-          value={tagsStr}
-          onChange={(e) => setTagsStr(e.target.value)}
-          style={inputStyle}
-          placeholder="trabajo, viaje, urgente"
-        />
+        <label style={labelStyle}>Tags</label>
+        <div>
+          <TagInput tags={tags} onChange={setTags} />
+        </div>
       </div>
     </div>
   );

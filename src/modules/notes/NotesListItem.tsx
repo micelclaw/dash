@@ -14,7 +14,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Pin, Archive, Trash, Share2, Link2 } from 'lucide-react';
 import { SourceBadge } from '@/components/shared/SourceBadge';
 import { HeatBadge } from '@/components/shared/HeatBadge';
-import { Tag } from '@/components/shared/Tag';
+import { TagChip } from '@/components/shared/TagChip';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { RelateModal } from '@/components/shared/RelateModal';
@@ -95,7 +95,7 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
             <HeatBadge score={note.heat_score ?? 0} />
             <span>{timeAgo(note.updated_at)}</span>
             {visibleTags.map(t => (
-              <Tag key={t} label={t} color="var(--text-dim)" size="sm" variant="outline" />
+              <TagChip key={t} tag={t} size="xs" />
             ))}
             {extraTags > 0 && <span>+{extraTags}</span>}
             <span style={{ marginLeft: 'auto' }}>

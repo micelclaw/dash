@@ -12,6 +12,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { ChevronLeft, Plus, X } from 'lucide-react';
+import { TagInput } from '@/components/shared/TagInput';
 import type { Contact, ContactCreateInput, ContactUpdateInput } from './types';
 
 interface ContactFormProps {
@@ -99,7 +100,6 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
   const [company, setCompany] = useState(contact?.company || '');
   const [jobTitle, setJobTitle] = useState(contact?.job_title || '');
   const [notes, setNotes] = useState(contact?.notes || '');
-  const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>(contact?.tags || []);
 
   const [emails, setEmails] = useState<EmailEntry[]>(
@@ -193,17 +193,6 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
     }));
   };
 
-  const addTag = (value: string) => {
-    const trimmed = value.trim().toLowerCase();
-    if (trimmed && !tags.includes(trimmed)) {
-      setTags(prev => [...prev, trimmed]);
-    }
-    setTagInput('');
-  };
-
-  const removeTag = (tag: string) => {
-    setTags(prev => prev.filter(t => t !== tag));
-  };
 
   return (
     <div style={{
@@ -398,49 +387,7 @@ export function ContactForm({ contact, onSave, onCancel }: ContactFormProps) {
         {/* Tags */}
         <div>
           <label style={labelStyle}>Tags</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: tags.length > 0 ? 6 : 0 }}>
-            {tags.map(tag => (
-              <span
-                key={tag}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.75rem',
-                  fontFamily: 'var(--font-sans)',
-                  background: 'var(--amber-dim)',
-                  border: '1px solid var(--amber)',
-                  color: 'var(--text)',
-                }}
-              >
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  style={{
-                    background: 'none', border: 'none', padding: 0,
-                    cursor: 'pointer', color: 'var(--text-dim)', display: 'flex',
-                  }}
-                >
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
-          </div>
-          <input
-            value={tagInput}
-            onChange={e => setTagInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addTag(tagInput);
-              }
-            }}
-            placeholder="Type a tag and press Enter"
-            style={inputStyle}
-          />
+          <TagInput tags={tags} onChange={setTags} />
         </div>
 
         {/* Notes */}

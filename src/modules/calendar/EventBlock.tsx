@@ -14,6 +14,7 @@ import { useState, useCallback, type CSSProperties } from 'react';
 import { formatTime } from '@/lib/date-helpers';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
+import { TagChip } from '@/components/shared/TagChip';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
 
@@ -130,6 +131,15 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
             {timeStr}
             <HeatBadge score={event.heat_score ?? 0} size={6} />
           </div>
+
+          {/* Tags (3+ lines) */}
+          {lines >= 3 && (event.tags?.length ?? 0) > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 3, marginTop: 1 }}>
+              {event.tags!.slice(0, 3).map(t => (
+                <TagChip key={t} tag={t} size="xs" />
+              ))}
+            </div>
+          )}
 
           {/* Location (4+ lines) */}
           {lines >= 4 && event.location && (

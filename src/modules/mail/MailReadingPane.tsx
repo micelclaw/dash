@@ -15,10 +15,11 @@ import {
   ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
   Printer, ExternalLink, Trash2, Ban, ShieldAlert,
-  AlertTriangle, Languages, Code, Download, Sparkles,
+  AlertTriangle, Languages, Code, Download, Sparkles, Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { TagInput } from '@/components/shared/TagInput';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
 import { useEmailLinks } from './hooks/use-email-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
@@ -467,6 +468,15 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
   // Single email view
   const receivedDate = new Date(email.received_at);
 
+  const handleLabelsChange = async (labels: string[]) => {
+    setEmail(prev => (prev ? { ...prev, labels } : prev));
+    try {
+      await api.patch(`/emails/${email.id}`, { labels });
+    } catch {
+      toast.error('No se pudieron actualizar las etiquetas');
+    }
+  };
+
   return (
     <div
       style={{
@@ -547,6 +557,12 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
               {email.attachments.length} attachment{email.attachments.length !== 1 ? 's' : ''}
             </span>
           )}
+        </div>
+
+        {/* Tags (etiquetas — editable, persiste en labels) */}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Tag size={13} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+          <TagInput tags={email.labels} onChange={handleLabelsChange} />
         </div>
 
         {/* Divider */}

@@ -16,6 +16,7 @@ import {
   MailOpen, Mail as MailIcon, Inbox, ShieldAlert, Link2,
 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { TagChip } from '@/components/shared/TagChip';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { RelateModal } from '@/components/shared/RelateModal';
 import { formatEmailTime } from '@/lib/date-helpers';
@@ -137,7 +138,7 @@ export function MailListItem({
         flexDirection: 'column',
         gap: 2,
         padding: '8px 12px',
-        height: 68,
+        minHeight: 68,
         boxSizing: 'border-box',
         cursor: 'pointer',
         borderBottom: '1px solid var(--border)',
@@ -397,22 +398,7 @@ export function MailListItem({
           }}
         >
           {email.labels.map((label) => (
-            <span
-              key={label}
-              style={{
-                fontSize: '0.625rem',
-                fontFamily: 'var(--font-sans)',
-                color: 'var(--text-dim)',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-full)',
-                padding: '1px 6px',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-              }}
-            >
-              {label}
-            </span>
+            <TagChip key={label} tag={label} size="xs" />
           ))}
         </div>
       )}
