@@ -3,13 +3,26 @@
  * All rights reserved.
  */
 
-import { useMemo, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { PanelLeftClose, PanelLeftOpen, Pin, PinOff } from 'lucide-react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type CollisionDetection,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { MODULES } from '@/config/modules';
 import { SidebarItem } from './SidebarItem';
 import { SidebarGroup } from './SidebarGroup';
+import { SortableSidebarItem } from './SortableSidebarItem';
 import { ConnectionStatus } from './ConnectionStatus';
 import { UserFooter } from './UserFooter';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -23,6 +36,37 @@ interface SidebarProps {
 
 const AUTO_COLLAPSE_DELAY = 3000; // 3s before auto-collapse
 const HOVER_COLLAPSE_DELAY = 2000; // 2s after mouse leaves before re-collapsing
+
+/** Clave de sección para los módulos sin grupo (top-level). */
+const TOP_SECTION = '__top';
+
+/**
+ * Aplica el orden guardado del usuario a los ids por defecto del registry:
+ * primero los guardados que sigan existiendo (en su orden), después los
+ * módulos nuevos del registry (en su orden por defecto). Ids obsoletos en
+ * el guardado se descartan.
+ */
+function applyOrder(defaultIds: string[], saved?: string[]): string[] {
+  if (!saved || saved.length === 0) return defaultIds;
+  const existing = new Set(defaultIds);
+  const ordered = saved.filter((id) => existing.has(id));
+  const orderedSet = new Set(ordered);
+  return [...ordered, ...defaultIds.filter((id) => !orderedSet.has(id))];
+}
+
+// Solo se consideran drop targets de la MISMA sección que el item activo:
+// las otras secciones ni se desplazan visualmente ni aceptan el drop
+// (mismo patrón que columnAwareCollision en projects/KanbanBoard).
+const sectionAwareCollision: CollisionDetection = (args) => {
+  const activeSection = args.active.data.current?.section as string | undefined;
+  if (!activeSection) return closestCenter(args);
+  return closestCenter({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => c.data.current?.section === activeSection,
+    ),
+  });
+};
 
 export function Sidebar({ forceExpanded }: SidebarProps) {
   const storeCollapsed = useSidebarStore((s) => s.collapsed);
@@ -102,16 +146,52 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
     };
   }, []);
 
+  const moduleOrder = useSidebarStore((s) => s.moduleOrder);
+  const setSectionOrder = useSidebarStore((s) => s.setSectionOrder);
+
   const { ungrouped, groups } = useMemo(() => {
-    const ungrouped = MODULES.filter((m) => !m.group);
+    const byId = new Map(MODULES.map((m) => [m.id, m]));
+    const orderSection = (mods: typeof MODULES, section: string) =>
+      applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!);
+
+    const ungrouped = orderSection(MODULES.filter((m) => !m.group), TOP_SECTION);
     const grouped = MODULES.filter((m) => m.group);
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups = groupNames.map((name) => ({
       name,
-      modules: grouped.filter((m) => m.group === name),
+      modules: orderSection(grouped.filter((m) => m.group === name), name),
     }));
     return { ungrouped, groups };
+  }, [moduleOrder]);
+
+  // ─── Drag & drop: reordenar módulos dentro de su sección ────────
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const onDragStart = useCallback((e: DragStartEvent) => {
+    setActiveDragId(e.active.id as string);
   }, []);
+
+  const onDragEnd = useCallback((e: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const activeSection = active.data.current?.section as string | undefined;
+    const overSection = over.data.current?.section as string | undefined;
+    // Cinturón además del collision filter: nunca cruzar de sección.
+    if (!activeSection || activeSection !== overSection) return;
+
+    const list = activeSection === TOP_SECTION
+      ? ungrouped
+      : groups.find((g) => g.name === activeSection)?.modules ?? [];
+    const ids = list.map((m) => m.id);
+    const oldIdx = ids.indexOf(active.id as string);
+    const newIdx = ids.indexOf(over.id as string);
+    if (oldIdx < 0 || newIdx < 0) return;
+    setSectionOrder(activeSection, arrayMove(ids, oldIdx, newIdx));
+  }, [ungrouped, groups, setSectionOrder]);
+
+  const activeDragModule = activeDragId ? MODULES.find((m) => m.id === activeDragId) ?? null : null;
 
   return (
     <div
@@ -246,35 +326,67 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
         )}
       </div>
 
-      {/* Navigation */}
+      {/* Navigation — los módulos se reordenan por drag & drop DENTRO de su
+          sección (collision filter + guard de onDragEnd impiden cruzar).
+          Drag deshabilitado en modo rail (collapsed). */}
       <ScrollArea className="flex-1">
-        <div style={{ padding: collapsed ? '0 4px' : '0 8px' }}>
-          {/* Ungrouped items (Chat, Search) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {ungrouped.map((mod) => (
-              <SidebarItem
-                key={mod.id}
-                module={mod}
-                collapsed={collapsed}
-                onNavigate={() => setMobileOpen(false)}
-              />
+        <DndContext
+          sensors={dndSensors}
+          collisionDetection={sectionAwareCollision}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onDragCancel={() => setActiveDragId(null)}
+        >
+          <div style={{ padding: collapsed ? '0 4px' : '0 8px' }}>
+            {/* Ungrouped items (Chat, Search) */}
+            <SortableContext items={ungrouped.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {ungrouped.map((mod) => (
+                  <SortableSidebarItem
+                    key={mod.id}
+                    module={mod}
+                    section={TOP_SECTION}
+                    collapsed={collapsed}
+                    disabled={collapsed}
+                    onNavigate={() => setMobileOpen(false)}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+
+            {/* Grouped items */}
+            {groups.map((group) => (
+              <SortableContext key={group.name} items={group.modules.map((m) => m.id)} strategy={verticalListSortingStrategy}>
+                <SidebarGroup label={group.name} collapsed={collapsed}>
+                  {group.modules.map((mod) => (
+                    <SortableSidebarItem
+                      key={mod.id}
+                      module={mod}
+                      section={group.name}
+                      collapsed={collapsed}
+                      disabled={collapsed}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  ))}
+                </SidebarGroup>
+              </SortableContext>
             ))}
           </div>
 
-          {/* Grouped items */}
-          {groups.map((group) => (
-            <SidebarGroup key={group.name} label={group.name} collapsed={collapsed}>
-              {group.modules.map((mod) => (
-                <SidebarItem
-                  key={mod.id}
-                  module={mod}
-                  collapsed={collapsed}
-                  onNavigate={() => setMobileOpen(false)}
-                />
-              ))}
-            </SidebarGroup>
-          ))}
-        </div>
+          {/* Preview flotante del item arrastrado */}
+          <DragOverlay>
+            {activeDragModule ? (
+              <div style={{
+                background: 'var(--surface-hover)',
+                borderRadius: 'var(--radius-sm)',
+                boxShadow: 'var(--shadow-lg)',
+                border: '1px solid var(--border-hover)',
+              }}>
+                <SidebarItem module={activeDragModule} collapsed={false} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </ScrollArea>
 
       {/* Footer */}
