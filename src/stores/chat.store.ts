@@ -53,7 +53,7 @@ interface ChatStore {
   cancelStream: () => void;
   finalizeStream: (conversationId: string, fullText: string, model?: string, tokensUsed?: number, errorType?: string, serverToolCalls?: ToolCallRecord[], thinking?: string | null, ids?: { clientTempId?: string | null; userMessageId?: string | null; assistantMessageId?: string | null }) => void;
   /** Append a system message (slash-command confirmation) to a conversation. */
-  addSystemMessage: (conversationId: string, text: string) => void;
+  addSystemMessage: (conversationId: string, text: string, command?: string | null, commandArgs?: string | null) => void;
   /** Clear all messages of a conversation in the dash (/clear). */
   clearConversationMessages: (conversationId: string) => void;
   deleteConversation: (id: string) => void;
@@ -250,7 +250,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     });
   },
 
-  addSystemMessage: (conversationId: string, text: string) => {
+  addSystemMessage: (conversationId: string, text: string, command?: string | null, commandArgs?: string | null) => {
     set((state) => {
       const updated = new Map(state.messages);
       const existing = updated.get(conversationId) ?? [];
@@ -260,6 +260,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         role: 'system',
         content: text,
         timestamp: new Date().toISOString(),
+        ...(command ? { message_metadata: { command, command_args: commandArgs ?? null } } : {}),
       };
       updated.set(conversationId, [...existing, sysMsg]);
       return { messages: updated };

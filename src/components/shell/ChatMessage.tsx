@@ -25,6 +25,7 @@ import { startGateway } from '@/services/gateway.service';
 import { ToolRenderer } from '@/components/chat/tool-renderers';
 import { ReasoningChip } from '@/components/chat/ReasoningChip';
 import { shouldRenderTool } from '@/config/tool-rendering';
+import { findSlashCommand, CATEGORY_COLORS } from '@/config/slash-commands';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 
 /** Convert a live streaming ToolExecution into the ToolCallRecord shape the
@@ -173,13 +174,18 @@ interface ChatMessageProps {
   userAvatar?: string;
 }
 
-/** Render a single line with **bold** segments (system-message chips). */
+/** Render a single line with **bold** segments (system-message chips).
+ *  Inline `code` backticks se quitan (el bloque terminal ya es monospace). */
 function renderInlineBold(text: string): ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-    part.startsWith('**') && part.endsWith('**')
-      ? <strong key={i} style={{ fontStyle: 'normal' }}>{part.slice(2, -2)}</strong>
-      : <span key={i}>{part}</span>,
-  );
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i} style={{ fontStyle: 'normal' }}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 1) {
+      return <span key={i}>{part.slice(1, -1)}</span>;
+    }
+    return <span key={i}>{part}</span>;
+  });
 }
 
 export function ChatMessage({ message, isStreaming, thinkingText, isThinking, tools, previousMessage, userAvatar = '👤' }: ChatMessageProps) {
@@ -226,11 +232,69 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     return <ApiErrorCard message={message} />;
   }
 
-  // Render system message (slash-command confirmation) as a discrete centered
-  // gray chip — distinct from user/assistant bubbles. No avatar, no actions.
-  // Content is dash-controlled (slash-command output), supports **bold** and
-  // multi-line via \n.
+  // Render system message (slash-command output) as a terminal-style block:
+  // dark monospace card with a header showing the command that produced it,
+  // accented with the command's category color (registry CATEGORY_COLORS).
+  // Content is dash-controlled, supports **bold**, `code` and multi-line \n.
+  // Messages without `command` metadata (legacy / non-command notices) keep
+  // the discrete centered gray chip.
   if (message.role === 'system') {
+    const cmdName = typeof message.message_metadata?.command === 'string'
+      ? message.message_metadata.command
+      : null;
+    const cmdArgs = typeof message.message_metadata?.command_args === 'string'
+      ? message.message_metadata.command_args
+      : null;
+    const cmd = cmdName ? findSlashCommand(cmdName) : undefined;
+
+    if (cmdName) {
+      const color = cmd ? CATEGORY_COLORS[cmd.category] : 'var(--text-dim)';
+      const HeaderIcon = cmd?.icon ?? Settings;
+      // ``` fences fuera: el bloque entero ya es monospace (afecta a /context json).
+      const lines = message.content.split('\n').filter((l) => !/^\s*```/.test(l));
+      return (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+          <div style={{
+            width: '85%',
+            maxWidth: 760,
+            borderRadius: 10,
+            overflow: 'hidden',
+            border: `1px solid color-mix(in srgb, ${color} 35%, var(--border))`,
+            borderTop: `2px solid ${color}`,
+            background: 'color-mix(in srgb, var(--bg) 55%, var(--surface))',
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              fontSize: '0.7rem',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontWeight: 600,
+              color,
+              background: `color-mix(in srgb, ${color} 9%, transparent)`,
+              borderBottom: `1px solid color-mix(in srgb, ${color} 18%, var(--border))`,
+            }}>
+              <HeaderIcon size={12} style={{ flexShrink: 0 }} />
+              <span>❯ /{cmdName}{cmdArgs ? ` ${cmdArgs}` : ''}</span>
+            </div>
+            <div style={{
+              padding: '8px 12px',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: '0.72rem',
+              lineHeight: 1.55,
+              color: 'var(--text)',
+              overflowX: 'auto',
+            }}>
+              {lines.map((line, i) => (
+                <div key={i} style={{ whiteSpace: 'pre-wrap', minHeight: '1em' }}>{renderInlineBold(line)}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const lines = message.content.split('\n');
     return (
       <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>

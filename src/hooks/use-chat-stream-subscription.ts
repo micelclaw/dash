@@ -50,7 +50,12 @@ export function useChatStreamSubscription(): void {
         s.finalizeStream(convId, '', '__gateway_down__', 0);
         break;
       case 'chat.stream.system_message':
-        s.addSystemMessage(convId, data.text as string);
+        s.addSystemMessage(
+          convId,
+          data.text as string,
+          typeof data.command === 'string' ? data.command : null,
+          typeof data.command_args === 'string' ? data.command_args : null,
+        );
         break;
       case 'chat.stream.cleared':
         s.clearConversationMessages(convId);

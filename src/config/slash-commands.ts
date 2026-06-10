@@ -112,23 +112,15 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   // ── Info ── read-only queries (render a chip with the result)
   { name: 'status', label: 'Status', icon: Activity, category: 'info' },
   { name: 'usage', label: 'Usage', icon: BarChart3, category: 'info' },
-  // E1: /context expone subcomandos pass-through al agente. Sin arg -> handler
-  // local rapido (resumen de tokens). Con arg -> Core no intercepta y el binario
-  // OpenClaw 5.12+ los procesa con su auto-reply nativo:
-  //   - /context map    -> treemap PNG del contexto como adjunto
-  //   - /context list   -> resumen corto
-  //   - /context detail -> desglose por archivo/tool/skill/system prompt
-  //   - /context json   -> machine-readable
-  // E1: /context expone subcomandos pass-through al agente (OpenClaw 5.12+).
-  // Sin arg -> handler local rapido (resumen de tokens). Con uno de los 4
-  // subcomandos -> Core no intercepta y el binario los procesa con su auto-reply
-  // nativo:
-  //   - /context map    -> treemap PNG del contexto como adjunto
-  //   - /context list   -> resumen corto
-  //   - /context detail -> desglose por archivo/tool/skill/system prompt
-  //   - /context json   -> machine-readable
-  // El dropdown solo muestra los 4 pass-through. Para el info local, escribir
-  // /context directo (sin elegir del menu).
+  // /context y sus 4 subcomandos son TODOS handler local en Core (2026-06-10).
+  // El pass-through al auto-reply nativo de OpenClaw nunca funciono: el RPC
+  // `agent` de chat-bridge no pasa por el pipeline get-reply de comandos de
+  // texto, asi que el comando le llegaba al modelo como texto plano.
+  //   - /context        -> resumen de tokens (sessions.describe)
+  //   - /context list   -> workspace/sandbox/system prompt/archivos/skills/tools
+  //   - /context detail -> list + top skills y top tool schemas por chars
+  //   - /context map    -> treemap textual con barras proporcionales
+  //   - /context json   -> systemPromptReport completo machine-readable
   { name: 'context', label: 'Context Info', icon: Info, category: 'info', options: ['list', 'detail', 'map', 'json'] },
   { name: 'whoami', label: 'Who Am I', icon: User, category: 'info' },
   { name: 'models', label: 'List Models', icon: Cpu, category: 'info' },
@@ -164,4 +156,20 @@ export function isKnownSlash(text: string): boolean {
   if (!m) return false;
   const name = m[1]!.toLowerCase();
   return SLASH_COMMANDS.some((c) => c.name === name);
+}
+
+/** Aliases del backend que no están en el menú pero sí llegan como `command`. */
+const COMMAND_ALIASES: Record<string, string> = {
+  commands: 'help',
+  side: 'btw',
+};
+
+/**
+ * Resuelve la entry del registry para el `command` que viene en los
+ * system messages (`chat.stream.system_message`). Usado por ChatMessage
+ * para colorear el bloque terminal por categoría.
+ */
+export function findSlashCommand(name: string): SlashCommand | undefined {
+  const resolved = COMMAND_ALIASES[name] ?? name;
+  return SLASH_COMMANDS.find((c) => c.name === resolved);
 }
