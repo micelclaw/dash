@@ -36,10 +36,12 @@ interface VersionsResponse {
 interface FileVersionHistoryProps {
   fileId: string;
   filename: string;
+  /** Start expanded (e.g. when hosted inside a dedicated dialog). */
+  defaultExpanded?: boolean;
 }
 
-export function FileVersionHistory({ fileId, filename }: FileVersionHistoryProps) {
-  const [expanded, setExpanded] = useState(false);
+export function FileVersionHistory({ fileId, filename, defaultExpanded = false }: FileVersionHistoryProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [data, setData] = useState<VersionsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [acting, setActing] = useState<string | null>(null);
@@ -47,8 +49,17 @@ export function FileVersionHistory({ fileId, filename }: FileVersionHistoryProps
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get<{ data: VersionsResponse }>(`/files/${fileId}/versions`);
-      setData(res.data);
+      // envelopeList shape: snapshots in `data`, counters in `meta`
+      const res = await api.get<{
+        data: Snapshot[];
+        meta: { current_version: number; current_size_bytes: number; total_snapshot_size_bytes: number };
+      }>(`/files/${fileId}/versions`);
+      setData({
+        snapshots: res.data ?? [],
+        current_version: res.meta?.current_version ?? 1,
+        current_size: res.meta?.current_size_bytes ?? 0,
+        total_snapshot_size: res.meta?.total_snapshot_size_bytes ?? 0,
+      });
     } catch {
       // versions endpoint may not be available
     }

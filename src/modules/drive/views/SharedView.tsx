@@ -84,6 +84,37 @@ export function SharedView() {
   );
 }
 
+interface Recipient {
+  id: string;
+  display_name: string | null;
+  email: string;
+  avatar_path: string | null;
+}
+
+/**
+ * D4 fix — id → user lookup for share rows. GET /shares/recipients lists every
+ * other active user of the instance (it excludes only the CURRENT user), so
+ * both `owner_id` (With me) and `shared_with_id` (By me) resolve here.
+ */
+function useUserLookup() {
+  const [map, setMap] = useState<Record<string, Recipient>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.get<ApiResponse<Recipient[]>>('/shares/recipients')
+      .then(res => {
+        if (!cancelled) setMap(Object.fromEntries(res.data.map(r => [r.id, r])));
+      })
+      .catch(() => { /* fall back to truncated ids */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  return useCallback((id: string) => {
+    const u = map[id];
+    return u ? (u.display_name || u.email) : id.slice(0, 8);
+  }, [map]);
+}
+
 /** Resolve file metadata for a list of shares (GET /files/:id supports shared access). */
 function useShareFileMeta(shares: UserShare[]) {
   const [meta, setMeta] = useState<Record<string, FileRecord | null>>({});
@@ -112,6 +143,7 @@ function useShareFileMeta(shares: UserShare[]) {
 function WithMeSub() {
   const [shares, setShares] = useState<UserShare[]>([]);
   const [loading, setLoading] = useState(true);
+  const userName = useUserLookup();
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +182,7 @@ function WithMeSub() {
                 {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                from {share.owner_id.slice(0, 8)} · {formatRelative(new Date(share.created_at))}
+                from {userName(share.owner_id)} · {formatRelative(new Date(share.created_at))}
                 {file ? ` · ${formatFileSize(file.size_bytes)}` : ''}
               </div>
             </div>
@@ -175,6 +207,7 @@ function ByMeSub() {
   const [shares, setShares] = useState<UserShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [revokeTarget, setRevokeTarget] = useState<UserShare | null>(null);
+  const userName = useUserLookup();
 
   const fetchShares = useCallback(async () => {
     setLoading(true);
@@ -222,7 +255,7 @@ function ByMeSub() {
       <EmptyState
         icon={Share2}
         title="You haven't shared anything"
-        description="Share a file with another user from My Drive (right-click → Share link)."
+        description="Share a file with another user from My Drive (right-click → Share → With user)."
       />
     );
   }
@@ -243,7 +276,7 @@ function ByMeSub() {
                 {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
               </div>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                to {share.shared_with_id.slice(0, 8)} · {formatRelative(new Date(share.created_at))}
+                to {userName(share.shared_with_id)} · {formatRelative(new Date(share.created_at))}
               </div>
             </div>
             <select

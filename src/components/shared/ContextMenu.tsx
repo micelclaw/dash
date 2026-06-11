@@ -39,6 +39,9 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    // Stop bubbling so a wrapping ContextMenu (e.g. a background-area menu
+    // around a list of rows) doesn't open on top of this one.
+    e.stopPropagation();
     rawPos.current = { x: e.clientX, y: e.clientY };
     setPosition({ x: e.clientX, y: e.clientY });
     setOpen(true);

@@ -10,16 +10,22 @@
  * https://micelclaw.com
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import { Trash2, RotateCcw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ContextMenu } from '@/components/shared/ContextMenu';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { api } from '@/services/api';
+import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useFilesQuery } from '../hooks/use-files-query';
+import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
+import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { FileRecord } from '@/types/files';
 
 type ConfirmKind =
@@ -68,8 +74,7 @@ export function TrashView() {
     }
   }, [refetch]);
 
-  const restoreSelected = useCallback(async () => {
-    const ids = [...selectedIds];
+  const restoreMany = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
     setBusy(true);
     try {
@@ -82,7 +87,11 @@ export function TrashView() {
     } finally {
       setBusy(false);
     }
-  }, [selectedIds, refetch]);
+  }, [refetch]);
+
+  const restoreSelected = useCallback(async () => {
+    await restoreMany([...selectedIds]);
+  }, [restoreMany, selectedIds]);
 
   const handleConfirmedDelete = useCallback(async () => {
     const target = confirm;
@@ -111,6 +120,59 @@ export function TrashView() {
 
   const hasSelection = selectedIds.size > 0;
   const allChecked = files.length > 0 && files.every(f => selectedIds.has(f.id));
+
+  // ─── D4 context menu (Restore / Delete forever only) ────
+
+  const navigate = useNavigate();
+  const clipboard = useFileClipboard();
+  const selectedFiles = useMemo(
+    () => files.filter(f => selectedIds.has(f.id)),
+    [files, selectedIds],
+  );
+
+  const menuCtx: DriveMenuContext = useMemo(() => ({
+    tab: 'trash',
+    clipboard: { operation: clipboard.operation, fileIds: clipboard.fileIds },
+    navigate,
+    callbacks: {
+      onRestore: (targets) => {
+        if (targets.length === 1) void restoreOne(targets[0]!);
+        else void restoreMany(targets.map(f => f.id));
+      },
+      onDeleteForever: (targets) => {
+        if (targets.length === 1) {
+          setConfirm({ kind: 'one', id: targets[0]!.id, name: targets[0]!.filename });
+        } else {
+          setSelectedIds(new Set(targets.map(f => f.id)));
+          setConfirm({ kind: 'selected' });
+        }
+      },
+    },
+  }), [clipboard.operation, clipboard.fileIds, navigate, restoreOne, restoreMany]);
+
+  const getContextMenuItems = useCallback((file: FileRecord): ContextMenuItem[] => {
+    const targets = selectedIds.has(file.id) && selectedIds.size > 1
+      ? selectedFiles
+      : [file];
+    return buildFileContextMenu(targets, menuCtx);
+  }, [selectedIds, selectedFiles, menuCtx]);
+
+  // ─── Keyboard shortcuts (D4): Ctrl+A / Delete = forever / Esc ──
+
+  useDriveShortcuts({
+    disabled: confirm !== null,
+    onSelectAll: () => {
+      if (files.length > 0 && selectedIds.size !== files.length) {
+        setSelectedIds(new Set(files.map(f => f.id)));
+      }
+    },
+    onDelete: () => {
+      if (selectedIds.size > 0) setConfirm({ kind: 'selected' });
+    },
+    onEscape: () => {
+      if (selectedIds.size > 0) setSelectedIds(new Set());
+    },
+  });
 
   if (!loading && files.length === 0) {
     return (
@@ -198,6 +260,7 @@ export function TrashView() {
             key={file.id}
             file={file}
             checked={selectedIds.has(file.id)}
+            contextItems={getContextMenuItems(file)}
             onToggle={() => toggleSelection(file.id)}
             onRestore={() => { void restoreOne(file); }}
             onDeleteForever={() => setConfirm({ kind: 'one', id: file.id, name: file.filename })}
@@ -222,15 +285,19 @@ export function TrashView() {
   );
 }
 
-function TrashRow({ file, checked, onToggle, onRestore, onDeleteForever }: {
+function TrashRow({ file, checked, contextItems, onToggle, onRestore, onDeleteForever }: {
   file: FileRecord;
   checked: boolean;
+  contextItems: ContextMenuItem[];
   onToggle: () => void;
   onRestore: () => void;
   onDeleteForever: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
+    <ContextMenu
+      items={contextItems}
+      trigger={
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -270,6 +337,8 @@ function TrashRow({ file, checked, onToggle, onRestore, onDeleteForever }: {
         <ActionButton icon={X} label="Delete forever" onClick={onDeleteForever} danger />
       </div>
     </div>
+      }
+    />
   );
 }
 

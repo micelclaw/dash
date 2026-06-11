@@ -10,35 +10,49 @@
  * https://micelclaw.com
  */
 
-import { useState, useRef, useCallback } from 'react';
-import { FolderInput, Download, Trash2 } from 'lucide-react';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router';
+import { FolderInput, Download, Trash2, Star, StarOff, Tags, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { DropZone } from '@/components/shared/DropZone';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RenameDialog } from '@/components/shared/RenameDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
 import { ShareModal } from '@/components/shared/ShareModal';
+import { ContextMenu } from '@/components/shared/ContextMenu';
 import { useNotificationStore } from '@/stores/notification.store';
+import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { downloadFile, downloadBatch } from '@/lib/file-download';
+import { api } from '@/services/api';
 import { useDrive } from '../hooks/use-drive';
+import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
+import { buildFileContextMenu, buildBackgroundContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveToolbar } from '../DriveToolbar';
 import { DriveGrid } from '../DriveGrid';
 import { DriveList } from '../DriveList';
 import { DrivePreview } from '../DrivePreview';
+import { ShareWithUserModal } from '../components/ShareWithUserModal';
+import { ShareEmailModal } from '../components/ShareEmailModal';
+import { TagsModal } from '../components/TagsModal';
+import { VersionHistoryDialog } from '../components/VersionHistoryDialog';
 import type { FileRecord } from '@/types/files';
 
 /**
- * My Drive — the classic folder-browsing view, extracted verbatim from the
- * pre-D3 DrivePage (toolbar + grid/list + multi-select + drag-to-folder +
- * batch bar + preview + modals). The only D3 addition is the star toggle.
+ * My Drive — the classic folder-browsing view (toolbar + grid/list +
+ * multi-select + drag-to-folder + batch bar + preview + modals).
+ *
+ * D4 additions: rich context menu (builder in ../context-menu.tsx), real
+ * Cut/Copy/Paste through the shared file clipboard, keyboard shortcuts,
+ * expanded batch bar (star/tags/share-with-user) and the new share modals.
  */
 export function MyDriveView() {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const addNotification = useNotificationStore(s => s.addNotification);
   const {
     currentPath, navigateTo,
-    files, loading, error,
+    files, loading, error, fetchFiles,
     selectedFile, handleItemClick,
     setSelectedFile,
     view, changeView,
@@ -51,15 +65,24 @@ export function MyDriveView() {
     toggleStar,
   } = useDrive();
 
+  const clipboard = useFileClipboard();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
   const [shareFile, setShareFile] = useState<FileRecord | null>(null);
+  const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
+  const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
+  const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
+  const [versionsFile, setVersionsFile] = useState<FileRecord | null>(null);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
   const [folderPickerTargetIds, setFolderPickerTargetIds] = useState<Set<string>>(new Set());
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+
+  const anyModalOpen = !!shareFile || !!shareUserFiles || !!shareEmailFile || !!tagsFiles
+    || !!versionsFile || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen;
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -96,53 +119,60 @@ export function MyDriveView() {
     setNewFolderOpen(true);
   }, []);
 
-  const handleRename = useCallback((id: string) => {
-    const file = files.find(f => f.id === id);
-    if (file) setRenameTarget(file);
-  }, [files]);
+  // ─── Move / Copy-to via FolderPicker ────────────────────
 
-  // Single file move — opens FolderPicker
-  const handleMove = useCallback((id: string) => {
-    setFolderPickerTargetIds(new Set([id]));
+  const openFolderPicker = useCallback((ids: string[], mode: 'move' | 'copy') => {
+    setFolderPickerTargetIds(new Set(ids));
+    setFolderPickerMode(mode);
     setFolderPickerOpen(true);
   }, []);
 
-  // Batch move — opens FolderPicker for all selected
   const handleBatchMove = useCallback(() => {
-    setFolderPickerTargetIds(new Set(selectedIds));
-    setFolderPickerOpen(true);
-  }, [selectedIds]);
+    openFolderPicker([...selectedIds], 'move');
+  }, [selectedIds, openFolderPicker]);
 
-  // FolderPicker confirmed
   const handleFolderPickerSelect = useCallback(async (destPath: string) => {
     setFolderPickerOpen(false);
-    if (folderPickerTargetIds.size === 1) {
-      const id = [...folderPickerTargetIds][0]!;
-      await moveFile(id, destPath);
-      addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
+    const ids = [...folderPickerTargetIds];
+    if (ids.length === 0) return;
+    if (folderPickerMode === 'move') {
+      if (ids.length === 1) {
+        await moveFile(ids[0]!, destPath);
+        addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
+      } else {
+        await batchMove(new Set(ids), destPath);
+        addNotification({ type: 'system', title: 'Moved', body: `${ids.length} items moved` });
+      }
     } else {
-      await batchMove(folderPickerTargetIds, destPath);
-      addNotification({ type: 'system', title: 'Moved', body: `${folderPickerTargetIds.size} items moved` });
+      // Copy to… → POST /files/:id/copy per id
+      try {
+        for (const id of ids) {
+          await api.post(`/files/${id}/copy`, { dest_parent_folder: destPath });
+        }
+        toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} copied`);
+        await fetchFiles();
+      } catch {
+        toast.error('Copy failed');
+      }
     }
-  }, [folderPickerTargetIds, moveFile, batchMove, addNotification]);
+  }, [folderPickerTargetIds, folderPickerMode, moveFile, batchMove, addNotification, fetchFiles]);
 
-  // Batch delete — opens confirm dialog
+  // ─── Delete (single via menu = direct, multi = confirm) ─
+
   const handleBatchDeleteClick = useCallback(() => {
-    setConfirmDeleteOpen(true);
-  }, []);
+    setConfirmDeleteIds(new Set(selectedIds));
+  }, [selectedIds]);
 
-  const handleBatchDeleteConfirm = useCallback(async () => {
-    const count = selectedIds.size;
-    await batchDelete(selectedIds);
-    addNotification({ type: 'system', title: 'Deleted', body: `${count} items deleted` });
-  }, [selectedIds, batchDelete, addNotification]);
+  const handleConfirmedDelete = useCallback(async () => {
+    const ids = confirmDeleteIds;
+    setConfirmDeleteIds(null);
+    if (!ids || ids.size === 0) return;
+    await batchDelete(ids);
+    addNotification({ type: 'system', title: 'Deleted', body: `${ids.size} items deleted` });
+  }, [confirmDeleteIds, batchDelete, addNotification]);
 
-  // Share — opens ShareModal
-  const handleShare = useCallback((file: FileRecord) => {
-    setShareFile(file);
-  }, []);
+  // ─── Star (single + bulk) ───────────────────────────────
 
-  // Star / unstar (D3)
   const handleToggleStar = useCallback(async (file: FileRecord) => {
     try {
       await toggleStar(file);
@@ -152,7 +182,70 @@ export function MyDriveView() {
     }
   }, [toggleStar]);
 
-  // Drag-and-drop to folder
+  const handleBulkStar = useCallback(async (targets: FileRecord[], starred: boolean) => {
+    const ids = targets.map(f => f.id);
+    if (ids.length === 0) return;
+    try {
+      if (ids.length === 1) {
+        await api.patch(`/files/${ids[0]}`, { starred });
+      } else {
+        await api.post('/files/bulk', { action: starred ? 'star' : 'unstar', ids });
+      }
+      toast.success(starred
+        ? `${ids.length === 1 ? 'Starred' : `${ids.length} items starred`}`
+        : `${ids.length === 1 ? 'Star removed' : `${ids.length} stars removed`}`);
+      await fetchFiles();
+    } catch {
+      toast.error('Could not update stars');
+    }
+  }, [fetchFiles]);
+
+  // ─── Clipboard: cut / copy / paste (D4) ─────────────────
+
+  const handleCut = useCallback((targets: FileRecord[]) => {
+    const ids = targets.map(f => f.id);
+    if (ids.length === 0) return;
+    clipboard.setClipboard('cut', ids, currentPath);
+    toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} cut`);
+  }, [clipboard, currentPath]);
+
+  const handleCopy = useCallback((targets: FileRecord[]) => {
+    const ids = targets.map(f => f.id);
+    if (ids.length === 0) return;
+    clipboard.setClipboard('copy', ids, currentPath);
+    toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} copied`);
+  }, [clipboard, currentPath]);
+
+  const handlePaste = useCallback(async (destFolder?: FileRecord) => {
+    if (!clipboard.operation || clipboard.fileIds.length === 0) return;
+    const dest = destFolder
+      ? (destFolder.filepath.endsWith('/') ? destFolder.filepath : destFolder.filepath + '/')
+      : currentPath;
+    // Don't paste a cut folder into itself
+    if (destFolder && clipboard.fileIds.includes(destFolder.id)) {
+      toast.error('Cannot paste a folder into itself');
+      return;
+    }
+    const n = clipboard.fileIds.length;
+    try {
+      if (clipboard.operation === 'cut') {
+        await api.post('/files/bulk', { action: 'move', ids: clipboard.fileIds, params: { parent_folder: dest } });
+        clipboard.clear();
+        toast.success(`${n} item${n === 1 ? '' : 's'} moved`);
+      } else {
+        for (const id of clipboard.fileIds) {
+          await api.post(`/files/${id}/copy`, { dest_parent_folder: dest });
+        }
+        toast.success(`${n} item${n === 1 ? '' : 's'} pasted`);
+      }
+      await fetchFiles();
+    } catch {
+      toast.error('Paste failed');
+    }
+  }, [clipboard, currentPath, fetchFiles]);
+
+  // ─── Drag-and-drop to folder ────────────────────────────
+
   const handleDragToFolder = useCallback(async (fileIds: string[], destPath: string) => {
     if (fileIds.length === 1) {
       await moveFile(fileIds[0]!, destPath);
@@ -163,7 +256,99 @@ export function MyDriveView() {
     }
   }, [moveFile, batchMove, addNotification]);
 
+  // ─── D4 context menu (builder) ──────────────────────────
+
+  const selectedFiles = useMemo(
+    () => files.filter(f => selectedIds.has(f.id)),
+    [files, selectedIds],
+  );
+
+  const menuCtx: DriveMenuContext = useMemo(() => ({
+    tab: 'my-drive',
+    clipboard: { operation: clipboard.operation, fileIds: clipboard.fileIds },
+    navigate,
+    callbacks: {
+      onOpen: (file) => handleItemDoubleClick(file),
+      onPreview: (file) => setSelectedFile(file),
+      onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
+      onShare: (file) => setShareFile(file),
+      onShareUser: (targets) => setShareUserFiles(targets),
+      onShareEmail: (file) => setShareEmailFile(file),
+      onCut: handleCut,
+      onCopy: handleCopy,
+      onPaste: (destFolder) => { void handlePaste(destFolder); },
+      onMoveTo: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+      onCopyTo: (targets) => openFolderPicker(targets.map(f => f.id), 'copy'),
+      onRename: (file) => setRenameTarget(file),
+      onTags: (targets) => setTagsFiles(targets),
+      onVersions: (file) => setVersionsFile(file),
+      onDelete: (targets) => {
+        if (targets.length === 1) void deleteFile(targets[0]!.id);
+        else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
+      },
+      onNewFolder: handleNewFolder,
+      onUpload: handleUploadClick,
+    },
+  }), [
+    clipboard.operation, clipboard.fileIds, navigate, handleItemDoubleClick,
+    setSelectedFile, handleBulkStar, handleCut, handleCopy, handlePaste,
+    openFolderPicker, deleteFile, handleNewFolder, handleUploadClick,
+  ]);
+
+  /** Right-clicking an item in the selection acts on the whole selection. */
+  const getContextMenuItems = useCallback((file: FileRecord) => {
+    const targets = selectedIds.has(file.id) && selectedIds.size > 1
+      ? selectedFiles
+      : [file];
+    return buildFileContextMenu(targets, menuCtx);
+  }, [selectedIds, selectedFiles, menuCtx]);
+
+  const backgroundItems = useMemo(() => buildBackgroundContextMenu(menuCtx), [menuCtx]);
+
+  // ─── Keyboard shortcuts (D4) ────────────────────────────
+
+  useDriveShortcuts({
+    disabled: anyModalOpen,
+    onCopy: () => {
+      const targets = selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : [];
+      if (targets.length > 0) handleCopy(targets);
+    },
+    onCut: () => {
+      const targets = selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : [];
+      if (targets.length > 0) handleCut(targets);
+    },
+    onPaste: () => { void handlePaste(); },
+    onSelectAll: () => {
+      if (files.length > 0 && selectedIds.size !== files.length) toggleAll();
+    },
+    onDelete: () => {
+      if (selectedIds.size > 0) setConfirmDeleteIds(new Set(selectedIds));
+      else if (selectedFile) void deleteFile(selectedFile.id);
+    },
+    onRename: () => {
+      const target = selectedIds.size === 1
+        ? files.find(f => selectedIds.has(f.id))
+        : selectedFile;
+      if (target) setRenameTarget(target);
+    },
+    onOpen: () => {
+      const target = selectedIds.size === 1
+        ? files.find(f => selectedIds.has(f.id))
+        : selectedFile;
+      if (target) handleItemDoubleClick(target);
+    },
+    onEscape: () => {
+      if (selectedIds.size > 0) clearSelection();
+      else if (selectedFile) setSelectedFile(null);
+    },
+  });
+
   const hasSelection = selectedIds.size > 0;
+  const allSelectedStarred = selectedFiles.length > 0 && selectedFiles.every(f => f.starred);
+  const cutIds = useMemo(
+    () => (clipboard.operation === 'cut' ? new Set(clipboard.fileIds) : undefined),
+    [clipboard.operation, clipboard.fileIds],
+  );
 
   return (
     <div
@@ -209,6 +394,7 @@ export function MyDriveView() {
           borderBottom: '1px solid var(--border)',
           fontSize: '0.8125rem',
           fontFamily: 'var(--font-sans)',
+          flexWrap: 'wrap',
         }}>
           <span style={{ color: 'var(--text)', fontWeight: 500 }}>
             {selectedIds.size} selected
@@ -216,6 +402,13 @@ export function MyDriveView() {
 
           <div style={{ flex: 1 }} />
 
+          <BatchButton
+            icon={allSelectedStarred ? StarOff : Star}
+            label={isMobile ? '' : allSelectedStarred ? 'Unstar' : 'Star'}
+            onClick={() => { void handleBulkStar(selectedFiles, !allSelectedStarred); }}
+          />
+          <BatchButton icon={Tags} label={isMobile ? '' : 'Tags'} onClick={() => setTagsFiles(selectedFiles)} />
+          <BatchButton icon={UserPlus} label={isMobile ? '' : 'Share'} onClick={() => setShareUserFiles(selectedFiles)} />
           <BatchButton icon={FolderInput} label={isMobile ? '' : 'Move'} onClick={handleBatchMove} />
           <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={handleBatchDownload} />
           <BatchButton icon={Trash2} label={isMobile ? '' : 'Delete'} onClick={handleBatchDeleteClick} variant="danger" />
@@ -234,55 +427,56 @@ export function MyDriveView() {
         </div>
       )}
 
-      {/* Content area */}
+      {/* Content area — right-click on the background opens New folder / Upload / Paste */}
       <DropZone onFilesDropped={handleFilesDropped}>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {error && (
-            <div style={{
-              padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
-              color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
-              borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
-            }}>
-              {error}
+        <ContextMenu
+          trigger={
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              {error && (
+                <div style={{
+                  padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
+                  color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
+                  borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
+                }}>
+                  {error}
+                </div>
+              )}
+              {view === 'grid' ? (
+                <DriveGrid
+                  files={files}
+                  loading={loading}
+                  selectedFileId={selectedFile?.id ?? null}
+                  selectedIds={selectedIds}
+                  hasSelection={hasSelection}
+                  onItemClick={handleItemClick}
+                  onItemDoubleClick={handleItemDoubleClick}
+                  onToggleSelect={toggleSelection}
+                  getContextMenuItems={getContextMenuItems}
+                  onToggleStar={handleToggleStar}
+                  onDragToFolder={handleDragToFolder}
+                  cutIds={cutIds}
+                  isMobile={isMobile}
+                />
+              ) : (
+                <DriveList
+                  files={files}
+                  loading={loading}
+                  selectedFileId={selectedFile?.id ?? null}
+                  selectedIds={selectedIds}
+                  onItemClick={handleItemClick}
+                  onItemDoubleClick={handleItemDoubleClick}
+                  onToggleSelect={toggleSelection}
+                  onToggleAll={toggleAll}
+                  getContextMenuItems={getContextMenuItems}
+                  onToggleStar={handleToggleStar}
+                  onDragToFolder={handleDragToFolder}
+                  cutIds={cutIds}
+                />
+              )}
             </div>
-          )}
-          {view === 'grid' ? (
-            <DriveGrid
-              files={files}
-              loading={loading}
-              selectedFileId={selectedFile?.id ?? null}
-              selectedIds={selectedIds}
-              hasSelection={hasSelection}
-              onItemClick={handleItemClick}
-              onItemDoubleClick={handleItemDoubleClick}
-              onToggleSelect={toggleSelection}
-              onRename={handleRename}
-              onMove={handleMove}
-              onShare={handleShare}
-              onDelete={deleteFile}
-              onToggleStar={handleToggleStar}
-              onDragToFolder={handleDragToFolder}
-              isMobile={isMobile}
-            />
-          ) : (
-            <DriveList
-              files={files}
-              loading={loading}
-              selectedFileId={selectedFile?.id ?? null}
-              selectedIds={selectedIds}
-              onItemClick={handleItemClick}
-              onItemDoubleClick={handleItemDoubleClick}
-              onToggleSelect={toggleSelection}
-              onToggleAll={toggleAll}
-              onRename={handleRename}
-              onMove={handleMove}
-              onShare={handleShare}
-              onDelete={deleteFile}
-              onToggleStar={handleToggleStar}
-              onDragToFolder={handleDragToFolder}
-            />
-          )}
-        </div>
+          }
+          items={backgroundItems}
+        />
       </DropZone>
 
       {/* Preview panel — fullscreen overlay on mobile, bottom panel on desktop */}
@@ -295,7 +489,7 @@ export function MyDriveView() {
         />
       )}
 
-      {/* Share modal */}
+      {/* Share modal (public link) */}
       {shareFile && (
         <ShareModal
           open={!!shareFile}
@@ -304,20 +498,53 @@ export function MyDriveView() {
         />
       )}
 
-      {/* Folder picker for Move */}
+      {/* Share with internal user (D4) */}
+      <ShareWithUserModal
+        open={shareUserFiles !== null}
+        files={shareUserFiles ?? []}
+        onClose={() => setShareUserFiles(null)}
+      />
+
+      {/* Share by email (D4) */}
+      {shareEmailFile && (
+        <ShareEmailModal
+          open={!!shareEmailFile}
+          file={shareEmailFile}
+          onClose={() => setShareEmailFile(null)}
+        />
+      )}
+
+      {/* Tags editor (D4) */}
+      <TagsModal
+        open={tagsFiles !== null}
+        files={tagsFiles ?? []}
+        onClose={() => setTagsFiles(null)}
+        onSaved={() => { void fetchFiles(); }}
+      />
+
+      {/* Version history (D4) */}
+      {versionsFile && (
+        <VersionHistoryDialog
+          open={!!versionsFile}
+          file={versionsFile}
+          onClose={() => setVersionsFile(null)}
+        />
+      )}
+
+      {/* Folder picker for Move / Copy to… */}
       <FolderPicker
         open={folderPickerOpen}
         currentPath={currentPath}
-        onSelect={handleFolderPickerSelect}
+        onSelect={(p) => { void handleFolderPickerSelect(p); }}
         onCancel={() => setFolderPickerOpen(false)}
       />
 
       {/* Confirm delete dialog */}
       <ConfirmDialog
-        open={confirmDeleteOpen}
-        onClose={() => setConfirmDeleteOpen(false)}
-        onConfirm={handleBatchDeleteConfirm}
-        title={`Delete ${selectedIds.size} items?`}
+        open={confirmDeleteIds !== null}
+        onClose={() => setConfirmDeleteIds(null)}
+        onConfirm={() => { void handleConfirmedDelete(); }}
+        title={`Delete ${confirmDeleteIds?.size ?? 0} item${(confirmDeleteIds?.size ?? 0) === 1 ? '' : 's'}?`}
         description="This action cannot be undone."
         confirmLabel="Delete"
         variant="danger"
