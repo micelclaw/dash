@@ -29,6 +29,7 @@ export function useVoice() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recordStartRef = useRef(0);
   const getToken = useCallback(() => useAuthStore.getState().tokens?.accessToken ?? '', []);
 
   // Cleanup on unmount
@@ -54,6 +55,7 @@ export function useVoice() {
 
       recorder.start(100); // 100ms chunks for responsiveness
       mediaRecorderRef.current = recorder;
+      recordStartRef.current = Date.now();
       setState('recording');
       setDuration(0);
 
@@ -81,7 +83,11 @@ export function useVoice() {
         mediaRecorderRef.current = null;
 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        if (blob.size === 0) {
+        // Toque accidental del push-to-talk (espacio): con <500ms no hay
+        // habla real que transcribir, y mandar silencio a Whisper produce
+        // alucinaciones ("¡Suscríbete!"). Descartar sin llamar al STT.
+        const elapsedMs = Date.now() - recordStartRef.current;
+        if (blob.size === 0 || elapsedMs < 500) {
           setState('idle');
           resolve(null);
           return;
