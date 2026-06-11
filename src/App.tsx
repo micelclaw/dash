@@ -30,10 +30,16 @@ function AuthGate() {
 // Lazy-loaded shell — loaded once authenticated
 const ShellModule = () => import('@/components/shell/Shell').then((m) => ({ Component: m.Shell }));
 
-/** Redirect con param: /tools/whiteboard/:fileId → /diagrams/whiteboard/:fileId. */
-function ToolsWhiteboardRedirect() {
+/** Redirect con param: rutas legacy de whiteboard → /sketches/whiteboard/:fileId. */
+function WhiteboardRedirect() {
   const { fileId } = useParams();
-  return <Navigate to={`/diagrams/whiteboard/${fileId}`} replace />;
+  return <Navigate to={`/sketches/whiteboard/${fileId}`} replace />;
+}
+
+/** Redirect con param: /diagrams/:fileId (legacy) → /sketches/:fileId. */
+function DiagramsRedirect() {
+  const { fileId } = useParams();
+  return <Navigate to={`/sketches/${fileId}`} replace />;
 }
 
 const router = createBrowserRouter([
@@ -54,17 +60,24 @@ const router = createBrowserRouter([
           { path: '/diary', lazy: () => import('@/modules/diary/DiaryPage') },
           { path: '/bookmarks', lazy: () => import('@/modules/bookmarks/BookmarksPage') },
           { path: '/tools', lazy: () => import('@/modules/tools/ToolsPage') },
-          { path: '/diagrams', lazy: () => import('@/modules/diagrams/DiagramsPage') },
-          // El whiteboard vive dentro del módulo Diagrams. Las rutas estáticas
-          // van ANTES de /diagrams/:fileId para que no las capture como fileId.
-          { path: '/diagrams/whiteboard', lazy: () => import('@/modules/diagrams/whiteboard/WhiteboardPage') },
-          { path: '/diagrams/whiteboard/:fileId', lazy: () => import('@/modules/diagrams/whiteboard/WhiteboardPage') },
-          { path: '/diagrams/:fileId', lazy: () => import('@/modules/diagrams/DiagramEditor') },
+          // Módulo Sketches: sub-secciones Diagrams (editor propio) y
+          // Whiteboards (Excalidraw). Las rutas estáticas van ANTES de
+          // /sketches/:fileId para que no las capture como fileId.
+          { path: '/sketches', lazy: () => import('@/modules/sketches/SketchesPage') },
+          { path: '/sketches/whiteboard', lazy: () => import('@/modules/sketches/whiteboard/WhiteboardPage') },
+          { path: '/sketches/whiteboard/:fileId', lazy: () => import('@/modules/sketches/whiteboard/WhiteboardPage') },
+          { path: '/sketches/:fileId', lazy: () => import('@/modules/sketches/DiagramEditor') },
+          // Redirects legacy (bookmarks + deep-links de skills de agentes):
+          // el módulo se llamaba Diagrams y vivía en /diagrams.
+          { path: '/diagrams', element: <Navigate to="/sketches" replace /> },
+          { path: '/diagrams/whiteboard', element: <Navigate to="/sketches/whiteboard" replace /> },
+          { path: '/diagrams/whiteboard/:fileId', element: <WhiteboardRedirect /> },
+          { path: '/diagrams/:fileId', element: <DiagramsRedirect /> },
           { path: '/projects', lazy: () => import('@/modules/projects/ProjectsPage') },
           { path: '/projects/:boardId', lazy: () => import('@/modules/projects/BoardView') },
-          // Redirects de bookmarks viejos: el whiteboard se movió a Diagrams.
-          { path: '/tools/whiteboard', element: <Navigate to="/diagrams/whiteboard" replace /> },
-          { path: '/tools/whiteboard/:fileId', element: <ToolsWhiteboardRedirect /> },
+          // Redirects de bookmarks viejos: el whiteboard vivió en Tools.
+          { path: '/tools/whiteboard', element: <Navigate to="/sketches/whiteboard" replace /> },
+          { path: '/tools/whiteboard/:fileId', element: <WhiteboardRedirect /> },
           { path: '/office', lazy: () => import('@/modules/office/OfficeLauncher') },
           { path: '/office/edit/:fileId', lazy: () => import('@/modules/office/OnlyOfficeEditor') },
           { path: '/office/pdf/:fileId', lazy: () => import('@/modules/office/PdfViewer') },

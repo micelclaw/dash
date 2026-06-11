@@ -29,8 +29,8 @@ import type {
   DiagramPage,
   DiagramLayer,
   NodeShapeType,
-} from '@/modules/diagrams/types';
-import { DEFAULT_SETTINGS, SHAPE_DEFAULTS } from '@/modules/diagrams/types';
+} from '@/modules/sketches/types';
+import { DEFAULT_SETTINGS, SHAPE_DEFAULTS } from '@/modules/sketches/types';
 
 // ─── Types ──────────────────────────────────────────────
 

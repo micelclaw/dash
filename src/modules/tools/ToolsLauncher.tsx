@@ -21,7 +21,7 @@ interface ToolCard {
   panelId: PanelId;
 }
 
-// El whiteboard se movió al módulo Diagrams (/diagrams — sección Whiteboards).
+// El whiteboard se movió al módulo Sketches (/sketches — sección Whiteboards).
 // Tools queda como launcher de utilities; las network utilities futuras se
 // añaden a este array.
 const UTILITIES: ToolCard[] = [

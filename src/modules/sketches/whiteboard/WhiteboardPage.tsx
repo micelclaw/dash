@@ -190,7 +190,7 @@ export function Component() {
         const saved = res.data;
         setCurrentFileId(saved.id);
         setCurrentFilename(saved.filename);
-        navigate(`/diagrams/whiteboard/${saved.id}`, { replace: true });
+        navigate(`/sketches/whiteboard/${saved.id}`, { replace: true });
       }
 
       lastSavedRef.current = contentKey;

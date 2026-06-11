@@ -58,7 +58,7 @@ export function useDiagramFile(fileId?: string) {
       } catch {
         if (!cancelled) {
           // File not found or parse error — redirect to launcher
-          navigate('/diagrams', { replace: true });
+          navigate('/sketches', { replace: true });
         }
       } finally {
         loadingRef.current = false;
@@ -101,7 +101,7 @@ export function useDiagramFile(fileId?: string) {
         setCurrentFileId(newFileId);
 
         // Navigate to the new file URL (replace 'new' in URL)
-        navigate(`/diagrams/${newFileId}`, { replace: true });
+        navigate(`/sketches/${newFileId}`, { replace: true });
       }
 
       useDiagramsStore.setState({ isDirty: false });

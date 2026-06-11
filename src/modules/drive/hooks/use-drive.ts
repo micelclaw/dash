@@ -18,7 +18,7 @@ import type { DriveView } from '../types';
 
 /** MIME types that can be opened in specialized editors */
 const OPENABLE_MIMES: Record<string, string> = {
-  'application/vnd.claw.diagram+json': '/diagrams/',
+  'application/vnd.claw.diagram+json': '/sketches/',
 };
 
 const SESSION_KEY = 'drive-current-path';

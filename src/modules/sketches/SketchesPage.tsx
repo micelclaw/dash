@@ -10,8 +10,8 @@
  * https://micelclaw.com
  */
 
-import { DiagramLauncher } from './DiagramLauncher';
+import { SketchesLauncher } from './SketchesLauncher';
 
 export function Component() {
-  return <DiagramLauncher />;
+  return <SketchesLauncher />;
 }

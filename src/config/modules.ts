@@ -14,7 +14,7 @@ import {
   MessageSquare, MessageCircle, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
   Settings, Puzzle, Activity, Wrench, Workflow, LineChart,
-  Waypoints, Kanban, Rss, Container, FileText, Cable,
+  Shapes, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
   Terminal, Radio, Server, Hammer,
 } from 'lucide-react';
@@ -36,7 +36,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'diary',    label: 'Diary',         icon: BookOpen,      color: 'var(--mod-diary)',    path: '/diary',    group: 'Productivity' },
   // { id: 'bookmarks', label: 'Bookmarks',   icon: Bookmark,      color: 'var(--mod-bookmarks)', path: '/bookmarks', group: 'Productivity' },
   { id: 'tools',    label: 'Tools',         icon: Wrench,        color: 'var(--mod-tools)',    path: '/tools',    group: 'Productivity' },
-  { id: 'diagrams', label: 'Diagrams',      icon: Waypoints,     color: 'var(--mod-diagrams)', path: '/diagrams', group: 'Productivity' },
+  { id: 'sketches', label: 'Sketches',      icon: Shapes,        color: 'var(--mod-sketches)', path: '/sketches', group: 'Productivity' },
   { id: 'projects', label: 'Projects',     icon: Kanban,        color: 'var(--mod-projects)', path: '/projects', group: 'Productivity' },
   { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
   // Finance

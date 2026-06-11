@@ -120,7 +120,7 @@ export function useModuleContext(): ModuleContext {
     }
 
     // Inject diagram context when on a diagram editor route
-    if (mod?.id === 'diagrams' && path.match(/\/diagrams\/.+/)) {
+    if (mod?.id === 'sketches' && path.match(/\/diagrams\/.+/)) {
       let selectedNode: Record<string, unknown> | null = null;
       if (selectedElement?.type === 'node') {
         const node = diagramNodes.find((n) => n.id === selectedElement.id);

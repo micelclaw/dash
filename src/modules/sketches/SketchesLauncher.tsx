@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Waypoints, FolderOpen, Layout, Loader2, Pencil, Trash2, PenTool } from 'lucide-react';
+import { Plus, Waypoints, Shapes, Layout, Loader2, Pencil, Trash2, PenTool } from 'lucide-react';
 import { api } from '@/services/api';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
@@ -30,7 +30,7 @@ interface TemplateInfo {
   edge_count: number;
 }
 
-export function DiagramLauncher() {
+export function SketchesLauncher() {
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [whiteboards, setWhiteboards] = useState<FileRecord[]>([]);
@@ -105,10 +105,10 @@ export function DiagramLauncher() {
       formData.append('file', blob, 'Untitled.diagram');
       formData.append('parent_folder', '/Diagrams/');
       const res = await api.upload<ApiResponse<FileRecord>>('/files/upload', formData);
-      navigate(`/diagrams/${res.data.id}`);
+      navigate(`/sketches/${res.data.id}`);
     } catch {
       // Fallback: open editor without file
-      navigate('/diagrams/new');
+      navigate('/sketches/new');
     } finally {
       setCreating(false);
     }
@@ -126,9 +126,9 @@ export function DiagramLauncher() {
       formData.append('file', blob, `${diagram.title || type}.diagram`);
       formData.append('parent_folder', '/Diagrams/');
       const fileRes = await api.upload<ApiResponse<FileRecord>>('/files/upload', formData);
-      navigate(`/diagrams/${fileRes.data.id}`);
+      navigate(`/sketches/${fileRes.data.id}`);
     } catch {
-      navigate('/diagrams/new');
+      navigate('/sketches/new');
     } finally {
       setCreating(false);
     }
@@ -238,14 +238,14 @@ export function DiagramLauncher() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Waypoints size={24} style={{ color: 'var(--mod-diagrams, #06b6d4)' }} />
+          <Shapes size={24} style={{ color: 'var(--mod-sketches, #06b6d4)' }} />
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text, #e2e8f0)', margin: 0 }}>
-            Diagrams
+            Sketches
           </h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            onClick={() => navigate('/diagrams/whiteboard')}
+            onClick={() => navigate('/sketches/whiteboard')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -261,7 +261,7 @@ export function DiagramLauncher() {
               fontFamily: 'var(--font-sans, system-ui)',
               transition: 'border-color 0.15s',
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-diagrams, #06b6d4)'; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-sketches, #06b6d4)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
           >
             <PenTool size={14} />
@@ -358,8 +358,8 @@ export function DiagramLauncher() {
           alignItems: 'center',
           gap: 6,
         }}>
-          <FolderOpen size={12} />
-          All Diagrams
+          <Waypoints size={12} />
+          Diagrams
         </h2>
 
         {loading ? (
@@ -429,7 +429,7 @@ export function DiagramLauncher() {
                 trigger={
                   <button
                     onClick={() => {
-                      if (renamingId !== file.id) navigate(`/diagrams/${file.id}`);
+                      if (renamingId !== file.id) navigate(`/sketches/${file.id}`);
                     }}
                     style={{
                       display: 'flex',
@@ -437,17 +437,17 @@ export function DiagramLauncher() {
                       width: '100%',
                       padding: 14,
                       background: 'var(--surface, #1a1a1a)',
-                      border: `1px solid ${renamingId === file.id ? 'var(--mod-diagrams, #06b6d4)' : 'var(--border, #333)'}`,
+                      border: `1px solid ${renamingId === file.id ? 'var(--mod-sketches, #06b6d4)' : 'var(--border, #333)'}`,
                       borderRadius: 8,
                       cursor: 'pointer',
                       textAlign: 'left',
                       transition: 'border-color 0.15s',
                     }}
-                    onMouseEnter={(e) => { if (renamingId !== file.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-diagrams, #06b6d4)'; }}
+                    onMouseEnter={(e) => { if (renamingId !== file.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-sketches, #06b6d4)'; }}
                     onMouseLeave={(e) => { if (renamingId !== file.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <Waypoints size={16} style={{ color: 'var(--mod-diagrams, #06b6d4)', flexShrink: 0 }} />
+                      <Waypoints size={16} style={{ color: 'var(--mod-sketches, #06b6d4)', flexShrink: 0 }} />
                       {renamingId === file.id ? (
                         <input
                           autoFocus
@@ -465,7 +465,7 @@ export function DiagramLauncher() {
                             fontWeight: 500,
                             fontFamily: 'var(--font-sans, system-ui)',
                             background: 'var(--background, #111)',
-                            border: '1px solid var(--mod-diagrams, #06b6d4)',
+                            border: '1px solid var(--mod-sketches, #06b6d4)',
                             borderRadius: 4,
                             color: 'var(--text, #e2e8f0)',
                             padding: '2px 6px',
@@ -537,7 +537,7 @@ export function DiagramLauncher() {
                 trigger={
                   <button
                     onClick={() => {
-                      if (renamingId !== wb.id) navigate(`/diagrams/whiteboard/${wb.id}`);
+                      if (renamingId !== wb.id) navigate(`/sketches/whiteboard/${wb.id}`);
                     }}
                     style={{
                       display: 'flex',
@@ -545,17 +545,17 @@ export function DiagramLauncher() {
                       width: '100%',
                       padding: 14,
                       background: 'var(--surface, #1a1a1a)',
-                      border: `1px solid ${renamingId === wb.id ? 'var(--mod-diagrams, #06b6d4)' : 'var(--border, #333)'}`,
+                      border: `1px solid ${renamingId === wb.id ? 'var(--mod-sketches, #06b6d4)' : 'var(--border, #333)'}`,
                       borderRadius: 8,
                       cursor: 'pointer',
                       textAlign: 'left',
                       transition: 'border-color 0.15s',
                     }}
-                    onMouseEnter={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-diagrams, #06b6d4)'; }}
+                    onMouseEnter={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-sketches, #06b6d4)'; }}
                     onMouseLeave={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <PenTool size={16} style={{ color: 'var(--mod-diagrams, #06b6d4)', flexShrink: 0 }} />
+                      <PenTool size={16} style={{ color: 'var(--mod-sketches, #06b6d4)', flexShrink: 0 }} />
                       {renamingId === wb.id ? (
                         <input
                           autoFocus
@@ -573,7 +573,7 @@ export function DiagramLauncher() {
                             fontWeight: 500,
                             fontFamily: 'var(--font-sans, system-ui)',
                             background: 'var(--background, #111)',
-                            border: '1px solid var(--mod-diagrams, #06b6d4)',
+                            border: '1px solid var(--mod-sketches, #06b6d4)',
                             borderRadius: 4,
                             color: 'var(--text, #e2e8f0)',
                             padding: '2px 6px',

@@ -35,8 +35,8 @@ export function useDiagramWs() {
     if (!diagram) return;
 
     // If on launcher (not in editor), navigate to editor first
-    if (location.pathname === '/diagrams' || location.pathname === '/diagrams/') {
-      navigate('/diagrams/new');
+    if (location.pathname === '/sketches' || location.pathname === '/sketches/') {
+      navigate('/sketches/new');
     }
 
     useDiagramsStore.getState().loadDiagram(diagram);
