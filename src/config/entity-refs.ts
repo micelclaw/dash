@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -88,6 +88,12 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-inventory)',
     label: 'Inventario',
     route: (id) => `/inventory?id=${encodeURIComponent(id)}`,
+  },
+  bookmark: {
+    Icon: Bookmark,
+    color: 'var(--mod-bookmarks)',
+    label: 'Bookmark',
+    route: (id) => `/bookmarks?id=${encodeURIComponent(id)}`,
   },
 };
 

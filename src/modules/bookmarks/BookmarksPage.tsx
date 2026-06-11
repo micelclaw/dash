@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Bookmark as BookmarkIcon, Plus, RefreshCw, Search, ExternalLink,
   MoreHorizontal, Trash2, Copy, Pencil, X,
@@ -380,6 +381,19 @@ export function Component() {
     fetchMeta();
   }, [fetchBookmarks, fetchMeta]);
 
+  // Deep-link from a chat bookmark chip (?id=): highlight + scroll to it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (!id) return;
+    setHighlightId(id);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+  const highlightRef = useCallback((el: HTMLDivElement | null) => {
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, []);
+
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -524,14 +538,26 @@ export function Component() {
         )}
 
         {bookmarks.map((b) => (
-          <BookmarkCard
-            key={b.id}
-            bookmark={b}
-            selected={false}
-            onToggleSelect={() => {}}
-            onEdit={() => {}}
-            onDelete={() => handleDelete(b.id)}
-          />
+          b.id === highlightId ? (
+            <div key={b.id} ref={highlightRef}>
+              <BookmarkCard
+                bookmark={b}
+                selected
+                onToggleSelect={() => {}}
+                onEdit={() => {}}
+                onDelete={() => handleDelete(b.id)}
+              />
+            </div>
+          ) : (
+            <BookmarkCard
+              key={b.id}
+              bookmark={b}
+              selected={false}
+              onToggleSelect={() => {}}
+              onEdit={() => {}}
+              onDelete={() => handleDelete(b.id)}
+            />
+          )
         ))}
       </div>
 
