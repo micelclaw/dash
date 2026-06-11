@@ -40,17 +40,23 @@ export function isDriveTab(value: string | null | undefined): value is DriveTab 
 /** Row density — reserved for a future D-session (compact/comfortable list rows). */
 export type DriveDensity = 'comfortable' | 'compact';
 
+/** Inner tabs of the right-hand inspector (D5). */
+export type DriveInspectorTab = 'details' | 'activity' | 'versions';
+
 interface DriveStore {
   /** Active tab of the Drive shell. The URL ?tab= param wins on mount. */
   activeTab: DriveTab;
   /** Row density (future use). */
   density: DriveDensity;
-  /** Inspector panel open state (future use — D5). */
+  /** Inspector panel open state (D5). Collapsed = false (rail shown while a selection exists). */
   inspectorOpen: boolean;
+  /** Active inner tab of the inspector (D5). */
+  inspectorTab: DriveInspectorTab;
 
   setActiveTab: (tab: DriveTab) => void;
   setDensity: (density: DriveDensity) => void;
   setInspectorOpen: (open: boolean) => void;
+  setInspectorTab: (tab: DriveInspectorTab) => void;
 }
 
 export const useDriveStore = create<DriveStore>()(
@@ -58,11 +64,13 @@ export const useDriveStore = create<DriveStore>()(
     (set) => ({
       activeTab: 'my-drive',
       density: 'comfortable',
-      inspectorOpen: false,
+      inspectorOpen: true,
+      inspectorTab: 'details',
 
       setActiveTab: (tab) => set({ activeTab: tab }),
       setDensity: (density) => set({ density }),
       setInspectorOpen: (open) => set({ inspectorOpen: open }),
+      setInspectorTab: (tab) => set({ inspectorTab: tab }),
     }),
     {
       name: 'claw-drive',
@@ -70,6 +78,7 @@ export const useDriveStore = create<DriveStore>()(
         activeTab: state.activeTab,
         density: state.density,
         inspectorOpen: state.inspectorOpen,
+        inspectorTab: state.inspectorTab,
       }),
     },
   ),

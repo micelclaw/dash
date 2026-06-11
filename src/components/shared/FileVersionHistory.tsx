@@ -20,7 +20,8 @@ import { formatRelative } from '@/lib/date-helpers';
 interface Snapshot {
   id: string;
   file_id: string;
-  version_number: number;
+  /** Snapshot version — the API field is `version` (not `version_number`). */
+  version: number;
   size_bytes: number;
   note: string | null;
   created_at: string;
@@ -187,7 +188,7 @@ export function FileVersionHistory({ fileId, filename, defaultExpanded = false }
                   }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ color: 'var(--text)', fontWeight: 500 }}>
-                        v{snap.version_number}
+                        v{snap.version}
                         {snap.note && <span style={{ marginLeft: 6, fontWeight: 400, color: 'var(--text-dim)' }}>{snap.note}</span>}
                       </div>
                       <div style={{ color: 'var(--text-muted)', fontSize: '0.6875rem' }}>

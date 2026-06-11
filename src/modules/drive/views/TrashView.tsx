@@ -25,6 +25,7 @@ import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
 import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
+import { DriveInspector } from '../components/inspector/DriveInspector';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { FileRecord } from '@/types/files';
 
@@ -46,6 +47,7 @@ export function TrashView() {
   });
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [confirm, setConfirm] = useState<ConfirmKind | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,6 +70,7 @@ export function TrashView() {
       await api.post(`/files/${file.id}/restore`);
       toast.success(`"${file.filename}" restored`);
       setSelectedIds(prev => { const n = new Set(prev); n.delete(file.id); return n; });
+      setSelectedFile(prev => prev?.id === file.id ? null : prev);
       await refetch();
     } catch {
       toast.error('Restore failed');
@@ -81,6 +84,7 @@ export function TrashView() {
       await api.post('/files/bulk', { action: 'restore', ids });
       toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} restored`);
       setSelectedIds(new Set());
+      setSelectedFile(null);
       await refetch();
     } catch {
       toast.error('Bulk restore failed');
@@ -103,12 +107,14 @@ export function TrashView() {
         await api.delete(`/files/${target.id}?permanent=true`);
         toast.success('Deleted forever');
         setSelectedIds(prev => { const n = new Set(prev); n.delete(target.id); return n; });
+        setSelectedFile(prev => prev?.id === target.id ? null : prev);
       } else {
         const ids = target.kind === 'selected' ? [...selectedIds] : files.map(f => f.id);
         if (ids.length === 0) return;
         await api.post('/files/bulk', { action: 'delete', ids, params: { permanent: true } });
         toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} deleted forever`);
         setSelectedIds(new Set());
+        setSelectedFile(null);
       }
       await refetch();
     } catch {
@@ -171,6 +177,7 @@ export function TrashView() {
     },
     onEscape: () => {
       if (selectedIds.size > 0) setSelectedIds(new Set());
+      else if (selectedFile) setSelectedFile(null);
     },
   });
 
@@ -225,7 +232,8 @@ export function TrashView() {
         <ActionButton icon={Trash2} label="Empty trash" onClick={() => setConfirm({ kind: 'all' })} disabled={busy || files.length === 0} danger />
       </div>
 
-      {/* List */}
+      {/* List + inspector (D5) */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {error && (
           <div style={{ padding: '8px 16px', fontSize: 13, color: 'var(--error)' }}>{error}</div>
@@ -260,7 +268,9 @@ export function TrashView() {
             key={file.id}
             file={file}
             checked={selectedIds.has(file.id)}
+            selected={selectedFile?.id === file.id}
             contextItems={getContextMenuItems(file)}
+            onSelect={() => setSelectedFile(prev => prev?.id === file.id ? null : file)}
             onToggle={() => toggleSelection(file.id)}
             onRestore={() => { void restoreOne(file); }}
             onDeleteForever={() => setConfirm({ kind: 'one', id: file.id, name: file.filename })}
@@ -270,6 +280,17 @@ export function TrashView() {
         {loading && (
           <div style={{ padding: '12px 16px', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Loading…</div>
         )}
+      </div>
+
+      {/* Inspector (D5) — multi via checkboxes wins, otherwise the clicked row.
+          No bulk quick actions here (trash has its own restore/delete bar). */}
+      {(selectedFiles.length > 0 || selectedFile) && (
+        <DriveInspector
+          files={selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []}
+          onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
+          onRefetch={() => { void refetch(); }}
+        />
+      )}
       </div>
 
       <ConfirmDialog
@@ -285,10 +306,12 @@ export function TrashView() {
   );
 }
 
-function TrashRow({ file, checked, contextItems, onToggle, onRestore, onDeleteForever }: {
+function TrashRow({ file, checked, selected, contextItems, onSelect, onToggle, onRestore, onDeleteForever }: {
   file: FileRecord;
   checked: boolean;
+  selected: boolean;
   contextItems: ContextMenuItem[];
+  onSelect: () => void;
   onToggle: () => void;
   onRestore: () => void;
   onDeleteForever: () => void;
@@ -299,6 +322,7 @@ function TrashRow({ file, checked, contextItems, onToggle, onRestore, onDeleteFo
       items={contextItems}
       trigger={
     <div
+      onClick={onSelect}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -307,17 +331,19 @@ function TrashRow({ file, checked, contextItems, onToggle, onRestore, onDeleteFo
         gap: 8,
         padding: '6px 16px',
         alignItems: 'center',
-        background: checked ? 'var(--amber-dim)' : hovered ? 'var(--surface-hover)' : 'transparent',
+        background: (checked || selected) ? 'var(--amber-dim)' : hovered ? 'var(--surface-hover)' : 'transparent',
         borderBottom: '1px solid var(--border)',
         fontSize: '0.8125rem',
         color: 'var(--text)',
         transition: 'background var(--transition-fast)',
+        cursor: 'pointer',
       }}
     >
       <input
         type="checkbox"
         checked={checked}
         onChange={onToggle}
+        onClick={e => e.stopPropagation()}
         style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -332,7 +358,7 @@ function TrashRow({ file, checked, contextItems, onToggle, onRestore, onDeleteFo
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {file.deleted_at ? formatRelative(new Date(file.deleted_at)) : '--'}
       </span>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
         <ActionButton icon={RotateCcw} label="Restore" onClick={onRestore} />
         <ActionButton icon={X} label="Delete forever" onClick={onDeleteForever} danger />
       </div>

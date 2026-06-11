@@ -24,16 +24,16 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { downloadFile, downloadBatch } from '@/lib/file-download';
 import { api } from '@/services/api';
+import { useDriveStore } from '@/stores/drive.store';
 import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
 import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveGrid } from '../DriveGrid';
 import { DriveList } from '../DriveList';
-import { DrivePreview } from '../DrivePreview';
+import { DriveInspector } from '../components/inspector/DriveInspector';
 import { ShareWithUserModal } from '../components/ShareWithUserModal';
 import { ShareEmailModal } from '../components/ShareEmailModal';
 import { TagsModal } from '../components/TagsModal';
-import { VersionHistoryDialog } from '../components/VersionHistoryDialog';
 import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
 import type { DriveView } from '../types';
@@ -47,6 +47,8 @@ export function StarredView() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const clipboard = useFileClipboard();
+  const setInspectorOpen = useDriveStore(s => s.setInspectorOpen);
+  const setInspectorTab = useDriveStore(s => s.setInspectorTab);
   const { files, loading, error, refetch } = useFilesQuery({ starred: true, limit: 200 });
 
   const [view, setView] = useState<DriveView>(
@@ -64,11 +66,10 @@ export function StarredView() {
   const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
   const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
   const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
-  const [versionsFile, setVersionsFile] = useState<FileRecord | null>(null);
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
 
   const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareFile
-    || !!shareUserFiles || !!shareEmailFile || !!tagsFiles || !!versionsFile || confirmDeleteIds !== null;
+    || !!shareUserFiles || !!shareEmailFile || !!tagsFiles || confirmDeleteIds !== null;
 
   const changeView = useCallback((v: DriveView) => {
     setView(v);
@@ -247,7 +248,12 @@ export function StarredView() {
     navigate,
     callbacks: {
       onOpen: handleItemDoubleClick,
-      onPreview: (file) => setSelectedFile(file),
+      // Details/Properties → inspector on the Details tab (D5)
+      onPreview: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('details');
+        setInspectorOpen(true);
+      },
       onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
       onShare: (file) => setShareFile(file),
       onShareUser: (targets) => setShareUserFiles(targets),
@@ -258,7 +264,12 @@ export function StarredView() {
       onCopyTo: (targets) => openFolderPicker(targets.map(f => f.id), 'copy'),
       onRename: (file) => setRenameTarget(file),
       onTags: (targets) => setTagsFiles(targets),
-      onVersions: (file) => setVersionsFile(file),
+      // Version history → inspector on the Versions tab (D5)
+      onVersions: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('versions');
+        setInspectorOpen(true);
+      },
       onDelete: (targets) => {
         if (targets.length === 1) void handleDelete(targets[0]!.id);
         else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
@@ -267,6 +278,7 @@ export function StarredView() {
   }), [
     clipboard.operation, clipboard.fileIds, navigate, handleItemDoubleClick,
     handleBulkStar, handleCut, handleCopy, openFolderPicker, handleDelete,
+    setInspectorOpen, setInspectorTab,
   ]);
 
   const getContextMenuItems = useCallback((file: FileRecord) => {
@@ -319,6 +331,12 @@ export function StarredView() {
   const cutIds = useMemo(
     () => (clipboard.operation === 'cut' ? new Set(clipboard.fileIds) : undefined),
     [clipboard.operation, clipboard.fileIds],
+  );
+
+  // D5 — selection feeding the inspector
+  const inspectorFiles = useMemo(
+    () => (selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []),
+    [selectedFiles, selectedFile],
   );
 
   if (!loading && files.length === 0) {
@@ -375,51 +393,60 @@ export function StarredView() {
         </div>
       )}
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {error && (
-          <div style={{ padding: '8px 16px', fontSize: 13, color: 'var(--error)' }}>{error}</div>
-        )}
-        {view === 'grid' ? (
-          <DriveGrid
-            files={files}
-            loading={loading}
-            selectedFileId={selectedFile?.id ?? null}
-            selectedIds={selectedIds}
-            hasSelection={hasSelection}
-            onItemClick={(f) => setSelectedFile(prev => prev?.id === f.id ? null : f)}
-            onItemDoubleClick={handleItemDoubleClick}
-            onToggleSelect={toggleSelection}
-            getContextMenuItems={getContextMenuItems}
-            onToggleStar={(f) => { void handleUnstar(f); }}
-            cutIds={cutIds}
-            isMobile={isMobile}
-          />
-        ) : (
-          <DriveList
-            files={files}
-            loading={loading}
-            selectedFileId={selectedFile?.id ?? null}
-            selectedIds={selectedIds}
-            onItemClick={(f) => setSelectedFile(prev => prev?.id === f.id ? null : f)}
-            onItemDoubleClick={handleItemDoubleClick}
-            onToggleSelect={toggleSelection}
-            onToggleAll={toggleAll}
-            getContextMenuItems={getContextMenuItems}
-            onToggleStar={(f) => { void handleUnstar(f); }}
-            cutIds={cutIds}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          {error && (
+            <div style={{ padding: '8px 16px', fontSize: 13, color: 'var(--error)' }}>{error}</div>
+          )}
+          {view === 'grid' ? (
+            <DriveGrid
+              files={files}
+              loading={loading}
+              selectedFileId={selectedFile?.id ?? null}
+              selectedIds={selectedIds}
+              hasSelection={hasSelection}
+              onItemClick={(f) => setSelectedFile(prev => prev?.id === f.id ? null : f)}
+              onItemDoubleClick={handleItemDoubleClick}
+              onToggleSelect={toggleSelection}
+              getContextMenuItems={getContextMenuItems}
+              onToggleStar={(f) => { void handleUnstar(f); }}
+              cutIds={cutIds}
+              isMobile={isMobile}
+            />
+          ) : (
+            <DriveList
+              files={files}
+              loading={loading}
+              selectedFileId={selectedFile?.id ?? null}
+              selectedIds={selectedIds}
+              onItemClick={(f) => setSelectedFile(prev => prev?.id === f.id ? null : f)}
+              onItemDoubleClick={handleItemDoubleClick}
+              onToggleSelect={toggleSelection}
+              onToggleAll={toggleAll}
+              getContextMenuItems={getContextMenuItems}
+              onToggleStar={(f) => { void handleUnstar(f); }}
+              cutIds={cutIds}
+            />
+          )}
+        </div>
+
+        {/* Inspector (D5) — replaces the old bottom DrivePreview */}
+        {inspectorFiles.length > 0 && (
+          <DriveInspector
+            files={inspectorFiles}
+            onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
+            onRefetch={() => { void refetch(); }}
+            onDeleteFile={(f) => { void handleDelete(f.id); }}
+            onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
+            bulk={{
+              onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
+              onTags: (targets) => setTagsFiles(targets),
+              onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+              onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
+            }}
           />
         )}
       </div>
-
-      {/* Preview */}
-      {selectedFile && (
-        <DrivePreview
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          onDelete={(id) => { void handleDelete(id); }}
-          isMobile={isMobile}
-        />
-      )}
 
       {/* Modals */}
       {shareFile && (
@@ -439,9 +466,6 @@ export function StarredView() {
         onClose={() => setTagsFiles(null)}
         onSaved={() => { void refetch(); }}
       />
-      {versionsFile && (
-        <VersionHistoryDialog open={!!versionsFile} file={versionsFile} onClose={() => setVersionsFile(null)} />
-      )}
       <FolderPicker
         open={folderPickerIds !== null}
         currentPath="/drive/"

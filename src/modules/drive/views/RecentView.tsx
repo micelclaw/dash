@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { Clock, Flame } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -19,17 +19,22 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { useFilesQuery } from '../hooks/use-files-query';
+import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
+import { DriveInspector } from '../components/inspector/DriveInspector';
 import type { FileRecord } from '@/types/files';
 
 /**
  * Recent — two bands: "Hot now" (heat-ranked cards) and "Earlier"
- * (last-accessed list). Clicking an item jumps to My Drive with ?id=,
- * which opens the containing folder and selects the file.
+ * (last-accessed list).
+ *
+ * D5: a single click selects the item and opens the right inspector;
+ * double-click jumps to My Drive with ?id= (containing folder + selection).
  */
 export function RecentView() {
   const navigate = useNavigate();
   const hot = useFilesQuery({ sort: 'heat', order: 'desc', limit: 12, is_directory: false });
   const earlier = useFilesQuery({ sort: 'last_accessed', order: 'desc', limit: 60, is_directory: false });
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
 
   const hotFiles = useMemo(
     () => hot.files.filter(f => (f.heat_score ?? 0) > 0),
@@ -45,6 +50,20 @@ export function RecentView() {
     navigate(`/drive?tab=my-drive&id=${file.id}`);
   };
 
+  // D5 — click selects (inspector), double-click navigates
+  const handleSelect = useCallback((file: FileRecord) => {
+    setSelectedFile(prev => prev?.id === file.id ? null : file);
+  }, []);
+
+  const refetchAll = useCallback(() => {
+    void hot.refetch();
+    void earlier.refetch();
+  }, [hot.refetch, earlier.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useDriveShortcuts({
+    onEscape: () => { setSelectedFile(null); },
+  });
+
   const loading = hot.loading || earlier.loading;
   const isEmpty = !loading && hotFiles.length === 0 && earlierFiles.length === 0;
 
@@ -59,44 +78,67 @@ export function RecentView() {
   }
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', fontFamily: 'var(--font-sans)' }}>
-      {/* Hot now */}
-      {hotFiles.length > 0 && (
-        <section style={{ padding: '16px 16px 0' }}>
-          <SectionHeader icon={Flame} label="Hot now" />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {hotFiles.map(file => (
-              <HotCard key={file.id} file={file} onClick={() => openInMyDrive(file)} />
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {/* Hot now */}
+        {hotFiles.length > 0 && (
+          <section style={{ padding: '16px 16px 0' }}>
+            <SectionHeader icon={Flame} label="Hot now" />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))',
+                gap: 10,
+              }}
+            >
+              {hotFiles.map(file => (
+                <HotCard
+                  key={file.id}
+                  file={file}
+                  selected={selectedFile?.id === file.id}
+                  onClick={() => handleSelect(file)}
+                  onDoubleClick={() => openInMyDrive(file)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Earlier */}
+        <section style={{ padding: '16px 16px 24px' }}>
+          <SectionHeader icon={Clock} label="Earlier" />
+          {earlierFiles.length === 0 && !loading && (
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
+              Nothing else accessed recently.
+            </div>
+          )}
+          <div>
+            {earlierFiles.map(file => (
+              <RecentRow
+                key={file.id}
+                file={file}
+                selected={selectedFile?.id === file.id}
+                onClick={() => handleSelect(file)}
+                onDoubleClick={() => openInMyDrive(file)}
+              />
             ))}
           </div>
+          {loading && (
+            <div style={{ padding: '8px 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+              Loading…
+            </div>
+          )}
         </section>
-      )}
+      </div>
 
-      {/* Earlier */}
-      <section style={{ padding: '16px 16px 24px' }}>
-        <SectionHeader icon={Clock} label="Earlier" />
-        {earlierFiles.length === 0 && !loading && (
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
-            Nothing else accessed recently.
-          </div>
-        )}
-        <div>
-          {earlierFiles.map(file => (
-            <RecentRow key={file.id} file={file} onClick={() => openInMyDrive(file)} />
-          ))}
-        </div>
-        {loading && (
-          <div style={{ padding: '8px 0', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Loading…
-          </div>
-        )}
-      </section>
+      {/* Inspector (D5) */}
+      {selectedFile && (
+        <DriveInspector
+          files={[selectedFile]}
+          onClose={() => setSelectedFile(null)}
+          onRefetch={refetchAll}
+        />
+      )}
     </div>
   );
 }
@@ -115,11 +157,17 @@ function SectionHeader({ icon: Icon, label }: { icon: React.ComponentType<{ size
   );
 }
 
-function HotCard({ file, onClick }: { file: FileRecord; onClick: () => void }) {
+function HotCard({ file, selected, onClick, onDoubleClick }: {
+  file: FileRecord;
+  selected?: boolean;
+  onClick: () => void;
+  onDoubleClick: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={file.filename}
@@ -129,8 +177,8 @@ function HotCard({ file, onClick }: { file: FileRecord; onClick: () => void }) {
         gap: 10,
         padding: '10px 12px',
         borderRadius: 'var(--radius-md)',
-        border: '1px solid var(--border)',
-        background: hovered ? 'var(--surface-hover)' : 'var(--surface)',
+        border: selected ? '1px solid var(--mod-drive)' : '1px solid var(--border)',
+        background: selected ? 'var(--amber-dim)' : hovered ? 'var(--surface-hover)' : 'var(--surface)',
         cursor: 'pointer',
         transition: 'background var(--transition-fast), box-shadow var(--transition-fast)',
         boxShadow: hovered ? 'var(--shadow-md)' : 'none',
@@ -157,11 +205,17 @@ function HotCard({ file, onClick }: { file: FileRecord; onClick: () => void }) {
   );
 }
 
-function RecentRow({ file, onClick }: { file: FileRecord; onClick: () => void }) {
+function RecentRow({ file, selected, onClick, onDoubleClick }: {
+  file: FileRecord;
+  selected?: boolean;
+  onClick: () => void;
+  onDoubleClick: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -171,7 +225,7 @@ function RecentRow({ file, onClick }: { file: FileRecord; onClick: () => void })
         alignItems: 'center',
         padding: '6px 8px',
         borderRadius: 'var(--radius-sm)',
-        background: hovered ? 'var(--surface-hover)' : 'transparent',
+        background: selected ? 'var(--amber-dim)' : hovered ? 'var(--surface-hover)' : 'transparent',
         cursor: 'pointer',
         fontSize: '0.8125rem',
         color: 'var(--text)',

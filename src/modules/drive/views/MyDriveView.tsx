@@ -25,17 +25,17 @@ import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { downloadFile, downloadBatch } from '@/lib/file-download';
 import { api } from '@/services/api';
+import { useDriveStore } from '@/stores/drive.store';
 import { useDrive } from '../hooks/use-drive';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
 import { buildFileContextMenu, buildBackgroundContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveToolbar } from '../DriveToolbar';
 import { DriveGrid } from '../DriveGrid';
 import { DriveList } from '../DriveList';
-import { DrivePreview } from '../DrivePreview';
+import { DriveInspector } from '../components/inspector/DriveInspector';
 import { ShareWithUserModal } from '../components/ShareWithUserModal';
 import { ShareEmailModal } from '../components/ShareEmailModal';
 import { TagsModal } from '../components/TagsModal';
-import { VersionHistoryDialog } from '../components/VersionHistoryDialog';
 import type { FileRecord } from '@/types/files';
 
 /**
@@ -45,11 +45,16 @@ import type { FileRecord } from '@/types/files';
  * D4 additions: rich context menu (builder in ../context-menu.tsx), real
  * Cut/Copy/Paste through the shared file clipboard, keyboard shortcuts,
  * expanded batch bar (star/tags/share-with-user) and the new share modals.
+ *
+ * D5: the bottom DrivePreview is replaced by the right-hand DriveInspector
+ * (Details | Activity | Versions, multi-select aggregate summary).
  */
 export function MyDriveView() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const addNotification = useNotificationStore(s => s.addNotification);
+  const setInspectorOpen = useDriveStore(s => s.setInspectorOpen);
+  const setInspectorTab = useDriveStore(s => s.setInspectorTab);
   const {
     currentPath, navigateTo,
     files, loading, error, fetchFiles,
@@ -73,7 +78,6 @@ export function MyDriveView() {
   const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
   const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
   const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
-  const [versionsFile, setVersionsFile] = useState<FileRecord | null>(null);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
   const [folderPickerTargetIds, setFolderPickerTargetIds] = useState<Set<string>>(new Set());
@@ -82,7 +86,7 @@ export function MyDriveView() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
 
   const anyModalOpen = !!shareFile || !!shareUserFiles || !!shareEmailFile || !!tagsFiles
-    || !!versionsFile || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen;
+    || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen;
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -269,7 +273,12 @@ export function MyDriveView() {
     navigate,
     callbacks: {
       onOpen: (file) => handleItemDoubleClick(file),
-      onPreview: (file) => setSelectedFile(file),
+      // Details/Properties → inspector on the Details tab (D5)
+      onPreview: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('details');
+        setInspectorOpen(true);
+      },
       onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
       onShare: (file) => setShareFile(file),
       onShareUser: (targets) => setShareUserFiles(targets),
@@ -281,7 +290,13 @@ export function MyDriveView() {
       onCopyTo: (targets) => openFolderPicker(targets.map(f => f.id), 'copy'),
       onRename: (file) => setRenameTarget(file),
       onTags: (targets) => setTagsFiles(targets),
-      onVersions: (file) => setVersionsFile(file),
+      // Version history → inspector on the Versions tab (D5). The standalone
+      // VersionHistoryDialog stays for views without an inspector.
+      onVersions: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('versions');
+        setInspectorOpen(true);
+      },
       onDelete: (targets) => {
         if (targets.length === 1) void deleteFile(targets[0]!.id);
         else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
@@ -293,6 +308,7 @@ export function MyDriveView() {
     clipboard.operation, clipboard.fileIds, navigate, handleItemDoubleClick,
     setSelectedFile, handleBulkStar, handleCut, handleCopy, handlePaste,
     openFolderPicker, deleteFile, handleNewFolder, handleUploadClick,
+    setInspectorOpen, setInspectorTab,
   ]);
 
   /** Right-clicking an item in the selection acts on the whole selection. */
@@ -348,6 +364,13 @@ export function MyDriveView() {
   const cutIds = useMemo(
     () => (clipboard.operation === 'cut' ? new Set(clipboard.fileIds) : undefined),
     [clipboard.operation, clipboard.fileIds],
+  );
+
+  // D5 — the inspector reflects the selection: checked items win, otherwise
+  // the clicked (preview) file.
+  const inspectorFiles = useMemo(
+    () => (selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []),
+    [selectedFiles, selectedFile],
   );
 
   return (
@@ -427,67 +450,77 @@ export function MyDriveView() {
         </div>
       )}
 
-      {/* Content area — right-click on the background opens New folder / Upload / Paste */}
-      <DropZone onFilesDropped={handleFilesDropped}>
-        <ContextMenu
-          trigger={
-            <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-              {error && (
-                <div style={{
-                  padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
-                  color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
-                  borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
-                }}>
-                  {error}
-                </div>
-              )}
-              {view === 'grid' ? (
-                <DriveGrid
-                  files={files}
-                  loading={loading}
-                  selectedFileId={selectedFile?.id ?? null}
-                  selectedIds={selectedIds}
-                  hasSelection={hasSelection}
-                  onItemClick={handleItemClick}
-                  onItemDoubleClick={handleItemDoubleClick}
-                  onToggleSelect={toggleSelection}
-                  getContextMenuItems={getContextMenuItems}
-                  onToggleStar={handleToggleStar}
-                  onDragToFolder={handleDragToFolder}
-                  cutIds={cutIds}
-                  isMobile={isMobile}
-                />
-              ) : (
-                <DriveList
-                  files={files}
-                  loading={loading}
-                  selectedFileId={selectedFile?.id ?? null}
-                  selectedIds={selectedIds}
-                  onItemClick={handleItemClick}
-                  onItemDoubleClick={handleItemDoubleClick}
-                  onToggleSelect={toggleSelection}
-                  onToggleAll={toggleAll}
-                  getContextMenuItems={getContextMenuItems}
-                  onToggleStar={handleToggleStar}
-                  onDragToFolder={handleDragToFolder}
-                  cutIds={cutIds}
-                />
-              )}
-            </div>
-          }
-          items={backgroundItems}
-        />
-      </DropZone>
+      {/* Content area + right inspector (D5). Right-click on the background
+          opens New folder / Upload / Paste. */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <DropZone onFilesDropped={handleFilesDropped}>
+          <ContextMenu
+            trigger={
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                {error && (
+                  <div style={{
+                    padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
+                    color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
+                    borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
+                  }}>
+                    {error}
+                  </div>
+                )}
+                {view === 'grid' ? (
+                  <DriveGrid
+                    files={files}
+                    loading={loading}
+                    selectedFileId={selectedFile?.id ?? null}
+                    selectedIds={selectedIds}
+                    hasSelection={hasSelection}
+                    onItemClick={handleItemClick}
+                    onItemDoubleClick={handleItemDoubleClick}
+                    onToggleSelect={toggleSelection}
+                    getContextMenuItems={getContextMenuItems}
+                    onToggleStar={handleToggleStar}
+                    onDragToFolder={handleDragToFolder}
+                    cutIds={cutIds}
+                    isMobile={isMobile}
+                  />
+                ) : (
+                  <DriveList
+                    files={files}
+                    loading={loading}
+                    selectedFileId={selectedFile?.id ?? null}
+                    selectedIds={selectedIds}
+                    onItemClick={handleItemClick}
+                    onItemDoubleClick={handleItemDoubleClick}
+                    onToggleSelect={toggleSelection}
+                    onToggleAll={toggleAll}
+                    getContextMenuItems={getContextMenuItems}
+                    onToggleStar={handleToggleStar}
+                    onDragToFolder={handleDragToFolder}
+                    cutIds={cutIds}
+                  />
+                )}
+              </div>
+            }
+            items={backgroundItems}
+          />
+        </DropZone>
 
-      {/* Preview panel — fullscreen overlay on mobile, bottom panel on desktop */}
-      {selectedFile && (
-        <DrivePreview
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          onDelete={deleteFile}
-          isMobile={isMobile}
-        />
-      )}
+        {/* Inspector — replaces the old bottom DrivePreview */}
+        {inspectorFiles.length > 0 && (
+          <DriveInspector
+            files={inspectorFiles}
+            onClose={() => { clearSelection(); setSelectedFile(null); }}
+            onRefetch={() => { void fetchFiles(); }}
+            onDeleteFile={(f) => { void deleteFile(f.id); }}
+            onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
+            bulk={{
+              onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
+              onTags: (targets) => setTagsFiles(targets),
+              onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+              onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
+            }}
+          />
+        )}
+      </div>
 
       {/* Share modal (public link) */}
       {shareFile && (
@@ -521,15 +554,6 @@ export function MyDriveView() {
         onClose={() => setTagsFiles(null)}
         onSaved={() => { void fetchFiles(); }}
       />
-
-      {/* Version history (D4) */}
-      {versionsFile && (
-        <VersionHistoryDialog
-          open={!!versionsFile}
-          file={versionsFile}
-          onClose={() => setVersionsFile(null)}
-        />
-      )}
 
       {/* Folder picker for Move / Copy to… */}
       <FolderPicker
