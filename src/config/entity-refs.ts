@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -58,4 +58,27 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     label: 'Diario',
     route: (id) => `/diary?id=${encodeURIComponent(id)}`,
   },
+  // Proyectos e inventario: las páginas aún no leen `?id=` (aterrizan en el
+  // módulo); se usa la convención igualmente para que lo adopten sin tocar esto.
+  kanban_board: {
+    Icon: Kanban,
+    color: 'var(--mod-projects)',
+    label: 'Tablero',
+    route: (id) => `/projects?id=${encodeURIComponent(id)}`,
+  },
+  kanban_card: {
+    Icon: SquareCheckBig,
+    color: 'var(--mod-projects)',
+    label: 'Tarjeta',
+    route: (id) => `/projects?card=${encodeURIComponent(id)}`,
+  },
+  inventory: {
+    Icon: Boxes,
+    color: 'var(--mod-inventory)',
+    label: 'Inventario',
+    route: (id) => `/inventory?id=${encodeURIComponent(id)}`,
+  },
 };
+
+/** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
+export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card'] as const;

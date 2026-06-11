@@ -59,7 +59,10 @@ export function Component() {
 
   const handleCreateNote = useCallback(async () => {
     try {
-      const newNote = await createNote({ content: '', content_format: 'html' });
+      // markdown: alinea con el default de la DB y con las notas de agentes;
+      // el editor TipTap edita markdown nativo (@tiptap/markdown) y el
+      // selector de formato del editor permite cambiarlo por nota.
+      const newNote = await createNote({ content: '', content_format: 'markdown' });
       handleSelect(newNote.id);
     } catch {
       // Error already handled in useNotes

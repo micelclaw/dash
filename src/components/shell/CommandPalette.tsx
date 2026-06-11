@@ -17,7 +17,7 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
-  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Container, FileText, Terminal,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Boxes, Container, FileText, Terminal,
   Play, SkipForward, Download as DownloadIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -65,6 +65,9 @@ const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   bookmark: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
   messages: { icon: MessageSquare, color: 'var(--mod-chat)' },
   message: { icon: MessageSquare, color: 'var(--mod-chat)' },
+  kanban_board: { icon: Kanban, color: 'var(--mod-projects)' },
+  kanban_card: { icon: Kanban, color: 'var(--mod-projects)' },
+  inventory: { icon: Boxes, color: 'var(--mod-inventory)' },
 };
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -85,6 +88,9 @@ const DOMAIN_LABELS: Record<string, string> = {
   bookmark: 'Bookmarks',
   messages: 'Messages',
   message: 'Messages',
+  kanban_board: 'Projects',
+  kanban_card: 'Projects',
+  inventory: 'Inventory',
 };
 
 interface CommandItem {
@@ -99,6 +105,7 @@ const ROUTE_MAP: Record<string, string> = {
   note: '/notes', event: '/calendar', contact: '/contacts',
   email: '/mail', file: '/drive', diary: '/diary', conversation: '/chat',
   message: '/chat', bookmark: '/bookmarks',
+  kanban_board: '/projects', kanban_card: '/projects', inventory: '/inventory',
 };
 
 function getResultTitle(result: SearchResult): string {
