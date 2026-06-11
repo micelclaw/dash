@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Excalidraw, serializeAsJSON, THEME } from '@excalidraw/excalidraw';
+import { Excalidraw, serializeAsJSON, THEME, useHandleLibrary } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { toast } from 'sonner';
 import { Save, Download } from 'lucide-react';
@@ -61,6 +61,13 @@ export function Component() {
   const lastSavedRef = useRef<string>('');
   const defaultLibIdsRef = useRef<Set<string>>(new Set());
 
+  // Protocolo #addLibrary: el botón "Add to Excalidraw" de
+  // libraries.excalidraw.com vuelve a esta URL con
+  // `#addLibrary=<url>&token=…` — este hook oficial parsea el hash (al
+  // montar y en hashchange), valida el dominio, pide confirmación y hace el
+  // merge en la librería. La persistencia la recoge onLibraryChange.
+  useHandleLibrary({ excalidrawAPI });
+
   // Cargar librería al montar el canvas: defaults (menos los borrados) + items
   // del usuario. updateLibrary reemplaza el contenido del panel de librería.
   useEffect(() => {
@@ -81,7 +88,9 @@ export function Component() {
         defaultLibIdsRef.current = new Set(defaults.map((i) => i.id));
         const items = [...defaults, ...userItems];
         if (!cancelled && items.length > 0) {
-          excalidrawAPI.updateLibrary({ libraryItems: items });
+          // merge:true — no machacar items que el hook de #addLibrary haya
+          // instalado mientras cargaba el bundle (dedupe por contenido).
+          excalidrawAPI.updateLibrary({ libraryItems: items, merge: true });
         }
       } catch { /* la librería nunca debe romper el lienzo */ }
     })();
@@ -93,10 +102,14 @@ export function Component() {
   const handleLibraryChange = useCallback((items: readonly unknown[]) => {
     try {
       const defaults = defaultLibIdsRef.current;
-      if (defaults.size === 0 && items.length === 0) return;
+      // Hasta que el bundle de defaults haya cargado no se puede separar
+      // user-items de defaults — no persistir aún (evita falsos positivos).
+      if (defaults.size === 0) return;
       const current = items as LibraryItemLike[];
       const currentIds = new Set(current.map((i) => i.id));
-      const userItems = current.filter((i) => !i.id?.startsWith('default-'));
+      // Default = pertenece al bundle (por id REAL — los .excalidrawlib v2
+      // conservan sus ids originales, no llevan prefijo "default-").
+      const userItems = current.filter((i) => !defaults.has(i.id));
       const removedNow = [...defaults].filter((id) => !currentIds.has(id));
       const removedStored = readJson<string[]>(REMOVED_DEFAULTS_KEY, []);
       const removed = Array.from(new Set([
