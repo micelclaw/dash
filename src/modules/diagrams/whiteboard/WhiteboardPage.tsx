@@ -22,6 +22,29 @@ import type { FileRecord } from '@/types/files';
 const PARENT_FOLDER = '/Tools/Whiteboards';
 const AUTOSAVE_MS = 5000;
 
+// ─── Librerías por defecto + persistencia de la librería ─────────────
+// Bundle con las 16 librerías más descargadas de libraries.excalidraw.com
+// (asset estático ~6.7MB, lazy — solo se fetchea al abrir el whiteboard y el
+// navegador lo cachea). Como NO cabe en localStorage, ahí solo persisten los
+// items añadidos por el usuario y los ids de defaults que haya borrado.
+const DEFAULT_LIBS_URL = '/whiteboard-libraries/default-libraries.json';
+const USER_LIBRARY_KEY = 'claw-whiteboard-user-library';
+const REMOVED_DEFAULTS_KEY = 'claw-whiteboard-removed-defaults';
+
+interface LibraryItemLike {
+  id: string;
+  [key: string]: unknown;
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function Component() {
   const { fileId } = useParams<{ fileId?: string }>();
   const navigate = useNavigate();
@@ -36,6 +59,54 @@ export function Component() {
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>('');
+  const defaultLibIdsRef = useRef<Set<string>>(new Set());
+
+  // Cargar librería al montar el canvas: defaults (menos los borrados) + items
+  // del usuario. updateLibrary reemplaza el contenido del panel de librería.
+  useEffect(() => {
+    if (!excalidrawAPI) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const userItems = readJson<LibraryItemLike[]>(USER_LIBRARY_KEY, []);
+        const removed = new Set(readJson<string[]>(REMOVED_DEFAULTS_KEY, []));
+        let defaults: LibraryItemLike[] = [];
+        try {
+          const res = await fetch(DEFAULT_LIBS_URL);
+          if (res.ok) {
+            const bundle = await res.json() as { libraryItems?: LibraryItemLike[] };
+            defaults = (bundle.libraryItems ?? []).filter((i) => !removed.has(i.id));
+          }
+        } catch { /* sin defaults si el asset no carga */ }
+        defaultLibIdsRef.current = new Set(defaults.map((i) => i.id));
+        const items = [...defaults, ...userItems];
+        if (!cancelled && items.length > 0) {
+          excalidrawAPI.updateLibrary({ libraryItems: items });
+        }
+      } catch { /* la librería nunca debe romper el lienzo */ }
+    })();
+    return () => { cancelled = true; };
+  }, [excalidrawAPI]);
+
+  // Persistir cambios de librería: solo items del usuario (los defaults no
+  // caben en localStorage) + el tombstone de defaults borrados.
+  const handleLibraryChange = useCallback((items: readonly unknown[]) => {
+    try {
+      const defaults = defaultLibIdsRef.current;
+      if (defaults.size === 0 && items.length === 0) return;
+      const current = items as LibraryItemLike[];
+      const currentIds = new Set(current.map((i) => i.id));
+      const userItems = current.filter((i) => !i.id?.startsWith('default-'));
+      const removedNow = [...defaults].filter((id) => !currentIds.has(id));
+      const removedStored = readJson<string[]>(REMOVED_DEFAULTS_KEY, []);
+      const removed = Array.from(new Set([
+        ...removedStored.filter((id) => !currentIds.has(id)), // re-añadidos salen del tombstone
+        ...removedNow,
+      ]));
+      localStorage.setItem(USER_LIBRARY_KEY, JSON.stringify(userItems));
+      localStorage.setItem(REMOVED_DEFAULTS_KEY, JSON.stringify(removed));
+    } catch { /* cuota llena u otros — no romper el lienzo */ }
+  }, []);
 
   // Load existing whiteboard from Drive
   useEffect(() => {
@@ -76,6 +147,10 @@ export function Component() {
     const appState = excalidrawAPI.getAppState();
     const files = excalidrawAPI.getFiles();
 
+    // No crear un archivo para un lienzo vacío (p.ej. el onChange que dispara
+    // updateLibrary al sembrar las librerías por defecto al abrir en blanco).
+    if (!currentFileId && elements.length === 0 && !force) return;
+
     const serialized = serializeAsJSON(elements, appState, files, 'local');
     // Skip save if nothing changed
     const contentKey = JSON.stringify({ elements, files });
@@ -102,7 +177,7 @@ export function Component() {
         const saved = res.data;
         setCurrentFileId(saved.id);
         setCurrentFilename(saved.filename);
-        navigate(`/tools/whiteboard/${saved.id}`, { replace: true });
+        navigate(`/diagrams/whiteboard/${saved.id}`, { replace: true });
       }
 
       lastSavedRef.current = contentKey;
@@ -216,6 +291,7 @@ export function Component() {
           initialData={initialData ?? undefined}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
           onChange={handleChange}
+          onLibraryChange={handleLibraryChange}
           name={currentFilename || 'Whiteboard'}
         />
       </div>
