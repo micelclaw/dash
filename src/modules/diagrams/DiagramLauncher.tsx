@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Plus, Waypoints, FolderOpen, Layout, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Waypoints, FolderOpen, Layout, Loader2, Pencil, Trash2, PenTool } from 'lucide-react';
 import { api } from '@/services/api';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
@@ -33,29 +33,39 @@ interface TemplateInfo {
 export function DiagramLauncher() {
   const navigate = useNavigate();
   const [files, setFiles] = useState<FileRecord[]>([]);
+  const [whiteboards, setWhiteboards] = useState<FileRecord[]>([]);
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Fetch recent diagrams and templates
+  // Fetch recent diagrams, whiteboards and templates
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const [filesRes, templatesRes] = await Promise.all([
+        const [filesRes, wbRes, templatesRes] = await Promise.all([
           api.get<ApiListResponse<FileRecord>>('/files', {
             mime_type: DIAGRAM_MIME,
             sort: 'updated_at',
             order: 'desc',
             limit: 200,
           }),
+          // Los whiteboards (Excalidraw) viven en /Tools/Whiteboards en Drive
+          // (ubicación histórica — los archivos existentes siguen ahí).
+          api.get<ApiListResponse<FileRecord>>('/files', {
+            parent_folder: '/Tools/Whiteboards',
+            sort: 'updated_at',
+            order: 'desc',
+            limit: 200,
+          }).catch(() => ({ data: [] as FileRecord[] })),
           api.get<{ data: TemplateInfo[] }>('/diagrams/templates').catch(() => ({ data: [] })),
         ]);
         if (cancelled) return;
         setFiles(filesRes.data);
+        setWhiteboards(wbRes.data);
         setTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
       } catch {
         // Silently fail
@@ -167,6 +177,44 @@ export function DiagramLauncher() {
     },
   ], [handleDelete]);
 
+  // ─── Whiteboards (Excalidraw) — movidos desde Tools ─────────────────
+
+  const handleDeleteWb = useCallback(async (file: FileRecord) => {
+    try {
+      await api.delete(`/files/${file.id}`);
+      setWhiteboards((prev) => prev.filter((f) => f.id !== file.id));
+    } catch { /* silently fail */ }
+  }, []);
+
+  const handleRenameWb = useCallback(async (fileId: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    const filename = trimmed.endsWith('.excalidraw') ? trimmed : `${trimmed}.excalidraw`;
+    try {
+      await api.patch(`/files/${fileId}`, { filename });
+      setWhiteboards((prev) => prev.map((f) => f.id === fileId ? { ...f, filename } : f));
+    } catch { /* silently fail */ }
+    setRenamingId(null);
+  }, []);
+
+  const getWbContextItems = useCallback((file: FileRecord): ContextMenuItem[] => [
+    {
+      label: 'Rename',
+      icon: Pencil,
+      onClick: () => {
+        setRenamingId(file.id);
+        setRenameValue(file.filename.replace(/\.(excalidraw|json)$/, ''));
+      },
+    },
+    { label: '', onClick: () => {}, separator: true },
+    {
+      label: 'Delete',
+      icon: Trash2,
+      variant: 'danger',
+      onClick: () => handleDeleteWb(file),
+    },
+  ], [handleDeleteWb]);
+
   // Format relative time
   const timeAgo = (dateStr: string) => {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -195,28 +243,53 @@ export function DiagramLauncher() {
             Diagrams
           </h1>
         </div>
-        <button
-          onClick={handleNewDiagram}
-          disabled={creating}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '8px 16px',
-            fontSize: 13,
-            fontWeight: 500,
-            background: 'var(--amber, #d4a017)',
-            color: '#000',
-            border: 'none',
-            borderRadius: 6,
-            cursor: creating ? 'wait' : 'pointer',
-            fontFamily: 'var(--font-sans, system-ui)',
-            opacity: creating ? 0.7 : 1,
-          }}
-        >
-          {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-          New Diagram
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => navigate('/diagrams/whiteboard')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 500,
+              background: 'transparent',
+              color: 'var(--text, #e2e8f0)',
+              border: '1px solid var(--border, #333)',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-sans, system-ui)',
+              transition: 'border-color 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-diagrams, #06b6d4)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
+          >
+            <PenTool size={14} />
+            New Whiteboard
+          </button>
+          <button
+            onClick={handleNewDiagram}
+            disabled={creating}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 500,
+              background: 'var(--amber, #d4a017)',
+              color: '#000',
+              border: 'none',
+              borderRadius: 6,
+              cursor: creating ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-sans, system-ui)',
+              opacity: creating ? 0.7 : 1,
+            }}
+          >
+            {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            New Diagram
+          </button>
+        </div>
       </div>
 
       {/* Templates section */}
@@ -415,6 +488,114 @@ export function DiagramLauncher() {
                     </div>
                     <span style={{ fontSize: 11, color: 'var(--text-dim, #64748b)' }}>
                       {timeAgo(file.updated_at)}
+                    </span>
+                  </button>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Whiteboards (Excalidraw) — sección hermana de los diagramas */}
+      <section style={{ marginTop: 32 }}>
+        <h2 style={{
+          fontSize: 12,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: 'var(--text-dim, #64748b)',
+          marginBottom: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+        }}>
+          <PenTool size={12} />
+          Whiteboards
+        </h2>
+
+        {whiteboards.length === 0 && !loading ? (
+          <div style={{
+            padding: '24px 16px',
+            textAlign: 'center',
+            color: 'var(--text-dim, #64748b)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}>
+            No whiteboards yet. Use “New Whiteboard” to start drawing.
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: 12,
+          }}>
+            {whiteboards.map((wb) => (
+              <ContextMenu
+                key={wb.id}
+                items={getWbContextItems(wb)}
+                trigger={
+                  <button
+                    onClick={() => {
+                      if (renamingId !== wb.id) navigate(`/diagrams/whiteboard/${wb.id}`);
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      width: '100%',
+                      padding: 14,
+                      background: 'var(--surface, #1a1a1a)',
+                      border: `1px solid ${renamingId === wb.id ? 'var(--mod-diagrams, #06b6d4)' : 'var(--border, #333)'}`,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onMouseEnter={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--mod-diagrams, #06b6d4)'; }}
+                    onMouseLeave={(e) => { if (renamingId !== wb.id) (e.currentTarget as HTMLElement).style.borderColor = 'var(--border, #333)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <PenTool size={16} style={{ color: 'var(--mod-diagrams, #06b6d4)', flexShrink: 0 }} />
+                      {renamingId === wb.id ? (
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onBlur={() => handleRenameWb(wb.id, renameValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameWb(wb.id, renameValue);
+                            if (e.key === 'Escape') setRenamingId(null);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            flex: 1,
+                            fontSize: 13,
+                            fontWeight: 500,
+                            fontFamily: 'var(--font-sans, system-ui)',
+                            background: 'var(--background, #111)',
+                            border: '1px solid var(--mod-diagrams, #06b6d4)',
+                            borderRadius: 4,
+                            color: 'var(--text, #e2e8f0)',
+                            padding: '2px 6px',
+                            outline: 'none',
+                            minWidth: 0,
+                          }}
+                        />
+                      ) : (
+                        <span style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: 'var(--text, #e2e8f0)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {wb.filename.replace(/\.(excalidraw|json)$/, '')}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--text-dim, #64748b)' }}>
+                      {timeAgo(wb.updated_at)}
                     </span>
                   </button>
                 }

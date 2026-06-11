@@ -168,7 +168,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'open-converter', label: 'Open Converter', icon: ArrowLeftRight, group: 'Actions', action: () => openPanel('converter') },
     { id: 'open-pomodoro', label: 'Open Pomodoro', icon: Timer, group: 'Actions', action: () => openPanel('pomodoro') },
     { id: 'open-recorder', label: 'Open Voice Recorder', icon: Mic, group: 'Actions', action: () => openPanel('voice-recorder') },
-    { id: 'open-whiteboard', label: 'Open Whiteboard', icon: PenTool, group: 'Actions', action: () => navigate('/tools/whiteboard') },
+    { id: 'open-whiteboard', label: 'Open Whiteboard', icon: PenTool, group: 'Actions', action: () => navigate('/diagrams/whiteboard') },
     { id: 'goto-diagrams', label: 'Go to Diagrams', icon: Waypoints, group: 'Navigation', action: () => navigate('/diagrams') },
     { id: 'goto-tools', label: 'Go to Tools', icon: Wrench, group: 'Navigation', action: () => navigate('/tools') },
     { id: 'create-diagram', label: 'Create new diagram', icon: Waypoints, group: 'Actions', action: () => navigate('/diagrams/new') },
