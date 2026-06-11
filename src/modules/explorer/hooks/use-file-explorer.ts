@@ -64,7 +64,9 @@ function vfsNodeToFileRecord(node: VFSNode, explorerParentPath: string): FileRec
 }
 
 export function useFileExplorer() {
-  const [currentPath, setCurrentPath] = useState('/drive/');
+  // Default landing on the VFS Files mount (the old virtual '/drive/' source was retired).
+  // currentSource resolves from the mount once mounts load (see the isVfs effect below).
+  const [currentPath, setCurrentPath] = useState('/vfs/user/files');
   const [currentSource, setCurrentSource] = useState<SourceRoot>(SOURCE_ROOTS[0]!);
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

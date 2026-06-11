@@ -15,16 +15,16 @@ import {
   Plus, HardDrive, Cloud, ChevronRight, ChevronDown,
   Trash2, Folder, FolderOpen,
 } from 'lucide-react';
-import { SOURCE_ROOTS } from './types';
-import { SourceTreeItem } from './SourceTreeItem';
-import { useAuthStore } from '@/stores/auth.store';
 import { useVFS } from './hooks/use-vfs';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { AddLocalSourceDialog } from './AddLocalSourceDialog';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { api } from '@/services/api';
 import type { VFSMount, VFSNode } from './hooks/use-vfs';
 
-/** Default auto-created local mounts that duplicate static SOURCE_ROOTS */
+/** Default auto-created local mounts that are unused legacy placeholders */
 const HIDDEN_DEFAULT_MOUNTS = new Set(['/local/drive', '/local/photos']);
 
 interface SourceTreeProps {
@@ -36,33 +36,17 @@ interface SourceTreeProps {
 }
 
 export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }: SourceTreeProps) {
-  const { user } = useAuthStore();
-  const userRole = user?.role ?? 'user';
   const { mounts, mountsLoading, fetchMounts, deleteMount } = useVFS();
   const [deleteTarget, setDeleteTarget] = useState<VFSMount | null>(null);
   const [localSourceOpen, setLocalSourceOpen] = useState(false);
 
   useEffect(() => { fetchMounts(); }, [fetchMounts, refreshKey]);
 
-  const visibleSources = useMemo(
-    () => SOURCE_ROOTS.filter(s => !s.requiredRoles || s.requiredRoles.includes(userRole)),
-    [userRole],
+  // Unified: ALL volumes (local + cloud) in ONE list — hide unused legacy defaults.
+  const allMounts = useMemo(
+    () => mounts.filter(m => !HIDDEN_DEFAULT_MOUNTS.has(m.mount_path)),
+    [mounts],
   );
-
-  // Split mounts: user-created local → Sources section, external → Mounts section
-  const { userLocalMounts, externalMounts } = useMemo(() => {
-    const userLocal: VFSMount[] = [];
-    const external: VFSMount[] = [];
-    for (const m of mounts) {
-      if (HIDDEN_DEFAULT_MOUNTS.has(m.mount_path)) continue;
-      if (m.mount_path.startsWith('/user/')) {
-        userLocal.push(m);
-      } else {
-        external.push(m);
-      }
-    }
-    return { userLocalMounts: userLocal, externalMounts: external };
-  }, [mounts]);
 
   const handleDeleteMount = useCallback(async () => {
     if (!deleteTarget) return;
@@ -88,7 +72,7 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
         gap: 2,
       }}
     >
-      {/* Sources header with "+" for local folders */}
+      {/* One unified header with one "+" → add local folder OR cloud storage */}
       <div
         style={{
           fontSize: '0.625rem',
@@ -101,78 +85,33 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
           alignItems: 'center',
         }}
       >
-        <span style={{ flex: 1 }}>Sources</span>
-        <button
-          onClick={() => setLocalSourceOpen(true)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-dim)',
-            padding: 2,
-            display: 'flex',
-            borderRadius: 'var(--radius-sm)',
-          }}
-          title="Add local folder"
-        >
-          <Plus size={12} />
-        </button>
-      </div>
-
-      {/* Static sources */}
-      {visibleSources.map(source => (
-        <SourceTreeItem
-          key={source.id}
-          source={source}
-          depth={0}
-          currentPath={currentPath}
-          onNavigate={onNavigate}
-        />
-      ))}
-
-      {/* User-created local folder mounts (shown in Sources section) */}
-      {userLocalMounts.map(mount => (
-        <MountTreeItem
-          key={mount.id}
-          mount={mount}
-          currentPath={currentPath}
-          onNavigate={onNavigate}
-          onDelete={() => setDeleteTarget(mount)}
-          icon={<FolderOpen size={14} style={{ flexShrink: 0 }} />}
-        />
-      ))}
-
-      {/* Mounts section (cloud/external only) */}
-      <div
-        style={{
-          fontSize: '0.625rem',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-          color: 'var(--text-muted)',
-          padding: '12px 8px 6px',
-          display: 'flex',
-          alignItems: 'center',
-        }}
-      >
-        <span style={{ flex: 1 }}>Mounts</span>
-        {onAddSource && (
-          <button
-            onClick={onAddSource}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-dim)',
-              padding: 2,
-              display: 'flex',
-              borderRadius: 'var(--radius-sm)',
-            }}
-            title="Add storage source"
-          >
-            <Plus size={12} />
-          </button>
-        )}
+        <span style={{ flex: 1 }}>Storage</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-dim)',
+                padding: 2,
+                display: 'flex',
+                borderRadius: 'var(--radius-sm)',
+              }}
+              title="Add storage"
+            >
+              <Plus size={12} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setLocalSourceOpen(true)} className="gap-2">
+              <FolderOpen size={14} /> Local folder
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onAddSource?.()} className="gap-2">
+              <Cloud size={14} /> Cloud storage
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {mountsLoading && (
@@ -181,32 +120,30 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
         </div>
       )}
 
-      {!mountsLoading && externalMounts.length === 0 && (
+      {!mountsLoading && allMounts.length === 0 && (
         <div style={{ padding: '4px 8px' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No mounts</span>
-          {onAddSource && (
-            <button
-              onClick={onAddSource}
-              style={{
-                display: 'block',
-                marginTop: 4,
-                padding: '4px 8px',
-                background: 'transparent',
-                border: '1px dashed var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-                color: 'var(--text-dim)',
-                fontSize: '0.6875rem',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              + Add storage source
-            </button>
-          )}
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No storage yet</span>
+          <button
+            onClick={() => setLocalSourceOpen(true)}
+            style={{
+              display: 'block',
+              marginTop: 4,
+              padding: '4px 8px',
+              background: 'transparent',
+              border: '1px dashed var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              color: 'var(--text-dim)',
+              fontSize: '0.6875rem',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            + Add a folder
+          </button>
         </div>
       )}
 
-      {externalMounts.map(mount => (
+      {allMounts.map(mount => (
         <MountTreeItem
           key={mount.id}
           mount={mount}
