@@ -62,7 +62,12 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     Icon: FolderOpen,
     color: 'var(--mod-drive)',
     label: 'Archivo',
-    route: (id) => `/drive?id=${encodeURIComponent(id)}`,
+    // Refs del ÍNDICE (uuid) → módulo Drive por ?id=. Refs del VFS (path, empieza
+    // por "/", de files_search/browse) → File Explorer por ?path= (es el navegador
+    // por-path; el módulo Drive es por-id).
+    route: (id) => id.startsWith('/')
+      ? `/explorer?path=${encodeURIComponent(id)}`
+      : `/drive?id=${encodeURIComponent(id)}`,
   },
   // Proyectos e inventario: las páginas aún no leen `?id=` (aterrizan en el
   // módulo); se usa la convención igualmente para que lo adopten sin tocar esto.

@@ -11,6 +11,7 @@
  */
 
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { Cloud, HardDrive } from 'lucide-react';
 import { useFiles } from '@/hooks/use-files';
 import { useVirtualSource, parseVirtualPath } from './use-virtual-source';
@@ -75,6 +76,18 @@ export function useFileExplorer() {
     () => (localStorage.getItem('fexp-view') as 'grid' | 'list') || 'list',
   );
   const [search, setSearch] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link from a chat file chip (VFS path, e.g. files_search result): open the
+  // item's containing folder. Paths arrive full (/user/files/...) → prefix with /vfs.
+  useEffect(() => {
+    const p = searchParams.get('path');
+    if (!p) return;
+    const full = p.startsWith('/vfs') ? p : '/vfs' + (p.startsWith('/') ? p : '/' + p);
+    const parent = full.slice(0, full.lastIndexOf('/')) || '/vfs/user/files';
+    setCurrentPath(parent);
+    setSearchParams({}, { replace: true });
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Detect path type
   const isVfs = isVfsPath(currentPath);
