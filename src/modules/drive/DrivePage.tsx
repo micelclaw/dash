@@ -10,359 +10,107 @@
  * https://micelclaw.com
  */
 
-import { useState, useRef, useCallback } from 'react';
-import { FolderInput, Download, Trash2 } from 'lucide-react';
-import { DropZone } from '@/components/shared/DropZone';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { RenameDialog } from '@/components/shared/RenameDialog';
-import { FolderPicker } from '@/components/shared/FolderPicker';
-import { ShareModal } from '@/components/shared/ShareModal';
-import { useNotificationStore } from '@/stores/notification.store';
-import { useIsMobile } from '@/hooks/use-media-query';
-import { downloadFile, downloadBatch } from '@/lib/file-download';
-import { useDrive } from './hooks/use-drive';
-import { DriveToolbar } from './DriveToolbar';
-import { DriveGrid } from './DriveGrid';
-import { DriveList } from './DriveList';
-import { DrivePreview } from './DrivePreview';
-import type { FileRecord } from '@/types/files';
+import { useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
+import {
+  HardDrive, Clock, Star, Users, Trash2, Copy, MonitorSmartphone,
+} from 'lucide-react';
+import { Tabs } from '@/components/shared/Tabs';
+import { useDriveStore, isDriveTab, type DriveTab } from '@/stores/drive.store';
+import { QuotaChip } from './components/QuotaChip';
+import { MyDriveView } from './views/MyDriveView';
+import { RecentView } from './views/RecentView';
+import { StarredView } from './views/StarredView';
+import { SharedView } from './views/SharedView';
+import { TrashView } from './views/TrashView';
+import { DuplicatesView } from './views/DuplicatesView';
+import { DevicesView } from './views/DevicesView';
 
+/**
+ * Drive module shell (D3) — tab row (My Drive / Recent / Starred / Shared /
+ * Trash / Duplicates / Devices) + quota chip, with the active view below.
+ *
+ * Tab state lives in `useDriveStore` (persisted); `?tab=` in the URL wins on
+ * mount and stays in sync afterwards. Legacy deep-links `?id=` / `?path=`
+ * (entity chips, search) keep working: they force the My Drive tab, which
+ * consumes them.
+ */
 export function Component() {
-  const isMobile = useIsMobile();
-  const addNotification = useNotificationStore(s => s.addNotification);
-  const {
-    currentPath, navigateTo,
-    files, loading, error,
-    selectedFile, handleItemClick,
-    setSelectedFile,
-    view, changeView,
-    search, setSearch,
-    uploadFile, createFolder,
-    renameFile, moveFile, deleteFile,
-    handleItemDoubleClick,
-    selectedIds, toggleSelection, toggleAll, clearSelection,
-    batchDelete, batchMove,
-  } = useDrive();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = useDriveStore(s => s.activeTab);
+  const setActiveTab = useDriveStore(s => s.setActiveTab);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Modal states
-  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
-  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-  const [folderPickerTargetIds, setFolderPickerTargetIds] = useState<Set<string>>(new Set());
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
-
-  const handleUploadClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList) return;
-    for (let i = 0; i < fileList.length; i++) {
-      const f = fileList[i];
-      if (f) uploadFile(f);
+  // URL → store. Runs on mount AND on later param changes (e.g. a view
+  // navigating to /drive?tab=my-drive&id=…).
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (isDriveTab(tabParam)) {
+      if (tabParam !== activeTab) setActiveTab(tabParam);
+      return;
     }
-    e.target.value = '';
-  }, [uploadFile]);
-
-  const handleBatchDownload = useCallback(() => {
-    const selected = files.filter(f => selectedIds.has(f.id));
-    if (selected.length === 0) return;
-    if (selected.length === 1) {
-      const f = selected[0]!;
-      void downloadFile(f.id, f.is_directory ? `${f.filename}.zip` : f.filename);
-    } else {
-      void downloadBatch([...selectedIds]);
+    // Legacy deep-links without ?tab= open My Drive (which consumes id/path).
+    if ((searchParams.has('id') || searchParams.has('path')) && activeTab !== 'my-drive') {
+      setActiveTab('my-drive');
     }
-  }, [files, selectedIds]);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFilesDropped = useCallback((droppedFiles: File[]) => {
-    for (const f of droppedFiles) {
-      uploadFile(f);
-    }
-  }, [uploadFile]);
+  const handleTabChange = (id: string) => {
+    setActiveTab(id as DriveTab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', id);
+      return next;
+    }, { replace: true });
+  };
 
-  const handleNewFolder = useCallback(() => {
-    setNewFolderOpen(true);
-  }, []);
-
-  const handleRename = useCallback((id: string) => {
-    const file = files.find(f => f.id === id);
-    if (file) setRenameTarget(file);
-  }, [files]);
-
-  // Single file move — opens FolderPicker
-  const handleMove = useCallback((id: string) => {
-    setFolderPickerTargetIds(new Set([id]));
-    setFolderPickerOpen(true);
-  }, []);
-
-  // Batch move — opens FolderPicker for all selected
-  const handleBatchMove = useCallback(() => {
-    setFolderPickerTargetIds(new Set(selectedIds));
-    setFolderPickerOpen(true);
-  }, [selectedIds]);
-
-  // FolderPicker confirmed
-  const handleFolderPickerSelect = useCallback(async (destPath: string) => {
-    setFolderPickerOpen(false);
-    if (folderPickerTargetIds.size === 1) {
-      const id = [...folderPickerTargetIds][0]!;
-      await moveFile(id, destPath);
-      addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
-    } else {
-      await batchMove(folderPickerTargetIds, destPath);
-      addNotification({ type: 'system', title: 'Moved', body: `${folderPickerTargetIds.size} items moved` });
-    }
-  }, [folderPickerTargetIds, moveFile, batchMove, addNotification]);
-
-  // Batch delete — opens confirm dialog
-  const handleBatchDeleteClick = useCallback(() => {
-    setConfirmDeleteOpen(true);
-  }, []);
-
-  const handleBatchDeleteConfirm = useCallback(async () => {
-    const count = selectedIds.size;
-    await batchDelete(selectedIds);
-    addNotification({ type: 'system', title: 'Deleted', body: `${count} items deleted` });
-  }, [selectedIds, batchDelete, addNotification]);
-
-  // Share — opens ShareModal
-  const handleShare = useCallback((file: FileRecord) => {
-    setShareFile(file);
-  }, []);
-
-  // Drag-and-drop to folder
-  const handleDragToFolder = useCallback(async (fileIds: string[], destPath: string) => {
-    if (fileIds.length === 1) {
-      await moveFile(fileIds[0]!, destPath);
-      addNotification({ type: 'system', title: 'Moved', body: 'File moved successfully' });
-    } else {
-      await batchMove(new Set(fileIds), destPath);
-      addNotification({ type: 'system', title: 'Moved', body: `${fileIds.length} items moved` });
-    }
-  }, [moveFile, batchMove, addNotification]);
-
-  const hasSelection = selectedIds.size > 0;
+  const tabs = useMemo(() => [
+    { id: 'my-drive', label: 'My Drive', icon: HardDrive },
+    { id: 'recent', label: 'Recent', icon: Clock },
+    { id: 'starred', label: 'Starred', icon: Star },
+    { id: 'shared', label: 'Shared', icon: Users },
+    { id: 'trash', label: 'Trash', icon: Trash2 },
+    { id: 'duplicates', label: 'Duplicates', icon: Copy },
+    { id: 'devices', label: 'Devices', icon: MonitorSmartphone },
+  ], []);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-        minHeight: 0,
-        overflow: 'hidden',
-        fontFamily: 'var(--font-sans)',
-      }}
-    >
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        onChange={handleFileInputChange}
-        style={{ display: 'none' }}
-      />
-
-      {/* Toolbar */}
-      <DriveToolbar
-        currentPath={currentPath}
-        onNavigate={navigateTo}
-        search={search}
-        onSearchChange={setSearch}
-        view={view}
-        onViewChange={changeView}
-        onNewFolder={handleNewFolder}
-        onUpload={handleUploadClick}
-        isMobile={isMobile}
-      />
-
-      {/* Batch action bar */}
-      {hasSelection && (
-        <div style={{
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* Tab row + quota chip */}
+      <div
+        style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: isMobile ? 6 : 12,
-          padding: isMobile ? '6px 10px' : '8px 16px',
-          background: 'var(--amber-dim)',
+          alignItems: 'flex-end',
+          gap: 12,
+          padding: '8px 16px 0',
           borderBottom: '1px solid var(--border)',
-          fontSize: '0.8125rem',
-          fontFamily: 'var(--font-sans)',
-        }}>
-          <span style={{ color: 'var(--text)', fontWeight: 500 }}>
-            {selectedIds.size} selected
-          </span>
-
-          <div style={{ flex: 1 }} />
-
-          <BatchButton icon={FolderInput} label={isMobile ? '' : 'Move'} onClick={handleBatchMove} />
-          <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={handleBatchDownload} />
-          <BatchButton icon={Trash2} label={isMobile ? '' : 'Delete'} onClick={handleBatchDeleteClick} variant="danger" />
-
-          <button
-            onClick={clearSelection}
-            style={{
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              fontSize: '0.75rem', color: 'var(--text-dim)',
-              fontFamily: 'var(--font-sans)',
-              padding: '4px 8px',
-            }}
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {/* Content area */}
-      <DropZone onFilesDropped={handleFilesDropped}>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-          {error && (
-            <div style={{
-              padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,
-              color: 'var(--error)', background: 'rgba(239,68,68,0.1)',
-              borderRadius: 'var(--radius-sm)', border: '1px solid rgba(239,68,68,0.2)',
-            }}>
-              {error}
-            </div>
-          )}
-          {view === 'grid' ? (
-            <DriveGrid
-              files={files}
-              loading={loading}
-              selectedFileId={selectedFile?.id ?? null}
-              selectedIds={selectedIds}
-              hasSelection={hasSelection}
-              onItemClick={handleItemClick}
-              onItemDoubleClick={handleItemDoubleClick}
-              onToggleSelect={toggleSelection}
-              onRename={handleRename}
-              onMove={handleMove}
-              onShare={handleShare}
-              onDelete={deleteFile}
-              onDragToFolder={handleDragToFolder}
-              isMobile={isMobile}
-            />
-          ) : (
-            <DriveList
-              files={files}
-              loading={loading}
-              selectedFileId={selectedFile?.id ?? null}
-              selectedIds={selectedIds}
-              onItemClick={handleItemClick}
-              onItemDoubleClick={handleItemDoubleClick}
-              onToggleSelect={toggleSelection}
-              onToggleAll={toggleAll}
-              onRename={handleRename}
-              onMove={handleMove}
-              onShare={handleShare}
-              onDelete={deleteFile}
-              onDragToFolder={handleDragToFolder}
-            />
-          )}
-        </div>
-      </DropZone>
-
-      {/* Preview panel — fullscreen overlay on mobile, bottom panel on desktop */}
-      {selectedFile && (
-        <DrivePreview
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          onDelete={deleteFile}
-          isMobile={isMobile}
-        />
-      )}
-
-      {/* Share modal */}
-      {shareFile && (
-        <ShareModal
-          open={!!shareFile}
-          file={shareFile}
-          onClose={() => setShareFile(null)}
-        />
-      )}
-
-      {/* Folder picker for Move */}
-      <FolderPicker
-        open={folderPickerOpen}
-        currentPath={currentPath}
-        onSelect={handleFolderPickerSelect}
-        onCancel={() => setFolderPickerOpen(false)}
-      />
-
-      {/* Confirm delete dialog */}
-      <ConfirmDialog
-        open={confirmDeleteOpen}
-        onClose={() => setConfirmDeleteOpen(false)}
-        onConfirm={handleBatchDeleteConfirm}
-        title={`Delete ${selectedIds.size} items?`}
-        description="This action cannot be undone."
-        confirmLabel="Delete"
-        variant="danger"
-      />
-
-      {/* Rename dialog */}
-      <RenameDialog
-        open={!!renameTarget}
-        currentName={renameTarget?.filename ?? ''}
-        title="New name:"
-        onConfirm={(name) => {
-          if (renameTarget) renameFile(renameTarget.id, name);
+          flexShrink: 0,
         }}
-        onClose={() => setRenameTarget(null)}
-      />
+      >
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            overflowX: 'auto',
+            // Scoped override: the shared Tabs underline picks up the Drive
+            // module identity color without forking the component.
+            ['--amber' as string]: 'var(--mod-drive)',
+          } as React.CSSProperties}
+        >
+          <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} variant="underline" />
+        </div>
+        <QuotaChip />
+      </div>
 
-      {/* New folder dialog */}
-      <RenameDialog
-        open={newFolderOpen}
-        currentName=""
-        title="Folder name:"
-        confirmLabel="Create"
-        onConfirm={(name) => createFolder(name)}
-        onClose={() => setNewFolderOpen(false)}
-      />
+      {/* Active view */}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        {activeTab === 'my-drive' && <MyDriveView />}
+        {activeTab === 'recent' && <RecentView />}
+        {activeTab === 'starred' && <StarredView />}
+        {activeTab === 'shared' && <SharedView />}
+        {activeTab === 'trash' && <TrashView />}
+        {activeTab === 'duplicates' && <DuplicatesView />}
+        {activeTab === 'devices' && <DevicesView />}
+      </div>
     </div>
-  );
-}
-
-function BatchButton({ icon: Icon, label, onClick, disabled, variant }: {
-  icon: React.ComponentType<{ size?: number }>;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  variant?: 'danger';
-}) {
-  const [hovered, setHovered] = useState(false);
-  const color = variant === 'danger'
-    ? 'var(--error)'
-    : 'var(--text)';
-
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 10px',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        background: hovered && !disabled ? 'var(--surface-hover)' : 'var(--surface)',
-        color: disabled ? 'var(--text-muted)' : color,
-        fontSize: '0.75rem',
-        fontFamily: 'var(--font-sans)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <Icon size={13} />
-      {label}
-    </button>
   );
 }

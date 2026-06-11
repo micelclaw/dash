@@ -28,7 +28,10 @@ export interface FileRecord {
   updated_at: string;
   synced_at: string | null;
   deleted_at: string | null;
+  starred?: boolean;
   heat_score?: number;
+  last_accessed_at?: string | null;
+  access_count?: number;
 }
 
 export interface Photo extends FileRecord {

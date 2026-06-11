@@ -13,7 +13,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  ChevronUp, ChevronDown, Folder,
+  ChevronUp, ChevronDown, Folder, Star,
   Pencil, FolderInput, Download, Share2, Link2, Trash2, Info, FileText, Play, ListPlus,
 } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -42,6 +42,7 @@ interface DriveListProps {
   onMove: (id: string) => void;
   onShare: (file: FileRecord) => void;
   onDelete: (id: string) => void;
+  onToggleStar?: (file: FileRecord) => void;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }
 
@@ -57,7 +58,7 @@ const GRID_COLS = '32px 1fr 90px 120px 100px';
 export function DriveList({
   files, loading, selectedFileId, selectedIds,
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll,
-  onRename, onMove, onShare, onDelete, onDragToFolder,
+  onRename, onMove, onShare, onDelete, onToggleStar, onDragToFolder,
 }: DriveListProps) {
   const [sortField, setSortField] = useState<SortField>('filename');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
@@ -157,6 +158,8 @@ export function DriveList({
           onMove={() => onMove(file.id)}
           onShare={() => onShare(file)}
           onDelete={() => onDelete(file.id)}
+          onToggleStar={onToggleStar ? () => onToggleStar(file) : undefined}
+          starred={!!file.starred}
           onDragToFolder={onDragToFolder}
         />
       ))}
@@ -219,7 +222,7 @@ function ColumnHeader({
 
 function ListRow({
   file, selected, checked, selectedIds, onClick, onDoubleClick, onToggleSelect,
-  onRename, onMove, onShare, onDelete, onDragToFolder,
+  onRename, onMove, onShare, onDelete, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
   selected: boolean;
@@ -232,6 +235,8 @@ function ListRow({
   onMove: () => void;
   onShare: () => void;
   onDelete: () => void;
+  onToggleStar?: () => void;
+  starred?: boolean;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
   const navigate = useNavigate();
@@ -277,6 +282,9 @@ function ListRow({
     ] : []),
     ...(isPdf ? [
       { label: 'Open in PDF Viewer', icon: FileText, onClick: () => navigate(`/office/pdf/${file.id}`) },
+    ] : []),
+    ...(onToggleStar ? [
+      { label: starred ? 'Unstar' : 'Star', icon: Star, onClick: onToggleStar },
     ] : []),
     { label: 'Rename', icon: Pencil, onClick: onRename },
     { label: 'Move to...', icon: FolderInput, onClick: onMove },
@@ -389,6 +397,25 @@ function ListRow({
             >
               {file.filename}
             </span>
+            {/* Star toggle (D3) — visible when starred or row hovered */}
+            {onToggleStar && (starred || hovered) && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
+                title={starred ? 'Unstar' : 'Star'}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: 2,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  color: starred ? 'var(--amber)' : 'var(--text-muted)',
+                }}
+              >
+                <Star size={13} fill={starred ? 'currentColor' : 'none'} />
+              </button>
+            )}
             <HeatBadge score={file.heat_score ?? 0} />
           </div>
 

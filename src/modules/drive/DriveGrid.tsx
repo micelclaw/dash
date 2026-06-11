@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Image, Folder } from 'lucide-react';
+import { Image, Folder, Star } from 'lucide-react';
 import {
   Pencil, FolderInput, Download, Share2, Link2, Trash2, Info, FileText, Play, ListPlus,
 } from 'lucide-react';
@@ -39,6 +39,7 @@ interface DriveGridProps {
   onMove: (id: string) => void;
   onShare: (file: FileRecord) => void;
   onDelete: (id: string) => void;
+  onToggleStar?: (file: FileRecord) => void;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
   isMobile?: boolean;
 }
@@ -46,7 +47,7 @@ interface DriveGridProps {
 export function DriveGrid({
   files, loading, selectedFileId, selectedIds, hasSelection,
   onItemClick, onItemDoubleClick, onToggleSelect,
-  onRename, onMove, onShare, onDelete, onDragToFolder,
+  onRename, onMove, onShare, onDelete, onToggleStar, onDragToFolder,
   isMobile,
 }: DriveGridProps) {
   if (!loading && files.length === 0) {
@@ -85,6 +86,8 @@ export function DriveGrid({
           onMove={() => onMove(file.id)}
           onShare={() => onShare(file)}
           onDelete={() => onDelete(file.id)}
+          onToggleStar={onToggleStar ? () => onToggleStar(file) : undefined}
+          starred={!!file.starred}
           onDragToFolder={onDragToFolder}
         />
       ))}
@@ -105,7 +108,7 @@ export function DriveGrid({
 
 function GridItem({
   file, selected, checked, showCheckbox, selectedIds, onClick, onDoubleClick,
-  onToggleSelect, onRename, onMove, onShare, onDelete, onDragToFolder,
+  onToggleSelect, onRename, onMove, onShare, onDelete, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
   selected: boolean;
@@ -119,6 +122,8 @@ function GridItem({
   onMove: () => void;
   onShare: () => void;
   onDelete: () => void;
+  onToggleStar?: () => void;
+  starred?: boolean;
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
 }) {
   const navigate = useNavigate();
@@ -165,6 +170,9 @@ function GridItem({
     ] : []),
     ...(isPdf ? [
       { label: 'Open in PDF Viewer', icon: FileText, onClick: () => navigate(`/office/pdf/${file.id}`) },
+    ] : []),
+    ...(onToggleStar ? [
+      { label: starred ? 'Unstar' : 'Star', icon: Star, onClick: onToggleStar },
     ] : []),
     { label: 'Rename', icon: Pencil, onClick: onRename },
     { label: 'Move to...', icon: FolderInput, onClick: onMove },
@@ -281,6 +289,30 @@ function GridItem({
               zIndex: 2,
             }}
           />
+        )}
+
+        {/* Star toggle (D3) — visible when starred or hovered */}
+        {onToggleStar && (starred || hovered) && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleStar(); }}
+            title={starred ? 'Unstar' : 'Star'}
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 4,
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: starred ? 'var(--amber)' : 'var(--text-muted)',
+            }}
+          >
+            <Star size={14} fill={starred ? 'currentColor' : 'none'} />
+          </button>
         )}
 
         {/* Thumbnail area — 80px */}

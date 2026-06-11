@@ -46,12 +46,17 @@ export function useDrive() {
     sessionStorage.setItem(SESSION_KEY, currentPath);
   }, [currentPath]);
 
-  // Handle ?path= param changes (e.g. from search deep-links)
+  // Handle ?path= param changes (e.g. from search deep-links).
+  // Only the consumed param is removed — others (notably ?tab=) survive.
   useEffect(() => {
     const p = searchParams.get('path');
     if (p && p !== currentPath) {
       setCurrentPath(normalizeDrivePath(p));
-      setSearchParams({}, { replace: true });
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('path');
+        return next;
+      }, { replace: true });
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
@@ -82,7 +87,13 @@ export function useDrive() {
       } catch {
         /* stale/invalid id — ignore */
       } finally {
-        if (!cancelled) setSearchParams({}, { replace: true });
+        if (!cancelled) {
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.delete('id');
+            return next;
+          }, { replace: true });
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -232,6 +243,13 @@ export function useDrive() {
     setSelectedIds(new Set());
   }, [moveFile]);
 
+  // Star / unstar a file (D3) — PATCH {starred} then refetch the folder
+  // (any write invalidates the backend semantic cache, so the refetch is fresh).
+  const toggleStar = useCallback(async (file: FileRecord) => {
+    await api.patch<ApiResponse<FileRecord>>(`/files/${file.id}`, { starred: !file.starred });
+    await fetchFiles();
+  }, [fetchFiles]);
+
   return {
     currentPath,
     navigateTo,
@@ -260,5 +278,6 @@ export function useDrive() {
     clearSelection,
     batchDelete,
     batchMove,
+    toggleStar,
   };
 }
