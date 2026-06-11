@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -57,6 +57,12 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-diary)',
     label: 'Diario',
     route: (id) => `/diary?id=${encodeURIComponent(id)}`,
+  },
+  file: {
+    Icon: FolderOpen,
+    color: 'var(--mod-drive)',
+    label: 'Archivo',
+    route: (id) => `/drive?id=${encodeURIComponent(id)}`,
   },
   // Proyectos e inventario: las páginas aún no leen `?id=` (aterrizan en el
   // módulo); se usa la convención igualmente para que lo adopten sin tocar esto.

@@ -12,8 +12,10 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { api } from '@/services/api';
 import { useFiles } from '@/hooks/use-files';
 import type { FileRecord } from '@/types/files';
+import type { ApiResponse } from '@/types/api';
 import type { DriveView } from '../types';
 
 /** MIME types that can be opened in specialized editors */
@@ -59,6 +61,32 @@ export function useDrive() {
   );
   const [search, setSearch] = useState('');
   const lastToggleRef = useRef<string | null>(null);
+
+  // Handle ?id= deep-link (e.g. a chat entity chip): fetch the file, open its
+  // containing folder and select it — even if it's not in the current view.
+  useEffect(() => {
+    const fileId = searchParams.get('id');
+    if (!fileId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await api.get<ApiResponse<FileRecord>>(`/files/${fileId}`);
+        if (cancelled) return;
+        const rec = res.data;
+        const fp = rec.filepath || '/drive/';
+        const folder = rec.is_directory
+          ? (fp.endsWith('/') ? fp : fp + '/')
+          : fp.slice(0, fp.lastIndexOf('/') + 1);
+        setCurrentPath(normalizeDrivePath(folder));
+        setSelectedFile(rec);
+      } catch {
+        /* stale/invalid id — ignore */
+      } finally {
+        if (!cancelled) setSearchParams({}, { replace: true });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     files, loading, error, fetchFiles,
