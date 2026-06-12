@@ -16,6 +16,7 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { isImageMime, simpleHash } from '@/lib/file-utils';
+import { useDriveStore } from '@/stores/drive.store';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 
@@ -35,35 +36,51 @@ interface DriveGridProps {
   /** Ids sitting in the clipboard as a pending CUT — rendered dimmed. */
   cutIds?: Set<string>;
   isMobile?: boolean;
+  /** Empty-state CTAs (D6). */
+  onEmptyUpload?: () => void;
+  onEmptyNewFolder?: () => void;
 }
 
 export function DriveGrid({
   files, loading, selectedFileId, selectedIds, hasSelection,
   onItemClick, onItemDoubleClick, onToggleSelect,
   getContextMenuItems, onToggleStar, onDragToFolder, cutIds,
-  isMobile,
+  isMobile, onEmptyUpload, onEmptyNewFolder,
 }: DriveGridProps) {
+  // D6 — density toggle (persisted in drive.store): compact tightens cells.
+  const density = useDriveStore(s => s.density);
+  const compact = density === 'compact';
+  const itemHeight = compact ? 92 : 120;
+
   if (!loading && files.length === 0) {
     return (
       <EmptyState
         icon={Folder}
         title="This folder is empty"
         description="Drop files here or use the upload button"
+        actions={[
+          ...(onEmptyUpload ? [{ label: 'Upload files', onClick: onEmptyUpload, variant: 'primary' as const }] : []),
+          ...(onEmptyNewFolder ? [{ label: 'New folder', onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
+        ]}
       />
     );
   }
 
   return (
     <div
+      role="listbox"
+      aria-multiselectable="true"
+      aria-label="Files"
       style={{
         display: 'grid',
         gridTemplateColumns: isMobile
           ? 'repeat(2, 1fr)'
-          : 'repeat(auto-fill, minmax(140px, 1fr))',
-        gap: isMobile ? 8 : 12,
-        padding: isMobile ? 10 : 16,
+          : `repeat(auto-fill, minmax(${compact ? 116 : 140}px, 1fr))`,
+        gap: isMobile ? 8 : compact ? 8 : 12,
+        padding: isMobile ? 10 : compact ? 12 : 16,
       }}
     >
+      <style>{'@keyframes drive-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }'}</style>
       {files.map(file => (
         <GridItem
           key={file.id}
@@ -73,6 +90,7 @@ export function DriveGrid({
           showCheckbox={hasSelection}
           selectedIds={selectedIds}
           isCut={!!cutIds?.has(file.id)}
+          compact={compact}
           onClick={() => onItemClick(file)}
           onDoubleClick={() => onItemDoubleClick(file)}
           onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
@@ -86,10 +104,10 @@ export function DriveGrid({
         <div
           key={`skeleton-${i}`}
           style={{
-            height: 120,
+            height: itemHeight,
             borderRadius: 'var(--radius-md)',
             background: 'var(--surface)',
-            animation: 'pulse 1.5s ease-in-out infinite',
+            animation: 'drive-pulse 1.2s ease-in-out infinite',
           }}
         />
       ))}
@@ -98,7 +116,7 @@ export function DriveGrid({
 }
 
 function GridItem({
-  file, selected, checked, showCheckbox, selectedIds, isCut, onClick, onDoubleClick,
+  file, selected, checked, showCheckbox, selectedIds, isCut, compact, onClick, onDoubleClick,
   onToggleSelect, contextItems, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
@@ -107,6 +125,7 @@ function GridItem({
   showCheckbox: boolean;
   selectedIds: Set<string>;
   isCut: boolean;
+  compact: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
   onToggleSelect: (shiftKey: boolean) => void;
@@ -171,6 +190,8 @@ function GridItem({
   return (
     <ContextMenu trigger={
       <div
+        role="option"
+        aria-selected={selected || checked}
         draggable
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
@@ -184,7 +205,7 @@ function GridItem({
         style={{
           position: 'relative',
           width: '100%',
-          height: 120,
+          height: compact ? 92 : 120,
           borderRadius: 'var(--radius-md)',
           background: checked
             ? 'var(--amber-dim)'
@@ -250,10 +271,10 @@ function GridItem({
           </button>
         )}
 
-        {/* Thumbnail area — 80px */}
+        {/* Thumbnail area */}
         <div
           style={{
-            height: 80,
+            height: compact ? 56 : 80,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -263,11 +284,11 @@ function GridItem({
           }}
         >
           {isImage ? (
-            <Image size={28} style={{ color: 'var(--text-dim)', opacity: 0.7 }} />
+            <Image size={compact ? 22 : 28} style={{ color: 'var(--text-dim)', opacity: 0.7 }} />
           ) : isDir ? (
-            <Folder size={28} style={{ color: isDragOver ? 'var(--amber)' : 'var(--amber)' }} />
+            <Folder size={compact ? 22 : 28} style={{ color: isDragOver ? 'var(--amber)' : 'var(--amber)' }} />
           ) : (
-            <FileIcon mime={file.mime_type} isDirectory={false} size="lg" />
+            <FileIcon mime={file.mime_type} isDirectory={false} size={compact ? 'md' : 'lg'} />
           )}
         </div>
 

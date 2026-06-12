@@ -73,6 +73,7 @@ export function RecentView() {
         icon={Clock}
         title="No recent activity"
         description="Files you open, edit or download will show up here, ranked by how hot they are."
+        actions={[{ label: 'Browse My Drive', onClick: () => navigate('/drive?tab=my-drive'), variant: 'primary' }]}
       />
     );
   }

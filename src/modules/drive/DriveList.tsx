@@ -18,6 +18,7 @@ import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
+import { useDriveStore } from '@/stores/drive.store';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import type { SortField, SortDirection } from './types';
@@ -37,6 +38,9 @@ interface DriveListProps {
   onDragToFolder?: (fileIds: string[], destPath: string) => void;
   /** Ids sitting in the clipboard as a pending CUT — rendered dimmed. */
   cutIds?: Set<string>;
+  /** Empty-state CTAs (D6). */
+  onEmptyUpload?: () => void;
+  onEmptyNewFolder?: () => void;
 }
 
 const COLUMNS: { key: SortField; label: string; width?: string }[] = [
@@ -52,9 +56,13 @@ export function DriveList({
   files, loading, selectedFileId, selectedIds,
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll,
   getContextMenuItems, onToggleStar, onDragToFolder, cutIds,
+  onEmptyUpload, onEmptyNewFolder,
 }: DriveListProps) {
   const [sortField, setSortField] = useState<SortField>('filename');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
+  // D6 — density toggle (persisted in drive.store): compact tightens rows.
+  const density = useDriveStore(s => s.density);
+  const compact = density === 'compact';
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -98,12 +106,17 @@ export function DriveList({
         icon={Folder}
         title="This folder is empty"
         description="Drop files here or use the upload button"
+        actions={[
+          ...(onEmptyUpload ? [{ label: 'Upload files', onClick: onEmptyUpload, variant: 'primary' as const }] : []),
+          ...(onEmptyNewFolder ? [{ label: 'New folder', onClick: onEmptyNewFolder, variant: 'secondary' as const }] : []),
+        ]}
       />
     );
   }
 
   return (
     <div style={{ fontFamily: 'var(--font-sans)' }}>
+      <style>{'@keyframes drive-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }'}</style>
       {/* Header */}
       <div
         style={{
@@ -137,33 +150,36 @@ export function DriveList({
       </div>
 
       {/* Rows */}
-      {sortedFiles.map(file => (
-        <ListRow
-          key={file.id}
-          file={file}
-          selected={file.id === selectedFileId}
-          checked={selectedIds.has(file.id)}
-          selectedIds={selectedIds}
-          isCut={!!cutIds?.has(file.id)}
-          onClick={() => onItemClick(file)}
-          onDoubleClick={() => onItemDoubleClick(file)}
-          onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
-          contextItems={getContextMenuItems(file)}
-          onToggleStar={onToggleStar ? () => onToggleStar(file) : undefined}
-          starred={!!file.starred}
-          onDragToFolder={onDragToFolder}
-        />
-      ))}
+      <div role="listbox" aria-multiselectable="true" aria-label="Files">
+        {sortedFiles.map(file => (
+          <ListRow
+            key={file.id}
+            file={file}
+            selected={file.id === selectedFileId}
+            checked={selectedIds.has(file.id)}
+            selectedIds={selectedIds}
+            isCut={!!cutIds?.has(file.id)}
+            compact={compact}
+            onClick={() => onItemClick(file)}
+            onDoubleClick={() => onItemDoubleClick(file)}
+            onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
+            contextItems={getContextMenuItems(file)}
+            onToggleStar={onToggleStar ? () => onToggleStar(file) : undefined}
+            starred={!!file.starred}
+            onDragToFolder={onDragToFolder}
+          />
+        ))}
+      </div>
 
       {loading && Array.from({ length: 3 }).map((_, i) => (
         <div
           key={`skeleton-${i}`}
           style={{
-            height: 36,
+            height: compact ? 26 : 36,
             margin: '0 16px',
             borderRadius: 'var(--radius-sm)',
             background: 'var(--surface)',
-            animation: 'pulse 1.5s ease-in-out infinite',
+            animation: 'drive-pulse 1.2s ease-in-out infinite',
             marginBottom: 4,
           }}
         />
@@ -212,7 +228,7 @@ function ColumnHeader({
 }
 
 function ListRow({
-  file, selected, checked, selectedIds, isCut, onClick, onDoubleClick, onToggleSelect,
+  file, selected, checked, selectedIds, isCut, compact, onClick, onDoubleClick, onToggleSelect,
   contextItems, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
@@ -220,6 +236,7 @@ function ListRow({
   checked: boolean;
   selectedIds: Set<string>;
   isCut: boolean;
+  compact: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
   onToggleSelect: (shiftKey: boolean) => void;
@@ -275,6 +292,8 @@ function ListRow({
     <ContextMenu
       trigger={
         <div
+          role="option"
+          aria-selected={selected || checked}
           draggable
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
@@ -289,7 +308,7 @@ function ListRow({
             display: 'grid',
             gridTemplateColumns: GRID_COLS,
             gap: 8,
-            padding: '6px 16px',
+            padding: compact ? '2px 16px' : '6px 16px',
             cursor: 'pointer',
             background: isDragOver
               ? 'var(--amber-dim)'
@@ -303,7 +322,7 @@ function ListRow({
             borderBottom: '1px solid var(--border)',
             border: isDragOver ? '1px dashed var(--amber)' : undefined,
             transition: 'background var(--transition-fast)',
-            fontSize: '0.8125rem',
+            fontSize: compact ? '0.75rem' : '0.8125rem',
             color: 'var(--text)',
             alignItems: 'center',
             // Pending cut → dimmed until pasted (D4)

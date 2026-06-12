@@ -38,8 +38,14 @@ export const isAudioFile = (f: FileRecord) => !!f.mime_type?.startsWith('audio/'
 export const isVideoFile = (f: FileRecord) => !!f.mime_type?.startsWith('video/');
 export const isDiagramFile = (f: FileRecord) => f.mime_type === 'application/vnd.claw.diagram+json';
 
+/** Mimes the inline text viewer (D6) can show via GET /files/:id/content. */
+export const isTextPreviewable = (f: FileRecord) =>
+  !!f.mime_type?.startsWith('text/')
+  || f.mime_type === 'application/json'
+  || f.mime_type === 'application/xml';
+
 /** Start audio/video playback in the global player (same flow the old inline menu used). */
-async function playFromDrive(file: FileRecord): Promise<void> {
+export async function playFromDrive(file: FileRecord): Promise<void> {
   const isVideo = isVideoFile(file);
   let title = file.filename;
   let artist: string | undefined;
@@ -200,13 +206,14 @@ function buildSingleMenu(file: FileRecord, ctx: DriveMenuContext): ContextMenuIt
   const hasClipboard = ctx.clipboard.operation !== null && ctx.clipboard.fileIds.length > 0;
   const items: ContextMenuItem[] = [];
 
-  // Open: folder → navigate; file → preview
+  // Open: folder → navigate; file → the view's open dispatcher (D6: lightbox /
+  // text viewer / PDF / player by mime), falling back to preview/properties.
   if (isDir && cb.onOpen) {
     items.push({ label: 'Open', icon: FolderOpen, shortcut: 'Enter', onClick: () => cb.onOpen!(file) });
-  } else if (!isDir && (cb.onPreview || cb.onOpen)) {
+  } else if (!isDir && (cb.onOpen || cb.onPreview)) {
     items.push({
       label: 'Open', icon: Eye, shortcut: 'Enter',
-      onClick: () => (cb.onPreview ?? cb.onOpen)!(file),
+      onClick: () => (cb.onOpen ?? cb.onPreview)!(file),
     });
   }
 

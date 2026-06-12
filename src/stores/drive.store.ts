@@ -37,7 +37,7 @@ export function isDriveTab(value: string | null | undefined): value is DriveTab 
   return !!value && (DRIVE_TABS as string[]).includes(value);
 }
 
-/** Row density — reserved for a future D-session (compact/comfortable list rows). */
+/** Row density (D6) — toggled from the My Drive toolbar, consumed by DriveGrid/DriveList. */
 export type DriveDensity = 'comfortable' | 'compact';
 
 /** Inner tabs of the right-hand inspector (D5). */
@@ -46,7 +46,7 @@ export type DriveInspectorTab = 'details' | 'activity' | 'versions';
 interface DriveStore {
   /** Active tab of the Drive shell. The URL ?tab= param wins on mount. */
   activeTab: DriveTab;
-  /** Row density (future use). */
+  /** Row density (D6) — compact tightens grid cells and list rows. */
   density: DriveDensity;
   /** Inspector panel open state (D5). Collapsed = false (rail shown while a selection exists). */
   inspectorOpen: boolean;

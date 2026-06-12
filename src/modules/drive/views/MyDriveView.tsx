@@ -24,15 +24,24 @@ import { useNotificationStore } from '@/stores/notification.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { downloadFile, downloadBatch } from '@/lib/file-download';
+import { isImageMime } from '@/lib/file-utils';
 import { api } from '@/services/api';
 import { useDriveStore } from '@/stores/drive.store';
 import { useDrive } from '../hooks/use-drive';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
-import { buildFileContextMenu, buildBackgroundContextMenu, type DriveMenuContext } from '../context-menu';
+import { useUploadQueue } from '../hooks/use-upload-queue';
+import {
+  buildFileContextMenu, buildBackgroundContextMenu, playFromDrive,
+  isPdfFile, isAudioFile, isVideoFile, isOfficeFile, isDiagramFile, isTextPreviewable,
+  type DriveMenuContext,
+} from '../context-menu';
 import { DriveToolbar } from '../DriveToolbar';
 import { DriveGrid } from '../DriveGrid';
 import { DriveList } from '../DriveList';
 import { DriveInspector } from '../components/inspector/DriveInspector';
+import { DriveLightbox } from '../components/DriveLightbox';
+import { TextPreviewModal } from '../components/TextPreviewModal';
+import { UploadQueuePanel } from '../components/UploadQueuePanel';
 import { ShareWithUserModal } from '../components/ShareWithUserModal';
 import { ShareEmailModal } from '../components/ShareEmailModal';
 import { TagsModal } from '../components/TagsModal';
@@ -48,6 +57,11 @@ import type { FileRecord } from '@/types/files';
  *
  * D5: the bottom DrivePreview is replaced by the right-hand DriveInspector
  * (Details | Activity | Versions, multi-select aggregate summary).
+ *
+ * D6: double-click / "Open" dispatches by mime (image → lightbox, text/md →
+ * inline viewer, pdf → /office/pdf, audio/video → global player, office →
+ * ONLYOFFICE, diagram → Sketches, else → inspector) and uploads run through
+ * the XHR queue with a visible per-file progress panel.
  */
 export function MyDriveView() {
   const navigate = useNavigate();
@@ -62,7 +76,7 @@ export function MyDriveView() {
     setSelectedFile,
     view, changeView,
     search, setSearch,
-    uploadFile, createFolder,
+    createFolder,
     renameFile, moveFile, deleteFile,
     handleItemDoubleClick,
     selectedIds, toggleSelection, toggleAll, clearSelection,
@@ -84,9 +98,23 @@ export function MyDriveView() {
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  // D6 viewers
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [textPreviewFile, setTextPreviewFile] = useState<FileRecord | null>(null);
 
   const anyModalOpen = !!shareFile || !!shareUserFiles || !!shareEmailFile || !!tagsFiles
-    || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen;
+    || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen
+    || lightboxIndex !== null || !!textPreviewFile;
+
+  // ─── Upload queue (D6) — XHR with per-file progress ─────
+
+  const {
+    items: uploadItems,
+    enqueue: enqueueUploads,
+    clearFinished: clearFinishedUploads,
+  } = useUploadQueue({
+    onAllSettled: () => { void fetchFiles(); },
+  });
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -94,13 +122,10 @@ export function MyDriveView() {
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
-    if (!fileList) return;
-    for (let i = 0; i < fileList.length; i++) {
-      const f = fileList[i];
-      if (f) uploadFile(f);
-    }
+    if (!fileList || fileList.length === 0) return;
+    enqueueUploads(Array.from(fileList), currentPath);
     e.target.value = '';
-  }, [uploadFile]);
+  }, [enqueueUploads, currentPath]);
 
   const handleBatchDownload = useCallback(() => {
     const selected = files.filter(f => selectedIds.has(f.id));
@@ -114,14 +139,65 @@ export function MyDriveView() {
   }, [files, selectedIds]);
 
   const handleFilesDropped = useCallback((droppedFiles: File[]) => {
-    for (const f of droppedFiles) {
-      uploadFile(f);
-    }
-  }, [uploadFile]);
+    enqueueUploads(droppedFiles, currentPath);
+  }, [enqueueUploads, currentPath]);
 
   const handleNewFolder = useCallback(() => {
     setNewFolderOpen(true);
   }, []);
+
+  // ─── Open dispatcher (D6) ───────────────────────────────
+
+  /** Images of the current folder in display order — the lightbox set. */
+  const imageFiles = useMemo(
+    () => files.filter(f => !f.is_directory && isImageMime(f.mime_type)),
+    [files],
+  );
+
+  /** Show the file's details in the right-hand inspector. */
+  const openInspector = useCallback((file: FileRecord, tab: 'details' | 'versions' = 'details') => {
+    setSelectedFile(file);
+    setInspectorTab(tab);
+    setInspectorOpen(true);
+  }, [setSelectedFile, setInspectorTab, setInspectorOpen]);
+
+  /**
+   * Double-click / Enter / context-menu "Open": route the file to its best
+   * viewer by mime. Folders keep navigating (via use-drive).
+   */
+  const openFile = useCallback((file: FileRecord) => {
+    if (file.is_directory) {
+      handleItemDoubleClick(file);
+      return;
+    }
+    if (isDiagramFile(file)) {
+      navigate(`/sketches/${file.id}`);
+      return;
+    }
+    if (isImageMime(file.mime_type)) {
+      const idx = imageFiles.findIndex(f => f.id === file.id);
+      setLightboxIndex(idx >= 0 ? idx : 0);
+      return;
+    }
+    if (isAudioFile(file) || isVideoFile(file)) {
+      void playFromDrive(file);
+      return;
+    }
+    if (isPdfFile(file)) {
+      navigate(`/office/pdf/${file.id}`);
+      return;
+    }
+    if (isTextPreviewable(file)) {
+      setTextPreviewFile(file);
+      return;
+    }
+    if (isOfficeFile(file)) {
+      navigate(`/office/edit/${file.id}`);
+      return;
+    }
+    // No dedicated viewer → inspector details.
+    openInspector(file);
+  }, [handleItemDoubleClick, navigate, imageFiles, openInspector]);
 
   // ─── Move / Copy-to via FolderPicker ────────────────────
 
@@ -272,13 +348,10 @@ export function MyDriveView() {
     clipboard: { operation: clipboard.operation, fileIds: clipboard.fileIds },
     navigate,
     callbacks: {
-      onOpen: (file) => handleItemDoubleClick(file),
+      // Open → mime dispatcher (D6): lightbox / text viewer / pdf / player / …
+      onOpen: openFile,
       // Details/Properties → inspector on the Details tab (D5)
-      onPreview: (file) => {
-        setSelectedFile(file);
-        setInspectorTab('details');
-        setInspectorOpen(true);
-      },
+      onPreview: (file) => openInspector(file, 'details'),
       onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
       onShare: (file) => setShareFile(file),
       onShareUser: (targets) => setShareUserFiles(targets),
@@ -292,11 +365,7 @@ export function MyDriveView() {
       onTags: (targets) => setTagsFiles(targets),
       // Version history → inspector on the Versions tab (D5). The standalone
       // VersionHistoryDialog stays for views without an inspector.
-      onVersions: (file) => {
-        setSelectedFile(file);
-        setInspectorTab('versions');
-        setInspectorOpen(true);
-      },
+      onVersions: (file) => openInspector(file, 'versions'),
       onDelete: (targets) => {
         if (targets.length === 1) void deleteFile(targets[0]!.id);
         else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
@@ -305,10 +374,9 @@ export function MyDriveView() {
       onUpload: handleUploadClick,
     },
   }), [
-    clipboard.operation, clipboard.fileIds, navigate, handleItemDoubleClick,
-    setSelectedFile, handleBulkStar, handleCut, handleCopy, handlePaste,
+    clipboard.operation, clipboard.fileIds, navigate, openFile, openInspector,
+    handleBulkStar, handleCut, handleCopy, handlePaste,
     openFolderPicker, deleteFile, handleNewFolder, handleUploadClick,
-    setInspectorOpen, setInspectorTab,
   ]);
 
   /** Right-clicking an item in the selection acts on the whole selection. */
@@ -351,7 +419,7 @@ export function MyDriveView() {
       const target = selectedIds.size === 1
         ? files.find(f => selectedIds.has(f.id))
         : selectedFile;
-      if (target) handleItemDoubleClick(target);
+      if (target) openFile(target);
     },
     onEscape: () => {
       if (selectedIds.size > 0) clearSelection();
@@ -474,13 +542,15 @@ export function MyDriveView() {
                     selectedIds={selectedIds}
                     hasSelection={hasSelection}
                     onItemClick={handleItemClick}
-                    onItemDoubleClick={handleItemDoubleClick}
+                    onItemDoubleClick={openFile}
                     onToggleSelect={toggleSelection}
                     getContextMenuItems={getContextMenuItems}
                     onToggleStar={handleToggleStar}
                     onDragToFolder={handleDragToFolder}
                     cutIds={cutIds}
                     isMobile={isMobile}
+                    onEmptyUpload={handleUploadClick}
+                    onEmptyNewFolder={handleNewFolder}
                   />
                 ) : (
                   <DriveList
@@ -489,13 +559,15 @@ export function MyDriveView() {
                     selectedFileId={selectedFile?.id ?? null}
                     selectedIds={selectedIds}
                     onItemClick={handleItemClick}
-                    onItemDoubleClick={handleItemDoubleClick}
+                    onItemDoubleClick={openFile}
                     onToggleSelect={toggleSelection}
                     onToggleAll={toggleAll}
                     getContextMenuItems={getContextMenuItems}
                     onToggleStar={handleToggleStar}
                     onDragToFolder={handleDragToFolder}
                     cutIds={cutIds}
+                    onEmptyUpload={handleUploadClick}
+                    onEmptyNewFolder={handleNewFolder}
                   />
                 )}
               </div>
@@ -594,6 +666,30 @@ export function MyDriveView() {
         onConfirm={(name) => createFolder(name)}
         onClose={() => setNewFolderOpen(false)}
       />
+
+      {/* Image lightbox (D6) — arrows navigate the folder's images */}
+      {lightboxIndex !== null && imageFiles.length > 0 && (
+        <DriveLightbox
+          images={imageFiles}
+          currentIndex={Math.min(lightboxIndex, imageFiles.length - 1)}
+          onClose={() => setLightboxIndex(null)}
+          onNavigate={setLightboxIndex}
+          onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
+          onDetails={(f) => {
+            setLightboxIndex(null);
+            openInspector(f, 'details');
+          }}
+        />
+      )}
+
+      {/* Inline text / markdown / code viewer (D6) */}
+      <TextPreviewModal
+        file={textPreviewFile}
+        onClose={() => setTextPreviewFile(null)}
+      />
+
+      {/* Upload progress queue (D6) */}
+      <UploadQueuePanel items={uploadItems} onClear={clearFinishedUploads} />
     </div>
   );
 }

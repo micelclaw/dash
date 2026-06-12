@@ -11,9 +11,10 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { FolderOpen, FolderPlus, Upload, Search, X } from 'lucide-react';
+import { FolderOpen, FolderPlus, Upload, Search, X, Rows3, Rows4 } from 'lucide-react';
 import { FileBreadcrumb } from '@/components/shared/FileBreadcrumb';
 import { ViewToggle } from '@/components/shared/ViewToggle';
+import { useDriveStore } from '@/stores/drive.store';
 import type { DriveView } from './types';
 
 interface DriveToolbarProps {
@@ -38,7 +39,14 @@ export function DriveToolbar({
   const [localSearch, setLocalSearch] = useState(search);
   const [newFolderHovered, setNewFolderHovered] = useState(false);
   const [uploadHovered, setUploadHovered] = useState(false);
+  const [densityHovered, setDensityHovered] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // D6 — density toggle (persisted in drive.store, consumed by DriveGrid/DriveList)
+  const density = useDriveStore(s => s.density);
+  const setDensity = useDriveStore(s => s.setDensity);
+  const compact = density === 'compact';
+  const DensityIcon = compact ? Rows4 : Rows3;
 
   // Sync external search changes into local state
   useEffect(() => {
@@ -145,6 +153,32 @@ export function DriveToolbar({
 
       {/* View toggle */}
       <ViewToggle view={view} onChange={onViewChange} />
+
+      {/* Density toggle (D6) */}
+      <button
+        onClick={() => setDensity(compact ? 'comfortable' : 'compact')}
+        title={compact ? 'Density: Compact — switch to Comfortable' : 'Density: Comfortable — switch to Compact'}
+        aria-label="Toggle density"
+        aria-pressed={compact}
+        onMouseEnter={() => setDensityHovered(true)}
+        onMouseLeave={() => setDensityHovered(false)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 32,
+          height: 32,
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          background: densityHovered ? 'var(--surface-hover)' : 'transparent',
+          color: compact ? 'var(--mod-drive)' : 'var(--text-dim)',
+          cursor: 'pointer',
+          flexShrink: 0,
+          transition: 'background var(--transition-fast), color var(--transition-fast)',
+        }}
+      >
+        <DensityIcon size={16} />
+      </button>
 
       {/* New Folder button */}
       <button
