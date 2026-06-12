@@ -11,12 +11,14 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Share2, Link2, Download, X, Copy as CopyIcon, KeyRound, Search } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Users, Share2, Link2, Download, X, Copy as CopyIcon, KeyRound, Search, FolderOpen, Pencil, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '@/components/shared/Tabs';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { downloadFile } from '@/lib/file-download';
@@ -25,6 +27,9 @@ import type { ApiResponse, ApiListResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
 
 type SharedSub = 'with-me' | 'by-me' | 'links';
+
+/** Separator entry for the bespoke ContextMenu rows (P2). */
+const menuSep = (): ContextMenuItem => ({ label: '', separator: true, onClick: () => {} });
 
 interface UserShare {
   id: string;
@@ -171,30 +176,51 @@ function WithMeSub() {
       {loading && <Loading />}
       {shares.map(share => {
         const file = meta[share.target_id];
+        // P2 — bespoke menu: shares received have no inspector/preview here,
+        // so Download (when possible) + Copy file ID is what the row supports.
+        const menuItems: ContextMenuItem[] = [
+          ...(file && !file.is_directory ? [{
+            label: 'Download', icon: Download,
+            onClick: () => { void downloadFile(file.id, file.filename); },
+          }] : []),
+          {
+            label: 'Copy file ID', icon: CopyIcon,
+            onClick: () => {
+              void navigator.clipboard.writeText(share.target_id);
+              toast.success('File ID copied');
+            },
+          },
+        ];
         return (
-          <ShareRow key={share.id}>
-            <FileIcon mime={file?.mime_type ?? ''} isDirectory={!!file?.is_directory} size="sm" />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{
-                fontSize: '0.8125rem', color: 'var(--text)',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
-              </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                from {userName(share.owner_id)} · {formatRelative(new Date(share.created_at))}
-                {file ? ` · ${formatFileSize(file.size_bytes)}` : ''}
-              </div>
-            </div>
-            <PermissionBadge permission={share.permission} />
-            {file && !file.is_directory && (
-              <IconButton
-                icon={Download}
-                title="Download"
-                onClick={() => { void downloadFile(file.id, file.filename); }}
-              />
-            )}
-          </ShareRow>
+          <ContextMenu
+            key={share.id}
+            items={menuItems}
+            trigger={
+              <ShareRow>
+                <FileIcon mime={file?.mime_type ?? ''} isDirectory={!!file?.is_directory} size="sm" />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: '0.8125rem', color: 'var(--text)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+                    from {userName(share.owner_id)} · {formatRelative(new Date(share.created_at))}
+                    {file ? ` · ${formatFileSize(file.size_bytes)}` : ''}
+                  </div>
+                </div>
+                <PermissionBadge permission={share.permission} />
+                {file && !file.is_directory && (
+                  <IconButton
+                    icon={Download}
+                    title="Download"
+                    onClick={() => { void downloadFile(file.id, file.filename); }}
+                  />
+                )}
+              </ShareRow>
+            }
+          />
         );
       })}
     </div>
@@ -204,10 +230,21 @@ function WithMeSub() {
 // ─── By me ───────────────────────────────────────────────
 
 function ByMeSub() {
+  const navigate = useNavigate();
   const [shares, setShares] = useState<UserShare[]>([]);
   const [loading, setLoading] = useState(true);
   const [revokeTarget, setRevokeTarget] = useState<UserShare | null>(null);
   const userName = useUserLookup();
+
+  // P2 — "Open" jumps to My Drive (the current user OWNS these files).
+  const openInMyDrive = useCallback((file: FileRecord) => {
+    if (file.is_directory) {
+      const path = file.filepath.endsWith('/') ? file.filepath : file.filepath + '/';
+      navigate(`/drive?tab=my-drive&path=${encodeURIComponent(path)}`);
+    } else {
+      navigate(`/drive?tab=my-drive&id=${file.id}`);
+    }
+  }, [navigate]);
 
   const fetchShares = useCallback(async () => {
     setLoading(true);
@@ -265,39 +302,62 @@ function ByMeSub() {
       {loading && <Loading />}
       {shares.map(share => {
         const file = meta[share.target_id];
+        const nextPermission: 'view' | 'edit' = share.permission === 'view' ? 'edit' : 'view';
+        // P2 — bespoke menu: Open / Change permission / Revoke (existing handlers).
+        const menuItems: ContextMenuItem[] = [
+          ...(file ? [{
+            label: 'Open in My Drive', icon: FolderOpen,
+            onClick: () => openInMyDrive(file),
+          }] : []),
+          {
+            label: `Change permission to ${nextPermission}`, icon: Pencil,
+            onClick: () => { void changePermission(share, nextPermission); },
+          },
+          menuSep(),
+          {
+            label: 'Revoke share', icon: X, variant: 'danger' as const,
+            onClick: () => setRevokeTarget(share),
+          },
+        ];
         return (
-          <ShareRow key={share.id}>
-            <FileIcon mime={file?.mime_type ?? ''} isDirectory={!!file?.is_directory} size="sm" />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{
-                fontSize: '0.8125rem', color: 'var(--text)',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
-                {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
-              </div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                to {userName(share.shared_with_id)} · {formatRelative(new Date(share.created_at))}
-              </div>
-            </div>
-            <select
-              value={share.permission}
-              onChange={(e) => { void changePermission(share, e.target.value as 'view' | 'edit'); }}
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text)',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-sans)',
-                padding: '3px 6px',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="view">view</option>
-              <option value="edit">edit</option>
-            </select>
-            <IconButton icon={X} title="Revoke" danger onClick={() => setRevokeTarget(share)} />
-          </ShareRow>
+          <ContextMenu
+            key={share.id}
+            items={menuItems}
+            trigger={
+              <ShareRow>
+                <FileIcon mime={file?.mime_type ?? ''} isDirectory={!!file?.is_directory} size="sm" />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: '0.8125rem', color: 'var(--text)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {file === undefined ? '…' : file?.filename ?? 'Unavailable file'}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
+                    to {userName(share.shared_with_id)} · {formatRelative(new Date(share.created_at))}
+                  </div>
+                </div>
+                <select
+                  value={share.permission}
+                  onChange={(e) => { void changePermission(share, e.target.value as 'view' | 'edit'); }}
+                  style={{
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text)',
+                    fontSize: '0.75rem',
+                    fontFamily: 'var(--font-sans)',
+                    padding: '3px 6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="view">view</option>
+                  <option value="edit">edit</option>
+                </select>
+                <IconButton icon={X} title="Revoke" danger onClick={() => setRevokeTarget(share)} />
+              </ShareRow>
+            }
+          />
         );
       })}
 
@@ -436,39 +496,66 @@ function LinksSub() {
               No active public links for this file.
             </div>
           )}
-          {links?.map(link => (
-            <ShareRow key={link.id}>
-              <Link2 size={14} style={{ color: 'var(--mod-drive)', flexShrink: 0 }} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{
-                  fontSize: '0.75rem', color: 'var(--text)',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                  fontFamily: 'var(--font-mono, monospace)',
-                }}>
-                  {link.url}
-                </div>
-                <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span>{formatRelative(new Date(link.created_at))}</span>
-                  <span>· {link.download_count ?? 0}{link.max_downloads ? `/${link.max_downloads}` : ''} downloads</span>
-                  {link.expires_at && <span>· expires {formatRelative(new Date(link.expires_at))}</span>}
-                  {link.password_hash && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                      · <KeyRound size={10} /> password
-                    </span>
-                  )}
-                </div>
-              </div>
-              <IconButton
-                icon={CopyIcon}
-                title="Copy link"
-                onClick={() => {
+          {links?.map(link => {
+            // P2 — bespoke menu: Copy link / Open link / Revoke (existing handlers).
+            const menuItems: ContextMenuItem[] = [
+              {
+                label: 'Copy link', icon: CopyIcon,
+                onClick: () => {
                   void navigator.clipboard.writeText(link.url);
                   toast.success('Link copied');
-                }}
+                },
+              },
+              {
+                label: 'Open link', icon: ExternalLink,
+                onClick: () => { window.open(link.url, '_blank', 'noopener'); },
+              },
+              menuSep(),
+              {
+                label: 'Revoke link', icon: X, variant: 'danger' as const,
+                onClick: () => { void revokeLink(link); },
+              },
+            ];
+            return (
+              <ContextMenu
+                key={link.id}
+                items={menuItems}
+                trigger={
+                  <ShareRow>
+                    <Link2 size={14} style={{ color: 'var(--mod-drive)', flexShrink: 0 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{
+                        fontSize: '0.75rem', color: 'var(--text)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        fontFamily: 'var(--font-mono, monospace)',
+                      }}>
+                        {link.url}
+                      </div>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span>{formatRelative(new Date(link.created_at))}</span>
+                        <span>· {link.download_count ?? 0}{link.max_downloads ? `/${link.max_downloads}` : ''} downloads</span>
+                        {link.expires_at && <span>· expires {formatRelative(new Date(link.expires_at))}</span>}
+                        {link.password_hash && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                            · <KeyRound size={10} /> password
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <IconButton
+                      icon={CopyIcon}
+                      title="Copy link"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(link.url);
+                        toast.success('Link copied');
+                      }}
+                    />
+                    <IconButton icon={X} title="Revoke" danger onClick={() => { void revokeLink(link); }} />
+                  </ShareRow>
+                }
               />
-              <IconButton icon={X} title="Revoke" danger onClick={() => { void revokeLink(link); }} />
-            </ShareRow>
-          ))}
+            );
+          })}
         </div>
       )}
 

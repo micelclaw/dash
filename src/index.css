@@ -60,6 +60,12 @@
   --mod-terminal: #22c55e;
   --mod-gateway: #0ea5e9;
 
+  /* File-type palette (FileIcon) — formatos sin módulo dueño */
+  --file-doc: #3b82f6;
+  --file-sheet: #22c55e;
+  --file-slides: #f97316;
+  --file-audio: #10b981;
+
   /* Typography */
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;

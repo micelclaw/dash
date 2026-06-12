@@ -11,13 +11,16 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Copy, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Copy, CheckCircle2, FolderOpen, Download, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
+import { downloadFile } from '@/lib/file-download';
 import { api } from '@/services/api';
 import type { ApiListResponse } from '@/types/api';
 
@@ -42,10 +45,12 @@ interface DupGroup {
  * the rest of the group (soft delete → they land in Trash) via POST /files/bulk.
  */
 export function DuplicatesView() {
+  const navigate = useNavigate();
   const [groups, setGroups] = useState<DupGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmKeep, setConfirmKeep] = useState<{ keep: DupFile; others: DupFile[] } | null>(null);
+  const [confirmDeleteOne, setConfirmDeleteOne] = useState<DupFile | null>(null);
   const [busy, setBusy] = useState(false);
 
   const fetchGroups = useCallback(async () => {
@@ -90,6 +95,45 @@ export function DuplicatesView() {
       setBusy(false);
     }
   }, [confirmKeep, fetchGroups]);
+
+  // P2 — delete a SINGLE copy of a group (the inverse of "Keep this").
+  const handleDeleteOneConfirmed = useCallback(async () => {
+    const target = confirmDeleteOne;
+    setConfirmDeleteOne(null);
+    if (!target) return;
+    setBusy(true);
+    try {
+      await api.post('/files/bulk', { action: 'delete', ids: [target.id] });
+      toast.success('Copy moved to trash');
+      await fetchGroups();
+    } catch {
+      toast.error('Could not delete the copy');
+    } finally {
+      setBusy(false);
+    }
+  }, [confirmDeleteOne, fetchGroups]);
+
+  // P2 — per-copy context menu.
+  const buildRowMenu = useCallback((file: DupFile, others: DupFile[]): ContextMenuItem[] => [
+    {
+      label: 'Open in My Drive', icon: FolderOpen,
+      onClick: () => navigate(`/drive?tab=my-drive&id=${file.id}`),
+    },
+    {
+      label: 'Download', icon: Download,
+      onClick: () => { void downloadFile(file.id, file.filename); },
+    },
+    { label: '', separator: true, onClick: () => {} },
+    {
+      label: `Keep this (delete ${others.length} other${others.length === 1 ? '' : 's'})`,
+      icon: CheckCircle2, disabled: busy,
+      onClick: () => setConfirmKeep({ keep: file, others }),
+    },
+    {
+      label: 'Delete this copy', icon: Trash2, variant: 'danger' as const, disabled: busy,
+      onClick: () => setConfirmDeleteOne(file),
+    },
+  ], [navigate, busy]);
 
   if (!loading && groups.length === 0) {
     return (
@@ -163,14 +207,19 @@ export function DuplicatesView() {
 
             {/* Copies */}
             {group.files.map(file => (
-              <DupRow
+              <ContextMenu
                 key={file.id}
-                file={file}
-                disabled={busy}
-                onKeep={() => setConfirmKeep({
-                  keep: file,
-                  others: group.files.filter(f => f.id !== file.id),
-                })}
+                items={buildRowMenu(file, group.files.filter(f => f.id !== file.id))}
+                trigger={
+                  <DupRow
+                    file={file}
+                    disabled={busy}
+                    onKeep={() => setConfirmKeep({
+                      keep: file,
+                      others: group.files.filter(f => f.id !== file.id),
+                    })}
+                  />
+                }
               />
             ))}
           </div>
@@ -185,6 +234,16 @@ export function DuplicatesView() {
         description={`The other copies are moved to the trash (${confirmKeep ? confirmKeep.others.map(f => f.parent_folder + f.filename).join(', ') : ''}).`}
         confirmLabel="Keep this one"
         variant="warning"
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOne !== null}
+        onClose={() => setConfirmDeleteOne(null)}
+        onConfirm={() => { void handleDeleteOneConfirmed(); }}
+        title={`Delete this copy of "${confirmDeleteOne?.filename ?? ''}"?`}
+        description={`${confirmDeleteOne ? confirmDeleteOne.parent_folder + confirmDeleteOne.filename : ''} will be moved to the trash. The other copies stay where they are.`}
+        confirmLabel="Delete copy"
+        variant="danger"
       />
     </div>
   );

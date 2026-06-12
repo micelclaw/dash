@@ -24,33 +24,47 @@ interface FileIconProps {
 
 const SIZE_MAP = { sm: 16, md: 24, lg: 32 } as const;
 
-const MIME_ICONS: [string, LucideIcon][] = [
-  ['application/vnd.claw.diagram+json', Waypoints],
-  ['text/plain', FileText],
-  ['text/markdown', FileText],
-  ['text/', FileCode],
-  ['image/', Image],
-  ['video/', Film],
-  ['audio/', Music],
-  ['application/pdf', FileText],
-  ['application/vnd.openxmlformats-officedocument.spreadsheetml', FileSpreadsheet],
-  ['application/vnd.openxmlformats-officedocument.wordprocessingml', FileText],
-  ['application/vnd.openxmlformats-officedocument.presentationml', Presentation],
-  ['application/zip', FileArchive],
-  ['application/x-tar', FileArchive],
-  ['application/gzip', FileArchive],
+// [prefijo mime, icono, color] — colores de la paleta micelclaw (--mod-* del
+// sidebar + 3 vars --file-* para los formatos office sin módulo dueño).
+// Orden importa: prefijos específicos antes que los catch-all ('text/').
+const MIME_ICONS: [string, LucideIcon, string][] = [
+  ['application/vnd.claw.diagram+json', Waypoints, 'var(--mod-sketches)'],
+  ['text/markdown', FileText, 'var(--mod-notes)'],
+  ['text/plain', FileText, 'var(--mod-notes)'],
+  ['text/csv', FileSpreadsheet, 'var(--file-sheet)'],
+  ['text/', FileCode, 'var(--mod-tools)'],
+  ['application/json', FileCode, 'var(--mod-tools)'],
+  ['application/xml', FileCode, 'var(--mod-tools)'],
+  ['image/', Image, 'var(--mod-photos)'],
+  ['video/', Film, 'var(--mod-multimedia)'],
+  ['audio/', Music, 'var(--file-audio)'],
+  ['application/pdf', FileText, 'var(--mod-office)'],
+  ['application/vnd.openxmlformats-officedocument.spreadsheetml', FileSpreadsheet, 'var(--file-sheet)'],
+  ['application/vnd.ms-excel', FileSpreadsheet, 'var(--file-sheet)'],
+  ['application/vnd.oasis.opendocument.spreadsheet', FileSpreadsheet, 'var(--file-sheet)'],
+  ['application/vnd.openxmlformats-officedocument.wordprocessingml', FileText, 'var(--file-doc)'],
+  ['application/vnd.oasis.opendocument.text', FileText, 'var(--file-doc)'],
+  ['application/msword', FileText, 'var(--file-doc)'],
+  ['application/rtf', FileText, 'var(--file-doc)'],
+  ['application/vnd.openxmlformats-officedocument.presentationml', Presentation, 'var(--file-slides)'],
+  ['application/vnd.oasis.opendocument.presentation', Presentation, 'var(--file-slides)'],
+  ['application/zip', FileArchive, 'var(--mod-inventory)'],
+  ['application/x-tar', FileArchive, 'var(--mod-inventory)'],
+  ['application/gzip', FileArchive, 'var(--mod-inventory)'],
+  ['application/x-7z-compressed', FileArchive, 'var(--mod-inventory)'],
+  ['application/x-rar-compressed', FileArchive, 'var(--mod-inventory)'],
 ];
 
-function getFileIcon(mime: string, isDirectory: boolean): LucideIcon {
-  if (isDirectory) return Folder;
-  for (const [prefix, icon] of MIME_ICONS) {
-    if (mime.startsWith(prefix)) return icon;
+function getFileIconEntry(mime: string, isDirectory: boolean): [LucideIcon, string] {
+  if (isDirectory) return [Folder, 'var(--amber)'];
+  for (const [prefix, icon, color] of MIME_ICONS) {
+    if (mime.startsWith(prefix)) return [icon, color];
   }
-  return File;
+  return [File, 'var(--text-dim)'];
 }
 
 export function FileIcon({ mime, isDirectory, size = 'md' }: FileIconProps) {
-  const Icon = getFileIcon(mime, isDirectory);
+  const [Icon, color] = getFileIconEntry(mime, isDirectory);
   const px = SIZE_MAP[size];
-  return <Icon size={px} style={{ color: isDirectory ? 'var(--amber)' : 'var(--text-dim)', flexShrink: 0 }} />;
+  return <Icon size={px} style={{ color, flexShrink: 0 }} />;
 }

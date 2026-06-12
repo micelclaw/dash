@@ -13,14 +13,28 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { Clock, Flame } from 'lucide-react';
+import { toast } from 'sonner';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import { RenameDialog } from '@/components/shared/RenameDialog';
+import { FolderPicker } from '@/components/shared/FolderPicker';
+import { ShareModal } from '@/components/shared/ShareModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useFileClipboard } from '@/stores/file-clipboard.store';
+import { useDriveStore } from '@/stores/drive.store';
+import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
+import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveInspector } from '../components/inspector/DriveInspector';
+import { ShareWithUserModal } from '../components/ShareWithUserModal';
+import { ShareEmailModal } from '../components/ShareEmailModal';
+import { TagsModal } from '../components/TagsModal';
+import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
 
 /**
@@ -29,12 +43,31 @@ import type { FileRecord } from '@/types/files';
  *
  * D5: a single click selects the item and opens the right inspector;
  * double-click jumps to My Drive with ?id= (containing folder + selection).
+ *
+ * P2: both bands expose the full D4 context menu (buildFileContextMenu with
+ * tab 'recent'), single-file always — Recent has no multi-select.
  */
 export function RecentView() {
   const navigate = useNavigate();
+  const clipboard = useFileClipboard();
+  const setInspectorOpen = useDriveStore(s => s.setInspectorOpen);
+  const setInspectorTab = useDriveStore(s => s.setInspectorTab);
   const hot = useFilesQuery({ sort: 'heat', order: 'desc', limit: 12, is_directory: false });
   const earlier = useFilesQuery({ sort: 'last_accessed', order: 'desc', limit: 60, is_directory: false });
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
+
+  // Modals (calqued from StarredView)
+  const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
+  const [folderPickerIds, setFolderPickerIds] = useState<string[] | null>(null);
+  const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
+  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
+  const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
+  const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
+  const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
+  const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
+
+  const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareFile
+    || !!shareUserFiles || !!shareEmailFile || !!tagsFiles || confirmDeleteIds !== null;
 
   const hotFiles = useMemo(
     () => hot.files.filter(f => (f.heat_score ?? 0) > 0),
@@ -46,9 +79,9 @@ export function RecentView() {
     return earlier.files.filter(f => !hotIds.has(f.id));
   }, [earlier.files, hotFiles]);
 
-  const openInMyDrive = (file: FileRecord) => {
+  const openInMyDrive = useCallback((file: FileRecord) => {
     navigate(`/drive?tab=my-drive&id=${file.id}`);
-  };
+  }, [navigate]);
 
   // D5 — click selects (inspector), double-click navigates
   const handleSelect = useCallback((file: FileRecord) => {
@@ -60,7 +93,135 @@ export function RecentView() {
     void earlier.refetch();
   }, [hot.refetch, earlier.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Mutations behind the context menu (P2) ─────────────
+
+  const handleToggleStar = useCallback(async (targets: FileRecord[], starred: boolean) => {
+    const ids = targets.map(f => f.id);
+    if (ids.length === 0) return;
+    try {
+      if (ids.length === 1) {
+        await api.patch<ApiResponse<FileRecord>>(`/files/${ids[0]}`, { starred });
+      } else {
+        await api.post('/files/bulk', { action: starred ? 'star' : 'unstar', ids });
+      }
+      toast.success(starred
+        ? `${ids.length === 1 ? 'Starred' : `${ids.length} items starred`}`
+        : `${ids.length === 1 ? 'Star removed' : `${ids.length} stars removed`}`);
+      refetchAll();
+    } catch {
+      toast.error('Could not update stars');
+    }
+  }, [refetchAll]);
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = confirmDeleteIds ? [...confirmDeleteIds] : [];
+    setConfirmDeleteIds(null);
+    if (ids.length === 0) return;
+    try {
+      await api.post('/files/bulk', { action: 'delete', ids });
+      toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} moved to trash`);
+      setSelectedFile(prev => (prev && ids.includes(prev.id) ? null : prev));
+      refetchAll();
+    } catch {
+      toast.error('Delete failed');
+    }
+  }, [confirmDeleteIds, refetchAll]);
+
+  const handleRenameConfirm = useCallback(async (name: string) => {
+    if (!renameTarget) return;
+    try {
+      await api.patch<ApiResponse<FileRecord>>(`/files/${renameTarget.id}`, { filename: name });
+      refetchAll();
+    } catch {
+      toast.error('Rename failed');
+    }
+  }, [renameTarget, refetchAll]);
+
+  const handleFolderPicked = useCallback(async (destPath: string) => {
+    const ids = folderPickerIds ?? [];
+    const mode = folderPickerMode;
+    setFolderPickerIds(null);
+    if (ids.length === 0) return;
+    try {
+      if (mode === 'move') {
+        await api.post('/files/bulk', { action: 'move', ids, params: { parent_folder: destPath } });
+        toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} moved`);
+      } else {
+        for (const id of ids) {
+          await api.post(`/files/${id}/copy`, { dest_parent_folder: destPath });
+        }
+        toast.success(`${ids.length} item${ids.length === 1 ? '' : 's'} copied`);
+      }
+      refetchAll();
+    } catch {
+      toast.error(mode === 'move' ? 'Move failed' : 'Copy failed');
+    }
+  }, [folderPickerIds, folderPickerMode, refetchAll]);
+
+  const openFolderPicker = useCallback((ids: string[], mode: 'move' | 'copy') => {
+    setFolderPickerMode(mode);
+    setFolderPickerIds(ids);
+  }, []);
+
+  // Clipboard (cut/copy — paste happens in My Drive / Explorer)
+  const handleCut = useCallback((targets: FileRecord[]) => {
+    if (targets.length === 0) return;
+    clipboard.setClipboard('cut', targets.map(f => f.id), '/drive/');
+    toast.success(`${targets.length} item${targets.length === 1 ? '' : 's'} cut`);
+  }, [clipboard]);
+
+  const handleCopy = useCallback((targets: FileRecord[]) => {
+    if (targets.length === 0) return;
+    clipboard.setClipboard('copy', targets.map(f => f.id), '/drive/');
+    toast.success(`${targets.length} item${targets.length === 1 ? '' : 's'} copied`);
+  }, [clipboard]);
+
+  // ─── D4 context menu (single-file — Recent has no multi-select) ──
+
+  const menuCtx: DriveMenuContext = useMemo(() => ({
+    tab: 'recent',
+    clipboard: { operation: clipboard.operation, fileIds: clipboard.fileIds },
+    navigate,
+    callbacks: {
+      onOpen: openInMyDrive,
+      // Details/Properties → inspector on the Details tab (D5)
+      onPreview: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('details');
+        setInspectorOpen(true);
+      },
+      onToggleStar: (targets, starred) => { void handleToggleStar(targets, starred); },
+      onShare: (file) => setShareFile(file),
+      onShareUser: (targets) => setShareUserFiles(targets),
+      onShareEmail: (file) => setShareEmailFile(file),
+      onCut: handleCut,
+      onCopy: handleCopy,
+      onMoveTo: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+      onCopyTo: (targets) => openFolderPicker(targets.map(f => f.id), 'copy'),
+      onRename: (file) => setRenameTarget(file),
+      onTags: (targets) => setTagsFiles(targets),
+      // Version history → inspector on the Versions tab (D5)
+      onVersions: (file) => {
+        setSelectedFile(file);
+        setInspectorTab('versions');
+        setInspectorOpen(true);
+      },
+      // Siempre con ConfirmDialog — también para un único archivo
+      onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
+    },
+  }), [
+    clipboard.operation, clipboard.fileIds, navigate, openInMyDrive,
+    handleToggleStar, handleCut, handleCopy, openFolderPicker,
+    setInspectorOpen, setInspectorTab,
+  ]);
+
+  const getContextMenuItems = useCallback(
+    (file: FileRecord) => buildFileContextMenu([file], menuCtx),
+    [menuCtx],
+  );
+
   useDriveShortcuts({
+    disabled: anyModalOpen,
     onEscape: () => { setSelectedFile(null); },
   });
 
@@ -93,12 +254,17 @@ export function RecentView() {
               }}
             >
               {hotFiles.map(file => (
-                <HotCard
+                <ContextMenu
                   key={file.id}
-                  file={file}
-                  selected={selectedFile?.id === file.id}
-                  onClick={() => handleSelect(file)}
-                  onDoubleClick={() => openInMyDrive(file)}
+                  items={getContextMenuItems(file)}
+                  trigger={
+                    <HotCard
+                      file={file}
+                      selected={selectedFile?.id === file.id}
+                      onClick={() => handleSelect(file)}
+                      onDoubleClick={() => openInMyDrive(file)}
+                    />
+                  }
                 />
               ))}
             </div>
@@ -115,12 +281,17 @@ export function RecentView() {
           )}
           <div>
             {earlierFiles.map(file => (
-              <RecentRow
+              <ContextMenu
                 key={file.id}
-                file={file}
-                selected={selectedFile?.id === file.id}
-                onClick={() => handleSelect(file)}
-                onDoubleClick={() => openInMyDrive(file)}
+                items={getContextMenuItems(file)}
+                trigger={
+                  <RecentRow
+                    file={file}
+                    selected={selectedFile?.id === file.id}
+                    onClick={() => handleSelect(file)}
+                    onDoubleClick={() => openInMyDrive(file)}
+                  />
+                }
               />
             ))}
           </div>
@@ -140,6 +311,47 @@ export function RecentView() {
           onRefetch={refetchAll}
         />
       )}
+
+      {/* Modals (P2 — calqued from StarredView) */}
+      {shareFile && (
+        <ShareModal open={!!shareFile} file={shareFile} onClose={() => setShareFile(null)} />
+      )}
+      <ShareWithUserModal
+        open={shareUserFiles !== null}
+        files={shareUserFiles ?? []}
+        onClose={() => setShareUserFiles(null)}
+      />
+      {shareEmailFile && (
+        <ShareEmailModal open={!!shareEmailFile} file={shareEmailFile} onClose={() => setShareEmailFile(null)} />
+      )}
+      <TagsModal
+        open={tagsFiles !== null}
+        files={tagsFiles ?? []}
+        onClose={() => setTagsFiles(null)}
+        onSaved={refetchAll}
+      />
+      <FolderPicker
+        open={folderPickerIds !== null}
+        currentPath="/drive/"
+        onSelect={(p) => { void handleFolderPicked(p); }}
+        onCancel={() => setFolderPickerIds(null)}
+      />
+      <RenameDialog
+        open={!!renameTarget}
+        currentName={renameTarget?.filename ?? ''}
+        title="New name:"
+        onConfirm={(name) => { void handleRenameConfirm(name); }}
+        onClose={() => setRenameTarget(null)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteIds !== null}
+        onClose={() => setConfirmDeleteIds(null)}
+        onConfirm={() => { void handleBulkDelete(); }}
+        title={`Delete ${confirmDeleteIds?.size ?? 0} item${(confirmDeleteIds?.size ?? 0) === 1 ? '' : 's'}?`}
+        description="They will be moved to the trash."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
