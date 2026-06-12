@@ -196,6 +196,8 @@ export function Component() {
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const deepLinkHandled = useRef(false);
+  const albumDeepLinkHandled = useRef(false);
+  const clusterDeepLinkHandled = useRef(false);
 
   // Best Of state
   const [bestOfCount, setBestOfCount] = useState(0);
@@ -302,6 +304,26 @@ export function Component() {
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, photos, photosLoading]);
+
+  // Deep-link: ?album=<id> → abre ese álbum (vista de detalle). Chip de álbum.
+  useEffect(() => {
+    const albumId = searchParams.get('album');
+    if (!albumId || albumDeepLinkHandled.current) return;
+    setView('albums');
+    setSelectedAlbumId(albumId);
+    albumDeepLinkHandled.current = true;
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Deep-link: ?cluster=<id> → abre esa persona (vista People). Chip de persona.
+  useEffect(() => {
+    const clusterId = searchParams.get('cluster');
+    if (!clusterId || clusterDeepLinkHandled.current) return;
+    setView('people');
+    selectCluster(clusterId);
+    clusterDeepLinkHandled.current = true;
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams, selectCluster]);
 
   // Fetch Best Of count
   useEffect(() => {

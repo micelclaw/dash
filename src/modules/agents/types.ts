@@ -21,6 +21,8 @@ export interface ManagedAgent {
   is_chief: boolean;
   parent_agent_id: string | null;
   skills: AgentSkill[];
+  /** Modo por skill (tier núcleo/completo), keyed por skill id. Ausente = full. */
+  skill_modes?: Record<string, 'core' | 'full'>;
   workspace_path: string;
   status: 'active' | 'idle' | 'error';
   last_active_at: string | null;

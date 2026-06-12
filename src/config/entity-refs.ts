@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, User, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -108,6 +108,27 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-feeds)',
     label: 'Artículo',
     route: (id) => `/feeds?article=${encodeURIComponent(id)}`,
+  },
+  // photos: dos tipos. El álbum abre su detalle (?album=); la foto abre el lightbox
+  // (?id=, deep-link que PhotosPage ya soporta).
+  album: {
+    Icon: Images,
+    color: 'var(--mod-photos)',
+    label: 'Álbum',
+    route: (id) => `/photos?album=${encodeURIComponent(id)}`,
+  },
+  photo: {
+    Icon: Image,
+    color: 'var(--mod-photos)',
+    label: 'Foto',
+    route: (id) => `/photos?id=${encodeURIComponent(id)}`,
+  },
+  // persona = cluster de caras → vista People de PhotosPage (?cluster=).
+  person: {
+    Icon: User,
+    color: 'var(--mod-photos)',
+    label: 'Persona',
+    route: (id) => `/photos?cluster=${encodeURIComponent(id)}`,
   },
 };
 

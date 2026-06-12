@@ -500,7 +500,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           <div style={{ height: 1, background: 'var(--border)' }} />
 
           {/* Skills */}
-          <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} onSkillsChanged={refetch} />
+          <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} skillModes={agent.skill_modes} onSkillsChanged={refetch} />
 
           <div style={{ height: 1, background: 'var(--border)' }} />
 

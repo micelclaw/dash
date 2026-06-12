@@ -15,6 +15,7 @@ import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { AssignAppsModal } from '@/components/shared/AssignAppsModal';
+import { AppDetailModal } from './AppDetailModal';
 import type { AgentSkill } from './types';
 
 interface AgentSkillsProps {
@@ -22,13 +23,15 @@ interface AgentSkillsProps {
   agentId: string;
   agentName?: string;
   agentAvatar?: string;
+  skillModes?: Record<string, 'core' | 'full'>;
   onSkillsChanged?: () => void;
 }
 
-export function AgentSkills({ skills, agentId, agentName, agentAvatar, onSkillsChanged }: AgentSkillsProps) {
+export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillModes, onSkillsChanged }: AgentSkillsProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [detailSkill, setDetailSkill] = useState<AgentSkill | null>(null);
 
   const handleRemove = async (skill: AgentSkill) => {
     setRemoving(skill.id);
@@ -71,18 +74,20 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, onSkillsC
             key={skill.id}
             onMouseEnter={() => setHoveredId(skill.id)}
             onMouseLeave={() => setHoveredId(null)}
+            onClick={() => setDetailSkill(skill)}
+            title={`Ver detalle / modo de ${skill.name}`}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               justifyContent: 'center', gap: 4, height: 64, position: 'relative',
               background: hoveredId === skill.id ? 'var(--surface-hover)' : 'var(--card)',
               borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
-              transition: 'var(--transition-fast)', cursor: 'default',
+              transition: 'var(--transition-fast)', cursor: 'pointer',
               opacity: removing === skill.id ? 0.5 : 1,
             }}
           >
             {hoveredId === skill.id && (
               <button
-                onClick={() => handleRemove(skill)}
+                onClick={(e) => { e.stopPropagation(); handleRemove(skill); }}
                 disabled={removing === skill.id}
                 style={{
                   position: 'absolute', top: 3, right: 3, width: 16, height: 16,
@@ -119,6 +124,16 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, onSkillsC
         open={showModal}
         onClose={() => setShowModal(false)}
         onSaved={() => onSkillsChanged?.()}
+      />
+
+      <AppDetailModal
+        skill={detailSkill}
+        agentId={agentId}
+        allSkillIds={currentSkillIds}
+        skillModes={skillModes ?? {}}
+        open={detailSkill !== null}
+        onClose={() => setDetailSkill(null)}
+        onChanged={() => onSkillsChanged?.()}
       />
     </div>
   );
