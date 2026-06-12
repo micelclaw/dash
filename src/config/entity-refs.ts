@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -94,6 +94,20 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-bookmarks)',
     label: 'Bookmark',
     route: (id) => `/bookmarks?id=${encodeURIComponent(id)}`,
+  },
+  // feeds: dos tipos. La suscripción (feed) abre su lista; el artículo abre el
+  // lector. FeedsPage lee `?feed=`/`?article=` en el effect de montaje.
+  feed: {
+    Icon: Rss,
+    color: 'var(--mod-feeds)',
+    label: 'Feed',
+    route: (id) => `/feeds?feed=${encodeURIComponent(id)}`,
+  },
+  article: {
+    Icon: Newspaper,
+    color: 'var(--mod-feeds)',
+    label: 'Artículo',
+    route: (id) => `/feeds?article=${encodeURIComponent(id)}`,
   },
 };
 

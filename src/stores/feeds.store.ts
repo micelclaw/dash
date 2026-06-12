@@ -102,6 +102,9 @@ interface FeedsState {
   fetchUnreadCounts: () => Promise<void>;
   selectFeed: (feedId: string | null) => void;
   selectArticle: (articleId: string | null) => void;
+  /** Deep-link: abre un artículo por id aunque no esté en la lista actual
+   *  (lo trae de /feeds/articles/:id, conmuta a su feed y lo selecciona). */
+  openArticleById: (articleId: string) => Promise<void>;
   setViewMode: (mode: ViewMode) => void;
   setLayout: (layout: 'three-column' | 'two-column') => void;
   setFilter: (key: string, value: unknown) => void;
@@ -204,6 +207,25 @@ export const useFeedsStore = create<FeedsState>()((set, get) => ({
       if (article && !article.is_read) {
         get().toggleRead(articleId, true);
       }
+    }
+  },
+
+  openArticleById: async (articleId) => {
+    set({ loadingArticles: true });
+    try {
+      const res = await api.get<{ data: RssArticle }>(`/feeds/articles/${articleId}`);
+      const article = res.data;
+      // Conmuta a su feed y carga la lista de ese feed (contexto del panel central).
+      set({ activeFeedId: article.feed_id, viewMode: article.feed_id });
+      await get().fetchArticles();
+      // Garantiza que el artículo esté presente aunque sea más viejo que la página.
+      if (!get().articles.some(a => a.id === articleId)) {
+        set((s) => ({ articles: [article, ...s.articles] }));
+      }
+      get().selectArticle(articleId);
+    } catch (err) {
+      set({ loadingArticles: false, error: err instanceof Error ? err.message : 'Failed to open article' });
+      await get().fetchArticles();
     }
   },
 

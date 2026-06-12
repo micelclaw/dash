@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useFeedsStore } from '@/stores/feeds.store';
 import { FeedsSidebar } from './FeedsSidebar';
 import { ArticleList } from './ArticleList';
@@ -31,12 +32,33 @@ export function Component() {
   const filters = useFeedsStore(s => s.filters);
   const setFilter = useFeedsStore(s => s.setFilter);
   const isMobile = useIsMobile();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [mobileView, setMobileView] = useState<MobileView>('list');
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
+  // Carga inicial + deep-link de chips: `?article=<id>` abre el lector,
+  // `?feed=<id>` selecciona ese feed; si no, lista por defecto. Limpia la query.
   useEffect(() => {
-    fetchArticles();
+    const feedId = searchParams.get('feed');
+    const articleId = searchParams.get('article');
+    if (feedId || articleId) {
+      // En carga fresca `feeds` está vacío y fetchArticles confundiría el feedId
+      // con una categoría → cargamos feeds ANTES de seleccionar.
+      void (async () => {
+        const store = useFeedsStore.getState();
+        if (store.feeds.length === 0) await store.fetchFeeds();
+        const s = useFeedsStore.getState();
+        if (articleId) s.openArticleById(articleId);
+        else if (feedId) s.selectFeed(feedId);
+      })();
+      searchParams.delete('feed');
+      searchParams.delete('article');
+      setSearchParams(searchParams, { replace: true });
+    } else {
+      fetchArticles();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // When article is selected on mobile, switch to reader
