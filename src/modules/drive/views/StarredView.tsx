@@ -270,10 +270,8 @@ export function StarredView() {
         setInspectorTab('versions');
         setInspectorOpen(true);
       },
-      onDelete: (targets) => {
-        if (targets.length === 1) void handleDelete(targets[0]!.id);
-        else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
-      },
+      // Siempre con ConfirmDialog — también para un único archivo
+      onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
     },
   }), [
     clipboard.operation, clipboard.fileIds, navigate, handleItemDoubleClick,

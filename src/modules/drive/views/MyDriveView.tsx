@@ -366,10 +366,9 @@ export function MyDriveView() {
       // Version history → inspector on the Versions tab (D5). The standalone
       // VersionHistoryDialog stays for views without an inspector.
       onVersions: (file) => openInspector(file, 'versions'),
-      onDelete: (targets) => {
-        if (targets.length === 1) void deleteFile(targets[0]!.id);
-        else setConfirmDeleteIds(new Set(targets.map(f => f.id)));
-      },
+      // Siempre con ConfirmDialog — también para un único archivo (la
+      // versión que borraba directo el single era una regresión de D6)
+      onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
       onNewFolder: handleNewFolder,
       onUpload: handleUploadClick,
     },
