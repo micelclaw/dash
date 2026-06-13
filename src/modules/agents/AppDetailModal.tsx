@@ -131,12 +131,11 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
 
         {detail && (
           <>
-            <ToolGroup title={`Núcleo (${detail.tools.core.length})`} tools={detail.tools.core} dim={false} />
-            {hasFull && (
+            <ToolGroup title={`Núcleo (${detail.tools.core.length})`} tools={detail.tools.core} />
+            {hasFull && mode === 'full' && (
               <ToolGroup
                 title={`Adicionales en Completa (+${detail.tools.full_only.length})`}
                 tools={detail.tools.full_only}
-                dim={mode === 'core'}
               />
             )}
 
@@ -155,10 +154,10 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
   );
 }
 
-function ToolGroup({ title, tools, dim }: { title: string; tools: { action: string; description: string }[]; dim: boolean }) {
+function ToolGroup({ title, tools }: { title: string; tools: { action: string; description: string }[] }) {
   if (tools.length === 0) return null;
   return (
-    <div style={{ marginTop: 6, opacity: dim ? 0.45 : 1 }}>
+    <div style={{ marginTop: 6 }}>
       <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>{title}</h4>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {tools.map((t) => (
