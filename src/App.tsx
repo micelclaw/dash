@@ -140,6 +140,9 @@ const router = createBrowserRouter([
   },
   { path: '/login', element: <LoginPage /> },
   { path: '/oauth/callback', lazy: () => import('@/modules/oauth/OAuthCallbackPage') },
+  // Landing PÚBLICA de share links (sin login) — los datos vienen de los
+  // endpoints públicos /api/v1/share/:token/* de Core.
+  { path: '/share/:token', lazy: () => import('@/modules/share/PublicSharePage') },
 ]);
 
 export function App() {
