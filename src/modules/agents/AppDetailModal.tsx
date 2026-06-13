@@ -93,7 +93,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-xl max-h-[85vh] overflow-auto">
+      <DialogContent className="max-w-6xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span style={{ fontSize: '1.25rem' }}>{skill.icon}</span>
