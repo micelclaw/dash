@@ -12,11 +12,21 @@
 
 import { create } from 'zustand';
 
+/**
+ * Which namespace the clipboard ids belong to:
+ * - 'index' — DB file index UUIDs (Drive, Office, photos…). Pasted via /files endpoints.
+ * - 'vfs'   — VFS paths (File Explorer). Pasted via /vfs/move | /vfs/copy.
+ * Consumers MUST check `space` before pasting so VFS paths never reach
+ * /files/bulk (and index UUIDs never reach /vfs/*).
+ */
+export type FileClipboardSpace = 'index' | 'vfs';
+
 interface FileClipboardState {
   operation: 'copy' | 'cut' | null;
   fileIds: string[];
   sourcePath: string;
-  setClipboard: (op: 'copy' | 'cut', ids: string[], source: string) => void;
+  space: FileClipboardSpace;
+  setClipboard: (op: 'copy' | 'cut', ids: string[], source: string, space?: FileClipboardSpace) => void;
   clear: () => void;
 }
 
@@ -24,6 +34,8 @@ export const useFileClipboard = create<FileClipboardState>((set) => ({
   operation: null,
   fileIds: [],
   sourcePath: '',
-  setClipboard: (operation, fileIds, sourcePath) => set({ operation, fileIds, sourcePath }),
-  clear: () => set({ operation: null, fileIds: [], sourcePath: '' }),
+  space: 'index',
+  // `space` defaults to 'index' so existing call-sites (Drive, Office) need no changes.
+  setClipboard: (operation, fileIds, sourcePath, space = 'index') => set({ operation, fileIds, sourcePath, space }),
+  clear: () => set({ operation: null, fileIds: [], sourcePath: '', space: 'index' }),
 }));

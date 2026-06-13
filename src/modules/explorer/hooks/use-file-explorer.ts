@@ -36,8 +36,13 @@ function isVfsPath(path: string): boolean {
 }
 
 /** Strip the /vfs prefix to get the real VFS path for API calls */
-function toVfsApiPath(explorerPath: string): string {
-  return explorerPath.slice(4); // remove '/vfs'
+export function toVfsApiPath(explorerPath: string): string {
+  return explorerPath.startsWith('/vfs') ? explorerPath.slice(4) : explorerPath; // remove '/vfs'
+}
+
+/** Join a directory path + entry name with exactly one slash (mount roots arrive without trailing slash). */
+function joinVfsPath(dir: string, name: string): string {
+  return `${dir.replace(/\/+$/, '')}/${name}`;
 }
 
 /** Convert a VFSNode to a FileRecord for compatibility with FileBrowser */
@@ -221,7 +226,7 @@ export function useFileExplorer() {
 
   const handleUpload = useCallback(async (f: File) => {
     if (isVfs) {
-      const apiPath = toVfsApiPath(currentPath) + f.name;
+      const apiPath = joinVfsPath(toVfsApiPath(currentPath), f.name);
       const { api } = await import('@/services/api');
       const formData = new FormData();
       formData.append('file', f);
@@ -234,13 +239,25 @@ export function useFileExplorer() {
 
   const handleCreateFolder = useCallback(async (name: string) => {
     if (isVfs) {
-      const apiPath = toVfsApiPath(currentPath) + name;
+      const apiPath = joinVfsPath(toVfsApiPath(currentPath), name);
       await vfs.vfsMkdir(apiPath);
       fetchVfs(currentPath);
     } else {
       await createFolder(name, currentPath);
     }
   }, [createFolder, currentPath, isVfs, vfs.vfsMkdir, fetchVfs]);
+
+  // Rename: for VFS entries the id IS the VFS path → move from→to inside the same dir.
+  // The DB-index hook (`renameFile`) only works for index UUIDs.
+  const handleRename = useCallback(async (id: string, newName: string) => {
+    if (isVfs) {
+      const parent = id.slice(0, id.lastIndexOf('/'));
+      await vfs.vfsMove(id, `${parent}/${newName}`);
+      fetchVfs(currentPath);
+    } else {
+      await renameFile(id, newName);
+    }
+  }, [isVfs, vfs.vfsMove, renameFile, fetchVfs, currentPath]);
 
   const handleDelete = useCallback(async (id: string) => {
     if (isVfs) {
@@ -330,6 +347,24 @@ export function useFileExplorer() {
     setSelectedIds(new Set());
   }, [moveFile, isVfs, vfs.vfsMove, fetchVfs, currentPath]);
 
+  // Copy counterpart of batchMove: VFS → POST /vfs/copy; index → /files/:id/copy.
+  const batchCopy = useCallback(async (ids: Set<string>, destPath: string) => {
+    if (isVfs) {
+      for (const id of ids) {
+        const fileName = id.split('/').filter(Boolean).pop() ?? 'file';
+        const dest = destPath.endsWith('/') ? destPath + fileName : destPath + '/' + fileName;
+        await vfs.vfsCopy(id, dest);
+      }
+      fetchVfs(currentPath);
+    } else {
+      const { api } = await import('@/services/api');
+      for (const id of ids) {
+        await api.post(`/files/${id}/copy`, { dest_parent_folder: destPath });
+      }
+    }
+    setSelectedIds(new Set());
+  }, [isVfs, vfs.vfsCopy, fetchVfs, currentPath]);
+
   return {
     currentPath,
     currentSource,
@@ -349,7 +384,7 @@ export function useFileExplorer() {
     isWritable,
     uploadFile: handleUpload,
     createFolder: handleCreateFolder,
-    renameFile,
+    renameFile: handleRename,
     moveFile,
     deleteFile: handleDelete,
     // Multi-select
@@ -359,6 +394,7 @@ export function useFileExplorer() {
     clearSelection,
     batchDelete,
     batchMove,
+    batchCopy,
     // VFS-specific
     isVfs,
   };

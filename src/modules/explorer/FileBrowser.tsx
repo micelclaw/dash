@@ -10,15 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState, useRef } from 'react';
-import { Loader2, FolderOpen, Download, Link, Info, Edit3, Move, Trash2, Copy, Scissors, ClipboardPaste } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Loader2, FolderOpen } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
-import { downloadFile } from '@/lib/file-download';
 import { formatRelative } from '@/lib/date-helpers';
-import { useFileClipboard } from '@/stores/file-clipboard.store';
+import { buildExplorerContextMenu, buildExplorerBackgroundMenu, type ExplorerMenuContext } from './context-menu';
 import type { FileRecord } from '@/types/files';
 
 interface FileBrowserProps {
@@ -29,25 +28,24 @@ interface FileBrowserProps {
   selectedFile: FileRecord | null;
   selectedIds: Set<string>;
   isWritable: boolean;
-  currentPath: string;
   onItemClick: (file: FileRecord) => void;
   onItemDoubleClick: (file: FileRecord) => void;
   onToggleSelect: (id: string, shiftKey: boolean) => void;
   onToggleAll: () => void;
+  /** Commit of the inline rename input (id + new name). */
   onRename: (id: string, newName: string) => void;
-  onDelete: (id: string) => void;
-  onPaste?: () => void;
+  /** Menu context built by the page (clipboard, space, writable, callbacks).
+   *  FileBrowser injects `onRename` (inline rename) into the callbacks itself. */
+  menuCtx: ExplorerMenuContext;
 }
 
 export function FileBrowser({
-  files, loading, error, view, selectedFile, selectedIds, isWritable, currentPath,
-  onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll, onRename, onDelete, onPaste,
+  files, loading, error, view, selectedFile, selectedIds, isWritable,
+  onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll, onRename, menuCtx,
 }: FileBrowserProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
-  const clipboard = useFileClipboard();
-  const hasClipboard = clipboard.operation !== null && clipboard.fileIds.length > 0;
 
   const startRename = (file: FileRecord) => {
     setRenamingId(file.id);
@@ -63,50 +61,40 @@ export function FileBrowser({
     setRenameValue('');
   };
 
-  const buildContextItems = (file: FileRecord): ContextMenuItem[] => {
-    const items: ContextMenuItem[] = [];
-    if (file.is_directory) {
-      items.push({ label: 'Open', icon: FolderOpen, onClick: () => onItemDoubleClick(file) });
-    }
-    items.push({ label: 'Download', icon: Download, onClick: () => { void downloadFile(file.id, file.is_directory ? `${file.filename}.zip` : file.filename); } });
-    items.push({ label: 'Copy path', icon: Link, onClick: () => { void navigator.clipboard.writeText(file.filepath); } });
-    items.push({ label: 'Properties', icon: Info, onClick: () => onItemClick(file) });
-    items.push({ label: '', icon: undefined, onClick: () => {}, separator: true });
-    // Copy / Cut
-    items.push({
-      label: 'Copy',
-      icon: Copy,
-      onClick: () => {
-        const ids = selectedIds.size > 0 && selectedIds.has(file.id) ? [...selectedIds] : [file.id];
-        clipboard.setClipboard('copy', ids, currentPath);
-      },
-    });
-    if (isWritable) {
-      items.push({
-        label: 'Cut',
-        icon: Scissors,
-        onClick: () => {
-          const ids = selectedIds.size > 0 && selectedIds.has(file.id) ? [...selectedIds] : [file.id];
-          clipboard.setClipboard('cut', ids, currentPath);
-        },
-      });
-    }
-    // Paste (only shown if clipboard has items)
-    if (hasClipboard && isWritable) {
-      items.push({
-        label: 'Paste',
-        icon: ClipboardPaste,
-        onClick: () => onPaste?.(),
-      });
-    }
-    if (isWritable) {
-      items.push({ label: '', icon: undefined, onClick: () => {}, separator: true });
-      items.push({ label: 'Rename', icon: Edit3, onClick: () => startRename(file) });
-      items.push({ label: 'Move to...', icon: Move, onClick: () => {}, disabled: true });
-      items.push({ label: 'Delete', icon: Trash2, onClick: () => onDelete(file.id), variant: 'danger' });
-    }
-    return items;
+  // F2 → inline rename of the highlighted entry (matches the menu shortcut label)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'F2' || !isWritable || !selectedFile) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      e.preventDefault();
+      startRename(selectedFile);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isWritable, selectedFile]);
+
+  // Inject the inline-rename trigger into the page-provided callbacks
+  const fullCtx: ExplorerMenuContext = {
+    ...menuCtx,
+    callbacks: { ...menuCtx.callbacks, onRename: startRename },
   };
+
+  const buildContextItems = (file: FileRecord): ContextMenuItem[] => {
+    // Right-click on a selected row acts on the whole selection (Drive convention)
+    const entries = selectedIds.size > 0 && selectedIds.has(file.id)
+      ? files.filter(f => selectedIds.has(f.id))
+      : [file];
+    return buildExplorerContextMenu(entries, fullCtx);
+  };
+
+  const backgroundItems = buildExplorerBackgroundMenu(fullCtx);
+
+  /** Wrap content in the background (empty-area) context menu when it has entries. */
+  const withBackgroundMenu = (content: React.ReactElement) =>
+    backgroundItems.length > 0
+      ? <ContextMenu trigger={content} items={backgroundItems} />
+      : content;
 
   if (loading) {
     return (
@@ -125,19 +113,21 @@ export function FileBrowser({
   }
 
   if (files.length === 0) {
-    return (
-      <EmptyState
-        icon={FolderOpen}
-        title="No files here"
-        description="This folder is empty. Upload files or create a new folder to get started."
-      />
+    return withBackgroundMenu(
+      <div style={{ height: '100%' }}>
+        <EmptyState
+          icon={FolderOpen}
+          title="No files here"
+          description="This folder is empty. Upload files or create a new folder to get started."
+        />
+      </div>
     );
   }
 
   const hasSelection = selectedIds.size > 0;
 
   if (view === 'grid') {
-    return (
+    return withBackgroundMenu(
       <div
         style={{
           display: 'grid',
@@ -146,6 +136,7 @@ export function FileBrowser({
           padding: 12,
           overflow: 'auto',
           height: '100%',
+          alignContent: 'start',
         }}
       >
         {files.map(file => (
@@ -174,7 +165,7 @@ export function FileBrowser({
   const allChecked = files.length > 0 && files.every(f => selectedIds.has(f.id));
 
   // List view
-  return (
+  return withBackgroundMenu(
     <div style={{ overflow: 'auto', height: '100%' }}>
       {/* Header */}
       <div

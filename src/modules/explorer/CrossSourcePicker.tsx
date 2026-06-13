@@ -115,8 +115,10 @@ export function CrossSourcePicker({
     setMountNodes(prev => [...prev]);
   }, []);
 
-  // Check if a path is a source (can't be destination)
-  const isSourcePath = (path: string) => sourcePaths.some(sp => sp === path || sp.startsWith(path + '/'));
+  // A destination is invalid if it IS one of the sources or lives INSIDE one
+  // (e.g. moving a folder into itself). Ancestors of a source are fine —
+  // that's just moving the item up the tree.
+  const isSourcePath = (path: string) => sourcePaths.some(sp => sp === path || path.startsWith(sp + '/'));
 
   const canConfirm = selectedPath && !isSourcePath(selectedPath);
   const actionLabel = action === 'copy' ? 'Copy here' : 'Move here';

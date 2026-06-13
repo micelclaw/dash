@@ -10,23 +10,27 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { FolderTree, X, Trash2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { DropZone } from '@/components/shared/DropZone';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { RenameDialog } from '@/components/shared/RenameDialog';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
-import { downloadFile, downloadBatch } from '@/lib/file-download';
+import { downloadFile, downloadBatch, downloadVfsFile } from '@/lib/file-download';
 import { SourceTree } from './SourceTree';
 import { FileBrowserToolbar } from './FileBrowserToolbar';
 import { FileBrowser } from './FileBrowser';
 import { FileExplorerPreview } from './FileExplorerPreview';
 import { MountWizard } from './MountWizard';
-import { useFileExplorer } from './hooks/use-file-explorer';
+import { CrossSourcePicker } from './CrossSourcePicker';
+import { useFileExplorer, toVfsApiPath } from './hooks/use-file-explorer';
+import type { ExplorerMenuContext } from './context-menu';
 import { api } from '@/services/api';
+import type { FileRecord } from '@/types/files';
 
 export function Component() {
   const [searchParams] = useSearchParams();
@@ -39,6 +43,7 @@ export function Component() {
     files,
     loading,
     error,
+    fetchFiles,
     selectedFile,
     setSelectedFile,
     handleItemClick,
@@ -59,15 +64,24 @@ export function Component() {
     toggleAll,
     clearSelection,
     batchDelete,
-    batchMove: _batchMove,
+    batchMove,
+    batchCopy,
+    isVfs,
   } = useFileExplorer();
 
   const isMobile = useIsMobile();
   const [showTree, setShowTree] = useState(false);
-  const [confirmBatchDelete, setConfirmBatchDelete] = useState(false);
+  /** Delete confirmation target ids (from batch bar, Del key or context menu). */
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
   const [mountWizardOpen, setMountWizardOpen] = useState(false);
   const [mountRefreshKey, setMountRefreshKey] = useState(0);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  /** CrossSourcePicker state for Move to… / Copy to… (VFS paths). */
+  const [picker, setPicker] = useState<{ action: 'copy' | 'move'; ids: string[] } | null>(null);
   const clipboard = useFileClipboard();
+
+  /** Which clipboard namespace the current location belongs to. */
+  const currentSpace: 'index' | 'vfs' = isVfs ? 'vfs' : 'index';
 
   // Read ?path= from URL on mount
   useEffect(() => {
@@ -89,14 +103,14 @@ export function Component() {
           e.preventDefault();
           const ids = selectedIds.size > 0 ? [...selectedIds] : selectedFile ? [selectedFile.id] : [];
           if (ids.length > 0) {
-            clipboard.setClipboard('copy', ids, currentPath);
+            clipboard.setClipboard('copy', ids, currentPath, currentSpace);
             toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} copied`);
           }
         } else if (e.key === 'x' && isWritable) {
           e.preventDefault();
           const ids = selectedIds.size > 0 ? [...selectedIds] : selectedFile ? [selectedFile.id] : [];
           if (ids.length > 0) {
-            clipboard.setClipboard('cut', ids, currentPath);
+            clipboard.setClipboard('cut', ids, currentPath, currentSpace);
             toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} cut`);
           }
         } else if (e.key === 'v' && isWritable && clipboard.operation && clipboard.fileIds.length > 0) {
@@ -110,7 +124,7 @@ export function Component() {
 
       if (e.key === 'Delete' && isWritable && selectedIds.size > 0) {
         e.preventDefault();
-        setConfirmBatchDelete(true);
+        setPendingDeleteIds([...selectedIds]);
       }
 
       if (e.key === 'Escape') {
@@ -120,30 +134,55 @@ export function Component() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, selectedFile, currentPath, isWritable, clipboard, toggleAll, clearSelection]);
+  }, [selectedIds, selectedFile, currentPath, currentSpace, isWritable, clipboard, toggleAll, clearSelection]);
 
-  const handlePaste = useCallback(async () => {
-    if (!clipboard.operation || clipboard.fileIds.length === 0) return;
+  /**
+   * Paste the clipboard into `destFolder` (context menu over a folder) or the
+   * current folder. VFS ids are PATHS → POST /vfs/move | /vfs/copy. Index ids
+   * are UUIDs → moveFile / POST /files/:id/copy. Never mix the two spaces.
+   */
+  const handlePaste = useCallback(async (destFolder?: FileRecord) => {
+    const op = clipboard.operation;
+    if (!op || clipboard.fileIds.length === 0) return;
+    if (clipboard.space !== currentSpace) {
+      toast.error(clipboard.space === 'index'
+        ? 'Clipboard items are from Drive — paste them there'
+        : 'Clipboard items are File Explorer paths — paste them in a storage source');
+      return;
+    }
+    if (destFolder && clipboard.fileIds.includes(destFolder.id)) {
+      toast.error('Cannot paste a folder into itself');
+      return;
+    }
 
+    const n = clipboard.fileIds.length;
     try {
-      if (clipboard.operation === 'cut') {
-        // Move files
-        for (const id of clipboard.fileIds) {
-          await moveFile(id, currentPath);
+      if (currentSpace === 'vfs') {
+        const destDir = (destFolder ? destFolder.id : toVfsApiPath(currentPath)).replace(/\/+$/, '');
+        for (const from of clipboard.fileIds) {
+          const name = from.split('/').filter(Boolean).pop() ?? 'file';
+          const to = `${destDir}/${name}`;
+          if (to === from) continue; // cut+paste into the same folder → no-op
+          if (op === 'cut') await api.post('/vfs/move', { from, to });
+          else await api.post('/vfs/copy', { from, to });
         }
-        toast.success(`${clipboard.fileIds.length} item${clipboard.fileIds.length > 1 ? 's' : ''} moved`);
       } else {
-        // Copy files
-        for (const id of clipboard.fileIds) {
-          await api.post(`/files/${id}/copy`, { dest_parent_folder: currentPath });
+        const destPath = destFolder
+          ? (destFolder.filepath.endsWith('/') ? destFolder.filepath : destFolder.filepath + '/')
+          : currentPath;
+        if (op === 'cut') {
+          for (const id of clipboard.fileIds) await moveFile(id, destPath);
+        } else {
+          for (const id of clipboard.fileIds) await api.post(`/files/${id}/copy`, { dest_parent_folder: destPath });
         }
-        toast.success(`${clipboard.fileIds.length} item${clipboard.fileIds.length > 1 ? 's' : ''} copied`);
       }
-      clipboard.clear();
+      if (op === 'cut') clipboard.clear();
+      toast.success(`${n} item${n > 1 ? 's' : ''} ${op === 'cut' ? 'moved' : 'pasted'}`);
+      await fetchFiles();
     } catch {
       toast.error('Paste operation failed');
     }
-  }, [clipboard, currentPath, moveFile]);
+  }, [clipboard, currentPath, currentSpace, moveFile, fetchFiles]);
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -168,16 +207,96 @@ export function Component() {
     if (isMobile) setShowTree(false);
   }, [navigateTo, isMobile]);
 
-  const handleBatchDownload = useCallback(() => {
-    const selected = files.filter(f => selectedIds.has(f.id));
-    if (selected.length === 0) return;
-    if (selected.length === 1) {
-      const f = selected[0]!;
+  /**
+   * Download one-or-many entries. VFS entries stream via GET /vfs/read?download=1
+   * (their id IS the VFS path — never /files/<path>/download); index entries keep
+   * the /files/:id/download + batch-zip flow.
+   */
+  const handleDownload = useCallback((targets: FileRecord[]) => {
+    if (targets.length === 0) return;
+    if (isVfs) {
+      const filesOnly = targets.filter(f => !f.is_directory);
+      if (filesOnly.length < targets.length) {
+        toast.info('Folders can’t be downloaded from this source');
+      }
+      filesOnly.forEach(f => { void downloadVfsFile(f.id, f.filename); });
+    } else if (targets.length === 1) {
+      const f = targets[0]!;
       void downloadFile(f.id, f.is_directory ? `${f.filename}.zip` : f.filename);
     } else {
-      void downloadBatch([...selectedIds]);
+      void downloadBatch(targets.map(f => f.id));
     }
-  }, [files, selectedIds]);
+  }, [isVfs]);
+
+  const handleBatchDownload = useCallback(() => {
+    handleDownload(files.filter(f => selectedIds.has(f.id)));
+  }, [files, selectedIds, handleDownload]);
+
+  // ─── Context-menu handlers ─────────────────────────────
+
+  const handleCut = useCallback((targets: FileRecord[]) => {
+    if (targets.length === 0) return;
+    clipboard.setClipboard('cut', targets.map(f => f.id), currentPath, currentSpace);
+    toast.success(`${targets.length} item${targets.length > 1 ? 's' : ''} cut`);
+  }, [clipboard, currentPath, currentSpace]);
+
+  const handleCopy = useCallback((targets: FileRecord[]) => {
+    if (targets.length === 0) return;
+    clipboard.setClipboard('copy', targets.map(f => f.id), currentPath, currentSpace);
+    toast.success(`${targets.length} item${targets.length > 1 ? 's' : ''} copied`);
+  }, [clipboard, currentPath, currentSpace]);
+
+  const handlePickerConfirm = useCallback(async (destPath: string) => {
+    if (!picker) return;
+    const { action, ids } = picker;
+    setPicker(null);
+    try {
+      if (action === 'move') await batchMove(new Set(ids), destPath);
+      else await batchCopy(new Set(ids), destPath);
+      toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} ${action === 'move' ? 'moved' : 'copied'}`);
+    } catch {
+      toast.error(`${action === 'move' ? 'Move' : 'Copy'} failed`);
+    }
+  }, [picker, batchMove, batchCopy]);
+
+  const confirmPendingDelete = useCallback(async () => {
+    const ids = pendingDeleteIds ?? [];
+    setPendingDeleteIds(null);
+    if (ids.length === 0) return;
+    try {
+      if (ids.length === 1) await deleteFile(ids[0]!);
+      else await batchDelete(new Set(ids));
+      toast.success(`${ids.length} item${ids.length > 1 ? 's' : ''} deleted`);
+    } catch {
+      toast.error('Delete failed');
+    }
+  }, [pendingDeleteIds, deleteFile, batchDelete]);
+
+  /** Menu context shared by row menus + background menu (FileBrowser injects onRename). */
+  const menuCtx: ExplorerMenuContext = useMemo(() => ({
+    writable: isWritable,
+    space: currentSpace,
+    clipboard: { operation: clipboard.operation, fileIds: clipboard.fileIds, space: clipboard.space },
+    callbacks: {
+      onOpen: (file) => { if (file.is_directory) handleItemDoubleClick(file); else setSelectedFile(file); },
+      onProperties: (file) => setSelectedFile(file),
+      onDownload: handleDownload,
+      onCut: handleCut,
+      onCopy: handleCopy,
+      onPaste: (destFolder) => { void handlePaste(destFolder); },
+      // Move to… / Copy to… browse VFS mounts — only meaningful for VFS entries
+      ...(isVfs ? {
+        onMoveTo: (targets: FileRecord[]) => setPicker({ action: 'move', ids: targets.map(f => f.id) }),
+        onCopyTo: (targets: FileRecord[]) => setPicker({ action: 'copy', ids: targets.map(f => f.id) }),
+      } : {}),
+      onDelete: (targets) => setPendingDeleteIds(targets.map(f => f.id)),
+      onNewFolder: () => setNewFolderOpen(true),
+      onUpload: handleUploadClick,
+    },
+  }), [
+    isWritable, currentSpace, clipboard.operation, clipboard.fileIds, clipboard.space, isVfs,
+    handleItemDoubleClick, setSelectedFile, handleDownload, handleCut, handleCopy, handlePaste, handleUploadClick,
+  ]);
 
   const fileBrowserBlock = (
     <>
@@ -191,14 +310,12 @@ export function Component() {
             selectedFile={selectedFile}
             selectedIds={selectedIds}
             isWritable={isWritable}
-            currentPath={currentPath}
             onItemClick={handleItemClick}
             onItemDoubleClick={handleItemDoubleClick}
             onToggleSelect={toggleSelection}
             onToggleAll={toggleAll}
             onRename={renameFile}
-            onDelete={deleteFile}
-            onPaste={handlePaste}
+            menuCtx={menuCtx}
           />
         </DropZone>
       ) : (
@@ -211,14 +328,12 @@ export function Component() {
             selectedFile={selectedFile}
             selectedIds={selectedIds}
             isWritable={isWritable}
-            currentPath={currentPath}
             onItemClick={handleItemClick}
             onItemDoubleClick={handleItemDoubleClick}
             onToggleSelect={toggleSelection}
             onToggleAll={toggleAll}
             onRename={renameFile}
-            onDelete={deleteFile}
-            onPaste={handlePaste}
+            menuCtx={menuCtx}
           />
         </div>
       )}
@@ -260,7 +375,7 @@ export function Component() {
           <div style={{ flex: 1 }} />
           <BatchButton icon={Download} label="Download" onClick={handleBatchDownload} />
           {isWritable && (
-            <BatchButton icon={Trash2} label="Delete" onClick={() => setConfirmBatchDelete(true)} variant="danger" />
+            <BatchButton icon={Trash2} label="Delete" onClick={() => setPendingDeleteIds([...selectedIds])} variant="danger" />
           )}
           <BatchButton icon={X} label="Clear" onClick={clearSelection} />
         </div>
@@ -349,18 +464,38 @@ export function Component() {
         style={{ display: 'none' }}
       />
 
-      {/* Batch delete confirmation */}
+      {/* Delete confirmation (batch bar, Del key, context menu) */}
       <ConfirmDialog
-        open={confirmBatchDelete}
-        title={`Delete ${selectedIds.size} item${selectedIds.size > 1 ? 's' : ''}?`}
-        description="This action will move the selected items to trash."
+        open={pendingDeleteIds !== null}
+        title={`Delete ${pendingDeleteIds?.length ?? 0} item${(pendingDeleteIds?.length ?? 0) > 1 ? 's' : ''}?`}
+        description={currentSpace === 'vfs'
+          ? 'This will permanently delete the selected items from the storage source.'
+          : 'This action will move the selected items to trash.'}
         confirmLabel="Delete"
         variant="danger"
-        onConfirm={() => {
-          void batchDelete(selectedIds);
-          setConfirmBatchDelete(false);
+        onConfirm={() => { void confirmPendingDelete(); }}
+        onClose={() => setPendingDeleteIds(null)}
+      />
+
+      {/* New folder (background context menu) */}
+      <RenameDialog
+        open={newFolderOpen}
+        currentName=""
+        title="New folder name:"
+        confirmLabel="Create"
+        onConfirm={(name) => {
+          void Promise.resolve(createFolder(name)).catch(() => toast.error('Failed to create folder'));
         }}
-        onClose={() => setConfirmBatchDelete(false)}
+        onClose={() => setNewFolderOpen(false)}
+      />
+
+      {/* Move to… / Copy to… across storage sources */}
+      <CrossSourcePicker
+        open={picker !== null}
+        action={picker?.action ?? 'copy'}
+        sourcePaths={picker?.ids ?? []}
+        onConfirm={(dest) => { void handlePickerConfirm(dest); }}
+        onCancel={() => setPicker(null)}
       />
 
       {/* Mount wizard */}
