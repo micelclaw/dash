@@ -84,6 +84,9 @@ const router = createBrowserRouter([
           { path: '/office/pdf/tools', lazy: () => import('@/modules/office/PdfToolsFrame') },
           { path: '/finance/firefly', lazy: () => import('@/modules/finance/FireflyPage') },
           { path: '/finance/solidinvoice', lazy: () => import('@/modules/finance/SolidInvoicePage') },
+          { path: '/video', lazy: () => import('@/modules/video/VideoPage') },
+          { path: '/music', lazy: () => import('@/modules/music/MusicPage') },
+          { path: '/books', lazy: () => import('@/modules/books/BooksPage') },
           { path: '/multimedia', lazy: () => import('@/modules/multimedia/MultimediaPage') },
           { path: '/multimedia/jellyfin', lazy: () => import('@/modules/multimedia/JellyfinPage') },
           { path: '/multimedia/qbittorrent', lazy: () => import('@/modules/multimedia/QbittorrentPage') },
@@ -143,6 +146,11 @@ const router = createBrowserRouter([
   // Landing PÚBLICA de share links (sin login) — los datos vienen de los
   // endpoints públicos /api/v1/share/:token/* de Core.
   { path: '/share/:token', lazy: () => import('@/modules/share/PublicSharePage') },
+  // Fallback del PWA share target cuando el Service Worker no está activo
+  // (dev sin SW): el SW normalmente intercepta POST /share-target, cachea los
+  // blobs y redirige aquí; este GET solo rebota a Photos (el body se pierde sin
+  // SW, comportamiento aceptable). AuthGate de /photos pedirá login si hace falta.
+  { path: '/share-target', element: <Navigate to="/photos?shared=1" replace /> },
 ]);
 
 export function App() {

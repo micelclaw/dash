@@ -15,8 +15,8 @@ import {
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
   Settings, Puzzle, Activity, Wrench, Workflow, LineChart,
   Shapes, Kanban, Rss, Container, FileText, Cable,
-  Wallet, Receipt, Bitcoin, Clapperboard, Globe, Orbit,
-  Terminal, Radio, Server, Hammer, Bookmark,
+  Wallet, Receipt, Bitcoin, Antenna, Globe, Orbit,
+  Terminal, Radio, Server, Hammer, Bookmark, Music, Clapperboard, Library,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -44,13 +44,16 @@ export const MODULES: ModuleConfig[] = [
   { id: 'solidinvoice', label: 'SolidInvoice',    icon: Receipt,  color: 'var(--mod-finance)', path: '/finance/solidinvoice', group: 'Finance' },
   { id: 'crypto',       label: 'Crypto Stack',    icon: Bitcoin,      color: '#f7931a',              path: '/crypto',              group: 'Finance' },
   // Multimedia
-  { id: 'multimedia', label: 'Multimedia',  icon: Clapperboard,  color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia' },
+  { id: 'photos',   label: 'Photos',        icon: Image,         color: 'var(--mod-photos)',   path: '/photos',   group: 'Multimedia' },
+  { id: 'video',    label: 'Video',         icon: Clapperboard,  color: 'var(--mod-video)',    path: '/video',    group: 'Multimedia' },
+  { id: 'music',    label: 'Music',         icon: Music,         color: 'var(--mod-music)',    path: '/music',    group: 'Multimedia' },
+  { id: 'books',    label: 'Books',         icon: Library,       color: 'var(--mod-books)',    path: '/books',    group: 'Multimedia' },
+  { id: 'multimedia', label: 'Servarr',     icon: Antenna,       color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia' },
   // Social
   { id: 'messages', label: 'Messages',      icon: MessageCircle, color: 'var(--mod-chat)',     path: '/messages', group: 'Social' },
   { id: 'feeds',    label: 'Feeds',         icon: Rss,           color: 'var(--mod-feeds)',    path: '/feeds',    group: 'Social' },
   // Files
   { id: 'drive',    label: 'Drive',         icon: FolderOpen,    color: 'var(--mod-drive)',    path: '/drive',    group: 'Files' },
-  { id: 'photos',   label: 'Photos',        icon: Image,         color: 'var(--mod-photos)',   path: '/photos',   group: 'Files' },
   { id: 'explorer', label: 'File Explorer', icon: HardDrive,     color: 'var(--mod-explorer)', path: '/explorer', group: 'Files' },
   // Network
   { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'Network' },

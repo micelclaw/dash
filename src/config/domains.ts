@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
   Image, Columns, Bookmark, DollarSign,
-  Rss, GitBranch, FileText, Workflow, Cpu,
+  Rss, GitBranch, FileText, Workflow, Cpu, Music, Clapperboard, Library,
 } from 'lucide-react';
 
 export interface DataDomain {
@@ -58,6 +58,14 @@ export const CAPABILITY_DOMAINS: DataDomain[] = [
   { id: 'office',   label: 'Office',   icon: FileText,  hasTagSupport: false },
   { id: 'flows',    label: 'Flows',    icon: Workflow,  hasTagSupport: false },
   { id: 'hal',      label: 'Hardware', icon: Cpu,       hasTagSupport: false },
+  // Música (2026-06-12): biblioteca Navidrome vía tools music_* — sin tags ni Digest.
+  { id: 'music',    label: 'Music',    icon: Music,     hasTagSupport: false },
+  // Vídeo (2026-06-12): videoteca Jellyfin + peticiones Jellyseerr vía tools
+  // video_* — sin tags ni Digest.
+  { id: 'video',    label: 'Video',    icon: Clapperboard, hasTagSupport: false },
+  // Books (2026-06-12): ebooks EPUB + audiolibros Audiobookshelf vía tools
+  // books_* — sin tags ni Digest.
+  { id: 'books',    label: 'Books',    icon: Library,   hasTagSupport: false },
 ];
 
 // Digest solo sobre dominios de datos.

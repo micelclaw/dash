@@ -59,6 +59,9 @@
   --mod-flows-hover: #e11d48;
   --mod-terminal: #22c55e;
   --mod-gateway: #0ea5e9;
+  --mod-music: #10b981;
+  --mod-video: #ef4444;
+  --mod-books: #84cc16;
 
   /* File-type palette (FileIcon) — formatos sin módulo dueño */
   --file-doc: #3b82f6;
@@ -134,6 +137,7 @@ body {
   margin: 0;
   min-height: 100dvh;
 }
+
 
 /* Typography utilities */
 h1 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }
