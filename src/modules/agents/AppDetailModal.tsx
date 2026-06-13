@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import { api } from '@/services/api';
@@ -44,10 +44,14 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'core' | 'full'>('full');
   const [saving, setSaving] = useState(false);
+  // Si hubo cambio de modo, refrescamos el padre AL CERRAR (no en cada toggle, que
+  // desmontaría el modal). El toggle actualiza el modo localmente al instante.
+  const changed = useRef(false);
 
   useEffect(() => {
     if (!open || !skill) return;
     setMode(skillModes[skillId] ?? 'full');
+    changed.current = false;
     setDetail(null);
     setLoading(true);
     api.get<{ data: SkillDetail }>(`/managed-agents/skills/${encodeURIComponent(skillId)}/detail`)
@@ -68,7 +72,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
         skill_modes: { ...skillModes, [skillId]: next },
       });
       toast.success(`${skill?.name}: modo ${next === 'core' ? 'núcleo' : 'completo'}`);
-      onChanged();
+      changed.current = true; // refresco diferido al cierre
     } catch {
       setMode(prev);
       toast.error('No se pudo cambiar el modo');
@@ -77,11 +81,18 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
     }
   };
 
+  // Al cerrar: si cambió el modo, refresca el padre (una vez). La X y el overlay
+  // pasan por aquí vía onOpenChange.
+  const handleClose = () => {
+    if (changed.current) onChanged();
+    onClose();
+  };
+
   if (!skill) return null;
   const hasFull = (detail?.tools.full_only.length ?? 0) > 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
       <DialogContent className="max-w-xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
