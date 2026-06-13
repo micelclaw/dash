@@ -21,7 +21,7 @@ export type DriveTab =
   | 'shared'
   | 'trash'
   | 'duplicates'
-  | 'devices';
+  | 'settings';
 
 export const DRIVE_TABS: DriveTab[] = [
   'my-drive',
@@ -30,7 +30,7 @@ export const DRIVE_TABS: DriveTab[] = [
   'shared',
   'trash',
   'duplicates',
-  'devices',
+  'settings',
 ];
 
 export function isDriveTab(value: string | null | undefined): value is DriveTab {
@@ -74,12 +74,24 @@ export const useDriveStore = create<DriveStore>()(
     }),
     {
       name: 'claw-drive',
+      version: 1,
       partialize: (state) => ({
         activeTab: state.activeTab,
         density: state.density,
         inspectorOpen: state.inspectorOpen,
         inspectorTab: state.inspectorTab,
       }),
+      // v0 → v1: the legacy `devices` tab is gone (replaced by `settings`).
+      // Any persisted `activeTab` that is no longer a valid Drive tab — most
+      // notably `'devices'` — is reset to My Drive so the shell never lands on
+      // a tab that has no view to render.
+      migrate: (persisted, _version) => {
+        const state = (persisted ?? {}) as Partial<{ activeTab: string }>;
+        if (!isDriveTab(state.activeTab)) {
+          return { ...state, activeTab: 'my-drive' as DriveTab };
+        }
+        return state;
+      },
     },
   ),
 );

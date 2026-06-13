@@ -13,7 +13,7 @@
 import { useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import {
-  HardDrive, Clock, Star, Users, Trash2, Copy, MonitorSmartphone,
+  HardDrive, Clock, Star, Users, Trash2, Copy, Settings,
 } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
 import { useDriveStore, isDriveTab, type DriveTab } from '@/stores/drive.store';
@@ -24,16 +24,17 @@ import { StarredView } from './views/StarredView';
 import { SharedView } from './views/SharedView';
 import { TrashView } from './views/TrashView';
 import { DuplicatesView } from './views/DuplicatesView';
-import { DevicesView } from './views/DevicesView';
+import { DriveSettingsView } from './views/DriveSettingsView';
 
 /**
  * Drive module shell (D3) — tab row (My Drive / Recent / Starred / Shared /
- * Trash / Duplicates / Devices) + quota chip, with the active view below.
+ * Trash / Duplicates) + quota chip + a settings gear, with the active view
+ * below.
  *
  * Tab state lives in `useDriveStore` (persisted); `?tab=` in the URL wins on
  * mount and stays in sync afterwards. Legacy deep-links `?id=` / `?path=`
  * (entity chips, search) keep working: they force the My Drive tab, which
- * consumes them.
+ * consumes them. The old `?tab=devices` deep-link now redirects to settings.
  */
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,6 +45,16 @@ export function Component() {
   // navigating to /drive?tab=my-drive&id=…).
   useEffect(() => {
     const tabParam = searchParams.get('tab');
+    // Legacy `?tab=devices` deep-link → Drive settings (the Devices tab is gone).
+    if (tabParam === 'devices') {
+      setActiveTab('settings');
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set('tab', 'settings');
+        return next;
+      }, { replace: true });
+      return;
+    }
     if (isDriveTab(tabParam)) {
       if (tabParam !== activeTab) setActiveTab(tabParam);
       return;
@@ -70,7 +81,6 @@ export function Component() {
     { id: 'shared', label: 'Shared', icon: Users },
     { id: 'trash', label: 'Trash', icon: Trash2 },
     { id: 'duplicates', label: 'Duplicates', icon: Copy },
-    { id: 'devices', label: 'Devices', icon: MonitorSmartphone },
   ], []);
 
   return (
@@ -99,6 +109,21 @@ export function Component() {
           <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} variant="underline" />
         </div>
         <QuotaChip />
+        <button
+          onClick={() => handleTabChange('settings')}
+          title="Drive settings"
+          aria-label="Drive settings"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 32, height: 32, marginBottom: 6, flexShrink: 0,
+            background: activeTab === 'settings' ? 'color-mix(in srgb, var(--mod-drive) 14%, transparent)' : 'transparent',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+            color: activeTab === 'settings' ? 'var(--mod-drive)' : 'var(--text-dim)',
+            cursor: 'pointer',
+          }}
+        >
+          <Settings size={16} />
+        </button>
       </div>
 
       {/* Active view */}
@@ -109,7 +134,7 @@ export function Component() {
         {activeTab === 'shared' && <SharedView />}
         {activeTab === 'trash' && <TrashView />}
         {activeTab === 'duplicates' && <DuplicatesView />}
-        {activeTab === 'devices' && <DevicesView />}
+        {activeTab === 'settings' && <DriveSettingsView />}
       </div>
     </div>
   );
