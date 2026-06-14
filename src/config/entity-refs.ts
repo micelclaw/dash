@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -133,6 +133,41 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-photos)',
     label: 'Foto',
     route: (id) => `/photos?id=${encodeURIComponent(id)}`,
+  },
+  // Biblioteca multimedia (módulos propios sobre Navidrome/Jellyfin/ABS). El
+  // resolver afina la ruta por `media_type` del record (track/album, movie/
+  // series, ebook/audiobook); estas rutas son el fallback genérico.
+  music: {
+    Icon: Music,
+    color: 'var(--mod-music)',
+    label: 'Música',
+    route: (id) => `/music?album=${encodeURIComponent(id)}`,
+  },
+  video: {
+    Icon: Clapperboard,
+    color: 'var(--mod-video)',
+    label: 'Vídeo',
+    route: (id) => `/video?item=${encodeURIComponent(id)}`,
+  },
+  book: {
+    Icon: Library,
+    color: 'var(--mod-books)',
+    label: 'Libro',
+    route: (id) => `/books?book=${encodeURIComponent(id)}`,
+  },
+  // Conversación del chat / mensaje de canal — navegan a su módulo (sin
+  // deep-link fino hoy; mejor que dejarlos sin ruta).
+  conversation: {
+    Icon: MessageSquare,
+    color: 'var(--mod-chat)',
+    label: 'Chat',
+    route: () => `/chat`,
+  },
+  message: {
+    Icon: MessageCircle,
+    color: 'var(--mod-chat)',
+    label: 'Mensaje',
+    route: () => `/messages`,
   },
   // office: chips tipadas por formato del documento generado/referenciado. Word/Excel/
   // PowerPoint abren en el editor ONLYOFFICE (/office/edit/:id, que detecta el tipo por

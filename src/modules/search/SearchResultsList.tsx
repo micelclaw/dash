@@ -11,11 +11,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import {
-  StickyNote, Calendar, Mail, Users, BookOpen,
-  FolderOpen, ImageIcon, MessageSquare, MessagesSquare,
-  Trash2, ExternalLink, Square, CheckSquare, X,
-} from 'lucide-react';
+import { Trash2, ExternalLink, Square, CheckSquare, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { HeatBadge } from '@/components/shared/HeatBadge';
@@ -24,74 +20,10 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useSearchStore } from '@/stores/search.store';
 import { ProvenanceBreakdown } from './ProvenanceBreakdown';
 import { getPreviewUrl } from '@/lib/file-utils';
+import { resolveEntity } from '@/config/entity-registry';
 import { useSearchSelection, toKey } from './use-search-selection';
 import { deleteEntity, canDelete } from './delete-entity';
 import type { SearchResult } from '@/types/search';
-import type { LucideIcon } from 'lucide-react';
-
-const DOMAIN_META: Record<string, { icon: LucideIcon; color: string; route: string; label: string }> = {
-  note:         { icon: StickyNote,    color: 'var(--mod-notes)',    route: '/notes',    label: 'Note' },
-  event:        { icon: Calendar,      color: 'var(--mod-calendar)', route: '/calendar', label: 'Event' },
-  email:        { icon: Mail,          color: 'var(--mod-mail)',     route: '/mail',     label: 'Email' },
-  contact:      { icon: Users,         color: 'var(--mod-contacts)', route: '/contacts', label: 'Contact' },
-  diary:        { icon: BookOpen,      color: 'var(--mod-diary)',    route: '/diary',    label: 'Diary' },
-  file:         { icon: FolderOpen,    color: 'var(--mod-drive)',    route: '/drive',    label: 'File' },
-  photo:        { icon: ImageIcon,    color: 'var(--mod-photos)',   route: '/photos',   label: 'Photo' },
-  conversation: { icon: MessageSquare, color: 'var(--mod-chat)',     route: '/chat',     label: 'Chat' },
-  message:      { icon: MessagesSquare, color: 'var(--mod-observers)', route: '/settings/observers', label: 'Message' },
-};
-
-/** Build the deep-link URL for a search result */
-function buildDeepLink(r: SearchResult, meta: typeof DOMAIN_META[string] | undefined): string | null {
-  const rec = r.record as Record<string, unknown> | null;
-
-  // VFS files → file explorer at parent folder
-  if (rec?.source === 'vfs' && rec?.filepath) {
-    const fp = rec.filepath as string;
-    const parentPath = fp.substring(0, fp.lastIndexOf('/') + 1) || '/';
-    return `/explorer?path=${encodeURIComponent(parentPath)}`;
-  }
-
-  // Photos → photos page
-  if (r.domain === 'photo') {
-    return `/photos?id=${r.record_id}`;
-  }
-
-  // Regular files → drive at parent folder
-  if (r.domain === 'file' && rec) {
-    const folder = (rec.parent_folder as string) || '/';
-    return `/drive?path=${encodeURIComponent(folder)}`;
-  }
-
-  // Events → calendar at event date + open detail
-  if (r.domain === 'event' && rec) {
-    const dateStr = (rec.start_at as string) || (rec.start_date as string) || (rec.starts_at as string) || (rec.created_at as string);
-    if (dateStr) {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        const iso = d.toISOString().split('T')[0]; // YYYY-MM-DD
-        return `/calendar?id=${r.record_id}&date=${iso}&view=day`;
-      }
-    }
-    return `/calendar?id=${r.record_id}`;
-  }
-
-  // Diary → diary at entry date
-  if (r.domain === 'diary' && rec) {
-    const dateStr = (rec.entry_date as string) || (rec.date as string) || (rec.created_at as string);
-    if (dateStr) {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        const iso = d.toISOString().split('T')[0];
-        return `/diary?date=${iso}`;
-      }
-    }
-  }
-
-  // Default: module?id=record_id
-  if (meta?.route) return `${meta.route}?id=${r.record_id}`;
-  return null;
-}
 
 function getTitle(r: SearchResult): string {
   const rec = r.record as Record<string, unknown> | null;
@@ -211,12 +143,13 @@ export function SearchResultsList() {
     label: string;
   } | null>(null);
 
-  function getContextItems(r: SearchResult, meta: typeof DOMAIN_META[string] | undefined): ContextMenuItem[] {
+  function getContextItems(r: SearchResult): ContextMenuItem[] {
     const items: ContextMenuItem[] = [];
-    const link = buildDeepLink(r, meta);
+    const res = resolveEntity(r.domain, r.record_id, r.record);
+    const link = res.route;
 
     items.push({
-      label: `Open ${meta?.label ?? r.domain}`,
+      label: `Open ${res.label}`,
       icon: ExternalLink,
       onClick: () => { if (link) navigate(link); },
       disabled: !link,
@@ -374,8 +307,8 @@ export function SearchResultsList() {
       {/* Results */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {results.map((r, i) => {
-          const meta = DOMAIN_META[r.domain];
-          const Icon = meta?.icon ?? StickyNote;
+          const res = resolveEntity(r.domain, r.record_id, r.record);
+          const Icon = res.Icon;
           const isSelected = selectedResult?.record_id === r.record_id && selectedResult?.domain === r.domain;
           const heatScore = r.provenance?.heat_score ?? (r.record as Record<string, unknown> | null)?.heat_score as number ?? 0;
           const checked = isChecked(r);
@@ -387,10 +320,7 @@ export function SearchResultsList() {
                 <div>
                   <button
                     onClick={() => setSelectedResult(isSelected ? null : r)}
-                    onDoubleClick={() => {
-                      const link = buildDeepLink(r, meta);
-                      if (link) navigate(link);
-                    }}
+                    onDoubleClick={() => { if (res.route) navigate(res.route); }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -428,7 +358,7 @@ export function SearchResultsList() {
 
                     {r.domain === 'photo' && canPreview(r)
                       ? <PhotoThumb fileId={getFileId(r)} />
-                      : <Icon size={16} style={{ color: meta?.color ?? 'var(--text-muted)', flexShrink: 0 }} />
+                      : <Icon size={16} style={{ color: res.color, flexShrink: 0 }} />
                     }
                     <span style={{
                       flex: 1, fontSize: '0.8125rem', color: 'var(--text)',
@@ -473,29 +403,27 @@ export function SearchResultsList() {
                       </div>
                       <ProvenanceBreakdown result={r} />
                       <button
-                        onClick={() => {
-                          const link = buildDeepLink(r, meta);
-                          if (link) navigate(link);
-                        }}
+                        onClick={() => { if (res.route) navigate(res.route); }}
+                        disabled={!res.route}
                         style={{
                           marginTop: 8,
                           padding: '3px 10px',
                           borderRadius: 'var(--radius-sm)',
                           border: '1px solid var(--border)',
                           background: 'transparent',
-                          color: 'var(--amber)',
+                          color: res.route ? 'var(--amber)' : 'var(--text-muted)',
                           fontSize: '0.75rem',
                           fontFamily: 'var(--font-sans)',
-                          cursor: 'pointer',
+                          cursor: res.route ? 'pointer' : 'not-allowed',
                         }}
                       >
-                        Open {meta?.label ?? r.domain}
+                        Open {res.label}
                       </button>
                     </div>
                   )}
                 </div>
               }
-              items={getContextItems(r, meta)}
+              items={getContextItems(r)}
             />
           );
         })}

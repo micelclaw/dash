@@ -12,14 +12,12 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  User, Briefcase, MapPin, Hash, Network,
-  StickyNote, Calendar, Mail, BookOpen, FolderOpen,
-} from 'lucide-react';
+import { User, Briefcase, MapPin, Hash, Network } from 'lucide-react';
 import { IntelligencePanelHeader } from '@/components/shared/IntelligencePanelHeader';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
 import { useAuthStore } from '@/stores/auth.store';
 import { api } from '@/services/api';
+import { resolveEntity } from '@/config/entity-registry';
 import type { LucideIcon } from 'lucide-react';
 
 interface GraphProximityContactPanelProps {
@@ -48,12 +46,9 @@ const TYPE_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
   topic: { icon: Hash, color: '#fbbf24' },
 };
 
-const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string; route: string }> = {
-  note: { icon: StickyNote, color: 'var(--mod-notes)', route: '/notes' },
-  event: { icon: Calendar, color: 'var(--mod-calendar)', route: '/calendar' },
-  email: { icon: Mail, color: 'var(--mod-mail)', route: '/mail' },
-  diary: { icon: BookOpen, color: 'var(--mod-diary)', route: '/diary' },
-  file: { icon: FolderOpen, color: 'var(--mod-drive)', route: '/drive' },
+// Solo la base de la ruta para el link "?mention=" (icono/color salen del SSOT).
+const DOMAIN_MENTION_BASE: Record<string, string> = {
+  note: '/notes', event: '/calendar', email: '/mail', diary: '/diary', file: '/drive',
 };
 
 export function GraphProximityContactPanel({ contactId, onOpenGraph }: GraphProximityContactPanelProps) {
@@ -132,13 +127,14 @@ export function GraphProximityContactPanel({ contactId, onOpenGraph }: GraphProx
             Mentioned in
           </div>
           {mentions.map(m => {
-            const domainInfo = DOMAIN_ICONS[m.domain];
-            if (!domainInfo) return null;
-            const Icon = domainInfo.icon;
+            const base = DOMAIN_MENTION_BASE[m.domain];
+            if (!base) return null;
+            const ent = resolveEntity(m.domain);
+            const Icon = ent.Icon;
             return (
               <div
                 key={m.domain}
-                onClick={() => navigate(`${domainInfo.route}?mention=${contactId}`)}
+                onClick={() => navigate(`${base}?mention=${contactId}`)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6,
                   padding: '2px 0', fontSize: '0.8125rem', cursor: 'pointer',
@@ -146,7 +142,7 @@ export function GraphProximityContactPanel({ contactId, onOpenGraph }: GraphProx
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--amber)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text)')}
               >
-                <Icon size={13} style={{ color: domainInfo.color, flexShrink: 0 }} />
+                <Icon size={13} style={{ color: ent.color, flexShrink: 0 }} />
                 <span style={{ flex: 1, color: 'inherit' }}>{m.count} {m.domain}s</span>
                 <span style={{ fontSize: '0.75rem', color: 'var(--amber)' }}>View →</span>
               </div>

@@ -10,8 +10,14 @@
  * https://micelclaw.com
  */
 
+export type SearchDomain =
+  | 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary'
+  | 'conversation' | 'message' | 'bookmark' | 'inventory'
+  | 'kanban_board' | 'kanban_card' | 'feed' | 'article'
+  | 'music' | 'video' | 'book';
+
 export interface SearchResult {
-  domain: 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary' | 'conversation' | 'message' | 'bookmark';
+  domain: SearchDomain;
   record_id: string;
   score: number;
   snippet: string;

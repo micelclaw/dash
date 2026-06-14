@@ -55,7 +55,13 @@ const MIME_ICONS: [string, LucideIcon, string][] = [
   ['application/x-rar-compressed', FileArchive, 'var(--mod-inventory)'],
 ];
 
-function getFileIconEntry(mime: string, isDirectory: boolean): [LucideIcon, string] {
+/**
+ * Resuelve [Icono, color] de un archivo por su mime (o carpeta). FUENTE ÚNICA
+ * de la metadata visual de archivos — reutilizada por el resolver de entidades
+ * (entity-refs.ts) para que search/chips/menciones pinten los archivos igual
+ * que Drive/File Explorer. Añadir un mime nuevo = una edición en MIME_ICONS.
+ */
+export function getFileIconEntry(mime: string, isDirectory: boolean): [LucideIcon, string] {
   if (isDirectory) return [Folder, 'var(--amber)'];
   for (const [prefix, icon, color] of MIME_ICONS) {
     if (mime.startsWith(prefix)) return [icon, color];

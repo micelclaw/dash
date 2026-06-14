@@ -12,14 +12,12 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen, ArrowRight, Trash2,
-} from 'lucide-react';
+import { ArrowRight, Trash2 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { IntelligencePanelHeader } from '@/components/shared/IntelligencePanelHeader';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
-import type { LucideIcon } from 'lucide-react';
+import { resolveEntity } from '@/config/entity-registry';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import type { LinkedRecord } from '@/types/links';
@@ -30,15 +28,6 @@ interface RelatedItemsPanelProps {
   /** Called before navigating — use to close modals/panels */
   onNavigate?: () => void;
 }
-
-const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
-  note: { icon: StickyNote, color: 'var(--mod-notes)' },
-  event: { icon: Calendar, color: 'var(--mod-calendar)' },
-  contact: { icon: Users, color: 'var(--mod-contacts)' },
-  email: { icon: Mail, color: 'var(--mod-mail)' },
-  file: { icon: FolderOpen, color: 'var(--mod-drive)' },
-  diary: { icon: BookOpen, color: 'var(--mod-diary)' },
-};
 
 const MAX_VISIBLE = 3;
 
@@ -72,9 +61,7 @@ export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPa
   return (
     <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false}>
       {visible.map(rec => {
-        const domainInfo = DOMAIN_ICONS[rec.domain];
-        const Icon = domainInfo?.icon ?? StickyNote;
-        const color = domainInfo?.color ?? 'var(--text-dim)';
+        const { Icon, color } = resolveEntity(rec.domain, undefined, rec.record as Record<string, unknown> | null);
 
         const contextItems: ContextMenuItem[] = [
           {

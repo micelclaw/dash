@@ -12,9 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen, Link2,
-} from 'lucide-react';
+import { Link2 } from 'lucide-react';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { IntelligencePanelHeader } from '@/components/shared/IntelligencePanelHeader';
 import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
@@ -22,43 +20,13 @@ import { useIntelligenceStore } from '@/stores/intelligence.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { api, ApiError } from '@/services/api';
 import { toast } from 'sonner';
-import type { LucideIcon } from 'lucide-react';
+import { resolveEntity } from '@/config/entity-registry';
 import type { SimilarItem } from '@/types/intelligence';
 
 interface SimilarContentPanelProps {
   sourceType: string;
   sourceId: string;
 }
-
-const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
-  note:          { icon: StickyNote, color: 'var(--mod-notes)' },
-  notes:         { icon: StickyNote, color: 'var(--mod-notes)' },
-  event:         { icon: Calendar,   color: 'var(--mod-calendar)' },
-  events:        { icon: Calendar,   color: 'var(--mod-calendar)' },
-  contact:       { icon: Users,      color: 'var(--mod-contacts)' },
-  contacts:      { icon: Users,      color: 'var(--mod-contacts)' },
-  email:         { icon: Mail,       color: 'var(--mod-mail)' },
-  emails:        { icon: Mail,       color: 'var(--mod-mail)' },
-  file:          { icon: FolderOpen, color: 'var(--mod-drive)' },
-  files:         { icon: FolderOpen, color: 'var(--mod-drive)' },
-  diary:         { icon: BookOpen,   color: 'var(--mod-diary)' },
-  diary_entries: { icon: BookOpen,   color: 'var(--mod-diary)' },
-};
-
-const DOMAIN_ROUTES: Record<string, string> = {
-  note:          '/notes',
-  notes:         '/notes',
-  event:         '/calendar',
-  events:        '/calendar',
-  contact:       '/contacts',
-  contacts:      '/contacts',
-  email:         '/mail',
-  emails:        '/mail',
-  file:          '/drive',
-  files:         '/drive',
-  diary:         '/diary',
-  diary_entries: '/diary',
-};
 
 export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPanelProps) {
   const navigate = useNavigate();
@@ -152,9 +120,9 @@ export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPane
   return (
     <IntelligencePanelHeader title="Similar Semantic" storageKey="similar" defaultCollapsed={false}>
       {visible.map(item => {
-        const domainInfo = DOMAIN_ICONS[item.domain];
-        const Icon = domainInfo?.icon ?? StickyNote;
-        const color = domainInfo?.color ?? 'var(--text-dim)';
+        const ent = resolveEntity(item.domain, item.record_id, (item as { record?: Record<string, unknown> | null }).record);
+        const Icon = ent.Icon;
+        const color = ent.color;
 
         return (
           <div
@@ -163,7 +131,7 @@ export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPane
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '3px 0', cursor: 'pointer', fontSize: '0.8125rem',
             }}
-            onClick={() => navigate(`${DOMAIN_ROUTES[item.domain] ?? '/'}?id=${item.record_id}`)}
+            onClick={() => navigate(ent.route ?? '/')}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >

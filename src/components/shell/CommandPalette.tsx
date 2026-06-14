@@ -27,6 +27,7 @@ import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { api } from '@/services/api';
 import { usePlayerStore } from '@/stores/player.store';
 import { HeatBadge } from '@/components/shared/HeatBadge';
+import { resolveEntity } from '@/config/entity-registry';
 import type { SearchResult } from '@/types/search';
 
 interface CommandPaletteProps {
@@ -47,28 +48,8 @@ const DOMAIN_MAP: Record<string, string> = {
   bookmarks: 'bookmarks',
 };
 
-const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
-  notes: { icon: StickyNote, color: 'var(--mod-notes)' },
-  note: { icon: StickyNote, color: 'var(--mod-notes)' },
-  events: { icon: Calendar, color: 'var(--mod-calendar)' },
-  event: { icon: Calendar, color: 'var(--mod-calendar)' },
-  emails: { icon: Mail, color: 'var(--mod-mail)' },
-  email: { icon: Mail, color: 'var(--mod-mail)' },
-  contacts: { icon: Users, color: 'var(--mod-contacts)' },
-  contact: { icon: Users, color: 'var(--mod-contacts)' },
-  files: { icon: FolderOpen, color: 'var(--mod-drive)' },
-  file: { icon: FolderOpen, color: 'var(--mod-drive)' },
-  diary: { icon: BookOpen, color: 'var(--mod-diary)' },
-  conversations: { icon: MessageSquare, color: 'var(--mod-chat)' },
-  conversation: { icon: MessageSquare, color: 'var(--mod-chat)' },
-  bookmarks: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
-  bookmark: { icon: Bookmark, color: 'var(--mod-bookmarks)' },
-  messages: { icon: MessageSquare, color: 'var(--mod-chat)' },
-  message: { icon: MessageSquare, color: 'var(--mod-chat)' },
-  kanban_board: { icon: Kanban, color: 'var(--mod-projects)' },
-  kanban_card: { icon: Kanban, color: 'var(--mod-projects)' },
-  inventory: { icon: Boxes, color: 'var(--mod-inventory)' },
-};
+// Icono/color por dominio: ya NO se duplican aquí — salen del SSOT (resolveEntity
+// de entity-registry.ts). Este mapa local desapareció; ver usos abajo.
 
 const DOMAIN_LABELS: Record<string, string> = {
   notes: 'Notes',
@@ -101,13 +82,6 @@ interface CommandItem {
   action: () => void;
 }
 
-const ROUTE_MAP: Record<string, string> = {
-  note: '/notes', event: '/calendar', contact: '/contacts',
-  email: '/mail', file: '/drive', diary: '/diary', conversation: '/chat',
-  message: '/chat', bookmark: '/bookmarks',
-  kanban_board: '/projects', kanban_card: '/projects', inventory: '/inventory',
-};
-
 function getResultTitle(result: SearchResult): string {
   const r = result.record;
   if (!r) {
@@ -128,7 +102,7 @@ function getResultTitle(result: SearchResult): string {
 }
 
 function getResultRoute(result: SearchResult): string {
-  return `${ROUTE_MAP[result.domain] || '/'}?id=${result.record_id}`;
+  return resolveEntity(result.domain, result.record_id, result.record).route ?? '/';
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
@@ -498,9 +472,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   </Command.Group>
                 )}
                 {searchResults.length > 0 && Array.from(groupedResults.entries()).map(([domain, items]) => {
-                  const domainInfo = DOMAIN_ICONS[domain];
-                  const DomainIcon = domainInfo?.icon ?? Search;
-                  const domainColor = domainInfo?.color ?? 'var(--text-dim)';
+                  const dv = resolveEntity(domain);
+                  const DomainIcon = dv.Icon;
+                  const domainColor = dv.color;
                   const label = DOMAIN_LABELS[domain] ?? domain;
                   const visibleItems = items.slice(0, 3);
                   const remaining = items.length - visibleItems.length;
@@ -513,9 +487,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                         {label}
                       </div>
                       {visibleItems.map((result) => {
-                        const rInfo = DOMAIN_ICONS[domain];
-                        const RIcon = rInfo?.icon ?? Search;
-                        const rColor = rInfo?.color ?? 'var(--text-dim)';
+                        const rv = resolveEntity(result.domain, result.record_id, result.record);
+                        const RIcon = rv.Icon;
+                        const rColor = rv.color;
                         return (
                           <Command.Item
                             key={result.record_id}
@@ -636,8 +610,8 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 </div>
                 {domainSuggestions.map((d) => {
                   const apiDomain = DOMAIN_MAP[d]!;
-                  const info = DOMAIN_ICONS[apiDomain];
-                  const DIcon = info?.icon ?? Search;
+                  const info = resolveEntity(apiDomain);
+                  const DIcon = info.Icon;
                   return (
                     <Command.Item
                       key={d}
@@ -659,7 +633,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       }}
                       data-cmdk-item=""
                     >
-                      <DIcon size={16} style={{ color: info?.color ?? 'var(--text-dim)' }} />
+                      <DIcon size={16} style={{ color: info.color }} />
                       <span>@{d}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>
                         Search in {DOMAIN_LABELS[apiDomain] ?? d}
@@ -683,9 +657,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   </Command.Empty>
                 )}
                 {searchResults.map((result) => {
-                  const dInfo = selectedDomain ? DOMAIN_ICONS[DOMAIN_MAP[selectedDomain] ?? ''] : undefined;
-                  const DResultIcon = dInfo?.icon ?? Search;
-                  const dResultColor = dInfo?.color ?? 'var(--text-dim)';
+                  const dInfo = resolveEntity(result.domain, result.record_id, result.record);
+                  const DResultIcon = dInfo.Icon;
+                  const dResultColor = dInfo.color;
                   return (
                     <Command.Item
                       key={result.record_id}

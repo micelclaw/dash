@@ -14,11 +14,11 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   User, Briefcase, MapPin, Hash, Building2, CalendarDays,
-  StickyNote, Calendar, Mail, BookOpen, FolderOpen, LayoutGrid,
   ChevronDown, ChevronUp, Maximize2,
 } from 'lucide-react';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { api } from '@/services/api';
+import { resolveEntity } from '@/config/entity-registry';
 import { entityTypeColor } from './graph-utils';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 import type { LucideIcon } from 'lucide-react';
@@ -63,22 +63,16 @@ interface MentionGroup {
   records: MentionRecord[];
 }
 
-// Map domain names to UI metadata
-const DOMAIN_META: Record<string, { icon: LucideIcon; color: string; route: string; label: string }> = {
-  notes:         { icon: StickyNote, color: 'var(--mod-notes)',    route: '/notes',    label: 'Notes' },
-  note:          { icon: StickyNote, color: 'var(--mod-notes)',    route: '/notes',    label: 'Notes' },
-  events:        { icon: Calendar,   color: 'var(--mod-calendar)', route: '/calendar', label: 'Events' },
-  event:         { icon: Calendar,   color: 'var(--mod-calendar)', route: '/calendar', label: 'Events' },
-  emails:        { icon: Mail,       color: 'var(--mod-mail)',     route: '/mail',     label: 'Emails' },
-  email:         { icon: Mail,       color: 'var(--mod-mail)',     route: '/mail',     label: 'Emails' },
-  diary_entries: { icon: BookOpen,   color: 'var(--mod-diary)',    route: '/diary',    label: 'Diary entries' },
-  diary:         { icon: BookOpen,   color: 'var(--mod-diary)',    route: '/diary',    label: 'Diary entries' },
-  files:         { icon: FolderOpen, color: 'var(--mod-drive)',    route: '/drive',    label: 'Files' },
-  file:          { icon: FolderOpen, color: 'var(--mod-drive)',    route: '/drive',    label: 'Files' },
-  contacts:      { icon: User,       color: 'var(--mod-contacts)', route: '/contacts', label: 'Contacts' },
-  contact:       { icon: User,       color: 'var(--mod-contacts)', route: '/contacts', label: 'Contacts' },
-  kanban_cards:  { icon: LayoutGrid, color: '#f97316',             route: '/projects', label: 'Cards' },
-  kanban_card:   { icon: LayoutGrid, color: '#f97316',             route: '/projects', label: 'Cards' },
+// Icono/color/ruta por dominio salen del SSOT (resolveEntity). Aquí solo queda
+// el LABEL del encabezado de grupo (copy de UI, plural en inglés).
+const DOMAIN_LABEL: Record<string, string> = {
+  notes: 'Notes', note: 'Notes',
+  events: 'Events', event: 'Events',
+  emails: 'Emails', email: 'Emails',
+  diary_entries: 'Diary entries', diary: 'Diary entries',
+  files: 'Files', file: 'Files',
+  contacts: 'Contacts', contact: 'Contacts',
+  kanban_cards: 'Cards', kanban_card: 'Cards',
 };
 
 const CONNECTED_PAGE_SIZE = 5;
@@ -206,12 +200,12 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
   }
 
   const isRecordMode = mode === 'records';
-  const domainMeta = isRecordMode ? DOMAIN_META[node.entity_type] : null;
+  const recordEnt = isRecordMode ? resolveEntity(node.entity_type, node.id) : null;
   const Icon = isRecordMode
-    ? (domainMeta?.icon ?? Hash)
+    ? (recordEnt!.Icon)
     : (TYPE_ICONS[node.entity_type] ?? Hash);
   const color = isRecordMode
-    ? (domainMeta?.color ?? entityTypeColor(node.entity_type))
+    ? (recordEnt!.color)
     : entityTypeColor(node.entity_type);
 
   const visibleConnected = showAllConnected
@@ -287,9 +281,9 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
         </div>
 
         {/* View record button (record mode) */}
-        {isRecordMode && domainMeta && (
+        {isRecordMode && recordEnt?.route && (
           <button
-            onClick={() => { onNavigateAway?.(); navigate(`${domainMeta.route}?id=${node.id}`); }}
+            onClick={() => { onNavigateAway?.(); navigate(recordEnt.route!); }}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               width: '100%', padding: '6px 12px', marginBottom: 16,
@@ -348,9 +342,10 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   Mentioned in
                 </div>
                 {visibleMentionGroups.map(group => {
-                  const meta = DOMAIN_META[group.domain];
-                  if (!meta) return null;
-                  const DomainIcon = meta.icon;
+                  const groupEnt = resolveEntity(group.domain);
+                  const groupLabel = DOMAIN_LABEL[group.domain] ?? groupEnt.label;
+                  const DomainIcon = groupEnt.Icon;
+                  const meta = { color: groupEnt.color };
                   const count = group.records.length;
                   const isExpanded = expandedDomains.has(group.domain);
 
@@ -358,11 +353,11 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   if (count === 1) {
                     const rec = group.records[0];
                     if (!rec) return null;
-                    const title = rec.record_title || `1 ${meta.label.toLowerCase()}`;
+                    const title = rec.record_title || `1 ${groupLabel.toLowerCase()}`;
                     return (
                       <button
                         key={group.domain}
-                        onClick={() => { onNavigateAway?.(); navigate(`${meta.route}?id=${rec.record_id}`); }}
+                        onClick={() => { onNavigateAway?.(); navigate(resolveEntity(group.domain, rec.record_id).route ?? '/'); }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 6,
                           width: '100%', padding: '4px 0',
@@ -398,7 +393,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                         onMouseLeave={e => e.currentTarget.style.color = 'var(--text)'}
                       >
                         <DomainIcon size={14} style={{ color: meta.color, flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{count} {meta.label.toLowerCase()}</span>
+                        <span style={{ flex: 1 }}>{count} {groupLabel.toLowerCase()}</span>
                         {isExpanded
                           ? <ChevronUp size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                           : <ChevronDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
@@ -411,7 +406,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                             return (
                               <button
                                 key={rec.record_id}
-                                onClick={() => { onNavigateAway?.(); navigate(`${meta.route}?id=${rec.record_id}`); }}
+                                onClick={() => { onNavigateAway?.(); navigate(resolveEntity(group.domain, rec.record_id).route ?? '/'); }}
                                 style={{
                                   display: 'flex', alignItems: 'center', gap: 6,
                                   width: '100%', padding: '3px 0',
@@ -462,12 +457,12 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                   {isRecordMode ? 'Connected records' : 'Connected entities'}
                 </div>
                 {visibleConnected.map(entity => {
-                  const entityDomainMeta = isRecordMode ? DOMAIN_META[entity.entity_type] : null;
+                  const entityEnt = isRecordMode ? resolveEntity(entity.entity_type) : null;
                   const EntityIcon = isRecordMode
-                    ? (entityDomainMeta?.icon ?? Hash)
+                    ? (entityEnt!.Icon)
                     : (TYPE_ICONS[entity.entity_type] ?? Hash);
                   const entityColor = isRecordMode
-                    ? (entityDomainMeta?.color ?? entityTypeColor(entity.entity_type))
+                    ? (entityEnt!.color)
                     : entityTypeColor(entity.entity_type);
                   return (
                     <button

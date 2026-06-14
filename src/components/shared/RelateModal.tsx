@@ -11,13 +11,10 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  X, StickyNote, Calendar, Users, Mail, FolderOpen, BookOpen,
-  Link2, Search, Type, Brain, Lock, Layers,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { X, Link2, Search, Type, Brain, Lock, Layers } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { resolveEntity } from '@/config/entity-registry';
 import type { SearchResult } from '@/types/search';
 
 interface RelateModalProps {
@@ -28,23 +25,16 @@ interface RelateModalProps {
   onLinked?: () => void;
 }
 
-const DOMAINS: { value: string; label: string; icon: LucideIcon; color: string }[] = [
-  { value: 'note', label: 'Notes', icon: StickyNote, color: 'var(--mod-notes)' },
-  { value: 'event', label: 'Events', icon: Calendar, color: 'var(--mod-calendar)' },
-  { value: 'contact', label: 'Contacts', icon: Users, color: 'var(--mod-contacts)' },
-  { value: 'email', label: 'Emails', icon: Mail, color: 'var(--mod-mail)' },
-  { value: 'file', label: 'Files', icon: FolderOpen, color: 'var(--mod-drive)' },
-  { value: 'diary', label: 'Diary', icon: BookOpen, color: 'var(--mod-diary)' },
+// Conjunto curado de dominios relacionables (value + label de copy). El icono y
+// el color salen del SSOT (resolveEntity) — no se duplican aquí.
+const DOMAINS: { value: string; label: string }[] = [
+  { value: 'note', label: 'Notes' },
+  { value: 'event', label: 'Events' },
+  { value: 'contact', label: 'Contacts' },
+  { value: 'email', label: 'Emails' },
+  { value: 'file', label: 'Files' },
+  { value: 'diary', label: 'Diary' },
 ];
-
-const DOMAIN_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
-  note: { icon: StickyNote, color: 'var(--mod-notes)' },
-  event: { icon: Calendar, color: 'var(--mod-calendar)' },
-  contact: { icon: Users, color: 'var(--mod-contacts)' },
-  email: { icon: Mail, color: 'var(--mod-mail)' },
-  file: { icon: FolderOpen, color: 'var(--mod-drive)' },
-  diary: { icon: BookOpen, color: 'var(--mod-diary)' },
-};
 
 const DOMAIN_LABELS: Record<string, string> = {
   note: 'Notes',
@@ -237,7 +227,9 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
               All
             </button>
             {DOMAINS.map(d => {
-              const Icon = d.icon;
+              const ent = resolveEntity(d.value);
+              const Icon = ent.Icon;
+              const dColor = ent.color;
               const active = selectedDomain === d.value;
               return (
                 <button
@@ -246,10 +238,10 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
                   style={{
                     display: 'flex', alignItems: 'center', gap: 4,
                     padding: '4px 10px',
-                    background: active ? `color-mix(in srgb, ${d.color} 15%, transparent)` : 'transparent',
-                    border: active ? `1px solid ${d.color}` : '1px solid var(--border)',
+                    background: active ? `color-mix(in srgb, ${dColor} 15%, transparent)` : 'transparent',
+                    border: active ? `1px solid ${dColor}` : '1px solid var(--border)',
                     borderRadius: 'var(--radius-full)',
-                    color: active ? d.color : 'var(--text-dim)',
+                    color: active ? dColor : 'var(--text-dim)',
                     fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
                     cursor: 'pointer',
                     transition: 'all var(--transition-fast)',
@@ -306,9 +298,9 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
               </div>
             )}
             {results.length > 0 && Array.from(groupedResults.entries()).map(([domain, items]) => {
-              const domainInfo = DOMAIN_ICONS[domain];
-              const DomainIcon = domainInfo?.icon ?? Search;
-              const domainColor = domainInfo?.color ?? 'var(--text-dim)';
+              const domainEnt = resolveEntity(domain);
+              const DomainIcon = domainEnt.Icon;
+              const domainColor = domainEnt.color;
               const label = DOMAIN_LABELS[domain] ?? domain;
 
               return (
@@ -326,7 +318,7 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
                   {/* Results in this domain */}
                   {items.map(result => {
                     const isSelected = selectedId === result.record_id;
-                    const RIcon = domainInfo?.icon ?? Search;
+                    const RIcon = DomainIcon;
                     return (
                       <button
                         key={result.record_id}
