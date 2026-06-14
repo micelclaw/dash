@@ -45,6 +45,8 @@ export function useCardContextMenu() {
   const deleteCard = useProjectsStore((s) => s.deleteCard);
   const selectCard = useProjectsStore((s) => s.selectCard);
   const moveCard = useProjectsStore((s) => s.moveCard);
+  const archiveCard = useProjectsStore((s) => s.archiveCard);
+  const unarchiveCard = useProjectsStore((s) => s.unarchiveCard);
 
   const onCardContextMenu = useCallback((e: React.MouseEvent, card: Card) => {
     e.preventDefault();
@@ -98,9 +100,6 @@ export function useCardContextMenu() {
   const sortedColumns = activeBoardId
     ? (boardColumnIds[activeBoardId] ?? []).map(id => columns[id]).filter(Boolean)
     : [];
-
-  // Find done column
-  const doneColumn = sortedColumns.find(c => c?.is_done_column);
 
   const contextMenuPortal = menu ? createPortal(
     <>
@@ -276,33 +275,20 @@ export function useCardContextMenu() {
           close();
         }} />
 
-        {/* Mark complete = move to Done column */}
-        {doneColumn && menu.card.column_id !== doneColumn.id && (
-          <MenuItem icon={CheckSquare} label="Mark complete" onClick={() => {
-            if (activeBoardId && doneColumn) {
-              moveCard(activeBoardId, menu.card.id, doneColumn.id, 0);
-              updateCard(activeBoardId, menu.card.id, { completed_at: new Date().toISOString() });
-              toast.success('Moved to Done');
-              close();
-            }
-          }} />
-        )}
-
-        {/* If already in Done column, allow marking incomplete = move back */}
-        {doneColumn && menu.card.column_id === doneColumn.id && sortedColumns.length > 1 && (
-          <MenuItem icon={CheckSquare} label="Mark incomplete" onClick={() => {
+        {/* Mark complete / incomplete — toggles completed_at, never moves the card */}
+        <MenuItem
+          icon={CheckSquare}
+          label={menu.card.completed_at ? 'Mark incomplete' : 'Mark complete'}
+          onClick={() => {
             if (activeBoardId) {
-              // Move to the first non-done column (typically Backlog or This Week)
-              const target = sortedColumns.find(c => c && !c.is_done_column);
-              if (target) {
-                moveCard(activeBoardId, menu.card.id, target.id, 0);
-                updateCard(activeBoardId, menu.card.id, { completed_at: null });
-                toast.success(`Moved to ${target.title}`);
-              }
+              updateCard(activeBoardId, menu.card.id, {
+                completed_at: menu.card.completed_at ? null : new Date().toISOString(),
+              });
+              toast.success(menu.card.completed_at ? 'Marked incomplete' : 'Marked complete');
               close();
             }
-          }} />
-        )}
+          }}
+        />
 
         {/* Archive */}
         <MenuItem
@@ -310,8 +296,8 @@ export function useCardContextMenu() {
           label={menu.card.archived ? 'Unarchive' : 'Archive'}
           onClick={() => {
             if (activeBoardId) {
-              updateCard(activeBoardId, menu.card.id, { archived: !menu.card.archived });
-              toast.success(menu.card.archived ? 'Card restored' : 'Card archived');
+              if (menu.card.archived) unarchiveCard(activeBoardId, menu.card.id);
+              else archiveCard(activeBoardId, menu.card.id);
               close();
             }
           }}

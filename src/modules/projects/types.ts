@@ -34,7 +34,6 @@ export interface BoardSettings {
   background?: { type: 'color' | 'gradient' | 'image'; value: string };
   cardCoverDefault?: 'normal' | 'full' | 'none';
   showCardNumbers?: boolean;
-  showLabelsText?: boolean;
   defaultPriority?: string;
   cardAging?: { enabled: boolean; daysToAge: number };
   calendarSync?: { enabled: boolean; calendarName: string; syncCompletedCards: boolean };
@@ -47,7 +46,6 @@ export interface Column {
   color: string | null;
   position: number;
   wip_limit: number | null;
-  is_done_column: boolean;
   collapsed: boolean;
   created_at: string;
   updated_at: string;
@@ -91,15 +89,6 @@ export interface ChecklistItem {
 }
 
 // ─── Extended entities ────────────────────────────────
-
-export interface Label {
-  id: string;
-  board_id: string;
-  name: string;
-  color: string;
-  position: number;
-  created_at: string;
-}
 
 export interface Comment {
   id: string;
@@ -191,7 +180,6 @@ export interface ColumnWithCards extends Column {
 
 export interface FullBoard extends Board {
   columns: ColumnWithCards[];
-  labels?: Label[];
   custom_field_defs?: CustomFieldDef[];
 }
 
@@ -201,7 +189,6 @@ export interface CardFilters {
   priority?: string;
   assignee_id?: string;
   tag?: string;
-  label_id?: string;
   due_before?: string;
   due_after?: string;
   completed?: boolean;

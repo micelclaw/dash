@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Calendar, CheckSquare, MessageSquare, GitBranch, Link2 } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
-import { PRIORITY_COLORS, getCardAgeOpacity } from '../utils/design-tokens';
+import { TagChip } from '@/components/shared/TagChip';
+import { PRIORITY_COLORS, getCardAgeOpacity, getChecklistProgressColor } from '../utils/design-tokens';
 import type { Card } from '../types';
 
 const OVERDUE_COLOR = 'var(--error)';
@@ -29,7 +30,6 @@ function formatDate(date: string): string {
 
 interface KanbanCardProps {
   card: Card;
-  showLabelsText?: boolean;
   showCardNumbers?: boolean;
   cardAging?: { enabled: boolean; daysToAge: number };
   commentCount?: number;
@@ -39,7 +39,6 @@ interface KanbanCardProps {
 
 export const KanbanCard = React.memo(function KanbanCard({
   card,
-  showLabelsText = false,
   showCardNumbers = true,
   cardAging,
   commentCount = 0,
@@ -47,17 +46,17 @@ export const KanbanCard = React.memo(function KanbanCard({
   linkCount = 0,
 }: KanbanCardProps) {
   const selectCard = useProjectsStore((s) => s.selectCard);
-  const labels = useProjectsStore((s) => s.labels);
-  const cardLabelIds = useProjectsStore((s) => s.cardLabelIds);
   const multiSelectedIds = useProjectsStore((s) => s.multiSelectedIds);
   const toggleMultiSelect = useProjectsStore((s) => s.toggleMultiSelect);
   const customFieldDefs = useProjectsStore((s) => s.customFieldDefs);
+  const activeBoardId = useProjectsStore((s) => s.activeBoardId);
+  const updateCard = useProjectsStore((s) => s.updateCard);
+  const [checklistOpen, setChecklistOpen] = useState(false);
 
   const overdue = isOverdue(card.due_date, card.completed_at);
   const checklist = card.checklist ?? [];
   const checked = checklist.filter((c) => c.checked).length;
   const isSelected = multiSelectedIds.has(card.id);
-  const cardLabels = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter((l): l is NonNullable<typeof l> => !!l);
 
   // Card aging opacity
   const agingOpacity = cardAging?.enabled
@@ -86,9 +85,11 @@ export const KanbanCard = React.memo(function KanbanCard({
     <div
       onClick={handleClick}
       style={{
+        // Translucent over the column's glass (the column's backdrop blur
+        // already softens whatever sits behind the card).
         background: coverSize === 'full' && card.cover_color
           ? card.cover_color
-          : 'var(--card)',
+          : 'color-mix(in srgb, var(--card) 40%, transparent)',
         border: isSelected
           ? '2px solid var(--primary)'
           : '1px solid var(--border)',
@@ -140,41 +141,6 @@ export const KanbanCard = React.memo(function KanbanCard({
       </div>
 
       <div style={{ padding: '10px 12px' }}>
-        {/* Label pills */}
-        {cardLabels.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 6 }}>
-            {cardLabels.map((label) => (
-              showLabelsText ? (
-                <span
-                  key={label.id}
-                  style={{
-                    background: label.color + '22',
-                    color: label.color,
-                    fontSize: 10,
-                    fontWeight: 500,
-                    padding: '1px 6px',
-                    borderRadius: 3,
-                    lineHeight: '16px',
-                  }}
-                >
-                  {label.name}
-                </span>
-              ) : (
-                <span
-                  key={label.id}
-                  title={label.name}
-                  style={{
-                    width: 24,
-                    height: 6,
-                    borderRadius: 3,
-                    background: label.color,
-                  }}
-                />
-              )
-            ))}
-          </div>
-        )}
-
         {/* Title row: priority dot + card number + title */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
           {card.priority && card.priority !== 'none' && (
@@ -210,22 +176,28 @@ export const KanbanCard = React.memo(function KanbanCard({
           </div>
         </div>
 
+        {/* Description excerpt */}
+        {card.description && (
+          <div style={{
+            marginTop: 4,
+            fontSize: 11,
+            color: 'var(--text-dim)',
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}>
+            {card.description}
+          </div>
+        )}
+
         {/* Tags */}
         {card.tags && card.tags.length > 0 && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
             {card.tags.slice(0, 3).map((tag) => (
-              <span
-                key={tag}
-                style={{
-                  background: 'var(--surface)',
-                  color: 'var(--text-dim)',
-                  fontSize: 10,
-                  padding: '1px 5px',
-                  borderRadius: 3,
-                }}
-              >
-                {tag}
-              </span>
+              <TagChip key={tag} tag={tag} size="xs" />
             ))}
             {card.tags.length > 3 && (
               <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
@@ -293,18 +265,30 @@ export const KanbanCard = React.memo(function KanbanCard({
             )}
 
             {checklist.length > 0 && (
-              <span
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setChecklistOpen((v) => !v);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={checklistOpen ? 'Hide checklist' : 'Show checklist'}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 3,
                   fontSize: 11,
-                  color: checked === checklist.length ? 'var(--success)' : 'var(--text-dim)',
+                  color: getChecklistProgressColor(checked, checklist.length),
+                  background: checklistOpen ? 'var(--surface)' : 'none',
+                  border: 'none',
+                  borderRadius: 3,
+                  padding: '1px 4px',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
                 }}
               >
                 <CheckSquare size={11} />
                 {checked}/{checklist.length}
-              </span>
+              </button>
             )}
 
             {commentCount > 0 && (
@@ -404,6 +388,56 @@ export const KanbanCard = React.memo(function KanbanCard({
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Inline expanded checklist */}
+        {checklistOpen && checklist.length > 0 && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              marginTop: 8,
+              borderTop: '1px solid var(--border)',
+              paddingTop: 6,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            {checklist.map((item) => (
+              <label
+                key={item.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 6,
+                  fontSize: 11,
+                  color: item.checked ? 'var(--text-muted)' : 'var(--text-dim)',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  onChange={() => {
+                    if (!activeBoardId) return;
+                    const next = checklist.map((c) =>
+                      c.id === item.id ? { ...c, checked: !c.checked } : c,
+                    );
+                    updateCard(activeBoardId, card.id, { checklist: next });
+                  }}
+                  style={{ marginTop: 1, accentColor: 'var(--success)', flexShrink: 0 }}
+                />
+                <span style={{
+                  textDecoration: item.checked ? 'line-through' : undefined,
+                  wordBreak: 'break-word',
+                  lineHeight: 1.4,
+                }}>
+                  {item.text}
+                </span>
+              </label>
+            ))}
           </div>
         )}
       </div>

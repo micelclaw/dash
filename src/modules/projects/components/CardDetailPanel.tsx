@@ -12,16 +12,38 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Tag, Archive, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
+import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
+import { TagInput } from '@/components/shared/TagInput';
 import { useProjectsStore } from '@/stores/projects.store';
 import { api } from '@/services/api';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
 import { useCardLinks } from '../hooks/use-card-links';
-import type { ChecklistItem, Comment, Dependency, CustomFieldDef } from '../types';
+import { getChecklistProgressColor } from '../utils/design-tokens';
+import type { ChecklistItem, Comment, Dependency, CustomFieldDef, Column } from '../types';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
-const EMPTY_LABEL_IDS: string[] = [];
+
+// Humaniza una entrada de activity (kanban_comments type='activity'). El
+// 'moved' guarda los UUID de columna en activity_meta {from,to}; se traducen a
+// nombre con las columnas del board (las del store). Fallback legible para
+// cualquier otra acción (sin volcar JSON crudo).
+function formatActivity(
+  action: string | null,
+  meta: unknown,
+  columns: Record<string, Column>,
+): string {
+  const m = (meta ?? {}) as Record<string, unknown>;
+  const colName = (id: unknown) =>
+    typeof id === 'string' ? (columns[id]?.title ?? 'deleted column') : '—';
+  if (action === 'moved') {
+    return `Moved from «${colName(m.from)}» to «${colName(m.to)}»`;
+  }
+  // Otras acciones: texto legible (capitaliza) + meta solo si trae valores simples
+  const label = action ? action.charAt(0).toUpperCase() + action.slice(1).replace(/_/g, ' ') : 'Activity';
+  const extras = Object.values(m).filter(v => typeof v === 'string' || typeof v === 'number');
+  return extras.length ? `${label}: ${extras.join(', ')}` : label;
+}
 
 const DOMAIN_ICONS: Record<string, typeof FileText> = {
   note: FileText,
@@ -53,22 +75,21 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const navigate = useNavigate();
   const card = useProjectsStore((s) => s.cards[cardId]);
   const columns = useProjectsStore((s) => s.columns);
-  const labels = useProjectsStore((s) => s.labels);
   const customFieldDefs = useProjectsStore((s) => s.customFieldDefs);
-  const cardLabelIds = useProjectsStore((s) => s.cardLabelIds[cardId] ?? EMPTY_LABEL_IDS);
   const updateCard = useProjectsStore((s) => s.updateCard);
   const deleteCard = useProjectsStore((s) => s.deleteCard);
   const selectCard = useProjectsStore((s) => s.selectCard);
-  const addLabelToCard = useProjectsStore((s) => s.addLabelToCard);
-  const removeLabelFromCard = useProjectsStore((s) => s.removeLabelFromCard);
+  const archiveCard = useProjectsStore((s) => s.archiveCard);
+  const unarchiveCard = useProjectsStore((s) => s.unarchiveCard);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [tagInput, setTagInput] = useState('');
   const [newCheckItem, setNewCheckItem] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
 
   // Comments / activity state
   const [comments, setComments] = useState<Comment[]>([]);
@@ -83,9 +104,6 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const [showLinks, setShowLinks] = useState(false);
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
   const { links: linkedItems, loading: linksLoading, fetchLinks, removeLink } = useCardLinks(boardId, cardId);
-
-  // Labels picker
-  const [showLabels, setShowLabels] = useState(false);
 
   useEffect(() => {
     if (card) {
@@ -178,15 +196,17 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
     } catch { /* ignore */ }
   }, [newComment, boardId, cardId]);
 
-  const handleAddTag = useCallback(() => {
-    if (!tagInput.trim() || !card) return;
-    const currentTags = card.tags ?? [];
-    const newTag = tagInput.trim();
-    if (!currentTags.includes(newTag)) {
-      handleSaveField('tags', [...currentTags, newTag]);
+  const handleSaveCheckItemText = useCallback(() => {
+    if (!card || !editingItemId) return;
+    const text = editingText.trim();
+    if (text) {
+      handleSaveField('checklist', (card.checklist ?? []).map((c) =>
+        c.id === editingItemId ? { ...c, text } : c,
+      ));
     }
-    setTagInput('');
-  }, [tagInput, card, handleSaveField]);
+    setEditingItemId(null);
+    setEditingText('');
+  }, [card, editingItemId, editingText, handleSaveField]);
 
   if (!card) return null;
 
@@ -256,50 +276,6 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Labels */}
-        <div>
-          <label style={labelStyle}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} onClick={() => setShowLabels(!showLabels)}>
-              <Tag size={10} /> Labels
-            </span>
-          </label>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
-            {cardLabelIds.map(labelId => {
-              const label = labels[labelId];
-              if (!label) return null;
-              return (
-                <span key={labelId} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  padding: '2px 8px', borderRadius: 10, fontSize: 11,
-                  background: label.color + '30', color: label.color,
-                  border: `1px solid ${label.color}50`,
-                }}>
-                  {label.name}
-                  <button onClick={() => removeLabelFromCard(boardId, cardId, labelId)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0, display: 'flex' }}>
-                    <X size={10} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-          {showLabels && (
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {Object.values(labels).filter(l => !cardLabelIds.includes(l.id)).map(label => (
-                <button key={label.id}
-                  onClick={() => addLabelToCard(boardId, cardId, label.id)}
-                  style={{
-                    padding: '2px 8px', borderRadius: 10, fontSize: 11,
-                    background: label.color + '20', color: label.color,
-                    border: `1px solid ${label.color}30`, cursor: 'pointer',
-                  }}
-                >
-                  + {label.name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Description */}
@@ -382,31 +358,10 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
         {/* Tags */}
         <div>
           <label style={labelStyle}>Tags</label>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 4 }}>
-            {(card.tags ?? []).map((tag) => (
-              <span key={tag} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 3,
-                background: 'var(--surface)', color: 'var(--text-dim)',
-                fontSize: 11, padding: '2px 6px', borderRadius: 3,
-              }}>
-                {tag}
-                <button onClick={() => handleSaveField('tags', (card.tags ?? []).filter(t => t !== tag))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}>
-                  <X size={10} />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <input
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddTag(); }}
-              placeholder="Add tag..."
-              style={{ flex: 1, ...inputStyle }}
-            />
-            <button onClick={handleAddTag} style={smallBtnStyle}><Plus size={12} /></button>
-          </div>
+          <TagInput
+            tags={card.tags ?? []}
+            onChange={(next) => handleSaveField('tags', next)}
+          />
         </div>
 
         {/* Checklist */}
@@ -414,14 +369,15 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
           <label style={labelStyle}>
             Checklist
             {card.checklist && card.checklist.length > 0 && (
-              <span style={{ fontWeight: 400, marginLeft: 6 }}>
+              <span style={{ fontWeight: 400, marginLeft: 6, color: getChecklistProgressColor(card.checklist.filter((c) => c.checked).length, card.checklist.length) }}>
                 {card.checklist.filter((c) => c.checked).length}/{card.checklist.length}
               </span>
             )}
           </label>
 
           {(card.checklist ?? []).map((item) => (
-            <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            // flex-start: the checkbox sits at the TOP of multi-line items
+            <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
               <button
                 onClick={() => handleToggleCheck(item.id)}
                 style={{
@@ -429,18 +385,53 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
                   border: '1px solid var(--border)',
                   background: item.checked ? 'var(--success)' : 'transparent',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  marginTop: 1,
                 }}
               >
                 {item.checked && <Check size={10} color="#fff" />}
               </button>
-              <span style={{
-                color: item.checked ? 'var(--text-dim)' : 'var(--text)',
-                fontSize: 13, textDecoration: item.checked ? 'line-through' : 'none', flex: 1,
-              }}>
-                {item.text}
-              </span>
+              {editingItemId === item.id ? (
+                <textarea
+                  value={editingText}
+                  autoFocus
+                  rows={1}
+                  ref={(el) => {
+                    if (el) {
+                      el.style.height = 'auto';
+                      el.style.height = `${el.scrollHeight}px`;
+                    }
+                  }}
+                  onChange={(e) => {
+                    setEditingText(e.target.value);
+                    e.currentTarget.style.height = 'auto';
+                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveCheckItemText(); }
+                    if (e.key === 'Escape') { setEditingItemId(null); setEditingText(''); }
+                  }}
+                  onBlur={handleSaveCheckItemText}
+                  style={{
+                    flex: 1, ...inputStyle,
+                    resize: 'none', overflow: 'hidden',
+                    lineHeight: 1.5, minHeight: 28,
+                  }}
+                />
+              ) : (
+                <span
+                  onClick={() => { setEditingItemId(item.id); setEditingText(item.text); }}
+                  title="Click to edit"
+                  style={{
+                    color: item.checked ? 'var(--text-dim)' : 'var(--text)',
+                    fontSize: 13, textDecoration: item.checked ? 'line-through' : 'none', flex: 1,
+                    cursor: 'text', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {item.text}
+                </span>
+              )}
               <button onClick={() => handleRemoveCheckItem(item.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}>
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex', flexShrink: 0, marginTop: 1 }}>
                 <X size={12} />
               </button>
             </div>
@@ -575,7 +566,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
                   fontStyle: c.type === 'activity' ? 'italic' : 'normal',
                 }}>
                   {c.type === 'activity' ? (
-                    <span>{c.activity_action}: {JSON.stringify(c.activity_meta)}</span>
+                    <span>{formatActivity(c.activity_action, c.activity_meta, columns)}</span>
                   ) : (
                     <span>{c.content}</span>
                   )}
@@ -612,13 +603,21 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
           >
             <Trash2 size={14} /> Delete
           </button>
-          {!card.archived && (
+          {card.archived ? (
             <button
-              onClick={() => {
-                api.post(`/projects/boards/${boardId}/cards/${cardId}/archive`).then(() => {
-                  updateCard(boardId, cardId, { archived: true });
-                }).catch(() => {});
+              onClick={() => unarchiveCard(boardId, cardId)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', background: 'none',
+                border: '1px solid var(--border)', borderRadius: 6,
+                color: 'var(--text-dim)', fontSize: 13, fontFamily: 'var(--font-sans)', cursor: 'pointer',
               }}
+            >
+              <ArchiveRestore size={14} /> Unarchive
+            </button>
+          ) : (
+            <button
+              onClick={() => archiveCard(boardId, cardId)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 padding: '8px 12px', background: 'none',

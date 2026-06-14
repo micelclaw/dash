@@ -42,13 +42,14 @@ import type { Card, Column, BoardSettings } from '../types';
 
 // ─── Sortable Column ────────────────────────────────────
 
-function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchingIds, onCardCtx }: {
+function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchingIds, showArchived, onCardCtx }: {
   column: Column;
   cardIds: string[];
   cards: Record<string, Card>;
   boardId: string;
   boardSettings?: BoardSettings;
   matchingIds: Set<string> | null;
+  showArchived: boolean;
   onCardCtx: (e: React.MouseEvent, card: Card) => void;
 }) {
   const {
@@ -71,7 +72,11 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
     maxHeight: '100%',
     display: 'flex',
     flexDirection: 'column',
-    background: 'var(--surface)',
+    // Glass: translucent over the board background; the column's blur also
+    // covers the cards inside, so cards don't need their own backdrop-filter.
+    background: 'color-mix(in srgb, var(--surface) 40%, transparent)',
+    backdropFilter: 'blur(6px)',
+    WebkitBackdropFilter: 'blur(6px)',
     border: '1px solid var(--border)',
     borderRadius: 8,
     flexShrink: 0,
@@ -79,11 +84,15 @@ function SortableColumn({ column, cardIds, cards, boardId, boardSettings, matchi
   };
 
   const colCards = useMemo(
-    () => cardIds.map(id => cards[id]).filter((c): c is NonNullable<typeof c> => !!c),
-    [cardIds, cards],
+    () => cardIds
+      .map(id => cards[id])
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .filter(c => showArchived || !c.archived),
+    [cardIds, cards, showArchived],
   );
 
-  const sortableCardIds = useMemo(() => cardIds, [cardIds]);
+  // dnd-kit: keep the sortable id list in sync with the rendered cards
+  const sortableCardIds = useMemo(() => colCards.map(c => c.id), [colCards]);
 
   if (column.collapsed) {
     return (
@@ -155,7 +164,6 @@ const SortableCard = React.memo(function SortableCard({ card, boardSettings, dim
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} onContextMenu={(e) => onCardCtx(e, card)}>
       <KanbanCard
         card={card}
-        showLabelsText={boardSettings?.showLabelsText}
         showCardNumbers={boardSettings?.showCardNumbers ?? true}
         cardAging={boardSettings?.cardAging}
         commentCount={commentCount}
@@ -174,10 +182,12 @@ function DragOverlayCard({ card, boardSettings }: { card: Card; boardSettings?: 
       transform: 'rotate(2deg)',
       boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
       width: COLUMN_WIDTH - 16,
+      backdropFilter: 'blur(6px)',
+      WebkitBackdropFilter: 'blur(6px)',
+      borderRadius: 6,
     }}>
       <KanbanCard
         card={card}
-        showLabelsText={boardSettings?.showLabelsText}
         showCardNumbers={boardSettings?.showCardNumbers ?? true}
       />
     </div>
@@ -188,7 +198,9 @@ function DragOverlayColumn({ column, cardCount }: { column: Column; cardCount: n
   return (
     <div style={{
       width: COLUMN_WIDTH,
-      background: 'var(--surface)',
+      background: 'color-mix(in srgb, var(--surface) 40%, transparent)',
+      backdropFilter: 'blur(6px)',
+      WebkitBackdropFilter: 'blur(6px)',
       border: '1px solid var(--border)',
       borderRadius: 8,
       transform: 'rotate(1deg)',
@@ -224,10 +236,13 @@ export function KanbanBoard() {
   const boardColumnIds = useProjectsStore((s) => s.boardColumnIds);
   const columnCardIds = useProjectsStore((s) => s.columnCardIds);
   const boards = useProjectsStore((s) => s.boards);
+  const activeBoardSettings = useProjectsStore((s) => s.activeBoardSettings);
   const activeBoard = boards.find(b => b.id === activeBoardId);
-  const boardSettings = activeBoard?.settings;
+  // activeBoardSettings survives direct loads of /projects/:id (boards list not fetched)
+  const boardSettings = activeBoardSettings ?? activeBoard?.settings;
 
   const boardId = activeBoardId!;
+  const showArchived = useProjectsStore((s) => !!s.filters.show_archived);
   const { dragState, onDragStart, onDragOver, onDragEnd } = useDndKanban(boardId);
   const { matchingIds } = useCardFilters();
   const { onCardContextMenu, contextMenuPortal } = useCardContextMenu();
@@ -257,8 +272,15 @@ export function KanbanBoard() {
   const bgStyle: React.CSSProperties = {};
   if (boardSettings?.background) {
     const bg = boardSettings.background;
-    if (bg.type === 'color') bgStyle.background = bg.value;
-    else if (bg.type === 'gradient') bgStyle.background = bg.value;
+    if (bg.type === 'color' || bg.type === 'gradient') {
+      bgStyle.background = bg.value;
+    } else if (bg.type === 'image') {
+      // Bundled texture + a light dark overlay; columns/cards are glass
+      // (translucent + blur) so the texture shows through them.
+      bgStyle.backgroundImage = `linear-gradient(rgba(6,6,10,0.25), rgba(6,6,10,0.25)), url(/backgrounds/${bg.value})`;
+      bgStyle.backgroundSize = 'cover';
+      bgStyle.backgroundPosition = 'center';
+    }
   }
 
   // Empty state
@@ -315,6 +337,7 @@ export function KanbanBoard() {
                 boardId={boardId}
                 boardSettings={boardSettings}
                 matchingIds={matchingIds}
+                showArchived={showArchived}
                 onCardCtx={onCardContextMenu}
               />
             );

@@ -10,9 +10,10 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search, X, Filter } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { tagColor } from '@/lib/tag-color';
 import { PRIORITY_COLORS } from '../utils/design-tokens';
 import type { CardFilters } from '../types';
 
@@ -21,12 +22,17 @@ const PRIORITIES = ['urgent', 'high', 'medium', 'low'] as const;
 export function FilterBar() {
   const filters = useProjectsStore((s) => s.filters);
   const setFilters = useProjectsStore((s) => s.setFilters);
-  const labels = useProjectsStore((s) => s.labels);
+  const cards = useProjectsStore((s) => s.cards);
   const [expanded, setExpanded] = useState(false);
+
+  const allTags = useMemo(
+    () => [...new Set(Object.values(cards).flatMap((c) => c.tags ?? []))].sort(),
+    [cards],
+  );
 
   const hasActive = !!(
     filters.search || filters.priority || filters.assignee_id ||
-    filters.tag || filters.label_id || filters.due_before ||
+    filters.tag || filters.due_before ||
     filters.due_after || filters.has_dependencies || filters.is_blocked
   );
 
@@ -118,14 +124,14 @@ export function FilterBar() {
             />
           ))}
 
-          {/* Label chips */}
-          {Object.values(labels).map((label) => (
+          {/* Tag chips */}
+          {allTags.map((tag) => (
             <FilterChip
-              key={label.id}
-              label={label.name}
-              active={filters.label_id === label.id}
-              color={label.color}
-              onClick={() => updateFilter('label_id', filters.label_id === label.id ? undefined : label.id)}
+              key={tag}
+              label={tag}
+              active={filters.tag === tag}
+              color={tagColor(tag).text}
+              onClick={() => updateFilter('tag', filters.tag === tag ? undefined : tag)}
             />
           ))}
 

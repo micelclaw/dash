@@ -13,6 +13,7 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { tagColor } from '@/lib/tag-color';
 import { PriorityDot } from '../components/PriorityDot';
 import { PRIORITY_COLORS } from '../utils/design-tokens';
 import { useCardContextMenu } from '../hooks/use-card-context-menu';
@@ -21,7 +22,7 @@ import type { Card } from '../types';
 // ─── Sort / Group types ─────────────────────────────
 
 type SortField = 'due_date' | 'start_date' | 'priority' | 'column' | 'title' | 'card_number';
-type GroupBy = 'none' | 'column' | 'priority' | 'label';
+type GroupBy = 'none' | 'column' | 'priority' | 'tag';
 const PRIORITY_ORDER: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3, none: 4 };
 
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
@@ -164,8 +165,6 @@ function getCellDuration(zoom: ZoomLevel): number {
 export function TimelineView() {
   const cardsMap = useProjectsStore((s) => s.cards);
   const columnsMap = useProjectsStore((s) => s.columns);
-  const labelsMap = useProjectsStore((s) => s.labels);
-  const cardLabelIds = useProjectsStore((s) => s.cardLabelIds);
   const selectCard = useProjectsStore((s) => s.selectCard);
   const updateCard = useProjectsStore((s) => s.updateCard);
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
@@ -267,16 +266,15 @@ export function TimelineView() {
           color = PRIORITY_COLORS[key];
           break;
         }
-        case 'label': {
-          const ids = cardLabelIds[card.id] ?? [];
-          if (ids.length === 0) {
+        case 'tag': {
+          const tags = card.tags ?? [];
+          if (tags.length === 0) {
             key = '_none';
-            label = 'No label';
+            label = 'No tag';
           } else {
-            const lbl = labelsMap[ids[0]!];
-            key = ids[0]!;
-            label = lbl?.name ?? 'Unknown';
-            color = lbl?.color;
+            key = tags[0]!;
+            label = tags[0]!;
+            color = tagColor(tags[0]!).text;
           }
           break;
         }
@@ -286,7 +284,7 @@ export function TimelineView() {
       map.get(key)!.cards.push(card);
     }
     return Array.from(map.values());
-  }, [sortedDatedCards, groupBy, columnMap, cardLabelIds, labelsMap]);
+  }, [sortedDatedCards, groupBy, columnMap]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -593,7 +591,7 @@ export function TimelineView() {
 
         {/* Group selector */}
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Group:</span>
-        {(['none', 'column', 'priority', 'label'] as GroupBy[]).map(g => (
+        {(['none', 'column', 'priority', 'tag'] as GroupBy[]).map(g => (
           <button
             key={g}
             onClick={() => { setGroupBy(g); setCollapsedGroups(new Set()); }}

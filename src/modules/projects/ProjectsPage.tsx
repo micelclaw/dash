@@ -10,10 +10,12 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Plus, Archive } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { TagChip } from '@/components/shared/TagChip';
+import { NewBoardModal } from './components/NewBoardModal';
 import type { Board } from './types';
 
 function BoardCard({ board, onClick }: { board: Board; onClick: () => void }) {
@@ -48,18 +50,7 @@ function BoardCard({ board, onClick }: { board: Board; onClick: () => void }) {
       {board.tags && board.tags.length > 0 && (
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           {board.tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              style={{
-                background: 'var(--surface)',
-                color: 'var(--text-dim)',
-                fontSize: 10,
-                padding: '2px 6px',
-                borderRadius: 4,
-              }}
-            >
-              {tag}
-            </span>
+            <TagChip key={tag} tag={tag} size="xs" />
           ))}
         </div>
       )}
@@ -89,25 +80,13 @@ export function Component() {
   const boards = useProjectsStore((s) => s.boards);
   const loading = useProjectsStore((s) => s.loading);
   const fetchBoards = useProjectsStore((s) => s.fetchBoards);
-  const createBoard = useProjectsStore((s) => s.createBoard);
   const navigate = useNavigate();
 
   const [showNew, setShowNew] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
 
   useEffect(() => {
     fetchBoards();
   }, [fetchBoards]);
-
-  const handleCreate = useCallback(async () => {
-    if (!newTitle.trim()) return;
-    const board = await createBoard({ title: newTitle.trim() });
-    if (board) {
-      setShowNew(false);
-      setNewTitle('');
-      navigate(`/projects/${board.id}`);
-    }
-  }, [newTitle, createBoard, navigate]);
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
@@ -138,68 +117,13 @@ export function Component() {
       </div>
 
       {showNew && (
-        <div
-          style={{
-            background: 'var(--card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md, 8px)',
-            padding: 16,
-            marginBottom: 16,
-            display: 'flex',
-            gap: 8,
+        <NewBoardModal
+          onClose={() => setShowNew(false)}
+          onCreated={(board) => {
+            setShowNew(false);
+            navigate(`/projects/${board.id}`);
           }}
-        >
-          <input
-            autoFocus
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreate();
-              if (e.key === 'Escape') { setShowNew(false); setNewTitle(''); }
-            }}
-            placeholder="Board name..."
-            style={{
-              flex: 1,
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              padding: '6px 10px',
-              color: 'var(--text)',
-              fontSize: 13,
-              fontFamily: 'var(--font-sans)',
-              outline: 'none',
-            }}
-          />
-          <button
-            onClick={handleCreate}
-            style={{
-              padding: '6px 14px',
-              background: 'var(--amber)',
-              color: '#06060a',
-              border: 'none',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            Create
-          </button>
-          <button
-            onClick={() => { setShowNew(false); setNewTitle(''); }}
-            style={{
-              padding: '6px 10px',
-              background: 'none',
-              color: 'var(--text-dim)',
-              border: '1px solid var(--border)',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontSize: 13,
-            }}
-          >
-            Cancel
-          </button>
-        </div>
+        />
       )}
 
       {loading ? (

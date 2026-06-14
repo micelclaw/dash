@@ -13,8 +13,10 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowUpDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
+import { TagChip } from '@/components/shared/TagChip';
 import { PriorityBadge } from '../components/PriorityDot';
 import { useCardContextMenu } from '../hooks/use-card-context-menu';
+import { getChecklistProgressColor } from '../utils/design-tokens';
 import type { Card, CustomFieldDef } from '../types';
 
 type SortField = 'title' | 'priority' | 'due_date' | 'column' | 'card_number' | 'created_at' | 'updated_at';
@@ -29,8 +31,6 @@ interface EditingCell {
 export function ListView() {
   const columns = useProjectsStore((s) => s.columns);
   const cards = useProjectsStore((s) => s.cards);
-  const labels = useProjectsStore((s) => s.labels);
-  const cardLabelIds = useProjectsStore((s) => s.cardLabelIds);
   const selectCard = useProjectsStore((s) => s.selectCard);
   const updateCard = useProjectsStore((s) => s.updateCard);
   const activeBoardId = useProjectsStore((s) => s.activeBoardId);
@@ -249,7 +249,6 @@ export function ListView() {
                 </span>
               </th>
             ))}
-            <th style={thStyle}>Labels</th>
             <th style={thStyle}>Tags</th>
             {visibleFieldDefs.map(fd => (
               <th key={fd.id} style={{ ...thStyle, width: 100 }}>{fd.name}</th>
@@ -265,8 +264,6 @@ export function ListView() {
               collapsed={collapsedGroups.has(group.key)}
               toggleGroup={toggleGroup}
               columnMap={columnMap}
-              labels={labels}
-              cardLabelIds={cardLabelIds}
               selectCard={selectCard}
               editing={editing}
               editValue={editValue}
@@ -286,14 +283,12 @@ export function ListView() {
   );
 }
 
-function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, labels, cardLabelIds, selectCard, editing, editValue, setEditValue, editRef, startEdit, saveEdit, handleKeyDown, visibleFieldDefs = [], onCardCtx }: {
+function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, selectCard, editing, editValue, setEditValue, editRef, startEdit, saveEdit, handleKeyDown, visibleFieldDefs = [], onCardCtx }: {
   group: { key: string; label: string; cards: Card[] };
   showGroupHeader: boolean;
   collapsed: boolean;
   toggleGroup: (key: string) => void;
   columnMap: Map<string, { title: string; color: string | null; position: number }>;
-  labels: Record<string, { id: string; name: string; color: string }>;
-  cardLabelIds: Record<string, string[]>;
   selectCard: (id: string) => void;
   editing: EditingCell | null;
   editValue: string;
@@ -310,7 +305,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
       {showGroupHeader && (
         <tr>
           <td
-            colSpan={8 + visibleFieldDefs.length}
+            colSpan={7 + visibleFieldDefs.length}
             onClick={() => toggleGroup(group.key)}
             style={{
               padding: '8px 12px',
@@ -333,7 +328,6 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
         const checklist = card.checklist ?? [];
         const checked = checklist.filter(c => c.checked).length;
         const isEditingTitle = editing?.cardId === card.id && editing.field === 'title';
-        const cardLabelsArr = (cardLabelIds[card.id] ?? []).map(id => labels[id]).filter((l): l is NonNullable<typeof l> => !!l);
 
         return (
           <tr
@@ -370,7 +364,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
                 >
                   {card.title}
                   {checklist.length > 0 && (
-                    <span style={{ marginLeft: 6, color: checked === checklist.length ? 'var(--success)' : 'var(--text-muted)', fontSize: 11 }}>
+                    <span style={{ marginLeft: 6, color: getChecklistProgressColor(checked, checklist.length), fontSize: 11 }}>
                       <CheckSquare size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />
                       {checked}/{checklist.length}
                     </span>
@@ -416,24 +410,11 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
               </span>
             </td>
 
-            {/* Labels */}
-            <td style={cellStyle}>
-              <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                {cardLabelsArr.slice(0, 3).map((l) => (
-                  <span key={l.id} style={{ background: l.color + '22', color: l.color, fontSize: 10, padding: '1px 5px', borderRadius: 3 }}>
-                    {l.name}
-                  </span>
-                ))}
-              </div>
-            </td>
-
             {/* Tags */}
             <td style={cellStyle}>
               <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                 {(card.tags ?? []).slice(0, 3).map((tag) => (
-                  <span key={tag} style={{ background: 'var(--surface)', color: 'var(--text-dim)', fontSize: 10, padding: '1px 5px', borderRadius: 3 }}>
-                    {tag}
-                  </span>
+                  <TagChip key={tag} tag={tag} size="xs" />
                 ))}
               </div>
             </td>

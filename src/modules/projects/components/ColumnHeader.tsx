@@ -15,6 +15,8 @@ import { MoreHorizontal, Trash2, ChevronRight, ChevronDown } from 'lucide-react'
 import { useProjectsStore } from '@/stores/projects.store';
 import type { Column } from '../types';
 
+const COLUMN_COLORS = ['#94a3b8', '#3b82f6', '#8b5cf6', '#f59e0b', '#22c55e', '#ef4444'] as const;
+
 interface ColumnHeaderProps {
   column: Column;
   cardCount: number;
@@ -157,6 +159,37 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
               >
                 Rename
               </button>
+              {/* Column color — editable any time, not just at creation */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 8px', flexWrap: 'wrap' }}>
+                {COLUMN_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    title={c}
+                    onClick={() => updateColumn(activeBoardId!, column.id, { color: c })}
+                    style={{
+                      width: 16, height: 16, borderRadius: '50%', background: c,
+                      border: column.color === c ? '2px solid var(--text)' : '1px solid var(--border)',
+                      cursor: 'pointer', padding: 0, flexShrink: 0,
+                    }}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={column.color ?? '#94a3b8'}
+                  onChange={(e) => updateColumn(activeBoardId!, column.id, { color: e.target.value })}
+                  title="Custom color"
+                  style={{ width: 18, height: 18, padding: 0, border: '1px solid var(--border)', borderRadius: 4, background: 'none', cursor: 'pointer', flexShrink: 0 }}
+                />
+                <button
+                  title="No color"
+                  onClick={() => updateColumn(activeBoardId!, column.id, { color: null })}
+                  style={{
+                    width: 16, height: 16, borderRadius: '50%', background: 'transparent',
+                    border: !column.color ? '2px solid var(--text)' : '1px dashed var(--border)',
+                    cursor: 'pointer', padding: 0, flexShrink: 0,
+                  }}
+                />
+              </div>
               <button
                 onClick={() => {
                   const lim = prompt('WIP limit (0 to remove):', String(column.wip_limit ?? ''));
@@ -178,15 +211,6 @@ export function ColumnHeader({ column, cardCount }: ColumnHeaderProps) {
                 style={menuItemStyle}
               >
                 {column.collapsed ? 'Expand column' : 'Collapse column'}
-              </button>
-              <button
-                onClick={() => {
-                  updateColumn(activeBoardId!, column.id, { is_done_column: !column.is_done_column });
-                  setMenuOpen(false);
-                }}
-                style={menuItemStyle}
-              >
-                {column.is_done_column ? 'Unmark as Done' : 'Mark as Done column'}
               </button>
               <button
                 onClick={() => {

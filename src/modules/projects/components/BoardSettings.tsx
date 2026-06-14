@@ -14,7 +14,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Trash2, Archive } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useProjectsStore } from '@/stores/projects.store';
+import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
+import { TagInput } from '@/components/shared/TagInput';
 import { AutomationEditor } from './AutomationEditor';
+import { BOARD_COLOR_PRESETS, BOARD_VIEW_OPTIONS } from '../utils/board-options';
+import { BACKGROUND_TEXTURES } from '@/config/backgrounds';
 import type { BoardSettings as BoardSettingsType } from '../types';
 
 interface BoardSettingsProps {
@@ -36,6 +40,7 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
 
   const [tab, setTab] = useState<'general' | 'display' | 'automations' | 'danger'>('general');
   const [title, setTitle] = useState(activeBoardTitle || '');
+  const [description, setDescription] = useState(activeBoard?.description ?? '');
 
   useEffect(() => {
     fetchAutomations(boardId);
@@ -120,6 +125,75 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
                   style={inputStyle}
                 />
               </div>
+              <div>
+                <label style={labelStyle}>Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => {
+                    if (description !== (activeBoard?.description ?? '')) {
+                      updateBoard(boardId, { description: description || null });
+                    }
+                  }}
+                  placeholder="What is this board for?"
+                  rows={3}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 24 }}>
+                <div>
+                  <label style={labelStyle}>Icon</label>
+                  <EmojiAvatarPicker
+                    value={activeBoard?.icon}
+                    onChange={(emoji) => updateBoard(boardId, { icon: emoji })}
+                    size={32}
+                    fallback="📋"
+                    title="Change board icon"
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Color</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {BOARD_COLOR_PRESETS.map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => updateBoard(boardId, { color: c })}
+                        style={{
+                          width: 22, height: 22, borderRadius: '50%', background: c,
+                          border: activeBoard?.color === c ? '2px solid var(--text)' : '1px solid var(--border)',
+                          cursor: 'pointer',
+                        }}
+                      />
+                    ))}
+                    <input
+                      type="color"
+                      value={activeBoard?.color ?? '#3b82f6'}
+                      onChange={(e) => updateBoard(boardId, { color: e.target.value })}
+                      title="Custom color"
+                      style={{ width: 26, height: 26, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'none', cursor: 'pointer' }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Tags</label>
+                <TagInput
+                  tags={activeBoard?.tags ?? []}
+                  onChange={(next) => updateBoard(boardId, { tags: next })}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Default view</label>
+                <select
+                  value={activeBoard?.default_view ?? 'board'}
+                  onChange={(e) => updateBoard(boardId, { default_view: e.target.value })}
+                  style={{ ...inputStyle, width: 180 }}
+                >
+                  {BOARD_VIEW_OPTIONS.map((v) => (
+                    <option key={v.value} value={v.value}>{v.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
@@ -130,12 +204,6 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
                 description="Display #N on each card"
                 checked={boardSettings.showCardNumbers ?? true}
                 onChange={(v) => updateBoard(boardId, { settings: { ...boardSettings, showCardNumbers: v } })}
-              />
-              <ToggleRow
-                label="Show label text"
-                description="Show label names instead of color dots"
-                checked={boardSettings.showLabelsText ?? false}
-                onChange={(v) => updateBoard(boardId, { settings: { ...boardSettings, showLabelsText: v } })}
               />
               <ToggleRow
                 label="Card aging"
@@ -161,10 +229,11 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
               )}
               <div>
                 <label style={labelStyle}>Background</label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   {['none', '#1a1a2e', '#16213e', '#0f3460', '#1b1b2f', '#2c2c3e'].map((bg) => (
                     <button
                       key={bg}
+                      title={bg === 'none' ? 'No background' : bg}
                       onClick={() => updateBoard(boardId, {
                         settings: { ...boardSettings, background: bg === 'none' ? undefined : { type: 'color', value: bg } },
                       })}
@@ -180,6 +249,50 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
                       }}
                     />
                   ))}
+                  <input
+                    type="color"
+                    value={boardSettings.background?.type === 'color' ? boardSettings.background.value : '#1a1a2e'}
+                    onChange={(e) => updateBoard(boardId, {
+                      settings: { ...boardSettings, background: { type: 'color', value: e.target.value } },
+                    })}
+                    title="Custom color"
+                    style={{ width: 32, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 6, background: 'none', cursor: 'pointer' }}
+                  />
+                </div>
+                {/* Bundled textures (same gallery as Settings → Dash → Background) */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  {BACKGROUND_TEXTURES.map((t) => {
+                    const isActive = boardSettings.background?.type === 'image' && boardSettings.background.value === t.file;
+                    return (
+                      <button
+                        key={t.id}
+                        title={t.label}
+                        onClick={() => updateBoard(boardId, {
+                          settings: { ...boardSettings, background: { type: 'image', value: t.file } },
+                        })}
+                        style={{
+                          width: 76, height: 48, padding: 0, overflow: 'hidden',
+                          border: isActive ? '2px solid var(--amber)' : '1px solid var(--border)',
+                          borderRadius: 6, cursor: 'pointer',
+                          background: 'var(--surface)', position: 'relative',
+                        }}
+                      >
+                        <img
+                          src={`/backgrounds/${t.file}`}
+                          alt={t.label}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                        <span style={{
+                          position: 'absolute', bottom: 2, left: 4,
+                          fontSize: 9, color: '#cbd5e1',
+                          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                          fontFamily: 'var(--font-sans)',
+                        }}>
+                          {t.label}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

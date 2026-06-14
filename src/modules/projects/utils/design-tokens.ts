@@ -49,3 +49,14 @@ export function getCardAgeOpacity(updatedAt: string, daysToAge: number): number 
 // ─── Position gap ────────────────────────────────────
 
 export const POSITION_GAP = 1000;
+
+// ─── Checklist progress color ────────────────────────
+// Color del badge de progreso del checklist por porcentaje completado:
+// <50% rojo, [50%,100%) amarillo, 100% verde.
+export function getChecklistProgressColor(checked: number, total: number): string {
+  if (total === 0) return 'var(--text-dim)';
+  const pct = (checked / total) * 100;
+  if (pct < 50) return 'var(--error)';
+  if (pct < 100) return 'var(--warning)';
+  return 'var(--success)';
+}
