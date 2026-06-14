@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -133,6 +133,33 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-photos)',
     label: 'Foto',
     route: (id) => `/photos?id=${encodeURIComponent(id)}`,
+  },
+  // office: chips tipadas por formato del documento generado/referenciado. Word/Excel/
+  // PowerPoint abren en el editor ONLYOFFICE (/office/edit/:id, que detecta el tipo por
+  // mime); PDF abre en el visor (/office/pdf/:id). Colores de marca por formato.
+  office_doc: {
+    Icon: FileText,
+    color: '#2563eb',
+    label: 'Documento',
+    route: (id) => `/office/edit/${encodeURIComponent(id)}`,
+  },
+  office_sheet: {
+    Icon: Sheet,
+    color: '#16a34a',
+    label: 'Hoja',
+    route: (id) => `/office/edit/${encodeURIComponent(id)}`,
+  },
+  office_slides: {
+    Icon: Presentation,
+    color: '#ea580c',
+    label: 'Presentación',
+    route: (id) => `/office/edit/${encodeURIComponent(id)}`,
+  },
+  office_pdf: {
+    Icon: FileType,
+    color: '#dc2626',
+    label: 'PDF',
+    route: (id) => `/office/pdf/${encodeURIComponent(id)}`,
   },
 };
 
