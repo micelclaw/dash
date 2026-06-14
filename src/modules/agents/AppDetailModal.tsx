@@ -25,6 +25,7 @@ interface SkillDetail {
   domains: string[];
   tools: { core: SkillToolInfo[]; full_only: SkillToolInfo[] };
   skill_md: string;
+  skill_md_core: string;
 }
 
 interface AppDetailModalProps {
@@ -139,14 +140,18 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
               />
             )}
 
-            {detail.skill_md && (
-              <div style={{ marginTop: 8 }}>
-                <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Guía</h4>
-                <div className="prose prose-invert prose-sm max-w-none" style={{ fontSize: '0.75rem' }}>
-                  <ReactMarkdown>{detail.skill_md}</ReactMarkdown>
+            {(() => {
+              // Guía del modo activo: en núcleo, la recortada (sin la sección Avanzado).
+              const guide = mode === 'core' ? (detail.skill_md_core || detail.skill_md) : detail.skill_md;
+              return guide ? (
+                <div style={{ marginTop: 8 }}>
+                  <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Guía</h4>
+                  <div className="prose prose-invert prose-sm max-w-none" style={{ fontSize: '0.75rem' }}>
+                    <ReactMarkdown>{guide}</ReactMarkdown>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
           </>
         )}
       </DialogContent>
