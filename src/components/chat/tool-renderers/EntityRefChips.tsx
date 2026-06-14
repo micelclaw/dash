@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ENTITY_REF_MAP } from '@/config/entity-refs';
+import { handleSpaAnchorClick } from '@/lib/nav';
 
 type EntityRef = { type: string; id: string; title: string | null };
 
@@ -40,15 +41,18 @@ function EntityChip({ refItem }: { refItem: EntityRef }) {
   }
 
   const Icon = def.Icon;
+  const route = def.route(refItem.id);
   return (
-    <button
-      type="button"
+    <a
+      href={route}
       title={title}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={(e) => {
         e.stopPropagation();
-        navigate(def.route(refItem.id));
+        // Click izquierdo simple → navega en la SPA; rueda/ctrl/cmd → el
+        // navegador abre la ruta en nueva pestaña (href real).
+        handleSpaAnchorClick(e, () => navigate(route));
       }}
       style={{
         display: 'inline-flex',
@@ -66,12 +70,13 @@ function EntityChip({ refItem }: { refItem: EntityRef }) {
         color: 'var(--text)',
         cursor: 'pointer',
         fontFamily: 'var(--font-sans)',
+        textDecoration: 'none',
         transition: 'background var(--transition-fast)',
       }}
     >
       <Icon size={12} style={{ color: def.color, flexShrink: 0 }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</span>
-    </button>
+    </a>
   );
 }
 

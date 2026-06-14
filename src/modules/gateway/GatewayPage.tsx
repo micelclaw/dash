@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { handleSpaAnchorClick } from '@/lib/nav';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { OverviewTab } from './tabs/OverviewTab';
 import { ChannelsTab } from './tabs/ChannelsTab';
@@ -109,12 +110,16 @@ export function Component() {
             const isActive = activeTab === tab.key;
             const isHovered = hoveredTab === tab.key;
             return (
-              <button
+              <a
                 key={tab.key}
-                onClick={() => handleTabChange(tab.key)}
+                href={tab.key === 'overview' ? '/gateway' : `/gateway?tab=${tab.key}`}
+                onClick={(e) => handleSpaAnchorClick(e, () => handleTabChange(tab.key))}
                 onMouseEnter={() => setHoveredTab(tab.key)}
                 onMouseLeave={() => setHoveredTab(null)}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
                   background: isActive
                     ? 'var(--amber-dim)'
                     : isHovered
@@ -133,10 +138,11 @@ export function Component() {
                   fontFamily: 'var(--font-sans)',
                   whiteSpace: 'nowrap',
                   flex: isMobile ? 1 : undefined,
+                  justifyContent: isMobile ? 'center' : undefined,
                 }}
               >
                 {tab.label}
-              </button>
+              </a>
             );
           })}
         </div>

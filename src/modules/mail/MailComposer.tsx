@@ -41,12 +41,14 @@ interface Recipient {
 interface ContactResult {
   id: string;
   display_name: string | null;
-  emails: string[] | null;
+  // El endpoint GET /contacts devuelve los emails como objetos
+  // { address, label, primary }, no como strings sueltos.
+  emails: { address: string; label?: string; primary?: boolean }[] | null;
 }
 
-/** Extract first email from contact's emails array */
+/** Extract first email address from contact's emails array */
 function contactEmail(c: ContactResult): string {
-  return c.emails?.[0] ?? '';
+  return c.emails?.[0]?.address ?? '';
 }
 
 export function MailComposer({ data, onClose, onSend, accounts, inline = false }: MailComposerProps) {

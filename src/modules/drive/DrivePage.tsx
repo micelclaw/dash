@@ -72,12 +72,12 @@ export function Component() {
   };
 
   const tabs = useMemo(() => [
-    { id: 'my-drive', label: 'My Drive', icon: HardDrive },
-    { id: 'recent', label: 'Recent', icon: Clock },
-    { id: 'starred', label: 'Starred', icon: Star },
-    { id: 'shared', label: 'Shared', icon: Users },
-    { id: 'trash', label: 'Trash', icon: Trash2 },
-    { id: 'duplicates', label: 'Duplicates', icon: Copy },
+    { id: 'my-drive', label: 'My Drive', icon: HardDrive, href: '/drive?tab=my-drive' },
+    { id: 'recent', label: 'Recent', icon: Clock, href: '/drive?tab=recent' },
+    { id: 'starred', label: 'Starred', icon: Star, href: '/drive?tab=starred' },
+    { id: 'shared', label: 'Shared', icon: Users, href: '/drive?tab=shared' },
+    { id: 'trash', label: 'Trash', icon: Trash2, href: '/drive?tab=trash' },
+    { id: 'duplicates', label: 'Duplicates', icon: Copy, href: '/drive?tab=duplicates' },
   ], []);
 
   return (

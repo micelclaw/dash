@@ -26,6 +26,7 @@ import { ContainersLogsTab } from './tabs/ContainersLogsTab';
 import { ActivitySettingsModal } from './settings/ActivitySettingsModal';
 import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
+import { handleSpaAnchorClick } from '@/lib/nav';
 
 type TabKey = Adapter<never>['tabKey'];
 
@@ -169,10 +170,11 @@ export function Component() {
               : null;
             const isActive = tab.key === activeTab;
             return (
-              <button
+              <a
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`w-full flex items-center justify-between px-3 py-1.5 text-sm hover:bg-[var(--surface-hover)] ${
+                href={`/activity?tab=${tab.key}`}
+                onClick={(e) => handleSpaAnchorClick(e, () => setActiveTab(tab.key))}
+                className={`w-full flex items-center justify-between px-3 py-1.5 text-sm no-underline text-[var(--text)] hover:bg-[var(--surface-hover)] ${
                   isActive ? 'bg-[var(--surface-hover)] border-l-2 border-[var(--primary)]' : ''
                 }`}
               >
@@ -188,7 +190,7 @@ export function Component() {
                     {usage}%
                   </span>
                 )}
-              </button>
+              </a>
             );
           })}
         </nav>

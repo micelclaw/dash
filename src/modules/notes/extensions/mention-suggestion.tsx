@@ -47,6 +47,20 @@ function resultLabel(domain: string, record: Record<string, unknown> | null, sni
   }
 }
 
+/**
+ * Id que persiste la chip. Para `kanban_card` codificamos "<boardId>/<cardId>"
+ * (el board lo aporta el record del search) para que ENTITY_REF_MAP pueda abrir
+ * la card en su panel de detalle (BoardView vive en /projects/:boardId). El
+ * resto de dominios usan el record_id a secas.
+ */
+function mentionId(r: SearchResult): string {
+  if (r.domain === 'kanban_card') {
+    const boardId = r.record?.board_id;
+    if (typeof boardId === 'string' && boardId) return `${boardId}/${r.record_id}`;
+  }
+  return r.record_id;
+}
+
 async function searchMentions(query: string): Promise<MentionItem[]> {
   if (query.trim().length < 2) return [];
   try {
@@ -59,7 +73,7 @@ async function searchMentions(query: string): Promise<MentionItem[]> {
     const items = (res.data ?? [])
       .map((r) => ({
         domain: r.domain,
-        id: r.record_id,
+        id: mentionId(r),
         label: resultLabel(r.domain, r.record, r.snippet ?? ''),
         snippet: r.snippet,
       }))

@@ -73,6 +73,19 @@ interface NoteEditorProps {
   onSaved?: (id: string, changes: Partial<Note>) => void;
 }
 
+/**
+ * Dado el target de un click dentro del editor, si cae sobre una chip de
+ * mención (a[href^="claw://"]) devuelve la ruta de app resuelta vía
+ * ENTITY_REF_MAP; si no, null. Compartido por handleClick (navegar) y
+ * auxclick (abrir en nueva pestaña).
+ */
+function resolveMentionRoute(target: HTMLElement | null): string | null {
+  const anchor = target?.closest?.('a[href]');
+  const ref = parseClawHref(anchor?.getAttribute('href'));
+  const def = ref ? ENTITY_REF_MAP[ref.domain] : undefined;
+  return ref && def ? def.route(ref.id) : null;
+}
+
 function EditorSkeleton() {
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -190,15 +203,29 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         class: 'outline-none min-h-[200px] text-[var(--text)] text-sm leading-relaxed',
       },
       // Click en una chip de mención (a[href^="claw://"]) → navegar al registro.
+      // El href real es `claw://…` (no navegable por el navegador), así que el
+      // gesto "nueva pestaña" (rueda/ctrl/cmd) lo resolvemos a mano: abrimos la
+      // ruta de app resuelta vía ENTITY_REF_MAP con window.open.
       handleClick: (_view, _pos, event) => {
-        const anchor = (event.target as HTMLElement).closest?.('a[href]');
-        const ref = parseClawHref(anchor?.getAttribute('href'));
-        const def = ref ? ENTITY_REF_MAP[ref.domain] : undefined;
-        if (ref && def) {
-          navigate(def.route(ref.id));
-          return true;
+        const route = resolveMentionRoute(event.target as HTMLElement);
+        if (!route) return false;
+        if (event.metaKey || event.ctrlKey) {
+          window.open(route, '_blank', 'noopener');
+        } else {
+          navigate(route);
         }
-        return false;
+        return true;
+      },
+      handleDOMEvents: {
+        // Click central (rueda) sobre una chip → abrir en nueva pestaña.
+        auxclick: (_view, event) => {
+          if (event.button !== 1) return false;
+          const route = resolveMentionRoute(event.target as HTMLElement);
+          if (!route) return false;
+          event.preventDefault();
+          window.open(route, '_blank', 'noopener');
+          return true;
+        },
       },
     },
   });

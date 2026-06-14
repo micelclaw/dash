@@ -69,19 +69,30 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
       ? `/explorer?path=${encodeURIComponent(id)}`
       : `/drive?id=${encodeURIComponent(id)}`,
   },
-  // Proyectos e inventario: las páginas aún no leen `?id=` (aterrizan en el
-  // módulo); se usa la convención igualmente para que lo adopten sin tocar esto.
+  // Tablero kanban: el id de la chip ES el boardId → ruta directa a BoardView
+  // (/projects/:boardId), no al listado.
   kanban_board: {
     Icon: Kanban,
     color: 'var(--mod-projects)',
     label: 'Tablero',
-    route: (id) => `/projects?id=${encodeURIComponent(id)}`,
+    route: (id) => `/projects/${encodeURIComponent(id)}`,
   },
+  // Tarjeta kanban: abrir el CardDetailPanel requiere el boardId (BoardView lee
+  // `?card=`). La chip codifica el id como "<boardId>/<cardId>" (lo provee el
+  // search, ver mention-suggestion.tsx). Fallback degradado si llega sin board.
   kanban_card: {
     Icon: SquareCheckBig,
     color: 'var(--mod-projects)',
     label: 'Tarjeta',
-    route: (id) => `/projects?card=${encodeURIComponent(id)}`,
+    route: (id) => {
+      const slash = id.indexOf('/');
+      if (slash > 0) {
+        const boardId = id.slice(0, slash);
+        const cardId = id.slice(slash + 1);
+        return `/projects/${encodeURIComponent(boardId)}?card=${encodeURIComponent(cardId)}`;
+      }
+      return `/projects?card=${encodeURIComponent(id)}`;
+    },
   },
   inventory: {
     Icon: Boxes,

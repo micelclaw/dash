@@ -150,7 +150,8 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       const trimmed = voiceStream.transcript.trim();
       if (trimmed) {
         lastInputWasVoiceRef.current = true;
-        setText(trimmed);
+        // Append a lo que el usuario ya tuviera escrito (no sobrescribir).
+        setText(prev => (prev.trim() ? prev.trimEnd() + ' ' + trimmed : trimmed));
       }
     }
   }, [voiceStream.isSessionActive, voiceStream.transcript, isFullDuplex]);
