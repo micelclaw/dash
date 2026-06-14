@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchParams, useNavigate } from 'react-router';
 import {
   HardDrive, Clock, Star, Users, Trash2, Copy, Settings,
 } from 'lucide-react';
@@ -24,7 +24,6 @@ import { StarredView } from './views/StarredView';
 import { SharedView } from './views/SharedView';
 import { TrashView } from './views/TrashView';
 import { DuplicatesView } from './views/DuplicatesView';
-import { DriveSettingsView } from './views/DriveSettingsView';
 
 /**
  * Drive module shell (D3) — tab row (My Drive / Recent / Starred / Shared /
@@ -38,6 +37,7 @@ import { DriveSettingsView } from './views/DriveSettingsView';
  */
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const activeTab = useDriveStore(s => s.activeTab);
   const setActiveTab = useDriveStore(s => s.setActiveTab);
 
@@ -45,14 +45,11 @@ export function Component() {
   // navigating to /drive?tab=my-drive&id=…).
   useEffect(() => {
     const tabParam = searchParams.get('tab');
-    // Legacy `?tab=devices` deep-link → Drive settings (the Devices tab is gone).
-    if (tabParam === 'devices') {
-      setActiveTab('settings');
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev);
-        next.set('tab', 'settings');
-        return next;
-      }, { replace: true });
+    // Legacy deep-links a la antigua tab/sección de settings del Drive
+    // (devices = la Devices tab retirada; settings = la vista interna ya movida)
+    // → ahora las settings del Drive viven en Settings → System → Drive.
+    if (tabParam === 'devices' || tabParam === 'settings') {
+      navigate('/settings/drive', { replace: true });
       return;
     }
     if (isDriveTab(tabParam)) {
@@ -110,17 +107,19 @@ export function Component() {
         </div>
         <QuotaChip />
         <button
-          onClick={() => handleTabChange('settings')}
+          onClick={() => navigate('/settings/drive')}
           title="Drive settings"
           aria-label="Drive settings"
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 32, height: 32, marginBottom: 6, flexShrink: 0,
-            background: activeTab === 'settings' ? 'color-mix(in srgb, var(--mod-drive) 14%, transparent)' : 'transparent',
+            background: 'transparent',
             border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-            color: activeTab === 'settings' ? 'var(--mod-drive)' : 'var(--text-dim)',
+            color: 'var(--text-dim)',
             cursor: 'pointer',
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--mod-drive)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-dim)'; }}
         >
           <Settings size={16} />
         </button>
@@ -134,7 +133,6 @@ export function Component() {
         {activeTab === 'shared' && <SharedView />}
         {activeTab === 'trash' && <TrashView />}
         {activeTab === 'duplicates' && <DuplicatesView />}
-        {activeTab === 'settings' && <DriveSettingsView />}
       </div>
     </div>
   );

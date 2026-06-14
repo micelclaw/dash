@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
-  Search as SearchIcon, Newspaper, HardDrive, Users, Network, Zap,
+  Search as SearchIcon, Newspaper, HardDrive, FolderOpen, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
   Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code, MemoryStick,
@@ -32,6 +32,7 @@ import { PhotosSection } from '@/components/settings/sections/PhotosSection';
 import { DashSection } from '@/components/settings/sections/DashSection';
 import { ChatToolsSection } from '@/components/settings/sections/ChatToolsSection';
 import { StorageSection } from '@/components/settings/sections/StorageSection';
+import { DriveSection } from '@/components/settings/sections/DriveSection';
 import { SecuritySection } from '@/components/settings/sections/SecuritySection';
 import { LicenseSection } from '@/components/settings/sections/LicenseSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
@@ -197,6 +198,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       description: 'Storage, database, energy, services, sensors and automation.',
       sections: [
         { id: 'storage', label: 'Storage', icon: HardDrive },
+        { id: 'drive', label: 'Drive', icon: FolderOpen },
         { id: 'database', label: 'Database', icon: Database },
         { id: 'energy', label: 'Energy', icon: Zap },
         { id: 'services', label: 'Services', icon: Server },
@@ -284,6 +286,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'mail':                 () => <MailSection />,
   'photos':               () => <PhotosSection />,
   'storage':              () => <StorageSection />,
+  'drive':                () => <DriveSection />,
   'network':              () => <NetworkSection />,
   'energy':               () => <EnergySection />,
   'dash':                 () => <DashSection />,

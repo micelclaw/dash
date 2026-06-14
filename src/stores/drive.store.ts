@@ -14,14 +14,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 /** Tabs of the Drive module shell (DrivePage). Synced with ?tab= in the URL — the URL wins on mount. */
+// Nota: las settings del Drive NO son una tab — viven en Settings → System →
+// Drive (/settings/drive); el engranaje del módulo navega allí.
 export type DriveTab =
   | 'my-drive'
   | 'recent'
   | 'starred'
   | 'shared'
   | 'trash'
-  | 'duplicates'
-  | 'settings';
+  | 'duplicates';
 
 export const DRIVE_TABS: DriveTab[] = [
   'my-drive',
@@ -30,7 +31,6 @@ export const DRIVE_TABS: DriveTab[] = [
   'shared',
   'trash',
   'duplicates',
-  'settings',
 ];
 
 export function isDriveTab(value: string | null | undefined): value is DriveTab {
