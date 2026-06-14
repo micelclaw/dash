@@ -139,6 +139,12 @@ export function resolveEntity(domain: string, id?: string, record?: Rec): Resolv
   // Archivos: visual por mime (getFileIconEntry) + ruta por mime.
   if (d === 'file' || d === 'photo') {
     const mime = str(record, 'mime_type') ?? (d === 'photo' ? 'image/' : '');
+    // Sin mime (p.ej. un nodo del grafo o un panel que no aporta el record): usar la
+    // identidad de Drive (FolderOpen + --mod-drive) en vez del File/gris genérico.
+    if (!mime) {
+      const def = ENTITY_REF_MAP['file']!;
+      return { Icon: def.Icon, color: def.color, label: def.label, route: rid ? fileRoute(rid, record) : null };
+    }
     const [Icon, color] = getFileIconEntry(mime, false);
     return {
       Icon,
