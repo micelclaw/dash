@@ -53,7 +53,6 @@ export interface D3GraphUpdateParams {
   showHulls: boolean;
   hideLabels: boolean;
   compactLabels: boolean;
-  heatNormalize: boolean;
   highlightNodeIds: Set<string>;
   highlightEdgeIds: Set<string>;
   searchMatches: Set<string> | null;
@@ -103,8 +102,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let currentShowHulls = false;
   let currentHideLabels = false;
   let currentCompactLabels = false; // records → labels truncadas a 2 líneas (tspans)
-  let currentHeatNormalize = false; // records → heat_score en escala minúscula; normalizar para pintar
-  let currentHeatMax = 0;           // máximo heat visible (divisor de la normalización)
   let currentHighlightNodeIds = new Set<string>();
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
@@ -290,17 +287,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     });
   }
 
-  // Heat efectivo para pintar. En modo records el `heat_score` viene en escala minúscula
-  // (record_heat ~0.005 máx, vs entities ya normalizado a 0-1) → normaliza al máximo visible
-  // con curva sqrt para repartir los tonos como en entities. En entities devuelve el valor tal cual.
-  function effectiveHeat(d: SimNode): number {
-    const h = d.heat_score ?? 0;
-    if (currentHeatNormalize && currentHeatMax > 0) {
-      return Math.sqrt(Math.min(1, h / currentHeatMax));
-    }
-    return h;
-  }
-
   function renderHeatBackground() {
     if (!heatCtx || !heatCanvas) return;
 
@@ -316,7 +302,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     heatCtx.setTransform(k, 0, 0, k, tx, ty);
 
     for (const node of simNodes) {
-      const score = Math.max(effectiveHeat(node), 0.05); // minimum glow for cold nodes
+      const score = Math.max(node.heat_score, 0.05); // minimum glow for cold nodes
 
       const splatRadius = HEAT_SPLAT_RADIUS + node._r * 2;
       const rgb = heatColorRGB(score);
@@ -527,14 +513,16 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     nodeEnter.each(function (d) {
       const g = d3.select(this);
       const r = d._r;
-      const shape: NodeShape = currentHeatMode ? 'circle' : entityTypeShape(d.entity_type);
+      // La FORMA siempre refleja el tipo (cuadrado=nota, triángulo=evento…), también en
+      // modo Calor (ahí el COLOR es el heat, pero la forma sigue diciendo qué tipo es).
+      const shape: NodeShape = entityTypeShape(d.entity_type);
 
       // In heat mode, use rgba() directly (heatColor returns rgb() which can't take hex alpha suffix)
       let color: string;
       let fill: string;
       let haloFill: string;
       if (currentHeatMode) {
-        const rgb = heatColorRGB(effectiveHeat(d));
+        const rgb = heatColorRGB(d.heat_score);
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
         fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
@@ -579,13 +567,15 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     nodeSel.each(function (d) {
       const g = d3.select(this);
       const r = d._r;
-      const shape: NodeShape = currentHeatMode ? 'circle' : entityTypeShape(d.entity_type);
+      // La FORMA siempre refleja el tipo (cuadrado=nota, triángulo=evento…), también en
+      // modo Calor (ahí el COLOR es el heat, pero la forma sigue diciendo qué tipo es).
+      const shape: NodeShape = entityTypeShape(d.entity_type);
 
       let color: string;
       let fill: string;
       let haloFill: string;
       if (currentHeatMode) {
-        const rgb = heatColorRGB(effectiveHeat(d));
+        const rgb = heatColorRGB(d.heat_score);
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
         fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
@@ -780,7 +770,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         el.attr('stroke', '#f59e0b').attr('stroke-width', 2.5);
       } else {
         const color = currentHeatMode
-          ? (() => { const rgb = heatColorRGB(effectiveHeat(d)); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
+          ? (() => { const rgb = heatColorRGB(d.heat_score); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
           : nonHeatNodeColor(d);
         el.attr('stroke', color).attr('stroke-width', 1.5);
       }
@@ -801,7 +791,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     currentShowHulls = params.showHulls;
     currentHideLabels = params.hideLabels;
     currentCompactLabels = params.compactLabels;
-    currentHeatNormalize = params.heatNormalize;
     currentHighlightNodeIds = params.highlightNodeIds;
     currentHighlightEdgeIds = params.highlightEdgeIds;
     currentSearchMatches = params.searchMatches;
@@ -809,16 +798,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     // Build filtered node list
     const filteredNodes = params.nodes.filter(n => params.visibleNodeIds.has(n.id));
-
-    // Máximo heat visible (divisor de la normalización records-mode). Solo se calcula
-    // cuando hace falta; en entities queda 0 y effectiveHeat devuelve el heat tal cual.
-    currentHeatMax = 0;
-    if (currentHeatNormalize) {
-      for (const n of filteredNodes) {
-        const h = n.heat_score ?? 0;
-        if (h > currentHeatMax) currentHeatMax = h;
-      }
-    }
 
     // ── Derive community layout state (top-K islas + grid + labels) ──
     // Fuente de tamaños: la lista /graph/communities; si no llegó, contar por nodos

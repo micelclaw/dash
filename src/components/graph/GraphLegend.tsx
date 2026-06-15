@@ -36,8 +36,10 @@ const RECORD_LINK_TYPES = [
   { key: 'co_entity', label: 'Shared entities' },
 ];
 
-function ShapeSwatch({ entityType }: { entityType: string }) {
-  const color = entityTypeColor(entityType);
+function ShapeSwatch({ entityType, color: colorOverride }: { entityType: string; color?: string }) {
+  // En modo Calor el color del nodo es el heat (no el del tipo) → la leyenda de formas
+  // usa un tono neutro para no implicar el color del tipo; solo importa la figura.
+  const color = colorOverride ?? entityTypeColor(entityType);
   const shape = entityTypeShape(entityType);
   const r = 6;
   const path = svgShapePath(shape, r);
@@ -132,6 +134,20 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Cold</span>
             <span>Hot</span>
+          </div>
+
+          {/* Las figuras siguen indicando el TIPO en modo Calor (color = heat, forma = tipo). */}
+          <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+          <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
+            {isRecords ? 'Record Types' : 'Entity Types'}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {typeList.map(type => (
+              <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ShapeSwatch entityType={type} color="rgba(255,255,255,0.55)" />
+                <span style={{ textTransform: 'capitalize' }}>{type}</span>
+              </div>
+            ))}
           </div>
         </>
       ) : (

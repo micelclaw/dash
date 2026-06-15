@@ -30,7 +30,6 @@ export interface UseGraphRendererParams {
   height: number;
   hideLabels?: boolean;
   compactLabels?: boolean;
-  heatNormalize?: boolean;
   strengthThreshold?: number;
 }
 
@@ -129,7 +128,6 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
       showHulls,
       hideLabels: params.hideLabels ?? false,
       compactLabels: params.compactLabels ?? false,
-      heatNormalize: params.heatNormalize ?? false,
       highlightNodeIds: params.highlightNodeIds,
       highlightEdgeIds: params.highlightEdgeIds,
       searchMatches,
@@ -140,7 +138,7 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
     params.nodes, params.edges, params.colorMode, params.communities,
     params.highlightNodeIds, params.highlightEdgeIds,
     searchMatches, visibleNodeIds, showHulls, params.hideLabels, params.compactLabels,
-    params.heatNormalize, params.strengthThreshold,
+    params.strengthThreshold,
   ]);
 
   // ── External hover (from detail panel) ──────────────────────────────

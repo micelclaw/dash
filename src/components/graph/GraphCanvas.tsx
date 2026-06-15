@@ -73,8 +73,6 @@ export function GraphCanvas({
     // Records: mostrar nombres pero truncados a 2 líneas (antes se ocultaban del todo).
     hideLabels: false,
     compactLabels: mode === 'records',
-    // Records: el heat_score viene en escala minúscula → normalizar para que el heat map se vea.
-    heatNormalize: mode === 'records',
   });
 
   return (
