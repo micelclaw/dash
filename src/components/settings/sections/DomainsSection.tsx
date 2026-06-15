@@ -20,7 +20,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   Globe2, Plus, Trash2, Star, ExternalLink, Loader2, ShieldCheck,
-  Download, AlertTriangle, Check, Power,
+  Download, AlertTriangle, Check, Power, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { SettingSection } from '../SettingSection';
 import { InlineLoading } from '../shared/InlineLoading';
@@ -45,6 +45,7 @@ export function DomainsSection() {
   const [newLabel, setNewLabel] = useState('');
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -116,10 +117,55 @@ export function DomainsSection() {
 
   return (
     <div>
-      <SettingSection
-        title="Dominio principal del sistema"
-        description="Accede a la web del sistema y a todos los servicios por un nombre (stirling.tudominio.claw) en vez de IP:puerto. Fase 1: dominios locales .claw, dentro de tu red, con certificado por la CA interna."
-      >
+      <SettingSection title="Dominio principal del sistema">
+        {/* Intro corta + Leer más */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={introText}>
+            Accede a la web del sistema y a todos los servicios por un nombre
+            (<code>stirling.tudominio.claw</code>) en vez de IP:puerto. Fase 1:
+            dominios locales <code>.claw</code>, dentro de tu red, con certificado por la CA interna.
+          </p>
+          <button onClick={() => setShowHelp(v => !v)} style={readMoreLink}>
+            {showHelp ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            {showHelp ? 'Leer menos' : 'Leer más…'}
+          </button>
+          {showHelp && (
+            <div style={helpBox}>
+              <p style={helpP}>
+                <strong style={helpQ}>¿Para qué sirve?</strong> Normalmente, para entrar a cada
+                servicio tienes que recordar una dirección de números y un puerto
+                (por ejemplo <code>127.0.0.1:8081</code> para el editor de PDF). Es incómodo. Con un
+                <em> dominio principal</em> le pones un nombre a tu servidor (p. ej. <code>victor.claw</code>)
+                y entras a todo por nombre: la web del sistema en <code>victor.claw</code>, el editor de
+                PDF en <code>pdf.victor.claw</code>, la música en <code>music.victor.claw</code>… Tú eliges
+                el nombre; el sistema crea solo todas las direcciones.
+              </p>
+              <p style={helpP}>
+                <strong style={helpQ}>¿Qué es “.claw”?</strong> Es la terminación del dominio local,
+                como “.com” pero solo dentro de tu red (no existe en internet abierto). Funciona sin
+                conexión y sin pagar nada.
+              </p>
+              <p style={helpP}>
+                <strong style={helpQ}>¿Y el candado (HTTPS)?</strong> El navegador avisa de “sitio no
+                seguro” si una web no tiene certificado. Como tu <code>.claw</code> solo existe en tu
+                casa, el propio sistema hace de “autoridad” y emite el certificado. Instala su sello
+                (el botón “Descargar certificado CA” de más abajo) una vez en cada dispositivo y todos
+                los <code>.claw</code> saldrán con candado verde.
+              </p>
+              <p style={helpP}>
+                <strong style={helpQ}>¿Dónde se ven las direcciones creadas?</strong> Cada acceso es
+                una entrada real y editable en los módulos <em>Reverse Proxy</em> (marcada “system”) y
+                <em> DNS</em>. Nada queda oculto: puedes usarlas de ejemplo para exponer tus propios servicios.
+              </p>
+              <p style={{ ...helpP, marginBottom: 0 }}>
+                <strong style={helpQ}>¿Y desde fuera de casa?</strong> En la Fase 2 podrás añadir un
+                dominio público (el de tu licencia o uno tuyo de Cloudflare) y tener el local y el
+                público funcionando a la vez.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Lista de dominios */}
         {domains.length === 0 ? (
           <div style={emptyStyle}>
@@ -177,7 +223,15 @@ export function DomainsSection() {
             onKeyDown={e => { if (e.key === 'Enter') void handleCreate(); }}
           />
           <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>.claw</span>
-          <button style={primaryBtn} disabled={creating || !newLabel.trim()} onClick={() => void handleCreate()}>
+          <button
+            style={{
+              ...primaryBtn,
+              opacity: creating || !newLabel.trim() ? 0.45 : 1,
+              cursor: creating || !newLabel.trim() ? 'not-allowed' : 'pointer',
+            }}
+            disabled={creating || !newLabel.trim()}
+            onClick={() => void handleCreate()}
+          >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             Crear dominio local
           </button>
@@ -258,14 +312,31 @@ const badgeStyle: React.CSSProperties = {
   fontSize: '0.625rem', padding: '1px 6px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', color: 'var(--text-muted)', textTransform: 'capitalize',
 };
 const iconBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26,
-  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', cursor: 'pointer',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
+  borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+  background: 'var(--bg-elevated, rgba(255,255,255,0.05))', color: 'var(--text)', cursor: 'pointer',
 };
+// Botón principal: relleno sólido con texto oscuro → alto contraste y claramente "clicable".
 const primaryBtn: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--accent, #22d3ee)', background: 'color-mix(in srgb, var(--accent, #22d3ee) 14%, transparent)',
-  color: 'var(--accent, #22d3ee)', fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 'var(--radius-sm)',
+  border: 'none', background: 'var(--accent, #22d3ee)',
+  color: '#06222a', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)',
 };
+const introText: React.CSSProperties = {
+  fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 6px 0', lineHeight: 1.55,
+};
+const readMoreLink: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0,
+  cursor: 'pointer', color: 'var(--warning, #fbbf24)', fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+};
+const helpBox: React.CSSProperties = {
+  marginTop: 8, padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+  background: 'var(--bg-elevated, rgba(255,255,255,0.025))',
+};
+const helpP: React.CSSProperties = {
+  fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 9px 0', lineHeight: 1.6,
+};
+const helpQ: React.CSSProperties = { color: 'var(--text)' };
 const inputStyle: React.CSSProperties = {
   padding: '6px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)',
   color: 'var(--text)', fontSize: '0.8125rem', width: 140, fontFamily: 'var(--font-sans)',
