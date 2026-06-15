@@ -174,14 +174,17 @@ function Badge({ label, bg, color }: { label: string; bg: string; color: string 
 
 // ─── Create User Modal ──────────────────────────────────────
 
+type MediaMode = 'shared' | 'dedicated-light' | 'dedicated-full' | 'none';
+
 function CreateUserModal({ onClose, onCreate }: {
   onClose: () => void;
-  onCreate: (data: { email: string; display_name: string; password: string; role: UserRole }) => Promise<void>;
+  onCreate: (data: { email: string; display_name: string; password: string; role: UserRole; media_mode: MediaMode }) => Promise<void>;
 }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('user');
+  const [mediaMode, setMediaMode] = useState<MediaMode>('shared');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
@@ -190,12 +193,19 @@ function CreateUserModal({ onClose, onCreate }: {
     if (!isPasswordStrong(password)) { toast.error('Password does not meet the requirements'); return; }
     setSaving(true);
     try {
-      await onCreate({ email, display_name: displayName, password, role });
+      await onCreate({ email, display_name: displayName, password, role, media_mode: mediaMode });
       onClose();
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Failed to create user');
     } finally { setSaving(false); }
   };
+
+  const MEDIA_OPTIONS: { value: MediaMode; title: string; desc: string; disabled?: boolean }[] = [
+    { value: 'shared', title: 'Media compartida', desc: 'Accede a la biblioteca multimedia (Vídeo/Audiolibros/Música/Libros) con su propia cuenta en cada servicio. Comparte la biblioteca contigo (admin).' },
+    { value: 'dedicated-light', title: 'Media propia (biblioteca dedicada)', desc: 'Carpeta + biblioteca propias dentro de los servidores compartidos.', disabled: true },
+    { value: 'dedicated-full', title: 'Stack propio completo', desc: 'Sus propios contenedores (Radarr/Jellyfin/...).', disabled: true },
+    { value: 'none', title: 'Sin media', desc: 'El usuario no tendrá acceso a la biblioteca multimedia.' },
+  ];
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -220,6 +230,35 @@ function CreateUserModal({ onClose, onCreate }: {
             <option value="user">User</option>
             <option value="admin">Admin</option>
           </select>
+        </div>
+        <div>
+          <label style={labelStyle}>Media</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {MEDIA_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                style={{
+                  display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px',
+                  border: `1px solid ${mediaMode === opt.value ? 'var(--amber)' : 'var(--border)'}`,
+                  borderRadius: 'var(--radius-sm)', cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                  opacity: opt.disabled ? 0.5 : 1,
+                }}
+              >
+                <input
+                  type="radio" name="media_mode" value={opt.value}
+                  checked={mediaMode === opt.value} disabled={opt.disabled}
+                  onChange={() => !opt.disabled && setMediaMode(opt.value)}
+                  style={{ marginTop: 3, accentColor: 'var(--amber)' }}
+                />
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
+                    {opt.title}{opt.disabled ? ' · Próximamente' : ''}
+                  </span>
+                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{opt.desc}</span>
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <button style={btnSecondary} onClick={onClose}>Cancel</button>

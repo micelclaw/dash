@@ -33,6 +33,11 @@ export interface CreateUserPayload {
   display_name: string;
   password: string;
   role: UserRole;
+  /** Per-user media: 'shared' = cuenta propia en los servidores compartidos;
+   *  'dedicated-*' Fases 2/3; 'none' sin media. Default backend: 'none'. */
+  media_mode?: 'shared' | 'dedicated-light' | 'dedicated-full' | 'none';
+  /** En 'shared', usuario cuya biblioteca se comparte (default: el creador). */
+  share_target_user_id?: string;
 }
 
 export interface UpdateUserPayload {
