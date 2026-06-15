@@ -28,16 +28,21 @@ export interface AdminUser {
   updated_at: string;
 }
 
+/** Media por servicio (checkboxes del wizard). Grupo A = cuenta en servicio
+ *  compartido; grupo B = contenedor dedicado (privado). */
+export interface CreateUserMedia {
+  /** Servicios compartidos donde crear cuenta: jellyfin/audiobookshelf/calibreweb/jellyseerr. */
+  shared_services: string[];
+  /** Servicios dedicados (contenedor propio): navidrome. */
+  dedicated_services: string[];
+}
+
 export interface CreateUserPayload {
   email: string;
   display_name: string;
   password: string;
   role: UserRole;
-  /** Per-user media: 'shared' = cuenta propia en los servidores compartidos;
-   *  'dedicated-*' Fases 2/3; 'none' sin media. Default backend: 'none'. */
-  media_mode?: 'shared' | 'dedicated-light' | 'dedicated-full' | 'none';
-  /** En 'shared', usuario cuya biblioteca se comparte (default: el creador). */
-  share_target_user_id?: string;
+  media?: CreateUserMedia;
 }
 
 export interface UpdateUserPayload {

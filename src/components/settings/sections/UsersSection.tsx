@@ -174,18 +174,33 @@ function Badge({ label, bg, color }: { label: string; bg: string; color: string 
 
 // ─── Create User Modal ──────────────────────────────────────
 
-type MediaMode = 'shared' | 'dedicated-light' | 'dedicated-full' | 'none';
+// Grupo A: cuenta en servicio COMPARTIDO (catálogo común de la casa).
+const SHARED_MEDIA_SERVICES: { id: string; title: string; desc: string }[] = [
+  { id: 'jellyfin', title: 'Jellyfin', desc: 'Películas y series' },
+  { id: 'audiobookshelf', title: 'Audiobookshelf', desc: 'Audiolibros y podcasts' },
+  { id: 'calibreweb', title: 'Calibre-Web', desc: 'Libros' },
+  { id: 'jellyseerr', title: 'Jellyseerr', desc: 'Peticiones de pelis/series' },
+];
+// Grupo B: servicio DEDICADO (contenedor propio + carpeta privada).
+const DEDICATED_MEDIA_SERVICES: { id: string; title: string; desc: string }[] = [
+  { id: 'navidrome', title: 'Música — Navidrome propio', desc: 'Biblioteca privada en files/<usuario>/media/music · instala un contenedor (consume RAM)' },
+];
 
 function CreateUserModal({ onClose, onCreate }: {
   onClose: () => void;
-  onCreate: (data: { email: string; display_name: string; password: string; role: UserRole; media_mode: MediaMode }) => Promise<void>;
+  onCreate: (data: { email: string; display_name: string; password: string; role: UserRole; media: { shared_services: string[]; dedicated_services: string[] } }) => Promise<void>;
 }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('user');
-  const [mediaMode, setMediaMode] = useState<MediaMode>('shared');
+  // Default: grupo A todo marcado, grupo B desmarcado.
+  const [sharedServices, setSharedServices] = useState<string[]>(SHARED_MEDIA_SERVICES.map((s) => s.id));
+  const [dedicatedServices, setDedicatedServices] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const toggle = (list: string[], set: (v: string[]) => void, id: string) =>
+    set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
   const handleSubmit = async () => {
     if (!email || !displayName || !password) { toast.error('All fields are required'); return; }
@@ -193,19 +208,36 @@ function CreateUserModal({ onClose, onCreate }: {
     if (!isPasswordStrong(password)) { toast.error('Password does not meet the requirements'); return; }
     setSaving(true);
     try {
-      await onCreate({ email, display_name: displayName, password, role, media_mode: mediaMode });
+      await onCreate({ email, display_name: displayName, password, role, media: { shared_services: sharedServices, dedicated_services: dedicatedServices } });
       onClose();
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Failed to create user');
     } finally { setSaving(false); }
   };
 
-  const MEDIA_OPTIONS: { value: MediaMode; title: string; desc: string; disabled?: boolean }[] = [
-    { value: 'shared', title: 'Media compartida', desc: 'Accede a la biblioteca multimedia (Vídeo/Audiolibros/Música/Libros) con su propia cuenta en cada servicio. Comparte la biblioteca contigo (admin).' },
-    { value: 'dedicated-light', title: 'Media propia (biblioteca dedicada)', desc: 'Carpeta + biblioteca propias dentro de los servidores compartidos.', disabled: true },
-    { value: 'dedicated-full', title: 'Stack propio completo', desc: 'Sus propios contenedores (Radarr/Jellyfin/...).', disabled: true },
-    { value: 'none', title: 'Sin media', desc: 'El usuario no tendrá acceso a la biblioteca multimedia.' },
-  ];
+  const renderServiceCheckbox = (
+    opt: { id: string; title: string; desc: string },
+    checked: boolean,
+    onToggle: () => void,
+  ) => (
+    <label
+      key={opt.id}
+      style={{
+        display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px',
+        border: `1px solid ${checked ? 'var(--amber)' : 'var(--border)'}`,
+        borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+      }}
+    >
+      <input
+        type="checkbox" checked={checked} onChange={onToggle}
+        style={{ marginTop: 3, accentColor: 'var(--amber)' }}
+      />
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{opt.title}</span>
+        <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{opt.desc}</span>
+      </span>
+    </label>
+  );
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -232,32 +264,28 @@ function CreateUserModal({ onClose, onCreate }: {
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Media</label>
+          <label style={labelStyle}>Multimedia</label>
+          <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>
+            Cuenta propia en servicios compartidos
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 6 }}>
+            Catálogo común de la casa; se crea un login para el usuario.
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {MEDIA_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                style={{
-                  display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px',
-                  border: `1px solid ${mediaMode === opt.value ? 'var(--amber)' : 'var(--border)'}`,
-                  borderRadius: 'var(--radius-sm)', cursor: opt.disabled ? 'not-allowed' : 'pointer',
-                  opacity: opt.disabled ? 0.5 : 1,
-                }}
-              >
-                <input
-                  type="radio" name="media_mode" value={opt.value}
-                  checked={mediaMode === opt.value} disabled={opt.disabled}
-                  onChange={() => !opt.disabled && setMediaMode(opt.value)}
-                  style={{ marginTop: 3, accentColor: 'var(--amber)' }}
-                />
-                <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
-                    {opt.title}{opt.disabled ? ' · Próximamente' : ''}
-                  </span>
-                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{opt.desc}</span>
-                </span>
-              </label>
-            ))}
+            {SHARED_MEDIA_SERVICES.map((opt) =>
+              renderServiceCheckbox(opt, sharedServices.includes(opt.id), () => toggle(sharedServices, setSharedServices, opt.id)),
+            )}
+          </div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text)', margin: '12px 0 4px' }}>
+            Servicios dedicados (privados)
+          </div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 6 }}>
+            Instala un contenedor propio + carpeta privada del usuario.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {DEDICATED_MEDIA_SERVICES.map((opt) =>
+              renderServiceCheckbox(opt, dedicatedServices.includes(opt.id), () => toggle(dedicatedServices, setDedicatedServices, opt.id)),
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
