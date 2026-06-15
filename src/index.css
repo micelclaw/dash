@@ -45,6 +45,7 @@
   --mod-tools: #8b5cf6;
   --mod-sketches: #06b6d4;
   --mod-projects: #f97316;
+  --mod-inventory: #d97706;
   --mod-vpn: #7c3aed;
   --mod-portainer: #13bef9;
   --mod-micelhub: #a78bfa;
@@ -138,6 +139,12 @@ body {
   min-height: 100dvh;
 }
 
+/* Custom texture background (Settings → Dash → Background): the texture is
+   painted on <body>, so the shell container must not cover it with an
+   opaque --bg layer. */
+html[data-bg='texture'] .shell-root {
+  background: transparent !important;
+}
 
 /* Typography utilities */
 h1 { font-size: 1.5rem; font-weight: 600; line-height: 1.3; }

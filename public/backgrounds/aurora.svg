@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="a0" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#04070d"/>
+      <stop offset="100%" stop-color="#070b14"/>
+    </linearGradient>
+    <linearGradient id="a1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0"/>
+      <stop offset="45%" stop-color="#10b981" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="a2" x1="0" y1="0" x2="1" y2="0.6">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#6366f1" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="ablur"><feGaussianBlur stdDeviation="46"/></filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#a0)"/>
+  <g filter="url(#ablur)">
+    <path d="M -100 760 C 420 520, 880 880, 1320 600 S 2020 480, 2060 560 L 2060 1180 L -100 1180 Z" fill="url(#a1)"/>
+    <path d="M -100 420 C 380 240, 940 560, 1380 320 S 2020 180, 2060 260 L 2060 690 C 1400 800, 600 660, -100 760 Z" fill="url(#a2)"/>
+  </g>
+</svg>

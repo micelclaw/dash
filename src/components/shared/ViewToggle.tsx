@@ -20,16 +20,18 @@ interface ViewToggleProps {
 export function ViewToggle({ view, onChange }: ViewToggleProps) {
   return (
     <div style={{ display: 'flex', gap: 2, background: 'var(--surface)', borderRadius: 'var(--radius-sm)', padding: 2 }}>
-      <ToggleBtn active={view === 'grid'} onClick={() => onChange('grid')} icon={LayoutGrid} />
-      <ToggleBtn active={view === 'list'} onClick={() => onChange('list')} icon={List} />
+      <ToggleBtn active={view === 'grid'} onClick={() => onChange('grid')} icon={LayoutGrid} title="Grid view" />
+      <ToggleBtn active={view === 'list'} onClick={() => onChange('list')} icon={List} title="List view" />
     </div>
   );
 }
 
-function ToggleBtn({ active, onClick, icon: Icon }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ size?: number }> }) {
+function ToggleBtn({ active, onClick, icon: Icon, title }: { active: boolean; onClick: () => void; icon: React.ComponentType<{ size?: number }>; title?: string }) {
   return (
     <button
       onClick={onClick}
+      title={title}
+      aria-label={title}
       style={{
         display: 'flex',
         alignItems: 'center',

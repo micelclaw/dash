@@ -12,17 +12,20 @@
 
 import { Music } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
+import { coverSrc } from './cover-src';
 
 export function TrackInfo() {
   const currentItem = usePlayerStore((s) => s.currentItem);
   if (!currentItem) return null;
 
+  const cover = coverSrc(currentItem);
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, maxWidth: 200 }}>
       {/* Cover art or fallback icon */}
-      {currentItem.coverBase64 ? (
+      {cover ? (
         <img
-          src={currentItem.coverBase64}
+          src={cover}
           alt=""
           style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
         />

@@ -13,7 +13,7 @@
 import { create } from 'zustand';
 import { api } from '@/services/api';
 import type {
-  SimilarItem, GraphSubgraph, GraphStats, MergeCandidate, GraphProximityItem,
+  SimilarItem, GraphSubgraph, GraphStats, MergeCandidate, GraphProximityItem, GraphCommunity,
 } from '@/types/intelligence';
 
 interface CacheEntry<T> {
@@ -46,6 +46,7 @@ interface IntelligenceState {
   cleanupOrphans: () => Promise<{ deleted_count: number }>;
   fetchSubgraph: (opts?: { limit?: number; centerId?: string }) => Promise<GraphSubgraph>;
   fetchRecordSubgraph: (opts?: { limit?: number; centerId?: string; centerType?: string }) => Promise<GraphSubgraph>;
+  fetchCommunities: () => Promise<GraphCommunity[]>;
 }
 
 export const useIntelligenceStore = create<IntelligenceState>()((set, get) => ({
@@ -167,6 +168,15 @@ export const useIntelligenceStore = create<IntelligenceState>()((set, get) => ({
       return (res as any).data ?? res;
     } catch {
       return { nodes: [], edges: [], meta: { total_entities: 0, total_edges: 0, returned_entities: 0, returned_edges: 0 } };
+    }
+  },
+
+  fetchCommunities: async () => {
+    try {
+      const res = await api.get<{ data: { communities: GraphCommunity[] } }>('/graph/communities?limit=200');
+      return (res as any).data?.communities ?? (res as any).communities ?? [];
+    } catch {
+      return [];
     }
   },
 }));

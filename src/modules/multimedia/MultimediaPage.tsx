@@ -150,7 +150,7 @@ export function Component() {
   return (
     <div className="mm-page">
       <div className="mm-header">
-        <h2>Multimedia Suite</h2>
+        <h2>Servarr</h2>
         <button className="mm-btn-icon" onClick={refresh} title="Refresh">
           <RefreshCw size={14} />
         </button>

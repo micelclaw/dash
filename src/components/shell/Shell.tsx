@@ -780,7 +780,7 @@ export function Shell() {
 
   return (
     <TooltipProvider>
-      <div style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)', paddingTop: (gatewayConfigured === false || (onboardingJustCompleted && !bannerDismissed)) ? 40 : 0 }}>
+      <div className="shell-root" style={{ position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden', background: 'var(--bg)', paddingTop: (gatewayConfigured === false || (onboardingJustCompleted && !bannerDismissed)) ? 40 : 0 }}>
         {/* Onboarding banner */}
         {gatewayConfigured === false && !bannerDismissed && (
           <OnboardingBanner variant="unconfigured" />

@@ -307,7 +307,7 @@ export function MultimediaSetupWizard({ installedApps, onClose, onDone }: Props)
           borderBottom: '1px solid var(--border)',
         }}>
           <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            {step === 'select' && 'Setup Multimedia Suite'}
+            {step === 'select' && 'Setup Servarr Suite'}
             {step === 'review' && 'Review Installation'}
             {step === 'installing' && 'Installing Services...'}
             {step === 'cancelling' && 'Cancelling...'}

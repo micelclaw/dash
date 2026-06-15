@@ -81,10 +81,93 @@ export function entityTypeColor(entityType: string): string {
   return TYPE_COLORS[entityType] ?? '#94a3b8';
 }
 
+// ─── Coloreado por comunidad (F3) ────────────────────────────────────
+/** HSL→hex (devolvemos HEX para que el renderer pueda añadir alpha `+ '18'`). */
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+    return Math.round(255 * c).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/** Color estable y distinto por comunidad (Louvain). null/singleton → gris "otros".
+ *  Tono por ángulo áureo (137.5°) → comunidades vecinas bien separadas. HEX.
+ *  Saturación/luminosidad altas para que las islas "canten" sobre el fondo gris. */
+export function communityColor(communityId: number | null | undefined): string {
+  if (communityId == null) return '#5b6472'; // slate-600/500 — "otros"/sin comunidad (apagado)
+  const hue = (communityId * 137.508) % 360;
+  return hslToHex(hue, 72, 57);
+}
+
+/** Cuántas comunidades reciben color/foco propio; el resto (long-tail) va en gris. */
+export const SIGNIFICANT_COMMUNITY_COUNT = 14;
+/** Tamaño mínimo para considerar una comunidad "isla" (umbral de hull). */
+export const MIN_COMMUNITY_SIZE = 3;
+
+/** Conjunto de community_id "significativas": size ≥ MIN, top-K por tamaño.
+ *  Compartido por el renderer (color/foco/hulls) y la leyenda → todos coherentes. */
+export function significantCommunityIds(
+  communities: Array<{ community_id: number; size: number }>,
+): Set<number> {
+  return new Set(
+    [...communities]
+      .filter(c => c.size >= MIN_COMMUNITY_SIZE)
+      .sort((a, b) => b.size - a.size)
+      .slice(0, SIGNIFICANT_COMMUNITY_COUNT)
+      .map(c => c.community_id),
+  );
+}
+
 /** Node size based on mention count (log scale, 6–44px) */
 export function nodeSize(mentionCount: number): number {
   if (mentionCount <= 0) return 6;
   return Math.min(44, 6 + Math.log2(mentionCount + 1) * 6);
+}
+
+/** Parte un nombre en máx `maxLines` líneas (word-wrap greedy) para labels SVG multilínea.
+ *  Palabra más larga que el ancho → corte duro. Si sobra texto tras la última línea
+ *  permitida, esa línea se trunca a `maxCharsPerLine-1` + '…'. Nombre vacío → []. */
+export function wrapLabelLines(name: string, maxCharsPerLine: number, maxLines = 2): string[] {
+  const text = (name ?? '').trim();
+  if (!text) return [];
+
+  // Tokeniza partiendo además las palabras más largas que una línea (corte duro).
+  const words: string[] = [];
+  for (const w of text.split(/\s+/)) {
+    if (w.length <= maxCharsPerLine) { words.push(w); continue; }
+    for (let i = 0; i < w.length; i += maxCharsPerLine) words.push(w.slice(i, i + maxCharsPerLine));
+  }
+
+  const lines: string[] = [];
+  let line = '';
+  let i = 0;
+  for (; i < words.length; i++) {
+    const w = words[i]!;
+    const candidate = line ? `${line} ${w}` : w;
+    if (candidate.length <= maxCharsPerLine) {
+      line = candidate;
+    } else {
+      lines.push(line);
+      line = w;
+      if (lines.length === maxLines) break; // la última línea permitida es `line`, sin sitio para más
+    }
+  }
+  const overflow = lines.length === maxLines; // rompimos con palabras aún por colocar
+  if (!overflow && line) lines.push(line);
+
+  // ¿Quedó texto fuera (overflow, o una palabra que no cupo)? → '…' en la última línea.
+  if (overflow && lines.length > 0) {
+    const last = lines[lines.length - 1]!;
+    lines[lines.length - 1] = last.length >= maxCharsPerLine
+      ? last.slice(0, maxCharsPerLine - 1) + '…'
+      : last + '…';
+  }
+
+  return lines;
 }
 
 /** Shape paths for entity types */

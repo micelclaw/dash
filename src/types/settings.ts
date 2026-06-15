@@ -75,6 +75,8 @@ export interface Settings {
     accent_color: string;
     sidebar_collapsed: boolean;
     default_module: string;
+    /** Custom dash background: solid color override or bundled texture image. */
+    background?: { type: 'none' | 'color' | 'texture'; value: string };
   };
   notifications: {
     toast_position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';

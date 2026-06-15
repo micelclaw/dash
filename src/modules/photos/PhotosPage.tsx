@@ -24,7 +24,9 @@ import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
-import { PhotosToolbar } from './PhotosToolbar';
+import { MediaShell, MediaToolbar } from '@/components/media';
+import { PhotosFilters, PhotosBatchActions, PhotosUploadButton } from './PhotosToolbar';
+import { PhotoUploadDialog } from './upload/PhotoUploadDialog';
 import { PhotosTimeline } from './PhotosTimeline';
 import { PhotosAlbums } from './PhotosAlbums';
 import { PhotosPeople } from './PhotosPeople';
@@ -42,6 +44,14 @@ import { ShareModal } from '@/components/shared/ShareModal';
 import { getPreviewUrl } from '@/lib/file-utils';
 import type { PhotosView } from './types';
 import type { Photo, Album } from '@/types/files';
+
+const PHOTO_TABS: { id: PhotosView; label: string }[] = [
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'albums', label: 'Albums' },
+  { id: 'people', label: 'People' },
+  { id: 'dejavu', label: 'Déjà Vu' },
+  { id: 'dna', label: 'DNA' },
+];
 
 // ─── Search Results Grid ────────────────────────────────
 
@@ -193,11 +203,16 @@ export function Component() {
   const [view, setView] = useState<PhotosView>('timeline');
   const [search, setSearch] = useState('');
   const [selectedStars, setSelectedStars] = useState<Set<number>>(new Set());
+  const [inventoryOnly, setInventoryOnly] = useState(false);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  // Modo IA (✨): semántico (default, comportamiento actual de Fotos) vs palabra clave.
+  const [aiSearch, setAiSearch] = useState(true);
   const deepLinkHandled = useRef(false);
   const albumDeepLinkHandled = useRef(false);
   const clusterDeepLinkHandled = useRef(false);
+  const sharedHandled = useRef(false);
 
   // Best Of state
   const [bestOfCount, setBestOfCount] = useState(0);
@@ -239,7 +254,7 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto } = usePhotos({ search, selectedStars });
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto } = usePhotos({ search, selectedStars, inventory: inventoryOnly });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -324,6 +339,15 @@ export function Component() {
     clusterDeepLinkHandled.current = true;
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams, selectCluster]);
+
+  // PWA share-target landing: ?shared=1 → open the upload dialog, which drains
+  // the photos the user shared from their phone gallery (cached by the SW).
+  useEffect(() => {
+    if (searchParams.get('shared') !== '1' || sharedHandled.current) return;
+    sharedHandled.current = true;
+    setUploadDialogOpen(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Fetch Best Of count
   useEffect(() => {
@@ -410,11 +434,17 @@ export function Component() {
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
     if (value.trim()) {
-      searchPhotosAi(value);
+      searchPhotosAi(value, aiSearch);
     } else {
       clearSearch();
     }
-  }, [searchPhotosAi, clearSearch]);
+  }, [searchPhotosAi, clearSearch, aiSearch]);
+
+  const handleAiToggle = useCallback(() => {
+    const next = !aiSearch;
+    setAiSearch(next);
+    if (search.trim()) searchPhotosAi(search, next); // re-run with the new mode
+  }, [aiSearch, search, searchPhotosAi]);
 
   // Note: search/selectedStars changes are already handled by the initial-load
   // effect above — fetchPhotos depends on params.search & params.selectedStars,
@@ -674,28 +704,49 @@ export function Component() {
         : photos;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <PhotosToolbar
-        view={view}
-        onViewChange={handleViewChange}
-        search={search}
-        onSearchChange={handleSearchChange}
-        onUpload={handleUpload}
-        selectedCount={activeSelection.selectedIds.size}
-        onBatchAddToAlbum={handleBatchAddToAlbum}
-        onBatchProcess={handleBatchProcess}
-        onBatchDelete={() => setBatchDeleteOpen(true)}
-        onClearSelection={activeSelection.clearSelection}
-        selectedStars={selectedStars}
-        onStarsToggle={(n) => setSelectedStars(prev => {
-          const s = new Set(prev);
-          s.has(n) ? s.delete(n) : s.add(n);
-          return s;
-        })}
-      />
-
+    <>
+    <MediaShell
+      moduleVar="--mod-photos"
+      title="Photos"
+      tabs={PHOTO_TABS}
+      activeTab={view}
+      onTabChange={(id) => handleViewChange(id as PhotosView)}
+      actions={<PhotosUploadButton onClick={() => setUploadDialogOpen(true)} />}
+      toolbar={
+        <MediaToolbar
+          search={search}
+          onSearchChange={handleSearchChange}
+          searchPlaceholder="Search photos…"
+          aiSlot
+          aiActive={aiSearch}
+          onAiToggle={handleAiToggle}
+          aiPlaceholder="Describe a photo…"
+          left={view === 'timeline' ? (
+            <PhotosFilters
+              selectedStars={selectedStars}
+              onStarsToggle={(n) => setSelectedStars(prev => {
+                const s = new Set(prev);
+                s.has(n) ? s.delete(n) : s.add(n);
+                return s;
+              })}
+              inventoryActive={inventoryOnly}
+              onInventoryToggle={() => setInventoryOnly(v => !v)}
+            />
+          ) : undefined}
+          right={
+            <PhotosBatchActions
+              selectedCount={activeSelection.selectedIds.size}
+              onBatchAddToAlbum={handleBatchAddToAlbum}
+              onBatchProcess={handleBatchProcess}
+              onBatchDelete={() => setBatchDeleteOpen(true)}
+              onClearSelection={activeSelection.clearSelection}
+            />
+          }
+        />
+      }
+    >
       {/* Content + Sidebar */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', height: '100%' }}>
         {/* Main content area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0, minHeight: 0 }}>
           {/* Photo viewer (replaces content when a photo is open) */}
@@ -807,7 +858,7 @@ export function Component() {
           />
         )}
       </div>
-
+    </MediaShell>
 
       {/* Share photo modal */}
       {sharePhoto && (
@@ -904,6 +955,13 @@ export function Component() {
         confirmLabel="Delete"
         variant="danger"
       />
-    </div>
+
+      {/* Upload dialog (desktop pick/drop + phone QR + share-target drain) */}
+      <PhotoUploadDialog
+        open={uploadDialogOpen}
+        onClose={() => setUploadDialogOpen(false)}
+        onUpload={handleUpload}
+      />
+    </>
   );
 }

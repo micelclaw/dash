@@ -17,10 +17,23 @@ import { api } from '@/services/api';
 
 export interface PlayableItem {
   fileId: string;
+  /** Source-native id (e.g. the Navidrome song id) for scrobbling and other source-specific calls. */
+  sourceId?: string;
+  /** Origin of the item — 'navidrome' for music-module tracks. Absent for plain Drive files. */
+  source?: 'vfs' | 'navidrome' | 'jellyfin' | 'abs';
   title: string;
   artist?: string;
   album?: string;
   coverBase64?: string;
+  /** Authenticated cover image URL (token included), e.g. from music coverUrl(). */
+  coverUrl?: string;
+  /** Known duration in seconds (the audio element will refine it on loadedmetadata). */
+  durationSec?: number;
+  /**
+   * ABS audiobooks: offset (seconds) of this track within the whole book.
+   * Used by the books ABS sync watcher and chapter math. Absent elsewhere.
+   */
+  trackStartOffset?: number;
   streamUrl: string;
   mediaType: 'audio' | 'video';
 }
@@ -47,6 +60,8 @@ interface PlayerState {
   error: string | null;
   volume: number;
   isMuted: boolean;
+  /** Audio playback speed (audiobooks). Applied on every play. */
+  playbackRate: number;
 
   // Saved audio state (when video overlay opens over playing audio)
   _savedAudioItem: PlayableItem | null;
@@ -76,6 +91,7 @@ interface PlayerState {
   playPrev: () => void;
   seek: (time: number) => void;
   setVolume: (vol: number) => void;
+  setPlaybackRate: (rate: number) => void;
   toggleMute: () => void;
   toggleShuffle: () => void;
   cycleRepeat: () => void;
@@ -115,6 +131,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     error: null,
     volume: 0.8,
     isMuted: false,
+    playbackRate: 1,
 
     queue: [],
     queueIndex: -1,
@@ -145,6 +162,7 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
       getEngine().then((e) => {
         e.setVolume(get().volume);
         e.setMuted(get().isMuted);
+        e.setRate(get().playbackRate);
         e.play(item.streamUrl);
       });
     },
@@ -247,6 +265,11 @@ export const usePlayerStore = create<PlayerState>()((set, get) => {
     setVolume: (vol) => {
       getEngine().then((e) => e.setVolume(vol));
       set({ volume: vol, isMuted: false });
+    },
+
+    setPlaybackRate: (rate) => {
+      getEngine().then((e) => e.setRate(rate));
+      set({ playbackRate: rate });
     },
 
     toggleMute: () => {

@@ -15,7 +15,7 @@ import { api } from '@/services/api';
 import { toast } from 'sonner';
 import type {
   Board, Card, Column, FullBoard, CardFilters, ViewMode, Automation,
-  Label, CustomFieldDef,
+  CustomFieldDef,
 } from '@/modules/projects/types';
 
 interface ApiEnvelope<T> { data: T }
@@ -28,14 +28,12 @@ interface ProjectsState {
   boards: Board[];
   columns: Record<string, Column>;
   cards: Record<string, Card>;
-  labels: Record<string, Label>;
   customFieldDefs: Record<string, CustomFieldDef>;
   automations: Automation[];
 
   // Relationship arrays (ordered)
   boardColumnIds: Record<string, string[]>;   // boardId → columnId[]
   columnCardIds: Record<string, string[]>;    // columnId → cardId[]
-  cardLabelIds: Record<string, string[]>;     // cardId → labelId[]
   cardCommentCounts: Record<string, number>;  // cardId → count
   cardDependencyCounts: Record<string, number>;
   cardLinkCounts: Record<string, number>;
@@ -44,6 +42,9 @@ interface ProjectsState {
   activeBoardId: string | null;
   activeBoardTitle: string | null;
   activeBoardPermission: 'owner' | 'edit' | 'view' | null;
+  /** Settings of the active board (survives direct loads of /projects/:id,
+   *  where the boards list isn't fetched). */
+  activeBoardSettings: Board['settings'] | null;
 
   // UI state
   activeView: ViewMode;
@@ -59,14 +60,14 @@ interface ProjectsState {
   // Board actions
   fetchBoards: () => Promise<void>;
   fetchFullBoard: (boardId: string) => Promise<void>;
-  createBoard: (data: { title: string; description?: string; color?: string; icon?: string }) => Promise<Board | null>;
+  createBoard: (data: { title: string; description?: string; color?: string; icon?: string; default_view?: string; tags?: string[] }) => Promise<Board | null>;
   updateBoard: (id: string, data: Record<string, unknown>) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
   archiveBoard: (id: string) => Promise<void>;
   unarchiveBoard: (id: string) => Promise<void>;
 
   // Column actions
-  createColumn: (boardId: string, data: { title: string; color?: string; wip_limit?: number; is_done_column?: boolean }) => Promise<void>;
+  createColumn: (boardId: string, data: { title: string; color?: string; wip_limit?: number }) => Promise<void>;
   updateColumn: (boardId: string, columnId: string, data: Record<string, unknown>) => Promise<void>;
   deleteColumn: (boardId: string, columnId: string) => Promise<void>;
   reorderColumn: (boardId: string, columnId: string, position: number) => Promise<void>;
@@ -77,19 +78,14 @@ interface ProjectsState {
   updateCard: (boardId: string, cardId: string, data: Record<string, unknown>) => Promise<void>;
   deleteCard: (boardId: string, cardId: string) => Promise<void>;
   moveCard: (boardId: string, cardId: string, columnId: string, position: number) => Promise<void>;
+  archiveCard: (boardId: string, cardId: string) => Promise<void>;
+  unarchiveCard: (boardId: string, cardId: string) => Promise<void>;
 
   // Automation actions
   fetchAutomations: (boardId: string) => Promise<void>;
   createAutomation: (boardId: string, data: Record<string, unknown>) => Promise<void>;
   updateAutomation: (boardId: string, automationId: string, data: Record<string, unknown>) => Promise<void>;
   deleteAutomation: (boardId: string, automationId: string) => Promise<void>;
-
-  // Label actions
-  createLabel: (boardId: string, data: { name: string; color: string }) => Promise<void>;
-  updateLabel: (boardId: string, labelId: string, data: Record<string, unknown>) => Promise<void>;
-  deleteLabel: (boardId: string, labelId: string) => Promise<void>;
-  addLabelToCard: (boardId: string, cardId: string, labelId: string) => Promise<void>;
-  removeLabelFromCard: (boardId: string, cardId: string, labelId: string) => Promise<void>;
 
   // Custom field def actions
   createFieldDef: (boardId: string, input: { name: string; type: string; options?: unknown; required?: boolean; show_on_card?: boolean }) => Promise<void>;
@@ -121,18 +117,17 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   boards: [],
   columns: {},
   cards: {},
-  labels: {},
   customFieldDefs: {},
   automations: [],
   boardColumnIds: {},
   columnCardIds: {},
-  cardLabelIds: {},
   cardCommentCounts: {},
   cardDependencyCounts: {},
   cardLinkCounts: {},
   activeBoardId: null,
   activeBoardTitle: null,
   activeBoardPermission: null,
+  activeBoardSettings: null,
   activeView: 'board',
   filters: {},
   selectedCardId: null,
@@ -165,7 +160,6 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       const boardColumnIds: string[] = [];
       const columnCardIds: Record<string, string[]> = {};
       const cards: Record<string, Card> = {};
-      const cardLabelIds: Record<string, string[]> = {};
       const cardCommentCounts: Record<string, number> = {};
       const cardDependencyCounts: Record<string, number> = {};
       const cardLinkCounts: Record<string, number> = {};
@@ -178,12 +172,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         const sortedCards = [...(colCards ?? [])].sort((a, b) => a.position - b.position);
         columnCardIds[col.id] = sortedCards.map(c => c.id);
         for (const card of sortedCards) {
-          // Extract embedded labels into cardLabelIds relationship
           const cardAny = card as unknown as Record<string, unknown>;
-          const embeddedLabels = cardAny.labels as Array<{ id: string }> | undefined;
-          if (embeddedLabels && embeddedLabels.length > 0) {
-            cardLabelIds[card.id] = embeddedLabels.map(l => l.id);
-          }
           // Extract enrichment counts
           const cc = (cardAny._comment_count ?? 0) as number;
           const dc = (cardAny._dependency_count ?? 0) as number;
@@ -195,12 +184,6 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         }
       }
 
-      // Normalize labels
-      const labels: Record<string, Label> = {};
-      for (const label of board.labels ?? []) {
-        labels[label.id] = label;
-      }
-
       // Normalize custom field defs
       const customFieldDefs: Record<string, CustomFieldDef> = {};
       for (const fd of board.custom_field_defs ?? []) {
@@ -210,16 +193,15 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       set({
         columns,
         cards,
-        labels,
         customFieldDefs,
         boardColumnIds: { [boardId]: boardColumnIds },
         columnCardIds,
-        cardLabelIds,
         cardCommentCounts,
         cardDependencyCounts,
         cardLinkCounts,
         activeBoardTitle: board.title,
         activeBoardPermission: board._permission ?? 'owner',
+        activeBoardSettings: board.settings ?? null,
         activeView: (board.default_view as ViewMode) || 'board',
         boardLoading: false,
       });
@@ -246,6 +228,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       set((s) => ({
         boards: s.boards.map((b) => (b.id === id ? { ...b, ...data } as Board : b)),
         activeBoardTitle: data.title ? String(data.title) : s.activeBoardTitle,
+        activeBoardSettings: data.settings && s.activeBoardId === id
+          ? (data.settings as Board['settings'])
+          : s.activeBoardSettings,
       }));
     } catch {
       toast.error('Error updating board');
@@ -287,14 +272,18 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     try {
       const res = await api.post<ApiEnvelope<Column>>(`/projects/boards/${boardId}/columns`, data);
       const col = res.data;
-      set((s) => ({
-        columns: { ...s.columns, [col.id]: col },
-        boardColumnIds: {
-          ...s.boardColumnIds,
-          [boardId]: [...(s.boardColumnIds[boardId] ?? []), col.id],
-        },
-        columnCardIds: { ...s.columnCardIds, [col.id]: [] },
-      }));
+      set((s) => {
+        // The WS broadcast may have landed before this response (same client).
+        const ids = s.boardColumnIds[boardId] ?? [];
+        return {
+          columns: { ...s.columns, [col.id]: col },
+          boardColumnIds: {
+            ...s.boardColumnIds,
+            [boardId]: ids.includes(col.id) ? ids : [...ids, col.id],
+          },
+          columnCardIds: { ...s.columnCardIds, [col.id]: s.columnCardIds[col.id] ?? [] },
+        };
+      });
     } catch {
       toast.error('Error creating column');
     }
@@ -386,13 +375,17 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     try {
       const res = await api.post<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards`, data);
       const card = res.data;
-      set((s) => ({
-        cards: { ...s.cards, [card.id]: card },
-        columnCardIds: {
-          ...s.columnCardIds,
-          [data.column_id]: [...(s.columnCardIds[data.column_id] ?? []), card.id],
-        },
-      }));
+      set((s) => {
+        // The WS broadcast may have landed before this response (same client).
+        const ids = s.columnCardIds[data.column_id] ?? [];
+        return {
+          cards: { ...s.cards, [card.id]: card },
+          columnCardIds: {
+            ...s.columnCardIds,
+            [data.column_id]: ids.includes(card.id) ? ids : [...ids, card.id],
+          },
+        };
+      });
     } catch {
       toast.error('Error creating card');
     }
@@ -465,6 +458,26 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     }
   },
 
+  archiveCard: async (boardId, cardId) => {
+    try {
+      const res = await api.post<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards/${cardId}/archive`);
+      set((s) => ({ cards: { ...s.cards, [cardId]: res.data } }));
+      toast.success('Card archived');
+    } catch {
+      toast.error('Error archiving card');
+    }
+  },
+
+  unarchiveCard: async (boardId, cardId) => {
+    try {
+      const res = await api.post<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards/${cardId}/unarchive`);
+      set((s) => ({ cards: { ...s.cards, [cardId]: res.data } }));
+      toast.success('Card restored');
+    } catch {
+      toast.error('Error restoring card');
+    }
+  },
+
   // ─── Automation actions ──────────────────────────────
 
   fetchAutomations: async (boardId) => {
@@ -502,73 +515,6 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       set((s) => ({ automations: s.automations.filter((a) => a.id !== automationId) }));
     } catch {
       toast.error('Error deleting automation');
-    }
-  },
-
-  // ─── Label actions ───────────────────────────────────
-
-  createLabel: async (boardId, data) => {
-    try {
-      const res = await api.post<ApiEnvelope<Label>>(`/projects/boards/${boardId}/labels`, data);
-      set((s) => ({
-        labels: { ...s.labels, [res.data.id]: res.data },
-      }));
-    } catch {
-      toast.error('Error creating label');
-    }
-  },
-
-  updateLabel: async (boardId, labelId, data) => {
-    try {
-      await api.patch(`/projects/boards/${boardId}/labels/${labelId}`, data);
-      set((s) => ({
-        labels: {
-          ...s.labels,
-          [labelId]: { ...s.labels[labelId], ...data } as Label,
-        },
-      }));
-    } catch {
-      toast.error('Error updating label');
-    }
-  },
-
-  deleteLabel: async (boardId, labelId) => {
-    try {
-      await api.delete(`/projects/boards/${boardId}/labels/${labelId}`);
-      set((s) => {
-        const { [labelId]: _, ...rest } = s.labels;
-        return { labels: rest };
-      });
-    } catch {
-      toast.error('Error deleting label');
-    }
-  },
-
-  addLabelToCard: async (boardId, cardId, labelId) => {
-    try {
-      await api.post(`/projects/boards/${boardId}/cards/${cardId}/labels/${labelId}`);
-      set((s) => ({
-        cardLabelIds: {
-          ...s.cardLabelIds,
-          [cardId]: [...(s.cardLabelIds[cardId] ?? []), labelId],
-        },
-      }));
-    } catch {
-      toast.error('Error adding label');
-    }
-  },
-
-  removeLabelFromCard: async (boardId, cardId, labelId) => {
-    try {
-      await api.delete(`/projects/boards/${boardId}/cards/${cardId}/labels/${labelId}`);
-      set((s) => ({
-        cardLabelIds: {
-          ...s.cardLabelIds,
-          [cardId]: (s.cardLabelIds[cardId] ?? []).filter(id => id !== labelId),
-        },
-      }));
-    } catch {
-      toast.error('Error removing label');
     }
   },
 
@@ -664,24 +610,29 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   handleWsEvent: (event, data) => {
     const state = get();
     const boardId = state.activeBoardId;
+    // The WS broadcaster snake_cases every payload key (core ws/server.ts),
+    // so the event data arrives as board_id/card_id/column_id.
+    if (data.board_id !== boardId) return;
 
     switch (event) {
       case 'kanban.card.created': {
-        if (data.boardId !== boardId) return;
         const card = data.card as Card;
-        set((s) => ({
-          cards: { ...s.cards, [card.id]: card },
-          columnCardIds: {
-            ...s.columnCardIds,
-            [card.column_id]: [...(s.columnCardIds[card.column_id] ?? []), card.id],
-          },
-        }));
+        set((s) => {
+          // The originating client already added it via the HTTP response.
+          if (s.cards[card.id]) return s;
+          return {
+            cards: { ...s.cards, [card.id]: card },
+            columnCardIds: {
+              ...s.columnCardIds,
+              [card.column_id]: [...(s.columnCardIds[card.column_id] ?? []), card.id],
+            },
+          };
+        });
         break;
       }
 
       case 'kanban.card.updated': {
-        if (data.boardId !== boardId) return;
-        const cardId = data.cardId as string;
+        const cardId = data.card_id as string;
         const updates = data.updates as Record<string, unknown>;
         set((s) => {
           const existing = s.cards[cardId];
@@ -693,16 +644,15 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         break;
       }
 
-      case 'kanban.card.moved': {
-        if (data.boardId !== boardId) return;
-        // Refetch for accurate position data
+      case 'kanban.card.moved':
+      case 'kanban.cards.bulk_archived': {
+        // Refetch for accurate position/archive data
         state.fetchFullBoard(boardId!);
         break;
       }
 
       case 'kanban.card.deleted': {
-        if (data.boardId !== boardId) return;
-        const cardId = data.cardId as string;
+        const cardId = data.card_id as string;
         set((s) => {
           const { [cardId]: _, ...restCards } = s.cards;
           const columnCardIds = { ...s.columnCardIds };
@@ -715,22 +665,24 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       }
 
       case 'kanban.column.created': {
-        if (data.boardId !== boardId) return;
         const col = data.column as Column;
-        set((s) => ({
-          columns: { ...s.columns, [col.id]: col },
-          boardColumnIds: {
-            ...s.boardColumnIds,
-            [boardId!]: [...(s.boardColumnIds[boardId!] ?? []), col.id],
-          },
-          columnCardIds: { ...s.columnCardIds, [col.id]: [] },
-        }));
+        set((s) => {
+          // The originating client already added it via the HTTP response.
+          if (s.columns[col.id]) return s;
+          return {
+            columns: { ...s.columns, [col.id]: col },
+            boardColumnIds: {
+              ...s.boardColumnIds,
+              [boardId!]: [...(s.boardColumnIds[boardId!] ?? []), col.id],
+            },
+            columnCardIds: { ...s.columnCardIds, [col.id]: [] },
+          };
+        });
         break;
       }
 
       case 'kanban.column.updated': {
-        if (data.boardId !== boardId) return;
-        const columnId = data.columnId as string;
+        const columnId = data.column_id as string;
         const updates = data.updates as Record<string, unknown>;
         set((s) => ({
           columns: {
@@ -742,7 +694,6 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       }
 
       case 'kanban.board.updated': {
-        if (data.boardId !== boardId) return;
         const updates = data.updates as Record<string, unknown>;
         if (updates.title) set({ activeBoardTitle: String(updates.title) });
         break;

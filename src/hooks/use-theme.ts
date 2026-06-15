@@ -118,8 +118,50 @@ export function applyAccentColor(hex: string) {
   root.style.setProperty('--amber-dim', `rgba(${hexToRgb(hex)}, 0.2)`);
 }
 
+export interface DashBackground {
+  type: 'none' | 'color' | 'texture';
+  value: string;
+}
+
 /**
- * Hook that applies theme + accent from settings store on load,
+ * Applies the custom dash background on top of the active theme.
+ * - 'color': overrides the theme's --bg with a solid color.
+ * - 'texture': fixed cover image from /backgrounds/ behind a theme-derived
+ *   overlay (keeps content readable on every theme, light ones included).
+ * - 'none'/undefined: restores the theme's own --bg.
+ */
+export function applyBackground(bg: DashBackground | undefined, theme: string) {
+  const root = document.documentElement;
+  const body = document.body;
+  const themeBg = (THEMES[theme] || THEMES.dark!)['--bg']!;
+
+  if (bg?.type === 'color' && bg.value) {
+    root.style.setProperty('--bg', bg.value);
+    body.style.backgroundImage = '';
+    root.removeAttribute('data-bg');
+    return;
+  }
+
+  if (bg?.type === 'texture' && bg.value) {
+    // Theme-derived overlay (~60% alpha) so the texture never hurts legibility.
+    const overlay = `rgba(${hexToRgb(themeBg)}, 0.6)`;
+    root.style.setProperty('--bg', themeBg);
+    body.style.backgroundImage = `linear-gradient(${overlay}, ${overlay}), url(/backgrounds/${bg.value})`;
+    body.style.backgroundSize = 'cover';
+    body.style.backgroundPosition = 'center';
+    body.style.backgroundAttachment = 'fixed';
+    root.setAttribute('data-bg', 'texture');
+    return;
+  }
+
+  // none → restore theme default
+  root.style.setProperty('--bg', themeBg);
+  body.style.backgroundImage = '';
+  root.removeAttribute('data-bg');
+}
+
+/**
+ * Hook that applies theme + accent + background from settings store on load,
  * and re-applies whenever settings change.
  */
 export function useTheme() {
@@ -128,7 +170,9 @@ export function useTheme() {
   useEffect(() => {
     if (!settings?.dash) return;
     applyTheme(settings.dash.theme);
-  }, [settings?.dash?.theme]);
+    // Re-apply background AFTER the theme so a theme switch doesn't clobber it.
+    applyBackground(settings.dash.background, settings.dash.theme);
+  }, [settings?.dash?.theme, settings?.dash?.background]);
 
   useEffect(() => {
     if (!settings?.dash?.accent_color) return;

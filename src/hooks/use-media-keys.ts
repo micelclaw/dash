@@ -12,6 +12,7 @@
 
 import { useEffect } from 'react';
 import { usePlayerStore } from '@/stores/player.store';
+import { coverSrc } from '@/components/player/cover-src';
 
 /**
  * Integrates with the browser MediaSession API for OS-level media controls:
@@ -24,13 +25,12 @@ export function useMediaKeys() {
   useEffect(() => {
     if (!('mediaSession' in navigator) || !currentItem) return;
 
+    const art = coverSrc(currentItem);
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentItem.title,
       artist: currentItem.artist || '',
       album: currentItem.album || '',
-      artwork: currentItem.coverBase64
-        ? [{ src: currentItem.coverBase64, sizes: '512x512', type: 'image/jpeg' }]
-        : [],
+      artwork: art ? [{ src: art, sizes: '512x512' }] : [],
     });
 
     navigator.mediaSession.setActionHandler('play', () => usePlayerStore.getState().resume());

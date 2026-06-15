@@ -11,10 +11,10 @@
  */
 
 import * as d3 from 'd3';
-import type { GraphNode, GraphEdge } from '@/types/intelligence';
+import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 import {
-  entityTypeColor, entityTypeShape, nodeSize, heatColor, heatColorRGB,
-  linkColor, linkDashArray, linkStrokeWidth, expandPolygon,
+  entityTypeColor, entityTypeShape, nodeSize, heatColor, heatColorRGB, communityColor,
+  linkColor, linkDashArray, linkStrokeWidth, expandPolygon, significantCommunityIds, wrapLabelLines,
 } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
 import type { NodeShape } from './graph-utils';
@@ -48,9 +48,12 @@ export interface D3GraphConfig {
 export interface D3GraphUpdateParams {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  heatMapMode: boolean;
+  colorMode: GraphColorMode;
+  communities?: GraphCommunity[];
   showHulls: boolean;
   hideLabels: boolean;
+  compactLabels: boolean;
+  heatNormalize: boolean;
   highlightNodeIds: Set<string>;
   highlightEdgeIds: Set<string>;
   searchMatches: Set<string> | null;
@@ -75,7 +78,8 @@ export interface D3GraphInstance {
 
 // ─── Constants ──────────────────────────────────────────────────────
 
-const LABEL_HIDE_THRESHOLD = 200;
+const LABEL_HIDE_THRESHOLD = 400;
+const LABEL_MAX_CHARS = 18; // ancho de línea para labels (incl. modo compacto 2 líneas)
 const TICK_REDUCE_THRESHOLD = 500;
 const HULL_PADDING = 35;
 
@@ -95,13 +99,24 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let frozen = false;
   let frameId: number | null = null;
   let currentHeatMode = false;
+  let currentColorMode: GraphColorMode = 'type';
   let currentShowHulls = false;
   let currentHideLabels = false;
+  let currentCompactLabels = false; // records → labels truncadas a 2 líneas (tspans)
+  let currentHeatNormalize = false; // records → heat_score en escala minúscula; normalizar para pintar
+  let currentHeatMax = 0;           // máximo heat visible (divisor de la normalización)
   let currentHighlightNodeIds = new Set<string>();
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
   let currentSelectedNodeId: string | null = null;
   let currentStrengthThreshold = 0;
+
+  // ─── Community-mode state (derived each update) ────────────────
+  let currentSignificantSet = new Set<number>();          // community_ids con color/foco propio
+  let currentCommunityGridIndex = new Map<number, number>(); // community_id → celda del grid
+  let currentCommunityLabels = new Map<number, string>();   // community_id → label (para hulls)
+  let currentCommunityGridCols = 1;
+  let currentCommunityGridRows = 1;
 
   // ─── Heat canvas state ────────────────────────────────────────
   const heatCanvas = config.heatCanvas;
@@ -177,12 +192,54 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     return height / 2 + Math.min(width, height) * 0.30 * Math.sin(angle);
   }
 
+  // ─── Community group centers (re-cluster layout, modo community) ─
+  // Cada comunidad significativa ocupa una celda de un grid repartido por el
+  // canvas → islas espaciales. El long-tail (gris) cae al centro con fuerza floja.
+  const COMMUNITY_GRID_MARGIN = 0.12;
+
+  function communityFocusX(d: SimNode): number {
+    const cid = d.community_id;
+    const idx = cid != null ? currentCommunityGridIndex.get(cid) : undefined;
+    if (idx == null) return width / 2;
+    const col = idx % currentCommunityGridCols;
+    const usableW = width * (1 - 2 * COMMUNITY_GRID_MARGIN);
+    const cellW = usableW / currentCommunityGridCols;
+    return width * COMMUNITY_GRID_MARGIN + cellW * (col + 0.5);
+  }
+
+  function communityFocusY(d: SimNode): number {
+    const cid = d.community_id;
+    const idx = cid != null ? currentCommunityGridIndex.get(cid) : undefined;
+    if (idx == null) return height / 2;
+    const row = Math.floor(idx / currentCommunityGridCols);
+    const usableH = height * (1 - 2 * COMMUNITY_GRID_MARGIN);
+    const cellH = usableH / currentCommunityGridRows;
+    return height * COMMUNITY_GRID_MARGIN + cellH * (row + 0.5);
+  }
+
+  // Islas cohesionadas (0.20) vs cola gris floja (0.05) → islas destacan, gris difumina.
+  function communityFocusStrength(d: SimNode): number {
+    const cid = d.community_id;
+    return (cid != null && currentSignificantSet.has(cid)) ? 0.20 : 0.05;
+  }
+
+  // ─── Node fill/stroke base color (no-heat) ──────────────────────
+  // En modo community: color de la comunidad solo si es significativa; si no, gris.
+  function nonHeatNodeColor(d: SimNode): string {
+    if (currentColorMode === 'community') {
+      const cid = d.community_id;
+      return communityColor(cid != null && currentSignificantSet.has(cid) ? cid : null);
+    }
+    return entityTypeColor(d.entity_type);
+  }
+
   // ─── Simulation ─────────────────────────────────────────────────
 
   function createSimulation() {
     if (simulation) simulation.stop();
 
     const nodeCount = simNodes.length;
+    const communityMode = currentColorMode === 'community';
 
     simulation = d3.forceSimulation<SimNode, SimLink>(simNodes)
       .force('link', d3.forceLink<SimNode, SimLink>(simLinks)
@@ -198,8 +255,13 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         .radius(d => d._r + 25)
       )
       .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
-      .force('x', d3.forceX<SimNode>().x(d => groupCenterX(d.entity_type)).strength(0.10))
-      .force('y', d3.forceY<SimNode>().y(d => groupCenterY(d.entity_type)).strength(0.10))
+      // Modo community → re-cluster por comunidad (islas); resto → agrupar por tipo.
+      .force('x', d3.forceX<SimNode>()
+        .x(d => communityMode ? communityFocusX(d) : groupCenterX(d.entity_type))
+        .strength(d => communityMode ? communityFocusStrength(d) : 0.10))
+      .force('y', d3.forceY<SimNode>()
+        .y(d => communityMode ? communityFocusY(d) : groupCenterY(d.entity_type))
+        .strength(d => communityMode ? communityFocusStrength(d) : 0.10))
       .alphaDecay(nodeCount > TICK_REDUCE_THRESHOLD ? 0.05 : 0.02)
       .velocityDecay(0.3);
 
@@ -228,6 +290,17 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     });
   }
 
+  // Heat efectivo para pintar. En modo records el `heat_score` viene en escala minúscula
+  // (record_heat ~0.005 máx, vs entities ya normalizado a 0-1) → normaliza al máximo visible
+  // con curva sqrt para repartir los tonos como en entities. En entities devuelve el valor tal cual.
+  function effectiveHeat(d: SimNode): number {
+    const h = d.heat_score ?? 0;
+    if (currentHeatNormalize && currentHeatMax > 0) {
+      return Math.sqrt(Math.min(1, h / currentHeatMax));
+    }
+    return h;
+  }
+
   function renderHeatBackground() {
     if (!heatCtx || !heatCanvas) return;
 
@@ -243,7 +316,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     heatCtx.setTransform(k, 0, 0, k, tx, ty);
 
     for (const node of simNodes) {
-      const score = Math.max(node.heat_score, 0.05); // minimum glow for cold nodes
+      const score = Math.max(effectiveHeat(node), 0.05); // minimum glow for cold nodes
 
       const splatRadius = HEAT_SPLAT_RADIUS + node._r * 2;
       const rgb = heatColorRGB(score);
@@ -280,10 +353,13 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .attr('x2', d => (d.target as SimNode).x)
       .attr('y2', d => (d.target as SimNode).y);
 
-    // Update label positions
+    // Update label positions. `y` ancla la 1ª línea en el <text>; cada <tspan> lleva su
+    // propio `x` (centrado por línea), así que se actualiza por tick.
     labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
-      .attr('x', d => d.x)
-      .attr('y', d => d.y + d._r + 12);
+      .attr('y', d => d.y + d._r + 12)
+      .each(function (d) {
+        d3.select(this).selectAll<SVGTSpanElement, unknown>('tspan').attr('x', d.x);
+      });
 
     // Update hulls (skip if settled)
     if (simulation && simulation.alpha() > 0.001) {
@@ -297,48 +373,85 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   // ─── Hull computation ───────────────────────────────────────────
 
   function computeHulls() {
-    if (!currentShowHulls || currentHeatMode) {
+    const communityMode = currentColorMode === 'community';
+    // En modo community los blobs SON la feature → se muestran siempre (ignoran el
+    // toggle de hulls). En modo tipo, gobierna el toggle. Heat nunca pinta hulls.
+    const shouldShow = currentHeatMode ? false : (communityMode || currentShowHulls);
+    if (!shouldShow) {
       hullGroup.selectAll('.cluster-hull').remove();
       hullLabelGroup.selectAll('.hull-label').remove();
       return;
     }
 
-    const groups = d3.group(simNodes, d => d.entity_type);
-    const hullData: Array<{ type: string; points: [number, number][] }> = [];
+    type HullDatum = { key: string; color: string; label: string; points: [number, number][] };
+    const hullData: HullDatum[] = [];
 
-    groups.forEach((groupNodes, type) => {
-      if (groupNodes.length < 5) return;
-      const pts: [number, number][] = groupNodes.map(n => [n.x, n.y]);
-      const hull = d3.polygonHull(pts);
-      if (hull) {
-        hullData.push({ type, points: expandPolygon(hull, HULL_PADDING) });
-      }
-    });
+    if (communityMode) {
+      // Agrupar por comunidad significativa (≥3 nodos presentes → forma una isla).
+      const islandNodes = simNodes.filter(
+        n => n.community_id != null && currentSignificantSet.has(n.community_id),
+      );
+      const groups = d3.group(islandNodes, d => d.community_id as number);
+      groups.forEach((groupNodes, cid) => {
+        if (groupNodes.length < 3) return;
+        const pts: [number, number][] = groupNodes.map(n => [n.x, n.y]);
+        const hull = d3.polygonHull(pts);
+        if (hull) {
+          const label = currentCommunityLabels.get(cid) ?? `Comunidad ${cid}`;
+          hullData.push({
+            key: `c${cid}`,
+            color: communityColor(cid),
+            label: label.length > 22 ? label.slice(0, 22) + '…' : label,
+            points: expandPolygon(hull, HULL_PADDING),
+          });
+        }
+      });
+    } else {
+      const groups = d3.group(simNodes, d => d.entity_type);
+      groups.forEach((groupNodes, type) => {
+        if (groupNodes.length < 5) return;
+        const pts: [number, number][] = groupNodes.map(n => [n.x, n.y]);
+        const hull = d3.polygonHull(pts);
+        if (hull) {
+          hullData.push({
+            key: type,
+            color: entityTypeColor(type),
+            label: type.toUpperCase(),
+            points: expandPolygon(hull, HULL_PADDING),
+          });
+        }
+      });
+    }
+
+    // Blobs más marcados en modo community (relleno/borde sólido) que los hulls de tipo.
+    const fillAlpha = communityMode ? '1f' : '0a';
+    const strokeAlpha = communityMode ? '66' : '33';
+    const labelAlpha = communityMode ? 'cc' : '40';
 
     // Hulls
-    const hullSel = hullGroup.selectAll<SVGPathElement, (typeof hullData)[0]>('.cluster-hull')
-      .data(hullData, d => d.type);
+    const hullSel = hullGroup.selectAll<SVGPathElement, HullDatum>('.cluster-hull')
+      .data(hullData, d => d.key);
     hullSel.exit().remove();
     const hullLine = d3.line<[number, number]>().curve(d3.curveCatmullRomClosed);
     hullSel.enter().append('path').attr('class', 'cluster-hull')
       .merge(hullSel)
       .attr('d', d => hullLine(d.points))
-      .attr('fill', d => entityTypeColor(d.type) + '0a')
-      .attr('stroke', d => entityTypeColor(d.type) + '33')
-      .attr('stroke-dasharray', '6 4')
-      .attr('stroke-width', 1);
+      .attr('fill', d => d.color + fillAlpha)
+      .attr('stroke', d => d.color + strokeAlpha)
+      .attr('stroke-dasharray', communityMode ? null : '6 4')
+      .attr('stroke-width', communityMode ? 1.5 : 1);
 
     // Hull labels
-    const labelSel = hullLabelGroup.selectAll<SVGTextElement, (typeof hullData)[0]>('.hull-label')
-      .data(hullData, d => d.type);
+    const labelSel = hullLabelGroup.selectAll<SVGTextElement, HullDatum>('.hull-label')
+      .data(hullData, d => d.key);
     labelSel.exit().remove();
     labelSel.enter().append('text').attr('class', 'hull-label')
       .merge(labelSel)
       .attr('x', d => d3.mean(d.points, p => p[0]) ?? 0)
       .attr('y', d => (d3.min(d.points, p => p[1]) ?? 0) - 12)
-      .text(d => d.type.toUpperCase())
-      .attr('fill', d => entityTypeColor(d.type) + '40')
-      .attr('font-size', '10px')
+      .text(d => d.label)
+      .attr('fill', d => d.color + labelAlpha)
+      .attr('font-size', communityMode ? '11px' : '10px')
       .attr('font-family', 'var(--font-sans)')
       .attr('text-anchor', 'middle')
       .attr('letter-spacing', '0.08em')
@@ -421,12 +534,12 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       let fill: string;
       let haloFill: string;
       if (currentHeatMode) {
-        const rgb = heatColorRGB(d.heat_score);
+        const rgb = heatColorRGB(effectiveHeat(d));
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
         fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
       } else {
-        color = entityTypeColor(d.entity_type);
+        color = nonHeatNodeColor(d);
         fill = color + '18';
         haloFill = color + '08';
       }
@@ -472,12 +585,12 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       let fill: string;
       let haloFill: string;
       if (currentHeatMode) {
-        const rgb = heatColorRGB(d.heat_score);
+        const rgb = heatColorRGB(effectiveHeat(d));
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
         fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
       } else {
-        color = entityTypeColor(d.entity_type);
+        color = nonHeatNodeColor(d);
         fill = color + '18';
         haloFill = color + '08';
       }
@@ -540,8 +653,6 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     labelSel.exit().remove();
 
-    const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max) + '...' : s;
-
     labelSel.enter().append('text')
       .attr('class', 'node-label')
       .attr('text-anchor', 'middle')
@@ -549,7 +660,23 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .attr('font-family', 'var(--font-sans)')
       .attr('pointer-events', 'none')
       .merge(labelSel)
-      .text(d => currentHideLabels ? truncate(d.name, 18) : d.name)
+      // Modo compacto (records): título en ≤2 líneas truncadas (tspans). Resto: 1 línea, nombre completo.
+      // Reconstruir tspans SOLO si cambia el texto (cache en el elemento) → barato en updates.
+      .each(function (d) {
+        const lines = currentCompactLabels ? wrapLabelLines(d.name, LABEL_MAX_CHARS, 2) : [d.name];
+        const key = lines.join('');
+        const el = this as SVGTextElement & { __lblKey?: string };
+        if (el.__lblKey === key) return;
+        el.__lblKey = key;
+        const textEl = d3.select(el);
+        textEl.selectAll('tspan').remove();
+        lines.forEach((ln, i) => {
+          textEl.append('tspan')
+            .attr('x', d.x)
+            .attr('dy', i === 0 ? '0' : '1.1em')
+            .text(ln);
+        });
+      })
       .attr('fill', d => {
         if (currentSearchMatches !== null && !currentSearchMatches.has(d.id)) return 'rgba(255,255,255,0.15)';
         return 'rgba(255,255,255,0.7)';
@@ -592,7 +719,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     // Show temp labels for hovered node + connections when labels are hidden
     if (currentHideLabels || simNodes.length > LABEL_HIDE_THRESHOLD) {
-      const trunc = (s: string) => currentHideLabels ? (s.length > 18 ? s.slice(0, 18) + '...' : s) : s;
+      // Labels de hover = 1 línea siempre (transitorias), truncadas al mismo ancho que las fijas.
+      const trunc = (s: string) => s.length > LABEL_MAX_CHARS ? s.slice(0, LABEL_MAX_CHARS) + '…' : s;
       // Only show labels for connected nodes (hovered node already has tooltip)
       {
         for (const id of connectedIds) {
@@ -652,8 +780,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         el.attr('stroke', '#f59e0b').attr('stroke-width', 2.5);
       } else {
         const color = currentHeatMode
-          ? (() => { const rgb = heatColorRGB(d.heat_score); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
-          : entityTypeColor(d.entity_type);
+          ? (() => { const rgb = heatColorRGB(effectiveHeat(d)); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
+          : nonHeatNodeColor(d);
         el.attr('stroke', color).attr('stroke-width', 1.5);
       }
     });
@@ -668,9 +796,12 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
   function update(params: D3GraphUpdateParams) {
     const prevHeatMode = currentHeatMode;
-    currentHeatMode = params.heatMapMode;
+    currentColorMode = params.colorMode;
+    currentHeatMode = params.colorMode === 'heat';
     currentShowHulls = params.showHulls;
     currentHideLabels = params.hideLabels;
+    currentCompactLabels = params.compactLabels;
+    currentHeatNormalize = params.heatNormalize;
     currentHighlightNodeIds = params.highlightNodeIds;
     currentHighlightEdgeIds = params.highlightEdgeIds;
     currentSearchMatches = params.searchMatches;
@@ -678,6 +809,43 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     // Build filtered node list
     const filteredNodes = params.nodes.filter(n => params.visibleNodeIds.has(n.id));
+
+    // Máximo heat visible (divisor de la normalización records-mode). Solo se calcula
+    // cuando hace falta; en entities queda 0 y effectiveHeat devuelve el heat tal cual.
+    currentHeatMax = 0;
+    if (currentHeatNormalize) {
+      for (const n of filteredNodes) {
+        const h = n.heat_score ?? 0;
+        if (h > currentHeatMax) currentHeatMax = h;
+      }
+    }
+
+    // ── Derive community layout state (top-K islas + grid + labels) ──
+    // Fuente de tamaños: la lista /graph/communities; si no llegó, contar por nodos
+    // (community mode sigue funcionando solo con el subgrafo).
+    const communities = params.communities ?? [];
+    let sizeEntries: Array<{ community_id: number; size: number; label: string | null }>;
+    if (communities.length > 0) {
+      sizeEntries = communities.map(c => ({ community_id: c.community_id, size: c.size, label: c.label }));
+    } else {
+      const counts = new Map<number, number>();
+      for (const n of filteredNodes) {
+        if (n.community_id != null) counts.set(n.community_id, (counts.get(n.community_id) ?? 0) + 1);
+      }
+      sizeEntries = [...counts.entries()].map(([community_id, size]) => ({ community_id, size, label: null }));
+    }
+    currentSignificantSet = significantCommunityIds(sizeEntries);
+    currentCommunityLabels = new Map(
+      sizeEntries.filter(e => e.label).map(e => [e.community_id, e.label as string]),
+    );
+    // Asignar celda de grid a cada significativa, ordenadas por tamaño (mayor = primera celda).
+    const ordered = sizeEntries
+      .filter(e => currentSignificantSet.has(e.community_id))
+      .sort((a, b) => b.size - a.size);
+    currentCommunityGridIndex = new Map(ordered.map((e, i) => [e.community_id, i]));
+    const k = Math.max(1, ordered.length);
+    currentCommunityGridCols = Math.ceil(Math.sqrt(k));
+    currentCommunityGridRows = Math.ceil(k / currentCommunityGridCols);
     const visibleIds = new Set(filteredNodes.map(n => n.id));
 
     // Preserve existing positions for nodes that stay

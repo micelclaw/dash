@@ -16,7 +16,7 @@ import {
   Settings, Puzzle, Activity, Wrench, Workflow, LineChart,
   Shapes, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Antenna, Globe, Orbit,
-  Terminal, Radio, Server, Hammer, Bookmark, Music, Clapperboard, Library,
+  Terminal, Radio, Server, Hammer, Boxes, Bookmark, Music, Clapperboard, Library,
 } from 'lucide-react';
 import type { ModuleConfig } from '@/types/modules';
 
@@ -38,6 +38,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'tools',    label: 'Tools',         icon: Wrench,        color: 'var(--mod-tools)',    path: '/tools',    group: 'Productivity' },
   { id: 'sketches', label: 'Sketches',      icon: Shapes,        color: 'var(--mod-sketches)', path: '/sketches', group: 'Productivity' },
   { id: 'projects', label: 'Projects',     icon: Kanban,        color: 'var(--mod-projects)', path: '/projects', group: 'Productivity' },
+  { id: 'inventory', label: 'Inventory',   icon: Boxes,         color: 'var(--mod-inventory)', path: '/inventory', group: 'Productivity' },
   { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
   // Finance
   { id: 'firefly',      label: 'Firefly III',    icon: Wallet,   color: 'var(--mod-finance)', path: '/finance/firefly',      group: 'Finance' },

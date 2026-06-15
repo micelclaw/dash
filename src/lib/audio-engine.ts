@@ -17,6 +17,7 @@
 
 import { usePlayerStore } from '@/stores/player.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { coverSrc } from '@/components/player/cover-src';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -52,6 +53,33 @@ class AudioEngine {
       : `${BASE_URL}/api/v1${streamUrl}${sep}token=${token}`;
     this.audio.src = url;
     this.audio.play().catch(() => {/* autoplay may be blocked */});
+    this.updateMediaSession();
+  }
+
+  /**
+   * Sync OS-level media controls (lock screen, media keys, BT headsets)
+   * with the item that just started playing.
+   */
+  private updateMediaSession(): void {
+    if (!('mediaSession' in navigator)) return;
+    const item = usePlayerStore.getState().currentItem;
+    if (!item) return;
+
+    const art = coverSrc(item);
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: item.title,
+      artist: item.artist || '',
+      album: item.album || '',
+      artwork: art ? [{ src: art, sizes: '512x512' }] : [],
+    });
+
+    navigator.mediaSession.setActionHandler('play', () => usePlayerStore.getState().resume());
+    navigator.mediaSession.setActionHandler('pause', () => usePlayerStore.getState().pause());
+    navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().playPrev());
+    navigator.mediaSession.setActionHandler('nexttrack', () => usePlayerStore.getState().playNext());
+    navigator.mediaSession.setActionHandler('seekto', (details) => {
+      if (details.seekTime != null) usePlayerStore.getState().seek(details.seekTime);
+    });
   }
 
   pause(): void {
@@ -68,6 +96,16 @@ class AudioEngine {
 
   setVolume(vol: number): void {
     this.audio.volume = Math.max(0, Math.min(1, vol));
+  }
+
+  /**
+   * Playback speed. Sets defaultPlaybackRate too so the rate survives
+   * src changes (the media load algorithm resets playbackRate to it).
+   */
+  setRate(rate: number): void {
+    const r = Math.max(0.25, Math.min(4, rate || 1));
+    this.audio.defaultPlaybackRate = r;
+    this.audio.playbackRate = r;
   }
 
   setMuted(muted: boolean): void {

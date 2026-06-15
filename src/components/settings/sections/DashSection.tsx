@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
-import { applyTheme, applyAccentColor } from '@/hooks/use-theme';
+import { applyTheme, applyAccentColor, applyBackground } from '@/hooks/use-theme';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
@@ -22,6 +22,7 @@ import { SettingsBlock } from '../shared/SettingsBlock';
 import * as gwService from '@/services/gateway.service';
 import type { UiConfig } from '@/services/gateway.service';
 import { MODULES } from '@/config/modules';
+import { BACKGROUND_TEXTURES } from '@/config/backgrounds';
 
 // Settings module excluded — selecting it as default would create a
 // circular UX (you'd land where you're configuring it).
@@ -67,6 +68,10 @@ const ACCENT_PRESETS = [
   { color: '#14b8a6', label: 'Teal' },
   { color: '#ec4899', label: 'Pink' },
   { color: '#06b6d4', label: 'Cyan' },
+];
+
+const BACKGROUND_COLOR_PRESETS = [
+  '#06060a', '#0a0e1a', '#100c0a', '#080c0a', '#0c0a10', '#11131c',
 ];
 
 export function DashSection() {
@@ -178,6 +183,87 @@ export function DashSection() {
           </div>
         </div>
 
+        {/* Background: none / custom color / bundled texture */}
+        <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Background</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                Solid color or a bundled texture behind the whole dash
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button
+                onClick={() => setLocalValue('dash.background', { type: 'none', value: '' })}
+                style={{
+                  height: 26, padding: '0 10px',
+                  background: (!d.background || d.background.type === 'none') ? 'var(--amber)' : 'var(--surface)',
+                  color: (!d.background || d.background.type === 'none') ? '#06060a' : 'var(--text-dim)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                  fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer',
+                }}
+              >
+                None
+              </button>
+              {BACKGROUND_COLOR_PRESETS.map((c) => (
+                <button
+                  key={c}
+                  title={c}
+                  onClick={() => setLocalValue('dash.background', { type: 'color', value: c })}
+                  style={{
+                    width: 24, height: 24, borderRadius: '50%', background: c,
+                    border: d.background?.type === 'color' && d.background.value === c
+                      ? '2px solid var(--text)'
+                      : '1px solid var(--border)',
+                    cursor: 'pointer', padding: 0,
+                  }}
+                />
+              ))}
+              <input
+                type="color"
+                value={d.background?.type === 'color' ? d.background.value : '#06060a'}
+                onChange={(e) => setLocalValue('dash.background', { type: 'color', value: e.target.value })}
+                title="Custom background color"
+                style={{ width: 24, height: 24, border: 'none', background: 'transparent', cursor: 'pointer', padding: 0 }}
+              />
+            </div>
+          </div>
+
+          {/* Texture gallery */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {BACKGROUND_TEXTURES.map((t) => {
+              const isActive = d.background?.type === 'texture' && d.background.value === t.file;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setLocalValue('dash.background', { type: 'texture', value: t.file })}
+                  title={t.label}
+                  style={{
+                    width: 76, height: 48, padding: 0, overflow: 'hidden',
+                    border: isActive ? '2px solid var(--amber)' : '1px solid var(--border)',
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    background: 'var(--surface)', position: 'relative',
+                  }}
+                >
+                  <img
+                    src={`/backgrounds/${t.file}`}
+                    alt={t.label}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <span style={{
+                    position: 'absolute', bottom: 2, left: 4,
+                    fontSize: '0.5625rem', color: '#cbd5e1',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                    fontFamily: 'var(--font-sans)',
+                  }}>
+                    {t.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <SettingToggle
           label="Start with sidebar collapsed"
           checked={d.sidebar_collapsed}
@@ -199,6 +285,7 @@ export function DashSection() {
         if (original?.dash) {
           applyTheme(original.dash.theme);
           applyAccentColor(original.dash.accent_color);
+          applyBackground(original.dash.background, original.dash.theme);
         }
       }} />
 

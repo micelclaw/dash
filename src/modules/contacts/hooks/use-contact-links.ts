@@ -28,6 +28,7 @@ const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
   files: { endpoint: '/files', titleField: 'filename' },
   diary: { endpoint: '/diary', titleField: 'entry_date' },
   diary_entries: { endpoint: '/diary', titleField: 'entry_date' },
+  inventory_item: { endpoint: '/inventory/items', titleField: 'name' },
 };
 
 const ROUTE_MAP: Record<string, string> = {
@@ -38,6 +39,12 @@ const ROUTE_MAP: Record<string, string> = {
   file: '/drive', files: '/drive',
   diary: '/diary', diary_entries: '/diary',
 };
+
+function routeFor(domain: string, recordId: string): string {
+  // The inventory drawer opens via store, not URL — route to the module only.
+  if (domain === 'inventory_item') return '/inventory?tab=catalog';
+  return `${ROUTE_MAP[domain] || '/'}?id=${recordId}`;
+}
 
 export function useContactLinks(contactId: string | null) {
   const [linkedRecords, setLinkedRecords] = useState<LinkedRecord[]>([]);
@@ -71,11 +78,11 @@ export function useContactLinks(contactId: string | null) {
               record: {
                 id: recordId,
                 title: String(rec.data?.[config.titleField] || recordId),
-                route: `${ROUTE_MAP[domain] || '/'}?id=${recordId}`,
+                route: routeFor(domain, recordId),
               },
             });
           } catch {
-            records.push({ link, domain, record: { id: recordId, title: recordId, route: `${ROUTE_MAP[domain] || '/'}?id=${recordId}` } });
+            records.push({ link, domain, record: { id: recordId, title: recordId, route: routeFor(domain, recordId) } });
           }
         }
         setLinkedRecords(records);

@@ -93,7 +93,7 @@ interface PhotoAiState {
   showFaceOverlay: boolean;
 
   // Actions
-  searchPhotos: (query: string) => Promise<void>;
+  searchPhotos: (query: string, semantic?: boolean) => Promise<void>;
   clearSearch: () => void;
   fetchSimilar: (fileId: string, mode?: 'visual' | 'concept') => Promise<void>;
   setSimilarMode: (mode: 'visual' | 'concept') => void;
@@ -132,7 +132,7 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   faceDetectionsFileId: null,
   showFaceOverlay: true,
 
-  searchPhotos: async (query: string) => {
+  searchPhotos: async (query: string, semantic = true) => {
     if (!query.trim()) {
       set({ searchResults: null, searchMeta: null, searchLoading: false });
       return;
@@ -142,6 +142,9 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
       const res = await api.get<{ data: PhotoSearchResult[]; meta: SearchMeta }>('/photos/search', {
         q: query,
         limit: 60,
+        // El toggle ✨ apagado fuerza palabra clave (semantic=0); encendido =
+        // comportamiento por tier (pro=semántico).
+        ...(semantic ? {} : { semantic: '0' }),
       });
       set({ searchResults: res.data, searchMeta: res.meta, searchLoading: false });
     } catch {

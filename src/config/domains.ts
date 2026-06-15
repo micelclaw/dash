@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
   Image, Columns, Bookmark, DollarSign,
-  Rss, GitBranch, FileText, Workflow, Cpu, Music, Clapperboard, Library,
+  Rss, GitBranch, FileText, Workflow, Cpu, Boxes, Music, Clapperboard, Library,
 } from 'lucide-react';
 
 export interface DataDomain {
@@ -47,6 +47,7 @@ export const DATA_DOMAINS: DataDomain[] = [
   { id: 'photos',    label: 'Photos',    icon: Image,      hasTagSupport: true  },
   { id: 'kanban',    label: 'Projects',  icon: Columns,    hasTagSupport: true  },
   { id: 'bookmarks', label: 'Bookmarks', icon: Bookmark,   hasTagSupport: true  },
+  { id: 'inventory', label: 'Inventory', icon: Boxes,      hasTagSupport: true  },
   { id: 'finance',   label: 'Finance',   icon: DollarSign, hasTagSupport: false },
 ];
 

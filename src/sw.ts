@@ -41,6 +41,45 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// ─── Share Target handler ───────────────────────────────────────────
+// The PWA manifest declares a `share_target` pointing at POST /share-target
+// (see vite.config.ts). When the user shares photos/videos from the phone's
+// gallery to Micelclaw, the OS POSTs a multipart form here. We can't pass the
+// file blobs through a redirect, so we stash them in the Cache API and bounce
+// the navigation to /photos?shared=1, where the Photos upload dialog drains
+// the cache and enqueues the uploads. Keyed entries carry the original name +
+// type via custom headers so the page can reconstruct File objects.
+const SHARE_CACHE = 'claw-share-target';
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method !== 'POST' || url.pathname !== '/share-target') return;
+
+  event.respondWith((async () => {
+    try {
+      const form = await event.request.formData();
+      const files = form.getAll('media').filter((v): v is File => v instanceof File);
+      if (files.length > 0) {
+        const cache = await self.caches.open(SHARE_CACHE);
+        await Promise.all(files.map((file, i) =>
+          cache.put(
+            `share-${Date.now()}-${i}`,
+            new Response(file, {
+              headers: {
+                'content-type': file.type || 'application/octet-stream',
+                'x-claw-name': encodeURIComponent(file.name || `shared-${i}`),
+              },
+            }),
+          ),
+        ));
+      }
+    } catch {
+      // Swallow — we still redirect so the user lands somewhere sensible.
+    }
+    return Response.redirect('/photos?shared=1', 303);
+  })());
+});
+
 // ─── Push handler ───────────────────────────────────────────────────
 interface PushPayload {
   template?: string;

@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import type { GraphNode, GraphEdge } from '@/types/intelligence';
+import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 import { useGraphRenderer } from './use-graph-renderer';
 import { GraphNodeTooltip } from './GraphNodeTooltip';
 import { GraphEdgePopover } from './GraphEdgePopover';
@@ -20,7 +20,8 @@ import { GraphLegend } from './GraphLegend';
 interface GraphCanvasProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  heatMapMode: boolean;
+  colorMode: GraphColorMode;
+  communities?: GraphCommunity[];
   highlightNodeIds: Set<string>;
   highlightEdgeIds: Set<string>;
   searchQuery: string;
@@ -36,7 +37,7 @@ interface GraphCanvasProps {
 }
 
 export function GraphCanvas({
-  nodes, edges, heatMapMode,
+  nodes, edges, colorMode, communities,
   highlightNodeIds, highlightEdgeIds, searchQuery,
   categoryFilters,
   onNodeClick,
@@ -63,13 +64,17 @@ export function GraphCanvas({
     toggleHulls,
     showHulls,
   } = useGraphRenderer({
-    nodes, edges, heatMapMode,
+    nodes, edges, colorMode, communities,
     highlightNodeIds, highlightEdgeIds,
     searchQuery, categoryFilters,
     onNodeClick, externalHoverNodeId, selectedNodeId,
     strengthThreshold,
     width, height,
-    hideLabels: mode === 'records',
+    // Records: mostrar nombres pero truncados a 2 líneas (antes se ocultaban del todo).
+    hideLabels: false,
+    compactLabels: mode === 'records',
+    // Records: el heat_score viene en escala minúscula → normalizar para que el heat map se vea.
+    heatNormalize: mode === 'records',
   });
 
   return (
@@ -106,7 +111,7 @@ export function GraphCanvas({
         onToggleHulls={toggleHulls}
         showHulls={showHulls}
       />
-      <GraphLegend heatMapMode={heatMapMode} mode={mode} />
+      <GraphLegend colorMode={colorMode} communities={communities} mode={mode} />
     </div>
   );
 }

@@ -17,7 +17,7 @@ import type { ApiListResponse } from '@/types/api';
 
 const PAGE_SIZE = 50;
 
-export function usePhotos(params: { search?: string; selectedStars?: Set<number> }) {
+export function usePhotos(params: { search?: string; selectedStars?: Set<number>; inventory?: boolean }) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -44,6 +44,7 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
         offset: offsetRef.current,
         search: params.search || undefined,
         stars: starsParam,
+        zone: params.inventory ? 'inventory' : undefined,
       });
 
       // If a newer fetch was started while we were awaiting, discard this result
@@ -66,7 +67,7 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [params.search, params.selectedStars]);
+  }, [params.search, params.selectedStars, params.inventory]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {

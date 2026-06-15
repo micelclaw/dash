@@ -17,8 +17,8 @@ import { GraphCanvas } from './GraphCanvas';
 import { GraphDetailPanel } from './GraphDetailPanel';
 import { GraphSearchInput } from './GraphSearchInput';
 import { GraphCategoryFilters } from './GraphCategoryFilters';
-import { GraphHeatMapToggle } from './GraphHeatMapToggle';
-import type { GraphNode, GraphEdge } from '@/types/intelligence';
+import { GraphColorModeToggle } from './GraphColorModeToggle';
+import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 
 type GraphMode = 'entities' | 'records';
 
@@ -37,6 +37,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const containerRef = useRef<HTMLDivElement>(null);
   const fetchSubgraph = useIntelligenceStore(s => s.fetchSubgraph);
   const fetchRecordSubgraph = useIntelligenceStore(s => s.fetchRecordSubgraph);
+  const fetchCommunities = useIntelligenceStore(s => s.fetchCommunities);
 
   // Data
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -48,7 +49,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [graphMode, setGraphMode] = useState<GraphMode>('entities');
   const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
-  const [heatMapMode, setHeatMapMode] = useState(false);
+  const [colorMode, setColorMode] = useState<GraphColorMode>('type');
+  const [communities, setCommunities] = useState<GraphCommunity[]>([]);
   const [strengthThreshold, setStrengthThreshold] = useState(0);
   const [highlightNodeIds, setHighlightNodeIds] = useState<Set<string>>(new Set());
   const [highlightEdgeIds, setHighlightEdgeIds] = useState<Set<string>>(new Set());
@@ -118,6 +120,12 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
       })
       .finally(() => setLoading(false));
   }, [open, centerId, centerType, nodeLimit, graphMode, fetchSubgraph, fetchRecordSubgraph]);
+
+  // Comunidades (para colorear + leyenda en modo "community")
+  useEffect(() => {
+    if (!open) return;
+    fetchCommunities().then(setCommunities).catch(() => setCommunities([]));
+  }, [open, fetchCommunities]);
 
   // Resize observer
   useEffect(() => {
@@ -249,7 +257,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
 
         <GraphSearchInput value={searchQuery} onChange={setSearchQuery} />
         <GraphCategoryFilters enabled={categoryFilters} onToggle={toggleCategory} mode={graphMode} />
-        <GraphHeatMapToggle active={heatMapMode} onToggle={() => setHeatMapMode(p => !p)} />
+        <GraphColorModeToggle mode={colorMode} onChange={setColorMode} />
 
         <button
           onClick={onClose}
@@ -287,7 +295,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
             <GraphCanvas
               nodes={nodes}
               edges={edges}
-              heatMapMode={heatMapMode}
+              colorMode={colorMode}
+              communities={communities}
               highlightNodeIds={highlightNodeIds}
               highlightEdgeIds={highlightEdgeIds}
               searchQuery={searchQuery}
@@ -331,7 +340,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         <span>{stats.entities} {modeLabel}</span>
         <span>{stats.edges} connections</span>
         <span>Showing {nodes.length} of {stats.entities}</span>
-        {heatMapMode && <span style={{ color: '#f43f5e' }}>Heat map</span>}
+        {colorMode === 'heat' && <span style={{ color: '#f43f5e' }}>Heat map</span>}
+        {colorMode === 'community' && <span style={{ color: '#a78bfa' }}>{communities.length} comunidades</span>}
 
         {graphMode === 'records' && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.625rem' }}>

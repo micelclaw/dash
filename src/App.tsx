@@ -73,6 +73,7 @@ const router = createBrowserRouter([
           { path: '/diagrams/whiteboard', element: <Navigate to="/sketches/whiteboard" replace /> },
           { path: '/diagrams/whiteboard/:fileId', element: <WhiteboardRedirect /> },
           { path: '/diagrams/:fileId', element: <DiagramsRedirect /> },
+          { path: '/inventory', lazy: () => import('@/modules/inventory/InventoryPage') },
           { path: '/projects', lazy: () => import('@/modules/projects/ProjectsPage') },
           { path: '/projects/:boardId', lazy: () => import('@/modules/projects/BoardView') },
           // Redirects de bookmarks viejos: el whiteboard vivió en Tools.

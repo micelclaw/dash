@@ -87,6 +87,17 @@ export default defineConfig({
           { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // Receive shared photos/videos from the phone's gallery. The custom SW
+        // (src/sw.ts) intercepts POST /share-target, caches the blobs and
+        // redirects to /photos?shared=1 where the upload dialog enqueues them.
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [{ name: 'media', accept: ['image/*', 'video/*'] }],
+          },
+        },
       },
       // With injectManifest, `workbox.globPatterns` becomes
       // `injectManifest.globPatterns`. Same file set.

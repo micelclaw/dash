@@ -15,7 +15,7 @@ import {
   ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
   Printer, ExternalLink, Trash2, Ban, ShieldAlert,
-  AlertTriangle, Languages, Code, Download, Sparkles, Tag,
+  AlertTriangle, Languages, Code, Download, Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -29,6 +29,7 @@ import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { MailThread } from './MailThread';
 import { MailComposer } from './MailComposer';
+import { MailAIActionsMenu, InventoryProposalsBanner } from './MailAIActionsMenu';
 import type { Email, ComposeData, EmailAccount } from './types';
 import type { ApiResponse, ApiListResponse } from '@/types/api';
 
@@ -668,6 +669,11 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         )}
       </div>
 
+      {/* Inventory proposals from this email */}
+      <div style={{ padding: '0 16px' }}>
+        <InventoryProposalsBanner emailId={email.id} />
+      </div>
+
       {/* Related items */}
       <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} />
       <SimilarContentPanel sourceType="email" sourceId={emailId} />
@@ -897,43 +903,14 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         </div>
       </div>
 
-      {/* AI Auto-reply stub */}
+      {/* AI actions menu */}
       <div style={{
         padding: '8px 16px 12px',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
       }}>
-        <button
-          disabled
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 12px',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-            background: 'transparent',
-            color: 'var(--text-muted)',
-            fontSize: '0.8125rem',
-            fontFamily: 'var(--font-sans)',
-            cursor: 'not-allowed',
-            opacity: 0.6,
-          }}
-        >
-          <Sparkles size={14} />
-          AI Auto-reply
-          <span style={{
-            fontSize: '0.625rem',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '1px 4px',
-            fontWeight: 600,
-          }}>
-            Soon
-          </span>
-        </button>
+        <MailAIActionsMenu emailId={email.id} />
       </div>
 
       {/* Inline reply/forward composer */}

@@ -10,11 +10,13 @@
  * https://micelclaw.com
  */
 
-import { entityTypeColor, entityTypeShape, linkColor, linkDashArray } from './graph-utils';
+import { entityTypeColor, entityTypeShape, communityColor, linkColor, linkDashArray, significantCommunityIds } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
+import type { GraphColorMode, GraphCommunity } from '@/types/intelligence';
 
 interface GraphLegendProps {
-  heatMapMode: boolean;
+  colorMode: GraphColorMode;
+  communities?: GraphCommunity[];
   mode?: 'entities' | 'records';
 }
 
@@ -66,10 +68,15 @@ function LinkSwatch({ linkType }: { linkType: string }) {
   );
 }
 
-export function GraphLegend({ heatMapMode, mode = 'entities' }: GraphLegendProps) {
+export function GraphLegend({ colorMode, communities, mode = 'entities' }: GraphLegendProps) {
   const isRecords = mode === 'records';
   const typeList = isRecords ? RECORD_TYPE_LIST : ENTITY_TYPE_LIST;
   const linkTypes = isRecords ? RECORD_LINK_TYPES : ENTITY_LINK_TYPES;
+  // Mismas comunidades "significativas" que colorea/agrupa el renderer (size≥3, top-K) → leyenda coherente.
+  const significant = significantCommunityIds(communities ?? []);
+  const topCommunities = (communities ?? [])
+    .filter(c => significant.has(c.community_id))
+    .sort((a, b) => b.size - a.size);
 
   return (
     <div style={{
@@ -85,8 +92,32 @@ export function GraphLegend({ heatMapMode, mode = 'entities' }: GraphLegendProps
       fontSize: '0.6875rem',
       color: 'var(--text-dim)',
       minWidth: 120,
+      maxWidth: 220,
     }}>
-      {heatMapMode ? (
+      {colorMode === 'community' ? (
+        <>
+          <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
+            Comunidades
+          </div>
+          {topCommunities.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)' }}>Sin comunidades calculadas</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 280, overflowY: 'auto' }}>
+              {topCommunities.map(c => (
+                <div key={c.community_id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: communityColor(c.community_id), border: `1px solid ${communityColor(c.community_id)}` }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label || `Comunidad ${c.community_id}`}</span>
+                  <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>{c.size}</span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <span style={{ width: 12, height: 12, borderRadius: 3, flexShrink: 0, background: communityColor(null), border: `1px solid ${communityColor(null)}` }} />
+                <span style={{ color: 'var(--text-muted)' }}>Sueltas / otras</span>
+              </div>
+            </div>
+          )}
+        </>
+      ) : colorMode === 'heat' ? (
         <>
           <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6, fontSize: '0.6875rem' }}>
             Heat Map

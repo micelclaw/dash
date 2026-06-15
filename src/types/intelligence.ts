@@ -12,6 +12,9 @@
 
 export type HeatTier = 'hot' | 'warm' | 'cold';
 
+/** Cómo se colorea el grafo: por tipo de entidad, por calor, o por comunidad (F3). */
+export type GraphColorMode = 'type' | 'heat' | 'community';
+
 export interface SimilarItem {
   domain: string;
   record_id: string;
@@ -28,6 +31,18 @@ export interface GraphNode {
   aliases: string[];
   metadata: Record<string, unknown>;
   heat_score: number;
+  // F3 — comunidad temática (Louvain) + grado de co-ocurrencia. Solo en modo
+  // entidades (los nodos de tipo "record" no tienen comunidad → null).
+  community_id?: number | null;
+  degree?: number;
+}
+
+/** Comunidad temática del grafo (Louvain) — `GET /graph/communities`. */
+export interface GraphCommunity {
+  community_id: number;
+  label: string | null;
+  size: number;
+  top_entities: Array<{ id: string; name: string; type: string; degree: number }> | null;
 }
 
 export interface GraphEdge {

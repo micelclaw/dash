@@ -15,6 +15,7 @@ import { usePlayerStore } from '@/stores/player.store';
 import { PlaybackControls } from './PlaybackControls';
 import { ProgressBar } from './ProgressBar';
 import { VolumeControl } from './VolumeControl';
+import { coverSrc } from './cover-src';
 import { Music } from 'lucide-react';
 
 interface MobileNowPlayingProps {
@@ -67,9 +68,9 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
 
       {/* Cover art */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {currentItem.coverBase64 ? (
+        {coverSrc(currentItem) ? (
           <img
-            src={currentItem.coverBase64}
+            src={coverSrc(currentItem)!}
             alt=""
             style={{ width: '80%', maxWidth: 300, aspectRatio: '1', borderRadius: 12, objectFit: 'cover' }}
           />

@@ -11,13 +11,14 @@
  */
 
 import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
-import type { GraphNode, GraphEdge } from '@/types/intelligence';
+import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 import { createD3Graph, type D3GraphInstance, type SimNode } from './d3-graph-renderer';
 
 export interface UseGraphRendererParams {
   nodes: GraphNode[];
   edges: GraphEdge[];
-  heatMapMode: boolean;
+  colorMode: GraphColorMode;
+  communities?: GraphCommunity[];
   highlightNodeIds: Set<string>;
   highlightEdgeIds: Set<string>;
   searchQuery: string;
@@ -28,6 +29,8 @@ export interface UseGraphRendererParams {
   width: number;
   height: number;
   hideLabels?: boolean;
+  compactLabels?: boolean;
+  heatNormalize?: boolean;
   strengthThreshold?: number;
 }
 
@@ -121,9 +124,12 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
     instanceRef.current?.update({
       nodes: params.nodes,
       edges: params.edges,
-      heatMapMode: params.heatMapMode,
+      colorMode: params.colorMode,
+      communities: params.communities,
       showHulls,
       hideLabels: params.hideLabels ?? false,
+      compactLabels: params.compactLabels ?? false,
+      heatNormalize: params.heatNormalize ?? false,
       highlightNodeIds: params.highlightNodeIds,
       highlightEdgeIds: params.highlightEdgeIds,
       searchMatches,
@@ -131,10 +137,10 @@ export function useGraphRenderer(params: UseGraphRendererParams) {
       strengthThreshold: params.strengthThreshold,
     });
   }, [
-    params.nodes, params.edges, params.heatMapMode,
+    params.nodes, params.edges, params.colorMode, params.communities,
     params.highlightNodeIds, params.highlightEdgeIds,
-    searchMatches, visibleNodeIds, showHulls, params.hideLabels,
-    params.strengthThreshold,
+    searchMatches, visibleNodeIds, showHulls, params.hideLabels, params.compactLabels,
+    params.heatNormalize, params.strengthThreshold,
   ]);
 
   // ── External hover (from detail panel) ──────────────────────────────
