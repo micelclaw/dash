@@ -23,8 +23,8 @@ export function ManageView() {
     <div style={{ position: 'relative', height: '100%', minHeight: 0 }}>
       <MultimediaEmbed
         serviceName="calibreweb"
-        displayName="Calibre Web"
-        description="eBook Library"
+        displayName="Calibre-Web Automated"
+        description="eBook library manager · upload + auto-ingest"
         port={8083}
         icon={Library}
         color="#8b5cf6"
