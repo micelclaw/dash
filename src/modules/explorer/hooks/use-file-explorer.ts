@@ -191,6 +191,38 @@ export function useFileExplorer() {
     setSearch('');
   }, [vfs.mounts]);
 
+  // Deep-link por id (p.ej. "View file" del grafo para archivos FUERA de /drive/): abrir la
+  // carpeta del archivo y seleccionarlo. Funciona para el índice DB (Photos/Documents/… vía
+  // useFiles({parent_folder})) y para VFS. Va aquí (tras navigateTo) por orden de definición.
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (!id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { api } = await import('@/services/api');
+        const res = await api.get<{ data: FileRecord }>(`/files/${id}`);
+        if (cancelled) return;
+        const rec = res.data;
+        const fp = rec.filepath || '';
+        const folder = rec.parent_folder || (fp ? fp.slice(0, fp.lastIndexOf('/')) : '');
+        if (folder) navigateTo(folder);
+        setSelectedFile(rec); // tras navigateTo (que limpia la selección) → este gana
+      } catch {
+        /* id inválido/obsoleto — ignorar */
+      } finally {
+        if (!cancelled) {
+          setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.delete('id');
+            return next;
+          }, { replace: true });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // For VFS paths, check mount read_only status
   const isWritable = useMemo(() => {
     if (isVfs) {

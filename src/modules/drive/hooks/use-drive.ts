@@ -73,12 +73,22 @@ export function useDrive() {
     const fileId = searchParams.get('id');
     if (!fileId) return;
     let cancelled = false;
+    let redirected = false;
     void (async () => {
       try {
         const res = await api.get<ApiResponse<FileRecord>>(`/files/${fileId}`);
         if (cancelled) return;
         const rec = res.data;
         const fp = rec.filepath || '/drive/';
+        // Archivos FUERA del árbol de My Drive (scans de Photos, Documents, Audio… cuyos
+        // filepaths no llevan prefijo `/drive/` y que My Drive no lista por carpeta) →
+        // abrirlos en el File Explorer (navega por path; sí muestra /Photos/…, /Documents/…)
+        // en la carpeta del archivo, con el archivo seleccionado.
+        if (!fp.startsWith('/drive/')) {
+          redirected = true;
+          navigate(`/explorer?id=${encodeURIComponent(rec.id)}`, { replace: true });
+          return;
+        }
         const folder = rec.is_directory
           ? (fp.endsWith('/') ? fp : fp + '/')
           : fp.slice(0, fp.lastIndexOf('/') + 1);
@@ -87,7 +97,9 @@ export function useDrive() {
       } catch {
         /* stale/invalid id — ignore */
       } finally {
-        if (!cancelled) {
+        // Si redirigimos a otro módulo, NO tocar los search params (el id ya viaja en la
+        // nueva ruta, p.ej. /photos?id=…); solo limpiamos cuando nos quedamos en Drive.
+        if (!cancelled && !redirected) {
           setSearchParams(prev => {
             const next = new URLSearchParams(prev);
             next.delete('id');
