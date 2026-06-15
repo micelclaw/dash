@@ -14,22 +14,9 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { Search, X } from 'lucide-react';
 import { useSearchStore } from '@/stores/search.store';
+import { SEARCHABLE_DOMAINS } from '@/config/search-domains';
 import { SearchResultsList } from './SearchResultsList';
 import { RankingPanel } from './RankingPanel';
-
-const ALL_DOMAINS = ['note', 'event', 'email', 'contact', 'diary', 'file', 'photo', 'conversation', 'message'] as const;
-
-const DOMAIN_LABELS: Record<string, string> = {
-  note: 'Notes',
-  event: 'Events',
-  email: 'Emails',
-  contact: 'Contacts',
-  diary: 'Diary',
-  file: 'Files',
-  photo: 'Photos',
-  conversation: 'Chats',
-  message: 'Messages',
-};
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -138,12 +125,13 @@ export function Component() {
           <div style={{
             display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8,
           }}>
-            {ALL_DOMAINS.map(d => {
-              const active = domains.length === 0 || domains.includes(d);
+            {SEARCHABLE_DOMAINS.map(d => {
+              const id = d.domains.join(',');
+              const active = domains.length === 0 || domains.includes(id);
               return (
                 <button
-                  key={d}
-                  onClick={() => toggleDomain(d)}
+                  key={d.key}
+                  onClick={() => toggleDomain(id)}
                   style={{
                     padding: '2px 10px',
                     borderRadius: 'var(--radius-full)',
@@ -156,7 +144,7 @@ export function Component() {
                     transition: 'all var(--transition-fast)',
                   }}
                 >
-                  {DOMAIN_LABELS[d] ?? d}
+                  {d.label}
                 </button>
               );
             })}

@@ -28,6 +28,7 @@ import { api } from '@/services/api';
 import { usePlayerStore } from '@/stores/player.store';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { resolveEntity } from '@/config/entity-registry';
+import { SEARCHABLE_DOMAINS, searchableByKey, iconDomainOf, labelOfResultDomain } from '@/config/search-domains';
 import type { SearchResult } from '@/types/search';
 
 interface CommandPaletteProps {
@@ -37,42 +38,14 @@ interface CommandPaletteProps {
 
 type PaletteMode = 'search' | 'commands' | 'domain';
 
-const DOMAIN_MAP: Record<string, string> = {
-  notes: 'notes',
-  mail: 'emails',
-  calendar: 'events',
-  contacts: 'contacts',
-  drive: 'files',
-  diary: 'diary',
-  chat: 'conversations',
-  bookmarks: 'bookmarks',
-};
-
-// Icono/color por dominio: ya NO se duplican aquí — salen del SSOT (resolveEntity
-// de entity-registry.ts). Este mapa local desapareció; ver usos abajo.
-
-const DOMAIN_LABELS: Record<string, string> = {
-  notes: 'Notes',
-  note: 'Notes',
-  events: 'Events',
-  event: 'Events',
-  emails: 'Mail',
-  email: 'Mail',
-  contacts: 'Contacts',
-  contact: 'Contacts',
-  files: 'Files',
-  file: 'Files',
-  diary: 'Diary',
-  conversations: 'Conversations',
-  conversation: 'Conversations',
-  bookmarks: 'Bookmarks',
-  bookmark: 'Bookmarks',
-  messages: 'Messages',
-  message: 'Messages',
-  kanban_board: 'Projects',
-  kanban_card: 'Projects',
-  inventory: 'Inventory',
-};
+// Dominios buscables (alias `@` → CSV de dominios backend) desde la SSOT
+// compartida con el módulo Search — añadir un dominio en search-domains.ts lo
+// hace aparecer aquí y en los chips del Search a la vez. Icono/color por
+// dominio salen del SSOT visual (resolveEntity); etiquetas de resultado por
+// labelOfResultDomain().
+const DOMAIN_MAP: Record<string, string> = Object.fromEntries(
+  SEARCHABLE_DOMAINS.map(d => [d.key, d.domains.join(',')]),
+);
 
 interface CommandItem {
   id: string;
@@ -287,7 +260,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const placeholder = mode === 'commands'
     ? 'Run a command...'
     : mode === 'domain' && selectedDomain
-      ? `@${selectedDomain} Search in ${DOMAIN_LABELS[DOMAIN_MAP[selectedDomain] ?? ''] ?? selectedDomain}...`
+      ? `@${selectedDomain} Search in ${searchableByKey(selectedDomain)?.label ?? selectedDomain}...`
       : mode === 'domain'
         ? '@domain query...'
         : 'Search across all domains...';
@@ -475,7 +448,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   const dv = resolveEntity(domain);
                   const DomainIcon = dv.Icon;
                   const domainColor = dv.color;
-                  const label = DOMAIN_LABELS[domain] ?? domain;
+                  const label = labelOfResultDomain(domain);
                   const visibleItems = items.slice(0, 3);
                   const remaining = items.length - visibleItems.length;
                   const mod = MODULES.find((m) => m.path && DOMAIN_MAP[m.id] === domain);
@@ -609,8 +582,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                   Filter by domain
                 </div>
                 {domainSuggestions.map((d) => {
-                  const apiDomain = DOMAIN_MAP[d]!;
-                  const info = resolveEntity(apiDomain);
+                  const info = resolveEntity(iconDomainOf(d));
                   const DIcon = info.Icon;
                   return (
                     <Command.Item
@@ -636,7 +608,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       <DIcon size={16} style={{ color: info.color }} />
                       <span>@{d}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginLeft: 'auto' }}>
-                        Search in {DOMAIN_LABELS[apiDomain] ?? d}
+                        Search in {searchableByKey(d)?.label ?? d}
                       </span>
                     </Command.Item>
                   );
