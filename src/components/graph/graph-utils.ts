@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { GRAPH_RECORD_DOMAINS } from '@/config/graph-domains';
+
 /** Heat color interpolation: 6 stops from cold blue → hot red */
 const HEAT_STOPS = [
   { t: 0.0, r: 56, g: 189, b: 248 },  // #38bdf8 — cold
@@ -61,20 +63,15 @@ export function heatColorRGB(score: number): { r: number; g: number; b: number }
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  // Entity types
+  // Entity types (taxonomía del knowledge-graph — se mantiene aquí).
   person: '#60a5fa',
   project: '#a78bfa',
   location: '#34d399',
   topic: '#fbbf24',
   organization: '#f472b6',
   event: '#fb923c',
-  // Record types
-  contact: '#ec4899',
-  note:    '#8b5cf6',
-  email:   '#06b6d4',
-  file:         '#84cc16',
-  diary:        '#f43f5e',
-  kanban_card:  '#f97316',
+  // Record types — derivados de la SSOT del grafo (config/graph-domains.ts).
+  ...Object.fromEntries(GRAPH_RECORD_DOMAINS.map(d => [d.type, d.color])),
 };
 
 export function entityTypeColor(entityType: string): string {
@@ -174,21 +171,17 @@ export function wrapLabelLines(name: string, maxCharsPerLine: number, maxLines =
 export type NodeShape = 'circle' | 'diamond' | 'square' | 'triangle' | 'hexagon' | 'octagon';
 
 export function entityTypeShape(entityType: string): NodeShape {
+  // Record types desde la SSOT del grafo (config/graph-domains.ts).
+  const recordShape = GRAPH_RECORD_DOMAINS.find(d => d.type === entityType)?.shape;
+  if (recordShape) return recordShape;
+  // Entity types (taxonomía del knowledge-graph).
   switch (entityType) {
-    // Entity types
     case 'person': return 'circle';
     case 'project': return 'square';
     case 'location': return 'diamond';
     case 'topic': return 'hexagon';
     case 'organization': return 'octagon';
     case 'event': return 'triangle';
-    // Record types
-    case 'contact': return 'circle';
-    case 'note':    return 'square';
-    case 'email':   return 'diamond';
-    case 'file':    return 'triangle';
-    case 'diary':        return 'octagon';
-    case 'kanban_card':  return 'hexagon';
     default: return 'circle';
   }
 }

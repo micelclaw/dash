@@ -10,11 +10,11 @@
  * https://micelclaw.com
  */
 
-import {
-  User, Briefcase, MapPin, Hash, Building2, Calendar,
-  StickyNote, Mail, FolderOpen, BookOpen, Kanban,
-} from 'lucide-react';
+import { User, Briefcase, MapPin, Hash, Building2, Calendar } from 'lucide-react';
 import { entityTypeColor } from './graph-utils';
+import { GRAPH_RECORD_DOMAINS } from '@/config/graph-domains';
+import { resolveEntity } from '@/config/entity-registry';
+import { labelOfResultDomain } from '@/config/search-domains';
 import type { LucideIcon } from 'lucide-react';
 
 interface GraphCategoryFiltersProps {
@@ -32,15 +32,15 @@ const ENTITY_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
   { type: 'event', label: 'Events', icon: Calendar },
 ];
 
-const RECORD_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] = [
-  { type: 'contact', label: 'Contacts', icon: User },
-  { type: 'note', label: 'Notes', icon: StickyNote },
-  { type: 'email', label: 'Emails', icon: Mail },
-  { type: 'event', label: 'Events', icon: Calendar },
-  { type: 'file', label: 'Files', icon: FolderOpen },
-  { type: 'diary', label: 'Diary', icon: BookOpen },
-  { type: 'kanban_card', label: 'Kanban', icon: Kanban },
-];
+// Derivado de la SSOT del grafo: icono del SSOT visual (resolveEntity), label
+// consistente con los chips de Search (labelOfResultDomain). Añadir un dominio
+// al grafo = una entrada en GRAPH_RECORD_DOMAINS.
+const RECORD_CATEGORIES: { type: string; label: string; icon: LucideIcon }[] =
+  GRAPH_RECORD_DOMAINS.map(d => ({
+    type: d.type,
+    label: labelOfResultDomain(d.type),
+    icon: resolveEntity(d.type).Icon,
+  }));
 
 export function GraphCategoryFilters({ enabled, onToggle, mode = 'entities' }: GraphCategoryFiltersProps) {
   const categories = mode === 'records' ? RECORD_CATEGORIES : ENTITY_CATEGORIES;

@@ -12,6 +12,7 @@
 
 import { entityTypeColor, entityTypeShape, communityColor, linkColor, linkDashArray, significantCommunityIds } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
+import { GRAPH_RECORD_TYPES } from '@/config/graph-domains';
 import type { GraphColorMode, GraphCommunity } from '@/types/intelligence';
 
 interface GraphLegendProps {
@@ -21,7 +22,7 @@ interface GraphLegendProps {
 }
 
 const ENTITY_TYPE_LIST = ['person', 'project', 'location', 'topic', 'organization', 'event'];
-const RECORD_TYPE_LIST = ['contact', 'note', 'email', 'event', 'file', 'diary', 'kanban_card'];
+const RECORD_TYPE_LIST = GRAPH_RECORD_TYPES; // SSOT del grafo (config/graph-domains.ts)
 
 const ENTITY_LINK_TYPES = [
   { key: 'manual', label: 'Manual' },

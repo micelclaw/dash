@@ -18,7 +18,8 @@ import {
 } from 'lucide-react';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { api } from '@/services/api';
-import { resolveEntity } from '@/config/entity-registry';
+import { resolveEntity, normalizeDomain } from '@/config/entity-registry';
+import { labelOfResultDomain } from '@/config/search-domains';
 import { entityTypeColor } from './graph-utils';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 import type { LucideIcon } from 'lucide-react';
@@ -64,16 +65,8 @@ interface MentionGroup {
 }
 
 // Icono/color/ruta por dominio salen del SSOT (resolveEntity). Aquí solo queda
-// el LABEL del encabezado de grupo (copy de UI, plural en inglés).
-const DOMAIN_LABEL: Record<string, string> = {
-  notes: 'Notes', note: 'Notes',
-  events: 'Events', event: 'Events',
-  emails: 'Emails', email: 'Emails',
-  diary_entries: 'Diary entries', diary: 'Diary entries',
-  files: 'Files', file: 'Files',
-  contacts: 'Contacts', contact: 'Contacts',
-  kanban_cards: 'Cards', kanban_card: 'Cards',
-};
+// el LABEL del encabezado de grupo sale de labelOfResultDomain (consistente con
+// los chips de Search, normaliza plurales). Ya no hay mapa local.
 
 const CONNECTED_PAGE_SIZE = 5;
 
@@ -343,7 +336,7 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
                 </div>
                 {visibleMentionGroups.map(group => {
                   const groupEnt = resolveEntity(group.domain);
-                  const groupLabel = DOMAIN_LABEL[group.domain] ?? groupEnt.label;
+                  const groupLabel = labelOfResultDomain(normalizeDomain(group.domain));
                   const DomainIcon = groupEnt.Icon;
                   const meta = { color: groupEnt.color };
                   const count = group.records.length;

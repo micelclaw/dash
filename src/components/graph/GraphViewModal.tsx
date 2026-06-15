@@ -18,14 +18,13 @@ import { GraphDetailPanel } from './GraphDetailPanel';
 import { GraphSearchInput } from './GraphSearchInput';
 import { GraphCategoryFilters } from './GraphCategoryFilters';
 import { GraphColorModeToggle } from './GraphColorModeToggle';
+import { GRAPH_RECORD_DOMAIN_BY_TYPE } from '@/config/graph-domains';
 import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 
 type GraphMode = 'entities' | 'records';
 
-const RECORD_DOMAIN: Record<string, string> = {
-  note: 'notes', contact: 'contacts', email: 'emails',
-  event: 'events', file: 'files', diary: 'diary_entries',
-};
+// type (resolveEntity) → domain backend (center_record_type). SSOT del grafo.
+const RECORD_DOMAIN: Record<string, string> = GRAPH_RECORD_DOMAIN_BY_TYPE;
 
 interface GraphViewModalProps {
   open: boolean;
