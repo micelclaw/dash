@@ -74,6 +74,21 @@ export async function deleteDomain(id: string): Promise<void> {
   await api.delete(`/network/domains/${id}`);
 }
 
+export async function resyncDomain(id: string): Promise<SystemDomain> {
+  const res = await api.post<{ data: SystemDomain }>(`/network/domains/${id}/resync`);
+  return res.data;
+}
+
+export interface LocalDomainSetup {
+  lan_ip: string;
+  tld: string;
+}
+
+export async function getLocalDomainSetup(): Promise<LocalDomainSetup> {
+  const res = await api.get<{ data: LocalDomainSetup }>('/dns/local-domains/setup');
+  return res.data;
+}
+
 export async function setServiceExposure(slug: string, exposed: boolean): Promise<void> {
   await api.patch(`/network/domains/services/${slug}`, { exposed });
 }

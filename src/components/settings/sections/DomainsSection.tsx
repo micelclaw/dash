@@ -21,11 +21,14 @@ import { toast } from 'sonner';
 import {
   Globe2, Plus, Trash2, Star, ExternalLink, Loader2, ShieldCheck,
   Download, AlertTriangle, Check, Power, ChevronDown, ChevronRight,
+  RefreshCw, Wifi, Copy,
 } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { SettingSection } from '../SettingSection';
 import { InlineLoading } from '../shared/InlineLoading';
 import {
   getDomains, addDomain, patchDomain, deleteDomain, setServiceExposure,
+  resyncDomain, getLocalDomainSetup,
   type SystemDomain,
 } from '@/services/domains.service';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
@@ -40,12 +43,15 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 export function DomainsSection() {
+  const navigate = useNavigate();
   const [domains, setDomains] = useState<SystemDomain[]>([]);
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [newLabel, setNewLabel] = useState('');
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showAccess, setShowAccess] = useState(false);
+  const [lanIp, setLanIp] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -57,6 +63,9 @@ export function DomainsSection() {
   }, []);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void getLocalDomainSetup().then(s => setLanIp(s.lan_ip)).catch(() => {});
+  }, []);
 
   const reloadResolver = () => void useServiceUrlsStore.getState().load(true);
 
@@ -105,11 +114,23 @@ export function DomainsSection() {
     reloadResolver();
   });
 
+  const handleResync = (d: SystemDomain) => withBusy(d.id, async () => {
+    const updated = await resyncDomain(d.id);
+    if (updated.status === 'active') toast.success(`DNS de ${d.domain} sincronizado`);
+    else toast.warning(`No se pudo: ${updated.error_message ?? 'PowerDNS no disponible'}`);
+    await refresh();
+    reloadResolver();
+  });
+
   const handleToggleExposure = (slug: string, exposed: boolean) => withBusy(`svc:${slug}`, async () => {
     await setServiceExposure(slug, !exposed);
     await refresh();
     reloadResolver();
   });
+
+  const copyIp = () => {
+    if (lanIp) { void navigator.clipboard?.writeText(lanIp); toast.success('IP copiada'); }
+  };
 
   if (loadState === 'loading') return <InlineLoading />;
 
@@ -190,6 +211,11 @@ export function DomainsSection() {
                     {STATUS_LABELS[d.status]?.label ?? d.status}
                   </span>
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                    {d.status !== 'active' && d.kind === 'local' && (
+                      <button title="Reintentar DNS" style={iconBtn} disabled={busy === d.id} onClick={() => handleResync(d)}>
+                        {busy === d.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                      </button>
+                    )}
                     {!d.is_primary && (
                       <button title="Marcar como principal" style={iconBtn} disabled={busy === d.id} onClick={() => handleSetPrimary(d.id)}>
                         <Star size={14} />
@@ -270,6 +296,52 @@ export function DomainsSection() {
               );
             })}
           </div>
+        </SettingSection>
+      )}
+
+      {/* Acceso desde tus dispositivos (DNS de cliente) */}
+      {primary && (
+        <SettingSection
+          title="Acceso desde tus dispositivos"
+          description="Para que un .claw resuelva en tu PC/móvil, su DNS debe apuntar a este servidor. Hazlo una vez en cada dispositivo, o en el router para toda la red."
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Wifi size={15} style={{ color: 'var(--accent, #22d3ee)' }} />
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>DNS del servidor:</span>
+              <code style={{
+                fontSize: '0.8125rem', color: 'var(--text)', padding: '3px 8px',
+                borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)',
+              }}>{lanIp ?? 'detectando…'}</code>
+              {lanIp && (
+                <button title="Copiar" style={iconBtn} onClick={copyIp}><Copy size={13} /></button>
+              )}
+            </div>
+            <button onClick={() => setShowAccess(v => !v)} style={readMoreLink}>
+              {showAccess ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              {showAccess ? 'Ocultar pasos' : 'Cómo configurarlo'}
+            </button>
+          </div>
+
+          {showAccess && (
+            <div style={helpBox}>
+              <p style={helpP}>
+                <strong style={helpQ}>Opción A — en el router (recomendado, una sola vez para toda la red):</strong>{' '}
+                entra en la config de tu router (normalmente <code>192.168.1.1</code>), busca DHCP/DNS y pon el
+                <em> DNS primario</em> en <code>{lanIp ?? 'la IP de arriba'}</code>. Reinicia el Wi-Fi del dispositivo.
+              </p>
+              <p style={helpP}>
+                <strong style={helpQ}>Opción B — solo en este dispositivo:</strong>{' '}
+                <em>Windows:</em> Configuración de red → Propiedades del adaptador → IPv4 → DNS preferido ={' '}
+                <code>{lanIp ?? '…'}</code>. <em>macOS/iOS/Android/Linux:</em> en los ajustes de DNS de la red, añade esa IP.
+              </p>
+              <p style={{ ...helpP, marginBottom: 0 }}>
+                ¿Guía completa por plataforma? Está en el módulo{' '}
+                <button onClick={() => navigate('/dns')} style={{ ...readMoreLink, display: 'inline' }}>DNS → Dominios locales</button>.
+                Recuerda instalar también el certificado CA (abajo) para el candado HTTPS.
+              </p>
+            </div>
+          )}
         </SettingSection>
       )}
 
