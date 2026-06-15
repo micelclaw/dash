@@ -17,6 +17,7 @@ import { api } from '@/services/api';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile, useIsCompact } from '@/hooks/use-media-query';
 import { useKeyboard } from '@/hooks/use-keyboard';
@@ -87,6 +88,9 @@ export function Shell() {
   useEffect(() => {
     fetchSnapshot();
     fetchSettings();
+    // Resolver de URLs de servicios por dominio (stirling.victor.claw en vez de
+    // localhost:8081). Carga el catálogo una vez; failures silenciosos → respaldo.
+    void useServiceUrlsStore.getState().load();
     // Ola 7: load OpenClaw config schema once at boot. Used by the Raw JSON
     // editor (/settings/raw) for client-side validation. Failures are silent.
     loadConfigSchema();

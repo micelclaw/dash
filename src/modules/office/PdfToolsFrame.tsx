@@ -17,6 +17,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Wrench, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
+import { useServiceUrl } from '@/config/service-urls';
 
 interface StirlingStatus {
   installed: boolean;
@@ -79,6 +80,10 @@ export function Component() {
 
   useEffect(() => { checkAndStart(); }, [checkAndStart]);
 
+  // "Abrir en nueva pestaña" usa el dominio del sistema (pdf.tudominio.claw)
+  // si hay uno configurado; si no, el localhost:puerto de toda la vida.
+  const openUrl = useServiceUrl('stirling-pdf', status?.url ?? '');
+
   if (phase === 'ready' && status?.url) {
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
@@ -99,7 +104,7 @@ export function Component() {
             <span style={{ color: 'var(--text-muted)' }}>RAM: {status.ram_mb} MB</span>
           )}
           <a
-            href={status.url}
+            href={openUrl}
             target="_blank"
             rel="noopener noreferrer"
             style={{ ...iconBtn, textDecoration: 'none' }}

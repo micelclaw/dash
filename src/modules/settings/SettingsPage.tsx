@@ -39,6 +39,7 @@ import { DigestSection } from '@/components/settings/sections/DigestSection';
 import { SearchSection } from '@/components/settings/sections/SearchSection';
 import { UsersSection } from '@/components/settings/sections/UsersSection';
 import { NetworkSection } from '@/components/settings/sections/NetworkSection';
+import { DomainsSection } from '@/components/settings/sections/DomainsSection';
 import { EnergySection } from '@/components/settings/sections/EnergySection';
 import { NotificationsSection } from '@/components/settings/sections/NotificationsSection';
 import { CalendarSection } from '@/components/settings/sections/CalendarSection';
@@ -187,6 +188,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       sections: [
         { id: 'sync', label: 'Sync', icon: RefreshCw },
         { id: 'network', label: 'Network', icon: Network },
+        { id: 'domains', label: 'Domains', icon: Globe2 },
         { id: 'gateway-auth', label: 'Gateway', icon: Radio },
       ],
     },
@@ -288,6 +290,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'storage':              () => <StorageSection />,
   'drive':                () => <DriveSection />,
   'network':              () => <NetworkSection />,
+  'domains':              () => <DomainsSection />,
   'energy':               () => <EnergySection />,
   'dash':                 () => <DashSection />,
   'chat-tools':           () => <ChatToolsSection />,

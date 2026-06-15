@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/services/api';
+import { resolveServiceUrl } from '@/config/service-urls';
 import { AlertTriangle, Loader2, ExternalLink, Download } from 'lucide-react';
 
 interface FinanceAppStatus {
@@ -194,9 +195,10 @@ export function FinanceEmbed({ serviceName, displayName, port, icon: Icon, color
     </div>
   );
 
-  // Ready — open in new tab (no iframe embedding)
+  // Ready — open in new tab (no iframe embedding). Usa el dominio del sistema
+  // (finance.tudominio.claw) si hay uno; si no, el localhost:puerto.
   const openInNewTab = useCallback(() => {
-    window.open(`http://localhost:${port}`, '_blank');
+    window.open(resolveServiceUrl('firefly', `http://localhost:${port}`), '_blank', 'noopener,noreferrer');
   }, [port]);
 
   // Auto-open on first ready

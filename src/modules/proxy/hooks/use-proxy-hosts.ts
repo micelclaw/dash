@@ -61,6 +61,10 @@ export interface ProxyHost {
   enabled: boolean;
   label: string | null;
   notes: string | null;
+  // Procedencia: 'system' = auto-aprovisionada por el dominio del sistema
+  // (Ajustes → Conectividad → Dominios). 'user' = creada a mano aquí.
+  source?: 'user' | 'system';
+  service_key?: string | null;
   created_at: string;
   updated_at: string;
   upstreams: ProxyUpstream[];

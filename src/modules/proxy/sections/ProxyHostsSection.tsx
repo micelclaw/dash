@@ -183,6 +183,18 @@ export function ProxyHostsSection({
                 {host.label && (
                   <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 2 }}>
                     {host.label}
+                    {host.source === 'system' && (
+                      <span
+                        title="Gestionado por el sistema (Ajustes → Conectividad → Dominios)"
+                        style={{
+                          marginLeft: 6, fontSize: '0.5625rem', padding: '0 5px',
+                          borderRadius: 4, border: '1px solid var(--accent, #22d3ee)',
+                          color: 'var(--accent, #22d3ee)', textTransform: 'uppercase', letterSpacing: '0.04em',
+                        }}
+                      >
+                        system
+                      </span>
+                    )}
                   </div>
                 )}
               </div>

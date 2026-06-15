@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/services/api';
+import { resolveServiceUrl } from '@/config/service-urls';
 import { AlertTriangle, Loader2, ExternalLink, Download } from 'lucide-react';
 
 interface MultimediaAppStatus {
@@ -236,7 +237,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
             <span style={{ color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
           )}
           <a
-            href={proxyUrl}
+            href={resolveServiceUrl(serviceName, proxyUrl)}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
