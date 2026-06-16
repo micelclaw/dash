@@ -17,28 +17,155 @@
 // recursor local como DNS automáticamente → resuelve `.claw` por el túnel Y
 // navega normal, estés donde estés, sin tocar nada en el dispositivo.
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import {
   Podcast, ShieldCheck, Cable, Globe, ChevronDown, ChevronRight,
   Plus, Loader2, Download, QrCode, ExternalLink, Smartphone,
+  MonitorCheck, Check, RefreshCw, Copy, AlertTriangle,
 } from 'lucide-react';
 import { useWgClients } from '@/modules/vpn/hooks/use-wg-clients';
+import { getClientOS } from '@/services/platform';
+import {
+  getHostSyncStatus, installHostSyncLocal, getHostsBlock,
+  type HostSyncStatus,
+} from '@/services/domains.service';
 
-type MethodKey = 'mdns' | 'wireguard' | 'tailscale' | 'public';
+type MethodKey = 'thisdevice' | 'mdns' | 'wireguard' | 'tailscale' | 'public';
 
 export function DomainAccessMethods({ primaryDomain }: { primaryDomain: string }) {
-  // WireGuard es la opción funcional → arranca expandida.
-  const [open, setOpen] = useState<MethodKey | null>('wireguard');
+  // "Este equipo" lidera y arranca expandida (es el caso más común).
+  const [open, setOpen] = useState<MethodKey | null>('thisdevice');
   const toggle = (k: MethodKey) => setOpen(v => (v === k ? null : k));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <MdnsCard open={open === 'mdns'} onToggle={() => toggle('mdns')} domain={primaryDomain} />
+      <ThisDeviceCard open={open === 'thisdevice'} onToggle={() => toggle('thisdevice')} domain={primaryDomain} />
       <WireguardCard open={open === 'wireguard'} onToggle={() => toggle('wireguard')} domain={primaryDomain} />
+      <MdnsCard open={open === 'mdns'} onToggle={() => toggle('mdns')} domain={primaryDomain} />
       <TailscaleCard open={open === 'tailscale'} onToggle={() => toggle('tailscale')} />
       <PublicCard open={open === 'public'} onToggle={() => toggle('public')} />
     </div>
+  );
+}
+
+// ─── 0. Este equipo (hosts-sync automático) ─────────────────────────────
+
+function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: () => void; domain: string }) {
+  const [status, setStatus] = useState<HostSyncStatus | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [block, setBlock] = useState<string | null>(null);
+  const clientOS = getClientOS();
+
+  const refresh = useCallback(async () => {
+    try { setStatus(await getHostSyncStatus()); } catch { /* silent */ }
+  }, []);
+  useEffect(() => { if (open && !status) void refresh(); }, [open, status, refresh]);
+
+  const handleInstall = async () => {
+    setInstalling(true);
+    toast.info('Acepta el permiso de administrador en la ventana de Windows que aparecerá.');
+    try {
+      const res = await installHostSyncLocal();
+      setStatus(res);
+      if (res.installed) toast.success('Listo. Este equipo resolverá tus .claw automáticamente.');
+      else toast.error(res.message ?? 'No se pudo montar el agente.');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'No se pudo montar el agente en este equipo.');
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const showManualBlock = async () => {
+    try {
+      const b = await getHostsBlock();
+      setBlock(b.block);
+    } catch { toast.error('No se pudo obtener el bloque'); }
+  };
+  const copyManual = () => {
+    if (block) { void navigator.clipboard?.writeText(block); toast.success('Bloque copiado'); }
+  };
+
+  const installed = status?.installed === true;
+  const supported = status?.supported === true;
+
+  return (
+    <MethodCard
+      icon={<MonitorCheck size={17} />} title="Este equipo (automático)"
+      tagline="Mantiene el archivo del sistema al día — sin tocar nada"
+      badge={installed ? 'Activo' : 'Recomendado'}
+      badgeColor={installed ? 'var(--success, #34d399)' : 'var(--accent, #22d3ee)'}
+      open={open} onToggle={onToggle}
+    >
+      <p style={bodyP}>
+        MicelclawOS mantiene el archivo del sistema de este equipo al día con tus
+        <code> {domain}</code> y sus servicios. Se configura <strong>al instalar
+        MicelclawOS</strong>; después, cualquier servicio que actives aparece solo en tu
+        navegador. No edita nada más del archivo (respeta lo que ya tengas).
+      </p>
+
+      {!status ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+          <Loader2 size={13} className="animate-spin" /> Comprobando este equipo…
+        </div>
+      ) : installed ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: 'var(--success, #34d399)', fontWeight: 600 }}>
+            <Check size={14} /> Sincronizando este equipo
+          </span>
+          {status.last_run && (
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>· última: {status.last_run}</span>
+          )}
+          <button style={hubGhostBtn} disabled={installing} onClick={() => void handleInstall()}>
+            {installing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Reinstalar
+          </button>
+        </div>
+      ) : supported ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button
+            style={{ ...hubPrimaryBtn, opacity: installing ? 0.5 : 1, cursor: installing ? 'wait' : 'pointer', alignSelf: 'flex-start' }}
+            disabled={installing} onClick={() => void handleInstall()}
+          >
+            {installing ? <Loader2 size={14} className="animate-spin" /> : <MonitorCheck size={14} />}
+            Configurar este equipo
+          </button>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Pedirá permiso de administrador una vez (es necesario para tocar el archivo del sistema). Luego, automático.
+          </span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.73rem', color: 'var(--text-dim)' }}>
+          <AlertTriangle size={14} style={{ color: 'var(--warning, #fb923c)', flexShrink: 0, marginTop: 1 }} />
+          <span>
+            {status.reason ?? 'Este equipo no admite el agente automático.'}{' '}
+            {clientOS === 'mac' || clientOS === 'linux'
+              ? 'De momento, usa el bloque manual o WireGuard.'
+              : 'Usa WireGuard (móvil/fuera) o el bloque manual.'}
+          </span>
+        </div>
+      )}
+
+      {/* Fallback manual */}
+      <div style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+        {!block ? (
+          <button onClick={() => void showManualBlock()} style={inlineLink}>
+            Ver/copiar el bloque manual
+          </button>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Pégalo en el archivo hosts (Windows: <code>C:\Windows\System32\drivers\etc\hosts</code>, como admin):
+              </span>
+              <button onClick={copyManual} style={hubGhostBtn}><Copy size={12} /> Copiar</button>
+            </div>
+            <pre style={manualPre}>{block}</pre>
+          </div>
+        )}
+      </div>
+    </MethodCard>
   );
 }
 
@@ -293,4 +420,9 @@ const qrBox: React.CSSProperties = {
 };
 const stepsList: React.CSSProperties = {
   margin: '0 0 10px 0', paddingLeft: 18, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7,
+};
+const manualPre: React.CSSProperties = {
+  margin: 0, padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+  background: 'var(--bg)', color: 'var(--text)', fontSize: '0.7rem', lineHeight: 1.5,
+  fontFamily: 'var(--font-mono, monospace)', overflow: 'auto', maxHeight: 180, whiteSpace: 'pre',
 };

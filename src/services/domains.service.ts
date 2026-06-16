@@ -97,3 +97,37 @@ export async function getServices(): Promise<ServicesResponse> {
   const res = await api.get<{ data: ServicesResponse }>('/network/services');
   return res.data;
 }
+
+// ─── Hosts-sync (agente del anfitrión) ───────────────────────────────
+
+export interface HostSyncStatus {
+  supported: boolean;
+  platform: 'windows-wsl' | 'macos' | 'linux' | 'headless' | 'unsupported';
+  installed: boolean;
+  state?: string;
+  last_run?: string | null;
+  reason?: string;
+  message?: string;
+}
+
+export interface HostsBlock {
+  block: string;
+  entries: { ip: string; name: string }[];
+  hash: string;
+  domains: string[];
+}
+
+export async function getHostSyncStatus(): Promise<HostSyncStatus> {
+  const res = await api.get<{ data: HostSyncStatus }>('/network/hosts-sync/status');
+  return res.data;
+}
+
+export async function installHostSyncLocal(): Promise<HostSyncStatus> {
+  const res = await api.post<{ data: HostSyncStatus }>('/network/hosts-sync/local');
+  return res.data;
+}
+
+export async function getHostsBlock(): Promise<HostsBlock> {
+  const res = await api.get<{ data: HostsBlock }>('/network/hosts-block');
+  return res.data;
+}
