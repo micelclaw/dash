@@ -204,10 +204,10 @@ export function DomainsSection() {
             {domains.map(d => (
               <div key={d.id} style={cardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Globe2 size={16} style={{ color: d.is_primary ? 'var(--accent, #22d3ee)' : 'var(--text-muted)' }} />
+                  <Globe2 size={16} style={{ color: d.is_primary ? 'var(--amber)' : 'var(--text-muted)' }} />
                   <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text)' }}>{d.domain}</span>
                   <span style={badgeStyle}>{d.kind}</span>
-                  {d.is_primary && <span style={{ ...badgeStyle, color: 'var(--accent, #22d3ee)', borderColor: 'var(--accent, #22d3ee)' }}>principal</span>}
+                  {d.is_primary && <span style={{ ...badgeStyle, color: 'var(--amber)', borderColor: 'var(--amber)' }}>principal</span>}
                   <span style={{ ...badgeStyle, color: STATUS_LABELS[d.status]?.color, borderColor: STATUS_LABELS[d.status]?.color }}>
                     {STATUS_LABELS[d.status]?.label ?? d.status}
                   </span>
@@ -309,7 +309,7 @@ export function DomainsSection() {
           {/* Método directo: DNS al servidor (misma red) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Wifi size={15} style={{ color: 'var(--accent, #22d3ee)' }} />
+              <Wifi size={15} style={{ color: 'var(--amber)' }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Método directo · DNS del servidor:</span>
               <code style={{
                 fontSize: '0.8125rem', color: 'var(--text)', padding: '3px 8px',
@@ -347,7 +347,7 @@ export function DomainsSection() {
 
           {/* Hub anti-fricción: 4 métodos sin tocar el DNS del dispositivo */}
           <div style={{ marginTop: 16, marginBottom: 8 }}>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', fontWeight: 700, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
               O sin tocar la config de red de cada dispositivo
             </div>
             <DomainAccessMethods primaryDomain={primary.domain} />
@@ -401,7 +401,7 @@ const iconBtn: React.CSSProperties = {
 // Botón principal: relleno sólido con texto oscuro → alto contraste y claramente "clicable".
 const primaryBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 'var(--radius-sm)',
-  border: 'none', background: 'var(--accent, #22d3ee)',
+  border: 'none', background: 'var(--amber)',
   color: '#06222a', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)',
 };
 const introText: React.CSSProperties = {

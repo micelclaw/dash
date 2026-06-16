@@ -96,7 +96,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
       icon={<MonitorCheck size={17} />} title="Este equipo (automático)"
       tagline="Mantiene el archivo del sistema al día — sin tocar nada"
       badge={installed ? 'Activo' : 'Recomendado'}
-      badgeColor={installed ? 'var(--success, #34d399)' : 'var(--accent, #22d3ee)'}
+      badgeColor={installed ? 'var(--success, #34d399)' : 'var(--amber)'}
       open={open} onToggle={onToggle}
     >
       <p style={bodyP}>
@@ -107,7 +107,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
       </p>
 
       {!status ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-dim)', fontSize: '0.75rem' }}>
           <Loader2 size={13} className="animate-spin" /> Comprobando este equipo…
         </div>
       ) : installed ? (
@@ -116,7 +116,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
             <Check size={14} /> Sincronizando este equipo
           </span>
           {status.last_run && (
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>· última: {status.last_run}</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>· última: {status.last_run}</span>
           )}
           <button style={hubGhostBtn} disabled={installing} onClick={() => void handleInstall()}>
             {installing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Reinstalar
@@ -131,7 +131,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
             {installing ? <Loader2 size={14} className="animate-spin" /> : <MonitorCheck size={14} />}
             Configurar este equipo
           </button>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
             Pedirá permiso de administrador una vez (es necesario para tocar el archivo del sistema). Luego, automático.
           </span>
         </div>
@@ -156,7 +156,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
         ) : (
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
                 Pégalo en el archivo hosts (Windows: <code>C:\Windows\System32\drivers\etc\hosts</code>, como admin):
               </span>
               <button onClick={copyManual} style={hubGhostBtn}><Copy size={12} /> Copiar</button>
@@ -184,10 +184,10 @@ function MethodCard({
         <span style={{ color: badgeColor, display: 'inline-flex' }}>{icon}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left', flex: 1 }}>
           <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>{title}</span>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tagline}</span>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{tagline}</span>
         </span>
-        <span style={{ ...methodBadge, color: badgeColor, borderColor: badgeColor }}>{badge}</span>
-        {open ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+        <span style={{ ...methodBadge, color: badgeColor, borderColor: badgeColor, background: `color-mix(in srgb, ${badgeColor} 16%, transparent)` }}>{badge}</span>
+        {open ? <ChevronDown size={15} style={{ color: 'var(--text-dim)' }} /> : <ChevronRight size={15} style={{ color: 'var(--text-dim)' }} />}
       </button>
       {open && <div style={methodBody}>{children}</div>}
     </div>
@@ -259,7 +259,7 @@ function WireguardCard({ open, onToggle, domain }: { open: boolean; onToggle: ()
     <MethodCard
       icon={<ShieldCheck size={17} />} title="WireGuard (VPN propia)"
       tagline="Desde cualquier lugar — el dispositivo no configura nada"
-      badge="Recomendado" badgeColor="var(--accent, #22d3ee)"
+      badge="Recomendado" badgeColor="var(--amber)"
       open={open} onToggle={onToggle}
     >
       <p style={bodyP}>
@@ -271,7 +271,7 @@ function WireguardCard({ open, onToggle, domain }: { open: boolean; onToggle: ()
 
       {!result ? (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-          <Smartphone size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <Smartphone size={15} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
           <input
             value={name}
             onChange={e => setName(e.target.value)}
@@ -316,7 +316,7 @@ function WireguardCard({ open, onToggle, domain }: { open: boolean; onToggle: ()
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: '0.72rem', color: 'var(--text-dim)' }}>
         <QrCode size={12} />
         {clients.length > 0
           ? `${clients.length} dispositivo${clients.length === 1 ? '' : 's'} con acceso.`
@@ -359,7 +359,7 @@ function PublicCard({ open, onToggle }: { open: boolean; onToggle: () => void })
     <MethodCard
       icon={<Globe size={17} />} title="Subdominio público"
       tagline="Un nombre de internet, sin VPN ni app"
-      badge="Fase 2" badgeColor="var(--text-muted)"
+      badge="Fase 2" badgeColor="var(--text-dim)"
       open={open} onToggle={onToggle}
     >
       <p style={{ ...bodyP, marginBottom: 0 }}>
@@ -399,7 +399,7 @@ const hubInput: React.CSSProperties = {
 };
 const hubPrimaryBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 'var(--radius-sm)',
-  border: 'none', background: 'var(--accent, #22d3ee)', color: '#06222a', fontSize: '0.78rem', fontWeight: 600,
+  border: 'none', background: 'var(--amber)', color: '#06222a', fontSize: '0.78rem', fontWeight: 600,
   cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
 };
 const hubGhostBtn: React.CSSProperties = {
@@ -409,11 +409,11 @@ const hubGhostBtn: React.CSSProperties = {
 };
 const inlineLink: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0,
-  cursor: 'pointer', color: 'var(--accent, #22d3ee)', fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+  cursor: 'pointer', color: 'var(--amber)', fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
 };
 const wgResult: React.CSSProperties = {
-  marginTop: 6, padding: 12, border: '1px solid var(--accent, #22d3ee)', borderRadius: 'var(--radius-md)',
-  background: 'color-mix(in srgb, var(--accent, #22d3ee) 6%, transparent)',
+  marginTop: 6, padding: 12, border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)',
+  background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
 };
 const qrBox: React.CSSProperties = {
   width: 132, height: 132, padding: 8, background: '#fff', borderRadius: 'var(--radius-sm)', flexShrink: 0,
