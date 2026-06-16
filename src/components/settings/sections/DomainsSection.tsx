@@ -32,6 +32,7 @@ import {
   type SystemDomain,
 } from '@/services/domains.service';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
+import { DomainAccessMethods } from './DomainAccessMethods';
 
 const CA_CERT_URL = '/api/v1/hal/network/proxy/ca-certificate';
 
@@ -303,12 +304,13 @@ export function DomainsSection() {
       {primary && (
         <SettingSection
           title="Acceso desde tus dispositivos"
-          description="Para que un .claw resuelva en tu PC/móvil, su DNS debe apuntar a este servidor. Hazlo una vez en cada dispositivo, o en el router para toda la red."
+          description="Varias formas de alcanzar tus .claw — elige la que menos fricción te dé. La directa es apuntar el DNS al servidor; abajo tienes opciones que NO requieren tocar la config de red de cada dispositivo."
         >
+          {/* Método directo: DNS al servidor (misma red) */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Wifi size={15} style={{ color: 'var(--accent, #22d3ee)' }} />
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>DNS del servidor:</span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Método directo · DNS del servidor:</span>
               <code style={{
                 fontSize: '0.8125rem', color: 'var(--text)', padding: '3px 8px',
                 borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)',
@@ -326,7 +328,7 @@ export function DomainsSection() {
           {showAccess && (
             <div style={helpBox}>
               <p style={helpP}>
-                <strong style={helpQ}>Opción A — en el router (recomendado, una sola vez para toda la red):</strong>{' '}
+                <strong style={helpQ}>Opción A — en el router (una sola vez para toda la red):</strong>{' '}
                 entra en la config de tu router (normalmente <code>192.168.1.1</code>), busca DHCP/DNS y pon el
                 <em> DNS primario</em> en <code>{lanIp ?? 'la IP de arriba'}</code>. Reinicia el Wi-Fi del dispositivo.
               </p>
@@ -342,6 +344,14 @@ export function DomainsSection() {
               </p>
             </div>
           )}
+
+          {/* Hub anti-fricción: 4 métodos sin tocar el DNS del dispositivo */}
+          <div style={{ marginTop: 16, marginBottom: 8 }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              O sin tocar la config de red de cada dispositivo
+            </div>
+            <DomainAccessMethods primaryDomain={primary.domain} />
+          </div>
         </SettingSection>
       )}
 

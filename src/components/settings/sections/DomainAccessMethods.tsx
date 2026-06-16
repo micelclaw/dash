@@ -1,0 +1,296 @@
+/**
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
+ * All rights reserved.
+ *
+ * This file is part of Micelclaw OS and is proprietary software.
+ * Unauthorized copying, modification, distribution, or use of this
+ * file, via any medium, is strictly prohibited.
+ *
+ * See LICENSE in the root of this repository for full terms.
+ * https://micelclaw.com
+ */
+
+// ─── Domain Access Methods (hub anti-fricción) ──────────────────────────
+// Cuatro formas de alcanzar los `.claw` SIN cambiar el DNS de cada dispositivo
+// (que es lo "drástico" para un usuario novato). WireGuard es la funcional de
+// la Fase 1: genera un acceso por dispositivo (peer + QR) y el peer recibe el
+// recursor local como DNS automáticamente → resuelve `.claw` por el túnel Y
+// navega normal, estés donde estés, sin tocar nada en el dispositivo.
+
+import { useState } from 'react';
+import { useNavigate } from 'react-router';
+import {
+  Podcast, ShieldCheck, Cable, Globe, ChevronDown, ChevronRight,
+  Plus, Loader2, Download, QrCode, ExternalLink, Smartphone,
+} from 'lucide-react';
+import { useWgClients } from '@/modules/vpn/hooks/use-wg-clients';
+
+type MethodKey = 'mdns' | 'wireguard' | 'tailscale' | 'public';
+
+export function DomainAccessMethods({ primaryDomain }: { primaryDomain: string }) {
+  // WireGuard es la opción funcional → arranca expandida.
+  const [open, setOpen] = useState<MethodKey | null>('wireguard');
+  const toggle = (k: MethodKey) => setOpen(v => (v === k ? null : k));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <MdnsCard open={open === 'mdns'} onToggle={() => toggle('mdns')} domain={primaryDomain} />
+      <WireguardCard open={open === 'wireguard'} onToggle={() => toggle('wireguard')} domain={primaryDomain} />
+      <TailscaleCard open={open === 'tailscale'} onToggle={() => toggle('tailscale')} />
+      <PublicCard open={open === 'public'} onToggle={() => toggle('public')} />
+    </div>
+  );
+}
+
+// ─── Card chrome ────────────────────────────────────────────────────────
+
+function MethodCard({
+  icon, title, tagline, badge, badgeColor, open, onToggle, children,
+}: {
+  icon: React.ReactNode; title: string; tagline: string;
+  badge: string; badgeColor: string; open: boolean;
+  onToggle: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div style={methodCard}>
+      <button style={methodHeader} onClick={onToggle}>
+        <span style={{ color: badgeColor, display: 'inline-flex' }}>{icon}</span>
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left', flex: 1 }}>
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>{title}</span>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tagline}</span>
+        </span>
+        <span style={{ ...methodBadge, color: badgeColor, borderColor: badgeColor }}>{badge}</span>
+        {open ? <ChevronDown size={14} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={14} style={{ color: 'var(--text-muted)' }} />}
+      </button>
+      {open && <div style={methodBody}>{children}</div>}
+    </div>
+  );
+}
+
+// ─── 1. mDNS ────────────────────────────────────────────────────────────
+
+function MdnsCard({ open, onToggle, domain }: { open: boolean; onToggle: () => void; domain: string }) {
+  return (
+    <MethodCard
+      icon={<Podcast size={17} />} title="mDNS / Bonjour"
+      tagline="Sin configurar nada — misma red"
+      badge="Local" badgeColor="var(--success, #34d399)"
+      open={open} onToggle={onToggle}
+    >
+      <p style={bodyP}>
+        En dispositivos Apple (y muchos Linux/Windows recientes) tu servidor es
+        alcanzable por su <strong>nombre <code>.local</code></strong> en la misma
+        red, sin tocar ninguna config. Es un atajo para llegar al equipo.
+      </p>
+      <p style={bodyP}>
+        Para entrar a los nombres con candado (<code>pdf.{domain}</code>,
+        <code> music.{domain}</code>…) el dispositivo necesita resolver <code>.claw</code>:
+        usa <strong>WireGuard</strong> (desde cualquier lugar, recomendado) o, en la misma
+        red, apunta su DNS al servidor (arriba). mDNS por sí solo no sirve los
+        subdominios <code>.claw</code>.
+      </p>
+    </MethodCard>
+  );
+}
+
+// ─── 2. WireGuard (funcional) ───────────────────────────────────────────
+
+function WireguardCard({ open, onToggle, domain }: { open: boolean; onToggle: () => void; domain: string }) {
+  const navigate = useNavigate();
+  const { clients, create, getConfig, getQrCode } = useWgClients();
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ id: string; name: string; qr: string; config: string } | null>(null);
+
+  const handleGenerate = async () => {
+    const n = name.trim();
+    if (!n) return;
+    setBusy(true);
+    try {
+      const client = await create(n);
+      if (!client) return;
+      const [qr, config] = await Promise.all([getQrCode(client.id), getConfig(client.id)]);
+      setResult({ id: client.id, name: client.name, qr: qr ?? '', config: config ?? '' });
+      setName('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadConfig = () => {
+    if (!result?.config) return;
+    const blob = new Blob([result.config], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${result.name.replace(/\s+/g, '-')}.conf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <MethodCard
+      icon={<ShieldCheck size={17} />} title="WireGuard (VPN propia)"
+      tagline="Desde cualquier lugar — el dispositivo no configura nada"
+      badge="Recomendado" badgeColor="var(--accent, #22d3ee)"
+      open={open} onToggle={onToggle}
+    >
+      <p style={bodyP}>
+        Generas un acceso por dispositivo. Al conectar el túnel, el dispositivo
+        recibe <strong>automáticamente</strong> el DNS del sistema, así que
+        <code> {domain}</code> y todos sus subdominios resuelven sin que toques
+        nada en el equipo — y funciona también fuera de casa.
+      </p>
+
+      {!result ? (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+          <Smartphone size={15} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') void handleGenerate(); }}
+            placeholder="Nombre del dispositivo (iPhone, Portátil…)"
+            style={hubInput}
+          />
+          <button
+            style={{ ...hubPrimaryBtn, opacity: busy || !name.trim() ? 0.45 : 1, cursor: busy || !name.trim() ? 'not-allowed' : 'pointer' }}
+            disabled={busy || !name.trim()}
+            onClick={() => void handleGenerate()}
+          >
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            Generar acceso
+          </button>
+        </div>
+      ) : (
+        <div style={wgResult}>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {result.qr && (
+              <div style={qrBox} dangerouslySetInnerHTML={{ __html: result.qr }} />
+            )}
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>
+                Acceso «{result.name}» listo
+              </div>
+              <ol style={stepsList}>
+                <li>Instala la app <strong>WireGuard</strong> en el dispositivo (App Store / Play Store / wireguard.com).</li>
+                <li>Pulsa “+” → <strong>escanea este QR</strong> (o importa el archivo <code>.conf</code>).</li>
+                <li>Activa el túnel. Ya entras a <code>{domain}</code> y a todo lo demás por nombre.</li>
+              </ol>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button style={hubGhostBtn} onClick={downloadConfig}>
+                  <Download size={13} /> Descargar .conf
+                </button>
+                <button style={hubGhostBtn} onClick={() => setResult(null)}>
+                  <Plus size={13} /> Generar otro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        <QrCode size={12} />
+        {clients.length > 0
+          ? `${clients.length} dispositivo${clients.length === 1 ? '' : 's'} con acceso.`
+          : 'Aún no hay dispositivos con acceso.'}
+        <button onClick={() => navigate('/vpn')} style={{ ...inlineLink, marginLeft: 4 }}>
+          Gestionar dispositivos <ExternalLink size={11} />
+        </button>
+      </div>
+    </MethodCard>
+  );
+}
+
+// ─── 3. Tailscale ───────────────────────────────────────────────────────
+
+function TailscaleCard({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const navigate = useNavigate();
+  return (
+    <MethodCard
+      icon={<Cable size={17} />} title="Tailscale (VPN gestionada)"
+      tagline="Conecta aunque no puedas abrir puertos en el router"
+      badge="Sin puertos" badgeColor="var(--warning, #fb923c)"
+      open={open} onToggle={onToggle}
+    >
+      <p style={bodyP}>
+        Alternativa a WireGuard cuando el router no deja abrir puertos (CG-NAT,
+        operador restrictivo…). Tailscale atraviesa la red por ti con una cuenta
+        gratuita. Mismo resultado: alcanzas tus <code>.claw</code> desde fuera.
+      </p>
+      <button style={hubGhostBtn} onClick={() => navigate('/vpn')}>
+        <Cable size={13} /> Configurar Tailscale
+      </button>
+    </MethodCard>
+  );
+}
+
+// ─── 4. Público (Fase 2) ────────────────────────────────────────────────
+
+function PublicCard({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <MethodCard
+      icon={<Globe size={17} />} title="Subdominio público"
+      tagline="Un nombre de internet, sin VPN ni app"
+      badge="Fase 2" badgeColor="var(--text-muted)"
+      open={open} onToggle={onToggle}
+    >
+      <p style={{ ...bodyP, marginBottom: 0 }}>
+        Próximamente: un subdominio de tu licencia (<code>tunombre.micelclaw.com</code>)
+        o tu propio dominio (Cloudflare, Porkbun…), con certificado de internet, para
+        entrar desde cualquier navegador sin instalar nada. Convivirá con el dominio
+        local. Disponible en la Fase 2.
+      </p>
+    </MethodCard>
+  );
+}
+
+// ─── estilos ────────────────────────────────────────────────────────────
+
+const methodCard: React.CSSProperties = {
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+  background: 'var(--bg-elevated, rgba(255,255,255,0.02))', overflow: 'hidden',
+};
+const methodHeader: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+  padding: '10px 12px', background: 'none', border: 'none', cursor: 'pointer',
+  fontFamily: 'var(--font-sans)',
+};
+const methodBadge: React.CSSProperties = {
+  fontSize: '0.6rem', fontWeight: 600, padding: '1px 6px', borderRadius: 'var(--radius-sm)',
+  border: '1px solid', whiteSpace: 'nowrap',
+};
+const methodBody: React.CSSProperties = {
+  padding: '4px 14px 14px 14px', borderTop: '1px solid var(--border)',
+};
+const bodyP: React.CSSProperties = {
+  fontSize: '0.75rem', color: 'var(--text-dim)', margin: '10px 0 9px 0', lineHeight: 1.6,
+};
+const hubInput: React.CSSProperties = {
+  flex: 1, padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+  background: 'var(--bg)', color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', outline: 'none',
+};
+const hubPrimaryBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 'var(--radius-sm)',
+  border: 'none', background: 'var(--accent, #22d3ee)', color: '#06222a', fontSize: '0.78rem', fontWeight: 600,
+  cursor: 'pointer', fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
+};
+const hubGhostBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 'var(--radius-sm)',
+  border: '1px solid var(--border)', background: 'var(--bg-elevated, rgba(255,255,255,0.05))', color: 'var(--text)',
+  fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+};
+const inlineLink: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0,
+  cursor: 'pointer', color: 'var(--accent, #22d3ee)', fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+};
+const wgResult: React.CSSProperties = {
+  marginTop: 6, padding: 12, border: '1px solid var(--accent, #22d3ee)', borderRadius: 'var(--radius-md)',
+  background: 'color-mix(in srgb, var(--accent, #22d3ee) 6%, transparent)',
+};
+const qrBox: React.CSSProperties = {
+  width: 132, height: 132, padding: 8, background: '#fff', borderRadius: 'var(--radius-sm)', flexShrink: 0,
+};
+const stepsList: React.CSSProperties = {
+  margin: '0 0 10px 0', paddingLeft: 18, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.7,
+};
