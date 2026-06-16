@@ -250,7 +250,7 @@ export function Component() {
             {[
               { label: 'Processes', value: `${stats.running}/${stats.total}`, spark: null as number[] | null, color: '' },
               { label: 'CPU', value: `${(stats.cpu_total ?? 0).toFixed(1)}%`, spark: history.cpu, color: 'var(--text-dim)' },
-              { label: 'Memory', value: `${(stats.memory_total_mb ?? 0).toFixed(0)} MB`, spark: history.memory, color: 'var(--text-dim)' },
+              { label: 'Memory', value: `${(stats.system_memory_used_mb ?? 0).toFixed(0)} / ${(stats.system_memory_total_mb ?? 0).toFixed(0)} MB`, spark: history.memory, color: 'var(--text-dim)' },
               ...(ollamaStatus.gpu ? [
                 { label: 'GPU', value: `${ollamaStatus.gpu.gpu_percent}%`, spark: history.gpu, color: 'var(--amber)' },
                 { label: 'VRAM', value: `${ollamaStatus.gpu.vram_used_mb} / ${ollamaStatus.gpu.vram_total_mb} MB`, spark: history.vram, color: 'var(--amber)' },

@@ -32,7 +32,9 @@ export interface ProcessStats {
   running: number;
   stopped: number;
   cpu_total: number;
-  memory_total_mb: number;
+  memory_total_mb: number;          // suma per-proceso (sobre-cuenta mmap) — no es "RAM usada"
+  system_memory_used_mb: number;    // RAM REAL usada del sistema (MemTotal - MemAvailable)
+  system_memory_total_mb: number;   // RAM total del sistema
 }
 
 export interface LogEntry {
@@ -79,6 +81,8 @@ interface RawStats {
   failed?: number;
   cpu_total: number | null;
   memory_total: number | null;
+  system_memory_used_bytes?: number | null;
+  system_memory_total_bytes?: number | null;
 }
 
 // ─── History ────────────────────────────────────────────
@@ -170,6 +174,8 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
         stopped: raw.failed ?? 0,
         cpu_total: raw.cpu_total ?? 0,
         memory_total_mb: (raw.memory_total ?? 0) / (1024 * 1024),
+        system_memory_used_mb: (raw.system_memory_used_bytes ?? 0) / (1024 * 1024),
+        system_memory_total_mb: (raw.system_memory_total_bytes ?? 0) / (1024 * 1024),
       };
       const h = get().history;
       set({
@@ -177,7 +183,7 @@ export const useProcessesStore = create<ProcessesState>()((set, get) => ({
         history: {
           ...h,
           cpu: pushMetric(h.cpu, stats.cpu_total),
-          memory: pushMetric(h.memory, stats.memory_total_mb),
+          memory: pushMetric(h.memory, stats.system_memory_used_mb),
         },
       });
       // Always refresh ollama status (GPU + loaded models) in background
