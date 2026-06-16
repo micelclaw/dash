@@ -61,7 +61,7 @@ function ThisDeviceCard({ open, onToggle, domain }: { open: boolean; onToggle: (
   const refresh = useCallback(async () => {
     try { setStatus(await getHostSyncStatus()); } catch { /* silent */ }
   }, []);
-  useEffect(() => { if (open && !status) void refresh(); }, [open, status, refresh]);
+  useEffect(() => { if (open) void refresh(); }, [open, refresh]);
 
   const handleInstall = async () => {
     setInstalling(true);

@@ -118,7 +118,8 @@ export interface HostsBlock {
 }
 
 export async function getHostSyncStatus(): Promise<HostSyncStatus> {
-  const res = await api.get<{ data: HostSyncStatus }>('/network/hosts-sync/status');
+  // Estado vivo (instalado o no) → no_cache para esquivar la caché semántica de GETs.
+  const res = await api.get<{ data: HostSyncStatus }>('/network/hosts-sync/status?no_cache=true');
   return res.data;
 }
 
@@ -128,6 +129,6 @@ export async function installHostSyncLocal(): Promise<HostSyncStatus> {
 }
 
 export async function getHostsBlock(): Promise<HostsBlock> {
-  const res = await api.get<{ data: HostsBlock }>('/network/hosts-block');
+  const res = await api.get<{ data: HostsBlock }>('/network/hosts-block?no_cache=true');
   return res.data;
 }
