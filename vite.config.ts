@@ -110,6 +110,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 7100,
+    // Permite servir el dash por los dominios locales `.claw` (acceso por nombre +
+    // página /wake a la que redirige Caddy). Sin esto, Vite dev bloquea el Host
+    // con 403 "host not allowed". En producción (build estático) no aplica.
+    allowedHosts: ['.claw'],
     https: useInternalCerts
       ? { cert: internalCert, key: internalKey }
       : useTailscaleCerts
