@@ -147,6 +147,10 @@ const router = createBrowserRouter([
   // Landing PÚBLICA de share links (sin login) — los datos vienen de los
   // endpoints públicos /api/v1/share/:token/* de Core.
   { path: '/share/:token', lazy: () => import('@/modules/share/PublicSharePage') },
+  // Página "wake": Caddy redirige aquí (302) al ir a un `.claw` de un servicio
+  // del sistema DETENIDO. Renderiza branded siempre; el botón Activar usa la
+  // sesión (si no hay, enlaza a login).
+  { path: '/wake', lazy: () => import('@/modules/service-wake/ServiceWakePage') },
   // Fallback del PWA share target cuando el Service Worker no está activo
   // (dev sin SW): el SW normalmente intercepta POST /share-target, cachea los
   // blobs y redirige aquí; este GET solo rebota a Photos (el body se pierde sin
