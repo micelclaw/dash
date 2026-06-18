@@ -22,6 +22,7 @@ import { OPT_IN_APPS } from '@/config/app-catalog';
 import { getUserFolderAccess, patchUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
 import { getUserGroups, patchUserGroups, type UserGroup } from '@/services/groups.service';
 import { getUserQuota, patchUserQuota } from '@/services/quotas.service';
+import { getUserSpeedLimits, patchUserSpeedLimits } from '@/services/speed-limits.service';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [role, setRole] = useState(user.role);
   const [saving, setSaving] = useState(false);
   // Pestañas (rediseño NAS): Información + Aplicaciones (F1) + Permisos/carpetas (F2).
-  const [tab, setTab] = useState<'info' | 'grupos' | 'apps' | 'permisos' | 'cuota'>('info');
+  const [tab, setTab] = useState<'info' | 'grupos' | 'apps' | 'permisos' | 'cuota' | 'velocidad'>('info');
   const [appsLoaded, setAppsLoaded] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
@@ -268,6 +269,11 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [quotaLoaded, setQuotaLoaded] = useState(false);
   const [quotaGb, setQuotaGb] = useState('0');
   const [quotaUsed, setQuotaUsed] = useState(0);
+  // Pestaña Velocidad (F6) — KB/s, 0 = ilimitado.
+  const [speedLoaded, setSpeedLoaded] = useState(false);
+  const [downKbps, setDownKbps] = useState('0');
+  const [upKbps, setUpKbps] = useState('0');
+  const [speedEff, setSpeedEff] = useState<{ down: number; up: number }>({ down: 0, up: 0 });
 
   useEffect(() => {
     if (tab !== 'apps' || appsLoaded) return;
@@ -357,6 +363,29 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
     } finally { setSaving(false); }
   };
 
+  useEffect(() => {
+    if (tab !== 'velocidad' || speedLoaded) return;
+    getUserSpeedLimits(user.id).then((s) => {
+      setDownKbps(String(s.down_kbps || 0));
+      setUpKbps(String(s.up_kbps || 0));
+      setSpeedEff({ down: s.effective_down_kbps, up: s.effective_up_kbps });
+      setSpeedLoaded(true);
+    }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudo cargar el límite de velocidad'));
+  }, [tab, speedLoaded, user.id]);
+
+  const handleSaveSpeed = async () => {
+    const down = Number(downKbps), up = Number(upKbps);
+    if (![down, up].every((v) => Number.isFinite(v) && v >= 0)) { toast.error('Introduce KB/s >= 0 (0 = ilimitado)'); return; }
+    setSaving(true);
+    try {
+      await patchUserSpeedLimits(user.id, Math.round(up), Math.round(down));
+      toast.success('Límite de velocidad actualizado');
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudo guardar el límite');
+    } finally { setSaving(false); }
+  };
+
   const handleSubmit = async () => {
     if (!displayName || !email) { toast.error('Name and email are required'); return; }
     if (!EMAIL_REGEX.test(email)) { toast.error('Enter a valid email address'); return; }
@@ -379,7 +408,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       <ModalTitle onClose={onClose}>Edit User</ModalTitle>
       {/* Pestañas estilo Synology (más se añaden en fases siguientes). */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-        {([['info', 'Información'], ['grupos', 'Grupos'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos'], ['cuota', 'Cuota']] as const).map(([t, lbl]) => (
+        {([['info', 'Información'], ['grupos', 'Grupos'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos'], ['cuota', 'Cuota'], ['velocidad', 'Velocidad']] as const).map(([t, lbl]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -561,6 +590,37 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
             <button style={btnSecondary} onClick={onClose}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSaveQuota} disabled={saving || !quotaLoaded}>
               {saving ? 'Saving...' : 'Save Quota'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'velocidad' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            Límite de ancho de banda del servicio de archivos (descargas/subidas). KB/s. 0 = ilimitado.
+          </div>
+          {!speedLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
+          {speedLoaded && (
+            <>
+              <div>
+                <label style={labelStyle}>Bajada (KB/s) — 0 = ilimitado</label>
+                <input style={inputStyle} type="number" min={0} step="64" value={downKbps} onChange={(e) => setDownKbps(e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Subida (KB/s) — 0 = ilimitado</label>
+                <input style={inputStyle} type="number" min={0} step="64" value={upKbps} onChange={(e) => setUpKbps(e.target.value)} />
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                Efectivo (usuario ∪ grupos): bajada <strong style={{ color: 'var(--text)' }}>{speedEff.down === 0 ? 'ilimitado' : `${speedEff.down} KB/s`}</strong>,
+                {' '}subida <strong style={{ color: 'var(--text)' }}>{speedEff.up === 0 ? 'ilimitado' : `${speedEff.up} KB/s`}</strong>
+              </div>
+            </>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSaveSpeed} disabled={saving || !speedLoaded}>
+              {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
         </div>
