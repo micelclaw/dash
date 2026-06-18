@@ -16,7 +16,7 @@
 import { useEffect, useState, useRef, useCallback, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  FileText, Table2, Presentation, FileImage, Wrench,
+  FileText, Table2, Presentation, FileImage, Wrench, Database,
   Plus, Loader2, Pencil, Copy, Trash2, Files,
 } from 'lucide-react';
 import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.store';
@@ -31,6 +31,7 @@ const APP_MIME_FILTER: Record<OfficeApp, string | undefined> = {
   presentations: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'pdf-viewer': 'application/pdf',
   'pdf-tools': undefined,
+  databases: undefined,
 };
 
 const APP_NEW_TYPE: Record<string, 'docx' | 'xlsx' | 'pptx' | null> = {
@@ -47,6 +48,7 @@ const APP_CARD_STYLE: Record<OfficeApp, { icon: typeof FileText; color: string }
   presentations: { icon: Presentation, color: '#eab308' },   // yellow
   'pdf-viewer':  { icon: FileImage,    color: '#ef4444' },   // red
   'pdf-tools':   { icon: Wrench,       color: '#7f1d1d' },   // maroon
+  databases:     { icon: Database,     color: '#a855f7' },   // purple
 };
 
 const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string }[] = [
@@ -55,6 +57,7 @@ const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string
   { id: 'presentations', label: 'Presentations',  icon: Presentation, color: '#eab308' },
   { id: 'pdf-viewer',    label: 'PDF Viewer',     icon: FileImage,    color: '#ef4444' },
   { id: 'pdf-tools',     label: 'PDF Tools',      icon: Wrench,       color: '#7f1d1d' },
+  { id: 'databases',     label: 'Databases',      icon: Database,     color: '#a855f7' },
 ];
 
 // ─── Context Menu ────────────────────────────────────────────────────
@@ -285,9 +288,10 @@ export function Component() {
     refreshDocs();
   }, [renaming, refreshDocs]);
 
-  // PDF Tools navigates away
+  // PDF Tools / Databases navigate away (son apps embebidas, no listado de docs)
   useEffect(() => {
     if (activeApp === 'pdf-tools') navigate('/office/pdf/tools');
+    if (activeApp === 'databases') navigate('/office/databases');
   }, [activeApp, navigate]);
 
   const CardIcon = cardStyle.icon;

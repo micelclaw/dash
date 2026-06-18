@@ -18,7 +18,7 @@ import { api } from '@/services/api';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf-viewer' | 'pdf-tools';
+export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf-viewer' | 'pdf-tools' | 'databases';
 
 interface ServiceSubStatus {
   installed: boolean;
@@ -32,6 +32,7 @@ interface OfficeStatus {
   onlyoffice: ServiceSubStatus;
   stirling_pdf: ServiceSubStatus;
   documenso: ServiceSubStatus;
+  mathesar: ServiceSubStatus;
 }
 
 interface EditorSession {

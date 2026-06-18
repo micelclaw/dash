@@ -85,6 +85,7 @@ const router = createBrowserRouter([
           { path: '/office/edit/:fileId', lazy: () => import('@/modules/office/OnlyOfficeEditor') },
           { path: '/office/pdf/:fileId', lazy: () => import('@/modules/office/PdfViewer') },
           { path: '/office/pdf/tools', lazy: () => import('@/modules/office/PdfToolsFrame') },
+          { path: '/office/databases', lazy: () => import('@/modules/office/DatabasesFrame') },
           { path: '/finance/firefly', lazy: () => import('@/modules/finance/FireflyPage') },
           { path: '/finance/solidinvoice', lazy: () => import('@/modules/finance/SolidInvoicePage') },
           { path: '/video', lazy: () => import('@/modules/video/VideoPage') },
