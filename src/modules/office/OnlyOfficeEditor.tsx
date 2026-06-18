@@ -19,7 +19,6 @@ import { ArrowLeft, Loader2, AlertTriangle, Minimize2, Download } from 'lucide-r
 import { useOfficeStore } from '@/stores/office.store';
 import { useServicesStore } from '@/stores/services.store';
 import { api } from '@/services/api';
-import { resolveServiceUrl } from '@/config/service-urls';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useOfficeBridge } from './hooks/use-office-bridge';
@@ -149,17 +148,16 @@ export function Component() {
   const loadApiScript = useCallback(async (log: (msg: string) => void): Promise<boolean> => {
     if ((window as any).DocsAPI) return true;
 
-    // Resuelve la base del document server en runtime. En una página https
-    // (p.ej. victor.claw) carga api.js desde el dominio del sistema
-    // (https://office.<dom>) para evitar contenido mixto; en http (dev) usa el
-    // fallback local para que un certificado .claw aún no confiable no bloquee el
-    // editor. El catálogo se indexa por slug de servicio: 'onlyoffice' → office.<dom>
-    // (la clave 'office' NO existe → antes caía SIEMPRE al http, rompiendo .claw).
-    const isHttps = window.location.protocol === 'https:';
-    if (isHttps) await useServiceUrlsStore.getState().load(true);
-    const onlyofficeBase = (
-      isHttps ? resolveServiceUrl('onlyoffice', ONLYOFFICE_FALLBACK_URL) : ONLYOFFICE_FALLBACK_URL
-    ).replace(/\/$/, '');
+    // El document server SIEMPRE se carga por http://127.0.0.1:8080 (ONLYOFFICE_FALLBACK_URL),
+    // incluso desde una página https (victor.claw):
+    //  - `http://127.0.0.1` es "potentially trustworthy" (Secure Contexts spec) → los navegadores
+    //    NO lo bloquean como contenido mixto, ni el script ni el WebSocket del editor.
+    //  - Es alcanzable desde el navegador del usuario en la misma máquina (WSL2 mirrored comparte
+    //    loopback) y es directo (~3ms) vs el proxy Caddy (handshake TLS + más lento).
+    //  - El subdominio `office.<dom>` NO está aprovisionado en Caddy (sin ruta ni cert) → cargar
+    //    api.js de ahí daba "TLS internal error" y el bucle "attempt N/40". (Acceso remoto al
+    //    editor = pendiente: requiere proxypear el document server; ver pending-debt.)
+    const onlyofficeBase = ONLYOFFICE_FALLBACK_URL.replace(/\/$/, '');
 
     const SRC = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
 
