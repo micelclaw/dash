@@ -24,6 +24,13 @@ interface EmbedActionsProps {
   slug: string;
   /** URL local de respaldo si no hay dominio configurado. */
   fallbackUrl: string;
+  /**
+   * Override explícito del destino de "abrir en pestaña nueva". Cuando el dominio del
+   * servicio NO es una app navegable para el usuario (p.ej. el editor ONLYOFFICE, cuyo
+   * `office.<dom>` es el document server backend), el caller pasa aquí la URL útil
+   * (p.ej. el propio editor a pantalla completa en el dash). Si se omite, se usa el dominio.
+   */
+  openUrl?: string;
   /** RAM en MB (lo que ya muestra cada embebido). Oculto si null/undefined. */
   ramMb?: number | null;
   fullscreen: boolean;
@@ -36,8 +43,9 @@ const iconBtn: React.CSSProperties = {
   color: 'var(--text-muted)', padding: 2, lineHeight: 0,
 };
 
-export function EmbedActions({ slug, fallbackUrl, ramMb, fullscreen, onToggleFullscreen }: EmbedActionsProps) {
+export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, onToggleFullscreen }: EmbedActionsProps) {
   const domainUrl = useServiceUrl(slug, fallbackUrl);
+  const href = openUrl ?? domainUrl;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-muted)' }}>
       {ramMb != null && <span>RAM: {ramMb} MB</span>}
@@ -50,7 +58,7 @@ export function EmbedActions({ slug, fallbackUrl, ramMb, fullscreen, onToggleFul
         {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
       </button>
       <a
-        href={domainUrl}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         style={{ ...iconBtn, textDecoration: 'none' }}

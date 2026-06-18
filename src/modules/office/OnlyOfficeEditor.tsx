@@ -469,6 +469,11 @@ export function Component() {
         <div style={{ flex: 1 }} />
         <EmbedActions
           slug="onlyoffice" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
+          openUrl={
+            fileId
+              ? `${window.location.origin}/office/edit/${fileId}?fullscreen=1`
+              : `${window.location.origin}/office`
+          }
           fullscreen={fullscreen} onToggleFullscreen={toggleFullscreen}
         />
       </div>
