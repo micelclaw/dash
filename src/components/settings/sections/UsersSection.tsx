@@ -20,6 +20,7 @@ import type { AdminUser, UserRole } from '@/types/users';
 import { getUserAppAccess, patchUserAppAccess } from '@/services/app-access.service';
 import { OPT_IN_APPS } from '@/config/app-catalog';
 import { getUserFolderAccess, patchUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
+import { getUserGroups, patchUserGroups, type UserGroup } from '@/services/groups.service';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -250,7 +251,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [role, setRole] = useState(user.role);
   const [saving, setSaving] = useState(false);
   // Pestañas (rediseño NAS): Información + Aplicaciones (F1) + Permisos/carpetas (F2).
-  const [tab, setTab] = useState<'info' | 'apps' | 'permisos'>('info');
+  const [tab, setTab] = useState<'info' | 'grupos' | 'apps' | 'permisos'>('info');
   const [appsLoaded, setAppsLoaded] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
@@ -258,6 +259,10 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [foldersLoaded, setFoldersLoaded] = useState(false);
   const [folders, setFolders] = useState<UserFolderPerm[]>([]);
   const [folderPerm, setFolderPerm] = useState<Record<string, FolderPermission>>({});
+  // Pestaña Grupos de usuarios (F3).
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
+  const [groupMember, setGroupMember] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (tab !== 'apps' || appsLoaded) return;
@@ -303,6 +308,28 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
     } finally { setSaving(false); }
   };
 
+  useEffect(() => {
+    if (tab !== 'grupos' || groupsLoaded) return;
+    getUserGroups(user.id).then((rows) => {
+      setUserGroups(rows);
+      const m: Record<string, boolean> = {};
+      for (const g of rows) m[g.id] = g.member;
+      setGroupMember(m);
+      setGroupsLoaded(true);
+    }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudieron cargar los grupos'));
+  }, [tab, groupsLoaded, user.id]);
+
+  const handleSaveGroups = async () => {
+    setSaving(true);
+    try {
+      await patchUserGroups(user.id, groupMember);
+      toast.success('Grupos actualizados');
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudieron guardar los grupos');
+    } finally { setSaving(false); }
+  };
+
   const handleSubmit = async () => {
     if (!displayName || !email) { toast.error('Name and email are required'); return; }
     if (!EMAIL_REGEX.test(email)) { toast.error('Enter a valid email address'); return; }
@@ -325,7 +352,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       <ModalTitle onClose={onClose}>Edit User</ModalTitle>
       {/* Pestañas estilo Synology (más se añaden en fases siguientes). */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-        {([['info', 'Información'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos']] as const).map(([t, lbl]) => (
+        {([['info', 'Información'], ['grupos', 'Grupos'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos']] as const).map(([t, lbl]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -366,6 +393,32 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
             <button style={btnSecondary} onClick={onClose}>Cancel</button>
             <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSubmit} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'grupos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            El usuario hereda los permisos (apps, carpetas) de los grupos a los que pertenece.
+          </div>
+          {!groupsLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
+          {groupsLoaded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflow: 'auto' }}>
+              {userGroups.map((g) => (
+                <label key={g.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', border: `1px solid ${groupMember[g.id] ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!groupMember[g.id]} onChange={() => setGroupMember((p) => ({ ...p, [g.id]: !p[g.id] }))} style={{ accentColor: 'var(--amber)' }} />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{g.name}</span>
+                  {g.is_system && <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>sistema</span>}
+                </label>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSaveGroups} disabled={saving || !groupsLoaded}>
+              {saving ? 'Saving...' : 'Save Groups'}
             </button>
           </div>
         </div>
