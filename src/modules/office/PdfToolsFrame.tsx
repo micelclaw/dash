@@ -19,6 +19,8 @@ import { ArrowLeft, Wrench, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
+import { useOfficeStore } from '@/stores/office.store';
+import { useServiceUrlsStore } from '@/stores/service-urls.store';
 
 interface StirlingStatus {
   installed: boolean;
@@ -36,6 +38,16 @@ export function Component() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<StirlingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Al salir del frame, resetear la app activa → OfficeLauncher no re-redirige aquí.
+  const setActiveApp = useOfficeStore((s) => s.setActiveApp);
+  useEffect(() => () => { setActiveApp('documents'); }, [setActiveApp]);
+
+  // Dominio del sistema para abrir-en-pestaña-nueva la ruta del dash (no la URL del proxy).
+  const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
+  const loadServiceUrls = useServiceUrlsStore((s) => s.load);
+  useEffect(() => { void loadServiceUrls(); }, [loadServiceUrls]);
+  const dashOrigin = primaryDomain ? `https://${primaryDomain}` : window.location.origin;
 
   const checkAndStart = useCallback(async () => {
     try {
@@ -100,6 +112,7 @@ export function Component() {
           <div style={{ flex: 1 }} />
           <EmbedActions
             slug="stirling-pdf" fallbackUrl={status.url} ramMb={status.ram_mb}
+            openUrl={`${dashOrigin}/office/pdf/tools`}
             fullscreen={fullscreen} onToggleFullscreen={toggle}
           />
         </div>
