@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -195,6 +195,15 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: '#dc2626',
     label: 'PDF',
     route: (id) => `/office/pdf/${encodeURIComponent(id)}`,
+  },
+  // databases: el contenido vive en Mathesar (no en el índice de Core) → no hay
+  // refs por-registro; la chip navega al módulo (tab Databases de Office),
+  // ignorando el id. Color de marca igual que la tab (purple #a855f7).
+  databases: {
+    Icon: Database,
+    color: '#a855f7',
+    label: 'Base de datos',
+    route: () => `/office/databases`,
   },
 };
 

@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
   Image, Columns, Bookmark, DollarSign,
-  Rss, GitBranch, FileText, Workflow, Cpu, Boxes, Music, Clapperboard, Library,
+  Rss, GitBranch, FileText, Workflow, Cpu, Boxes, Music, Clapperboard, Library, Database,
 } from 'lucide-react';
 
 export interface DataDomain {
@@ -57,6 +57,9 @@ export const CAPABILITY_DOMAINS: DataDomain[] = [
   { id: 'feeds',    label: 'Feeds',    icon: Rss,       hasTagSupport: false },
   { id: 'diagrams', label: 'Diagrams', icon: GitBranch, hasTagSupport: false },
   { id: 'office',   label: 'Office',   icon: FileText,  hasTagSupport: false },
+  // Databases (2026-06-18): gestor tipo Access (Mathesar) vía tools databases_*,
+  // tab del módulo Office — sin tags ni Digest. Mapea a scope `databases:*`.
+  { id: 'databases', label: 'Databases', icon: Database, hasTagSupport: false },
   { id: 'flows',    label: 'Flows',    icon: Workflow,  hasTagSupport: false },
   { id: 'hal',      label: 'Hardware', icon: Cpu,       hasTagSupport: false },
   // Música (2026-06-12): biblioteca Navidrome vía tools music_* — sin tags ni Digest.
