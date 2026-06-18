@@ -12,7 +12,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
-import { Container, AlertTriangle, Loader2, ExternalLink } from 'lucide-react';
+import { Container, AlertTriangle, Loader2 } from 'lucide-react';
+import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 
 interface PortainerStatus {
   installed: boolean;
@@ -34,6 +36,7 @@ function formatUptime(seconds: number | null): string {
 }
 
 export function Component() {
+  const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<PortainerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +92,7 @@ export function Component() {
 
   if (phase === 'ready' && status?.url) {
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
         {/* ─── Header bar ─────────────────────────────────── */}
         <div style={{
           height: 36,
@@ -107,21 +110,13 @@ export function Component() {
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Portainer</span>
           <span style={{ color: 'var(--text-muted)' }}>Docker Management</span>
           <div style={{ flex: 1 }} />
-          {status.ram_mb != null && (
-            <span style={{ color: 'var(--text-muted)' }}>RAM: {status.ram_mb} MB</span>
-          )}
           {status.uptime_seconds != null && (
             <span style={{ color: 'var(--text-muted)' }}>Up: {formatUptime(status.uptime_seconds)}</span>
           )}
-          <a
-            href="http://localhost:9000"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
+          <EmbedActions
+            slug="portainer" fallbackUrl={status.url} ramMb={status.ram_mb}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}
+          />
         </div>
         {/* ─── Iframe ─────────────────────────────────────── */}
         <iframe
@@ -145,6 +140,7 @@ export function Component() {
       gap: 16,
       color: 'var(--text-dim)',
       background: 'var(--bg)',
+      ...rootStyle,
     }}>
       {phase === 'loading' && (
         <>

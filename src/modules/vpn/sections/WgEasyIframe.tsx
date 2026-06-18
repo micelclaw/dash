@@ -11,8 +11,10 @@
  */
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Cable, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Cable, Loader2, AlertTriangle } from 'lucide-react';
 import type { WgEasyStatus } from '../hooks/use-wg-easy';
+import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 
 interface WgEasyIframeProps {
   status: WgEasyStatus | null;
@@ -22,6 +24,7 @@ interface WgEasyIframeProps {
 }
 
 export function WgEasyIframe({ status, loading, starting, onStart }: WgEasyIframeProps) {
+  const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   // Auto-start once when not installed (via useEffect, not during render)
   const autoStarted = useRef(false);
   useEffect(() => {
@@ -94,7 +97,7 @@ export function WgEasyIframe({ status, loading, starting, onStart }: WgEasyIfram
   // Ready — show iframe
   if (iframeSrc) {
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
         {/* Header bar */}
         <div style={{
           height: 36,
@@ -112,18 +115,10 @@ export function WgEasyIframe({ status, loading, starting, onStart }: WgEasyIfram
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>WireGuard</span>
           <span style={{ color: 'var(--text-muted)' }}>VPN Management</span>
           <div style={{ flex: 1 }} />
-          {status.ram_mb != null && (
-            <span style={{ color: 'var(--text-muted)' }}>RAM: {status.ram_mb} MB</span>
-          )}
-          <a
-            href={status.url ?? '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
+          <EmbedActions
+            slug="wg-easy" fallbackUrl={status.url ?? ''} ramMb={status.ram_mb}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}
+          />
         </div>
         {/* Iframe */}
         <iframe

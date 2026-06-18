@@ -15,10 +15,12 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router';
-import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle, Minimize2, Download } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
+import { useServicesStore } from '@/stores/services.store';
 import { api } from '@/services/api';
 import { resolveServiceUrl } from '@/config/service-urls';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
 
@@ -53,6 +55,16 @@ export function Component() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [pendingSession, setPendingSession] = useState<{ config: any; token: string } | null>(null);
   const { createSession, clearSession, fullscreen, toggleFullscreen, setFullscreen } = useOfficeStore();
+  // RAM del document server (onlyoffice) desde el lifecycle store, igual que el resto de embebidos.
+  const fetchServices = useServicesStore((s) => s.fetchServices);
+  const ramMb = useServicesStore(
+    (s) => s.services.find((svc) => svc.name === 'onlyoffice')?.ram_mb ?? null,
+  );
+  useEffect(() => {
+    void fetchServices();
+    const id = setInterval(() => void fetchServices(), 10_000);
+    return () => clearInterval(id);
+  }, [fetchServices]);
 
   // Modo de apertura: embebido en el módulo (desde OfficeLauncher) por defecto;
   // pantalla completa si se llega con ?fullscreen=1 (atajos docs/sheets/presentations).
@@ -446,9 +458,10 @@ export function Component() {
         </button>
         <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
         <div style={{ flex: 1 }} />
-        <button onClick={toggleFullscreen} style={iconBtn} title="Pantalla completa (Ctrl+Shift+F)">
-          <Maximize2 size={14} />
-        </button>
+        <EmbedActions
+          slug="office" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
+          fullscreen={fullscreen} onToggleFullscreen={toggleFullscreen}
+        />
       </div>
 
       {/* ─── Editor container (hijo estable, nunca se reordena) ──────── */}

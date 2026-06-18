@@ -12,8 +12,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/services/api';
-import { resolveServiceUrl } from '@/config/service-urls';
-import { AlertTriangle, Loader2, ExternalLink, Download } from 'lucide-react';
+import { AlertTriangle, Loader2, Download } from 'lucide-react';
+import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 
 interface MultimediaAppStatus {
   name: string;
@@ -56,6 +57,7 @@ interface MultimediaEmbedProps {
 }
 
 export function MultimediaEmbed({ serviceName, displayName, description, icon: Icon, color }: MultimediaEmbedProps) {
+  const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [appStatus, setAppStatus] = useState<MultimediaAppStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -215,7 +217,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
       ? `${window.location.protocol}//${hostname}:${iframePort}/`
       : `${window.location.origin}/api/v1/multimedia/proxy/${serviceName}/`;
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
         {/* Header bar */}
         <div style={{
           height: 36,
@@ -233,18 +235,10 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>{displayName}</span>
           <span style={{ color: 'var(--text-muted)' }}>{description}</span>
           <div style={{ flex: 1 }} />
-          {appStatus.ram_mb != null && (
-            <span style={{ color: 'var(--text-muted)' }}>RAM: {appStatus.ram_mb} MB</span>
-          )}
-          <a
-            href={resolveServiceUrl(serviceName, proxyUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
+          <EmbedActions
+            slug={serviceName} fallbackUrl={proxyUrl} ramMb={appStatus.ram_mb}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}
+          />
         </div>
 
         {/* Iframe — apps are configured to allow embedding */}
@@ -270,6 +264,7 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
       gap: 16,
       color: 'var(--text-dim)',
       background: 'var(--bg)',
+      ...rootStyle,
     }}>
       {phase === 'loading' && (
         <>

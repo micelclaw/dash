@@ -15,9 +15,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Wrench, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Wrench, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
-import { useServiceUrl } from '@/config/service-urls';
+import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 
 interface StirlingStatus {
   installed: boolean;
@@ -31,6 +32,7 @@ type Phase = 'loading' | 'starting' | 'ready' | 'error';
 
 export function Component() {
   const navigate = useNavigate();
+  const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<StirlingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,13 +82,9 @@ export function Component() {
 
   useEffect(() => { checkAndStart(); }, [checkAndStart]);
 
-  // "Abrir en nueva pestaña" usa el dominio del sistema (pdf.tudominio.claw)
-  // si hay uno configurado; si no, el localhost:puerto de toda la vida.
-  const openUrl = useServiceUrl('stirling-pdf', status?.url ?? '');
-
   if (phase === 'ready' && status?.url) {
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
         <div style={{
           height: 36, display: 'flex', alignItems: 'center',
           padding: '0 12px', borderBottom: '1px solid var(--border)',
@@ -100,18 +98,10 @@ export function Component() {
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Stirling PDF</span>
           <span style={{ color: 'var(--text-muted)' }}>PDF Tools</span>
           <div style={{ flex: 1 }} />
-          {status.ram_mb != null && (
-            <span style={{ color: 'var(--text-muted)' }}>RAM: {status.ram_mb} MB</span>
-          )}
-          <a
-            href={openUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...iconBtn, textDecoration: 'none' }}
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
+          <EmbedActions
+            slug="stirling-pdf" fallbackUrl={status.url} ramMb={status.ram_mb}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}
+          />
         </div>
         <iframe
           src={status.url}
@@ -127,7 +117,7 @@ export function Component() {
     <div style={{
       position: 'absolute', inset: 0, display: 'flex',
       flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      gap: 16, color: 'var(--text-dim)', background: 'var(--bg)',
+      gap: 16, color: 'var(--text-dim)', background: 'var(--bg)', ...rootStyle,
     }}>
       {phase === 'loading' && (
         <>

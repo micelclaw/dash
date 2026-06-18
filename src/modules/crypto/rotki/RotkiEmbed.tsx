@@ -12,7 +12,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/services/api';
-import { Loader2, AlertTriangle, ExternalLink, Cpu } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
+import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
+import { EmbedActions } from '@/components/shared/EmbedActions';
 
 interface ServiceStatus {
   installed: boolean;
@@ -33,6 +35,7 @@ function formatUptime(s: number | null): string {
 }
 
 export function Component() {
+  const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<ServiceStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +89,7 @@ export function Component() {
 
   if (phase === 'ready') {
     return (
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
         <div style={{
           height: 36, display: 'flex', alignItems: 'center', padding: '0 12px',
           borderBottom: '1px solid var(--border)', background: 'var(--surface)',
@@ -95,18 +98,13 @@ export function Component() {
           <span style={{ fontWeight: 500, color: 'var(--text)' }}>Rotki</span>
           <span style={{ color: 'var(--text-muted)' }}>Portfolio Tracker</span>
           <div style={{ flex: 1 }} />
-          {status?.ram_mb != null && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--text-muted)' }}>
-              <Cpu size={11} /> {status.ram_mb} MB
-            </span>
-          )}
           {status?.uptime_seconds != null && (
             <span style={{ color: 'var(--text-muted)' }}>Up: {formatUptime(status.uptime_seconds)}</span>
           )}
-          <a href="http://localhost:5000" target="_blank" rel="noopener noreferrer"
-            style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }} title="Open in new tab">
-            <ExternalLink size={13} />
-          </a>
+          <EmbedActions
+            slug="rotki" fallbackUrl="http://localhost:5000" ramMb={status?.ram_mb}
+            fullscreen={fullscreen} onToggleFullscreen={toggle}
+          />
         </div>
         <iframe src="http://localhost:5000" title="Rotki" style={{ flex: 1, border: 'none', background: '#fff' }} />
       </div>
@@ -117,7 +115,7 @@ export function Component() {
     <div style={{
       position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center', gap: 16,
-      color: 'var(--text-dim)', background: 'var(--bg)',
+      color: 'var(--text-dim)', background: 'var(--bg)', ...rootStyle,
     }}>
       {phase === 'loading' && (<><Loader2 size={32} className="spin" /><span>Checking Rotki...</span></>)}
       {phase === 'installing' && (<><Loader2 size={32} className="spin" style={{ color: 'var(--amber)' }} /><span>Starting Rotki...</span><span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Portfolio tracker</span></>)}
