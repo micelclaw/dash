@@ -20,6 +20,7 @@ import { useOfficeStore } from '@/stores/office.store';
 import { useServicesStore } from '@/stores/services.store';
 import { api } from '@/services/api';
 import { resolveServiceUrl } from '@/config/service-urls';
+import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
@@ -138,6 +139,18 @@ export function Component() {
   const loadApiScript = useCallback(async (log: (msg: string) => void): Promise<boolean> => {
     if ((window as any).DocsAPI) return true;
 
+    // Resuelve la base del document server en runtime. En una página https
+    // (p.ej. victor.claw) carga api.js desde el dominio del sistema
+    // (https://office.<dom>) para evitar contenido mixto; en http (dev) usa el
+    // fallback local para que un certificado .claw aún no confiable no bloquee el
+    // editor. El catálogo se indexa por slug de servicio: 'onlyoffice' → office.<dom>
+    // (la clave 'office' NO existe → antes caía SIEMPRE al http, rompiendo .claw).
+    const isHttps = window.location.protocol === 'https:';
+    if (isHttps) await useServiceUrlsStore.getState().load(true);
+    const onlyofficeBase = (
+      isHttps ? resolveServiceUrl('onlyoffice', ONLYOFFICE_FALLBACK_URL) : ONLYOFFICE_FALLBACK_URL
+    ).replace(/\/$/, '');
+
     const maxAttempts = 40; // Up to ~120s of retries (3s between each)
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0 && attempt % 5 === 0) {
@@ -148,10 +161,6 @@ export function Component() {
       const existing = document.querySelector('script[data-onlyoffice-api]');
       if (existing) existing.remove();
 
-      // Resuelve la base del document server en runtime: si hay dominio del sistema
-      // y office expuesto → https://office.<dom> (mismo esquema que la página, sin
-      // mixed-content); si no, el fallback local (dev http).
-      const onlyofficeBase = resolveServiceUrl('office', ONLYOFFICE_FALLBACK_URL).replace(/\/$/, '');
       const loaded = await new Promise<boolean>((resolve) => {
         const script = document.createElement('script');
         script.src = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
@@ -459,7 +468,7 @@ export function Component() {
         <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
         <div style={{ flex: 1 }} />
         <EmbedActions
-          slug="office" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
+          slug="onlyoffice" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
           fullscreen={fullscreen} onToggleFullscreen={toggleFullscreen}
         />
       </div>
