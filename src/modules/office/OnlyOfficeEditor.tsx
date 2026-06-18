@@ -18,10 +18,14 @@ import { useParams, useNavigate } from 'react-router';
 import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
 import { api } from '@/services/api';
+import { resolveServiceUrl } from '@/config/service-urls';
 import { useOfficeBridge } from './hooks/use-office-bridge';
 import { useOfficeWs } from './hooks/use-office-ws';
 
-const ONLYOFFICE_API_URL = import.meta.env.VITE_ONLYOFFICE_URL ?? 'http://127.0.0.1:8080';
+// Fallback local (dev por http). En producción/.claw se resuelve en runtime a la
+// URL https del document server (office.<dominio>) para evitar contenido mixto
+// cuando el dash se sirve por https (victor.claw) — ver script.src abajo.
+const ONLYOFFICE_FALLBACK_URL = import.meta.env.VITE_ONLYOFFICE_URL ?? 'http://127.0.0.1:8080';
 const HEALTH_POLL_MS = 3_000;
 const HEALTH_MAX_WAIT_MS = 300_000; // 5 min — ONLYOFFICE image pull + cold start can be slow
 
@@ -123,9 +127,13 @@ export function Component() {
       const existing = document.querySelector('script[data-onlyoffice-api]');
       if (existing) existing.remove();
 
+      // Resuelve la base del document server en runtime: si hay dominio del sistema
+      // y office expuesto → https://office.<dom> (mismo esquema que la página, sin
+      // mixed-content); si no, el fallback local (dev http).
+      const onlyofficeBase = resolveServiceUrl('office', ONLYOFFICE_FALLBACK_URL).replace(/\/$/, '');
       const loaded = await new Promise<boolean>((resolve) => {
         const script = document.createElement('script');
-        script.src = `${ONLYOFFICE_API_URL}/web-apps/apps/api/documents/api.js`;
+        script.src = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
         script.setAttribute('data-onlyoffice-api', 'true');
         script.onload = () => resolve(true);
         script.onerror = () => resolve(false);

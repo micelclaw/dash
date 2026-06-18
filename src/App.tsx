@@ -80,6 +80,8 @@ const router = createBrowserRouter([
           { path: '/tools/whiteboard', element: <Navigate to="/sketches/whiteboard" replace /> },
           { path: '/tools/whiteboard/:fileId', element: <WhiteboardRedirect /> },
           { path: '/office', lazy: () => import('@/modules/office/OfficeLauncher') },
+          // Atajos docs/sheets/presentations.<dom> → crea un blanco y abre el editor.
+          { path: '/office/new', lazy: () => import('@/modules/office/NewDocumentHandler') },
           { path: '/office/edit/:fileId', lazy: () => import('@/modules/office/OnlyOfficeEditor') },
           { path: '/office/pdf/:fileId', lazy: () => import('@/modules/office/PdfViewer') },
           { path: '/office/pdf/tools', lazy: () => import('@/modules/office/PdfToolsFrame') },
