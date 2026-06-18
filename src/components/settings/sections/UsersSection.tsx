@@ -183,7 +183,7 @@ const SHARED_MEDIA_SERVICES: { id: string; title: string; desc: string }[] = [
 ];
 // Grupo B: servicio DEDICADO (contenedor propio + carpeta privada).
 const DEDICATED_MEDIA_SERVICES: { id: string; title: string; desc: string }[] = [
-  { id: 'navidrome', title: 'Música — Navidrome propio', desc: 'Biblioteca privada en files/<usuario>/media/music · instala un contenedor (consume RAM)' },
+  { id: 'navidrome', title: 'Música — Navidrome propio', desc: 'Biblioteca privada en files/<usuario>/Music · instala un contenedor (consume RAM)' },
 ];
 
 function CreateUserModal({ onClose, onCreate }: {
