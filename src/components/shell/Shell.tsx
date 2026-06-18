@@ -50,6 +50,8 @@ import { usePlayerStore } from '@/stores/player.store';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { useExtractionStore } from '@/stores/extraction.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
+import { useAppAccessStore } from '@/stores/app-access.store';
+import { AppAccessGate } from '@/components/shell/AppAccessGate';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
 import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
@@ -84,10 +86,14 @@ export function Shell() {
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const loadConfigSchema = useOpenclawSchemaStore((s) => s.loadConfigSchema);
+  const refreshAppAccess = useAppAccessStore((s) => s.refresh);
 
   useEffect(() => {
     fetchSnapshot();
     fetchSettings();
+    // Rediseño NAS, Fase 1: cargar qué apps/módulos ve este usuario (gating del
+    // Sidebar + router). Failures silenciosos → fail-open (ver app-access.store).
+    void refreshAppAccess();
     // Resolver de URLs de servicios por dominio (stirling.victor.claw en vez de
     // localhost:8081). Carga el catálogo una vez; failures silenciosos → respaldo.
     void useServiceUrlsStore.getState().load();
@@ -100,7 +106,7 @@ export function Shell() {
     // silently swallows errors (last-known value retained).
     const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
     return () => clearInterval(healthPoll);
-  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth]);
+  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess]);
 
   // G5: auto-resubscribe push idempotently. If permission is granted and
   // the browser still holds a sub but the backend has lost it (DB wipe,
@@ -465,6 +471,15 @@ export function Shell() {
   useEffect(() => {
     if (!approvalEvent) return;
 
+    // Conversación de ORIGEN de la aprobación (la rellena Core desde el sessionKey
+    // de la tool-call). Enrutamos cada tarjeta/mensaje a SU chat — NO al activo —
+    // para que las aprobaciones de chats distintos no se agrupen todas en uno.
+    // Si no viene (aprobación de canal/cron/HTTP directo, sin chat de origen) NO
+    // se inyecta en el chat: basta la notificación + la página /approvals.
+    // (Nota rollout: hasta recargar el Gateway con el hook nuevo, el evento llega
+    // sin conversation_id → la tarjeta vive solo en la notificación/approvals.)
+    const originConvId = (approvalEvent.data.conversation_id as string | undefined) ?? null;
+
     if (approvalEvent.event === 'approval.new') {
       addNotification({
         type: 'approval',
@@ -472,13 +487,12 @@ export function Shell() {
         action: { label: 'Review', route: '/approvals' },
       });
 
-      // Inject approval card into active chat conversation
-      const chatState = useChatStore.getState();
-      const activeConvId = chatState.activeConversationId;
-      if (activeConvId) {
-        chatState.addMessage({
+      // Inject approval card into its ORIGIN conversation (addMessage routes by
+      // conversation_id and bumps that conv's unread counter).
+      if (originConvId) {
+        useChatStore.getState().addMessage({
           id: `approval-${approvalEvent.data.id as string}`,
-          conversation_id: activeConvId,
+          conversation_id: originConvId,
           role: 'assistant',
           content: '',
           timestamp: new Date().toISOString(),
@@ -493,32 +507,28 @@ export function Shell() {
         });
       }
     } else if (approvalEvent.event === 'approval.resolved') {
-      // Update inline approval card status
+      // Update inline approval card status (busca la tarjeta en cualquier conv).
       useChatStore.getState().updateApprovalStatus(
         approvalEvent.data.id as string,
         approvalEvent.data.status as 'approved' | 'rejected' | 'expired',
       );
     } else if (approvalEvent.event === 'approval.executed') {
-      // Auto-execute result: inject as a system message in the active chat
-      const chatState = useChatStore.getState();
-      const activeConvId = chatState.activeConversationId;
-      if (activeConvId) {
-        chatState.addMessage({
+      // Auto-execute result: inject as a message in its origin conversation.
+      if (originConvId) {
+        useChatStore.getState().addMessage({
           id: `approval-exec-${approvalEvent.data.id as string}`,
-          conversation_id: activeConvId,
+          conversation_id: originConvId,
           role: 'assistant',
           content: approvalEvent.data.message as string,
           timestamp: new Date().toISOString(),
         });
       }
     } else if (approvalEvent.event === 'approval.agent_response') {
-      // Agent's follow-up response after approval notification
-      const chatState = useChatStore.getState();
-      const activeConvId = chatState.activeConversationId;
-      if (activeConvId && approvalEvent.data.text) {
-        chatState.addMessage({
+      // Agent's follow-up response after approval notification.
+      if (originConvId && approvalEvent.data.text) {
+        useChatStore.getState().addMessage({
           id: `approval-agent-${Date.now()}`,
-          conversation_id: activeConvId,
+          conversation_id: originConvId,
           role: 'assistant',
           content: approvalEvent.data.text as string,
           timestamp: new Date().toISOString(),
@@ -814,7 +824,7 @@ export function Shell() {
           {/* Content + BottomBar */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ flex: 1, overflow: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-              <Outlet />
+              <AppAccessGate><Outlet /></AppAccessGate>
             </div>
             {!isChatPage && <BottomBar />}
           </div>

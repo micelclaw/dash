@@ -20,6 +20,8 @@ import {
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useAppAccessStore } from '@/stores/app-access.store';
+import { DEFAULT_APP_KEYS } from '@/config/app-catalog';
 import { MODULES } from '@/config/modules';
 import { SidebarItem } from './SidebarItem';
 import { SidebarGroup } from './SidebarGroup';
@@ -151,11 +153,18 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
   const setSectionOrder = useSidebarStore((s) => s.setSectionOrder);
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const appAllowed = useAppAccessStore((s) => s.allowed);
+  const appLoaded = useAppAccessStore((s) => s.loaded);
 
   const { ungrouped, groups } = useMemo(() => {
-    // Fase 0 del rediseño NAS: los módulos adminOnly (infra del sistema) solo se
-    // ven para owner/admin. La Fase 1 añade el gating per-usuario por app-access.
-    const visible = MODULES.filter((m) => isAdmin || !m.adminOnly);
+    // Gating de módulos (rediseño NAS): adminOnly → solo owner/admin (Fase 0);
+    // default → siempre; opt_in → solo si concedida (Fase 1, /me/app-access).
+    // Antes de cargar el app-access: fail-open en opt_in (evita parpadeo/bloqueo).
+    const visible = MODULES.filter((m) => {
+      if (m.adminOnly) return isAdmin;
+      if (DEFAULT_APP_KEYS.includes(m.id)) return true;
+      return !appLoaded || appAllowed.has(m.id);
+    });
     const byId = new Map(visible.map((m) => [m.id, m]));
     const orderSection = (mods: typeof MODULES, section: string) =>
       applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!).filter(Boolean);
@@ -168,7 +177,7 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
       modules: orderSection(grouped.filter((m) => m.group === name), name),
     }));
     return { ungrouped, groups };
-  }, [moduleOrder, isAdmin]);
+  }, [moduleOrder, isAdmin, appLoaded, appAllowed]);
 
   // ─── Drag & drop: reordenar módulos dentro de su sección ────────
   const [activeDragId, setActiveDragId] = useState<string | null>(null);

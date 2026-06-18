@@ -17,6 +17,8 @@ import { useUsersStore } from '@/stores/users.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { SettingSection } from '../SettingSection';
 import type { AdminUser, UserRole } from '@/types/users';
+import { getUserAppAccess, patchUserAppAccess } from '@/services/app-access.service';
+import { OPT_IN_APPS } from '@/config/app-catalog';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -246,6 +248,33 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
   const [saving, setSaving] = useState(false);
+  // Pestaña Aplicaciones (rediseño NAS, Fase 1).
+  const [tab, setTab] = useState<'info' | 'apps'>('info');
+  const [appsLoaded, setAppsLoaded] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (tab !== 'apps' || appsLoaded) return;
+    getUserAppAccess(user.id).then((res) => {
+      setIsAdminUser(res.is_admin);
+      const m: Record<string, boolean> = {};
+      for (const a of res.apps) m[a.key] = a.allowed;
+      setAppAllow(m);
+      setAppsLoaded(true);
+    }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudieron cargar los permisos de apps'));
+  }, [tab, appsLoaded, user.id]);
+
+  const handleSaveApps = async () => {
+    setSaving(true);
+    try {
+      await patchUserAppAccess(user.id, appAllow);
+      toast.success('Permisos de aplicaciones actualizados');
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudieron guardar los permisos');
+    } finally { setSaving(false); }
+  };
 
   const handleSubmit = async () => {
     if (!displayName || !email) { toast.error('Name and email are required'); return; }
@@ -267,36 +296,100 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   return (
     <ModalOverlay onClose={onClose}>
       <ModalTitle onClose={onClose}>Edit User</ModalTitle>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <label style={labelStyle}>Display Name</label>
-          <input style={inputStyle} value={displayName} onChange={e => setDisplayName(e.target.value)} />
-        </div>
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input style={inputStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} />
-        </div>
-        <div>
-          <label style={labelStyle}>Role</label>
-          <select
-            style={{ ...selectStyle, opacity: isSelf ? 0.5 : 1 }}
-            value={role}
-            onChange={e => setRole(e.target.value as UserRole)}
-            disabled={isSelf}
-          >
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-            <option value="owner">Owner</option>
-          </select>
-          {isSelf && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, display: 'block' }}>You cannot change your own role</span>}
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
-          <button style={btnSecondary} onClick={onClose}>Cancel</button>
-          <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
+      {/* Pestañas estilo Synology (más se añaden en fases siguientes). */}
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
+        {([['info', 'Información'], ['apps', 'Aplicaciones']] as const).map(([t, lbl]) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            style={{
+              padding: '6px 12px', fontSize: '0.8125rem', background: 'none', cursor: 'pointer',
+              border: 'none', borderBottom: `2px solid ${tab === t ? 'var(--amber)' : 'transparent'}`,
+              color: tab === t ? 'var(--text)' : 'var(--text-dim)', fontWeight: tab === t ? 600 : 400,
+            }}
+          >{lbl}</button>
+        ))}
       </div>
+
+      {tab === 'info' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label style={labelStyle}>Display Name</label>
+            <input style={inputStyle} value={displayName} onChange={e => setDisplayName(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Email</label>
+            <input style={inputStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <div>
+            <label style={labelStyle}>Role</label>
+            <select
+              style={{ ...selectStyle, opacity: isSelf ? 0.5 : 1 }}
+              value={role}
+              onChange={e => setRole(e.target.value as UserRole)}
+              disabled={isSelf}
+            >
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+              <option value="owner">Owner</option>
+            </select>
+            {isSelf && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2, display: 'block' }}>You cannot change your own role</span>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSubmit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'apps' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            Módulos opcionales que verá el usuario. Conceder una app de media (Video/Música/Libros) le crea su cuenta en el servidor compartido.
+          </div>
+          {!appsLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
+          {appsLoaded && isAdminUser && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--amber)' }}>
+              Este usuario es administrador: ve todas las aplicaciones (no editable).
+            </div>
+          )}
+          {appsLoaded && !isAdminUser && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflow: 'auto' }}>
+              {OPT_IN_APPS.map((app) => (
+                <label
+                  key={app.key}
+                  style={{
+                    display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px',
+                    border: `1px solid ${appAllow[app.key] ? 'var(--amber)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!appAllow[app.key]}
+                    onChange={() => setAppAllow((p) => ({ ...p, [app.key]: !p[app.key] }))}
+                    style={{ accentColor: 'var(--amber)' }}
+                  />
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{app.label}</span>
+                  {app.group && <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginLeft: 'auto' }}>{app.group}</span>}
+                </label>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button
+              style={{ ...btnPrimary, opacity: (saving || isAdminUser) ? 0.6 : 1 }}
+              onClick={handleSaveApps}
+              disabled={saving || !appsLoaded || isAdminUser}
+            >
+              {saving ? 'Saving...' : 'Save Apps'}
+            </button>
+          </div>
+        </div>
+      )}
     </ModalOverlay>
   );
 }
