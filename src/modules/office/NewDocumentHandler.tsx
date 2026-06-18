@@ -52,7 +52,8 @@ export function Component() {
       return;
     }
     useOfficeStore.getState().createNewDocument(type, uniqueName(type))
-      .then((session) => navigate(`/office/edit/${session.fileId}`, { replace: true }))
+      // ?fullscreen=1 → los atajos docs/sheets/presentations abren a pantalla completa.
+      .then((session) => navigate(`/office/edit/${session.fileId}?fullscreen=1`, { replace: true }))
       .catch((e: any) => {
         setError(e?.message ?? 'No se pudo crear el documento.');
         toast.error('No se pudo crear el documento');

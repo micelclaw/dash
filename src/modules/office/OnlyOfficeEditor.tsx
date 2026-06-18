@@ -14,7 +14,7 @@
 // Embeds ONLYOFFICE Document Server via its JS API in an iframe.
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { ArrowLeft, Loader2, AlertTriangle, Maximize2, Minimize2, Download } from 'lucide-react';
 import { useOfficeStore } from '@/stores/office.store';
 import { api } from '@/services/api';
@@ -44,6 +44,7 @@ function ts(): string {
 export function Component() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<unknown>(null);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -51,7 +52,15 @@ export function Component() {
   const [startupLogs, setStartupLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [pendingSession, setPendingSession] = useState<{ config: any; token: string } | null>(null);
-  const { createSession, clearSession, fullscreen, toggleFullscreen } = useOfficeStore();
+  const { createSession, clearSession, fullscreen, toggleFullscreen, setFullscreen } = useOfficeStore();
+
+  // Modo de apertura: embebido en el módulo (desde OfficeLauncher) por defecto;
+  // pantalla completa si se llega con ?fullscreen=1 (atajos docs/sheets/presentations).
+  useEffect(() => {
+    setFullscreen(searchParams.get('fullscreen') === '1');
+    // solo al montar / cambiar de documento
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId]);
   // Track whether we've been through a startup phase (to keep logs visible during brief loading transitions)
   const wasWaitingRef = useRef(false);
   // Track if first poll (to use broader log window)
@@ -286,7 +295,8 @@ export function Component() {
   if (phase !== 'ready') {
     return (
       <div style={{
-        position: 'fixed', inset: 0, zIndex: 50, display: 'flex',
+        position: fullscreen ? 'fixed' : 'absolute', inset: 0, ...(fullscreen ? { zIndex: 50 } : {}),
+        display: 'flex',
         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 16, color: 'var(--text-dim)', background: 'var(--bg)',
       }}>
@@ -419,8 +429,8 @@ export function Component() {
   // "insertBefore: node is not a child". position:fixed cubre todo el dash.
   return (
     <div style={{
-      position: 'fixed', inset: 0, zIndex: 50, background: 'var(--bg)',
-      display: 'flex', flexDirection: 'column',
+      position: fullscreen ? 'fixed' : 'absolute', inset: 0, ...(fullscreen ? { zIndex: 50 } : {}),
+      background: 'var(--bg)', display: 'flex', flexDirection: 'column',
     }}>
       {/* ─── Toolbar (siempre presente; altura 0 en pantalla completa) ── */}
       <div style={{

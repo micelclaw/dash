@@ -63,6 +63,7 @@ interface OfficeState {
 
   setActiveApp: (app: OfficeApp) => void;
   toggleFullscreen: () => void;
+  setFullscreen: (v: boolean) => void;
   fetchStatus: () => Promise<void>;
   fetchRecentDocs: (mimeFilter?: string) => Promise<void>;
   createSession: (fileId: string) => Promise<EditorSession>;
@@ -82,6 +83,7 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   setActiveApp: (app) => set({ activeApp: app }),
 
   toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
+  setFullscreen: (v) => set({ fullscreen: v }),
 
   fetchStatus: async () => {
     try {
