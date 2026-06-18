@@ -21,6 +21,7 @@ import { getUserAppAccess, patchUserAppAccess } from '@/services/app-access.serv
 import { OPT_IN_APPS } from '@/config/app-catalog';
 import { getUserFolderAccess, patchUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
 import { getUserGroups, patchUserGroups, type UserGroup } from '@/services/groups.service';
+import { getUserQuota, patchUserQuota } from '@/services/quotas.service';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -251,7 +252,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [role, setRole] = useState(user.role);
   const [saving, setSaving] = useState(false);
   // Pestañas (rediseño NAS): Información + Aplicaciones (F1) + Permisos/carpetas (F2).
-  const [tab, setTab] = useState<'info' | 'grupos' | 'apps' | 'permisos'>('info');
+  const [tab, setTab] = useState<'info' | 'grupos' | 'apps' | 'permisos' | 'cuota'>('info');
   const [appsLoaded, setAppsLoaded] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
@@ -263,6 +264,10 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
   const [groupMember, setGroupMember] = useState<Record<string, boolean>>({});
+  // Pestaña Cuota (F5).
+  const [quotaLoaded, setQuotaLoaded] = useState(false);
+  const [quotaGb, setQuotaGb] = useState('0');
+  const [quotaUsed, setQuotaUsed] = useState(0);
 
   useEffect(() => {
     if (tab !== 'apps' || appsLoaded) return;
@@ -330,6 +335,28 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
     } finally { setSaving(false); }
   };
 
+  useEffect(() => {
+    if (tab !== 'cuota' || quotaLoaded) return;
+    getUserQuota(user.id).then((q) => {
+      setQuotaGb(((q.quota_bytes || 0) / 1e9).toString());
+      setQuotaUsed(q.used_bytes);
+      setQuotaLoaded(true);
+    }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudo cargar la cuota'));
+  }, [tab, quotaLoaded, user.id]);
+
+  const handleSaveQuota = async () => {
+    const gb = Number(quotaGb);
+    if (!Number.isFinite(gb) || gb < 0) { toast.error('Introduce un número de GB >= 0 (0 = ilimitado)'); return; }
+    setSaving(true);
+    try {
+      await patchUserQuota(user.id, Math.round(gb * 1e9));
+      toast.success('Cuota actualizada');
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudo guardar la cuota');
+    } finally { setSaving(false); }
+  };
+
   const handleSubmit = async () => {
     if (!displayName || !email) { toast.error('Name and email are required'); return; }
     if (!EMAIL_REGEX.test(email)) { toast.error('Enter a valid email address'); return; }
@@ -352,7 +379,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       <ModalTitle onClose={onClose}>Edit User</ModalTitle>
       {/* Pestañas estilo Synology (más se añaden en fases siguientes). */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-        {([['info', 'Información'], ['grupos', 'Grupos'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos']] as const).map(([t, lbl]) => (
+        {([['info', 'Información'], ['grupos', 'Grupos'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos'], ['cuota', 'Cuota']] as const).map(([t, lbl]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -508,6 +535,32 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
               disabled={saving || !foldersLoaded || folders.length === 0}
             >
               {saving ? 'Saving...' : 'Save Permissions'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'cuota' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            Límite de almacenamiento del usuario. 0 = ilimitado.
+          </div>
+          {!quotaLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
+          {quotaLoaded && (
+            <>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                Uso actual: <strong style={{ color: 'var(--text)' }}>{(quotaUsed / 1e9).toFixed(2)} GB</strong>
+              </div>
+              <div>
+                <label style={labelStyle}>Cuota (GB) — 0 = ilimitado</label>
+                <input style={inputStyle} type="number" min={0} step="0.5" value={quotaGb} onChange={(e) => setQuotaGb(e.target.value)} />
+              </div>
+            </>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }} onClick={handleSaveQuota} disabled={saving || !quotaLoaded}>
+              {saving ? 'Saving...' : 'Save Quota'}
             </button>
           </div>
         </div>
