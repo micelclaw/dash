@@ -126,6 +126,15 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ws': { target: 'ws://127.0.0.1:7200', ws: true },
+      // Mathesar (tab Databases) cablea rutas absolutas de raíz (/static, /api/rpc…); su
+      // SPA no soporta subpath. Core las proxya al contenedor; aquí las reenviamos a Core
+      // (las /api/* ya van por '/api' arriba). El dash no usa estas rutas en bare-root
+      // (su cliente api prefija /api/v1) → sin colisión. Equivalente en prod = Caddy.
+      ...Object.fromEntries(
+        ['/static', '/media', '/auth', '/files', '/bulk_insert', '/i18n'].map((p) => [
+          p, { target: 'http://127.0.0.1:7200', secure: false, changeOrigin: true },
+        ]),
+      ),
     },
   },
   resolve: {

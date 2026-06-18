@@ -15,7 +15,7 @@
 // El iframe carga el PROXY same-origin de Core (/api/v1/databases/ui/), que strippea
 // X-Frame-Options; NO la URL interna 127.0.0.1:8090 (la bloquearía el navegador).
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowLeft, Database, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/services/api';
@@ -39,6 +39,7 @@ type Phase = 'loading' | 'starting' | 'ready' | 'error';
 
 export function Component() {
   const navigate = useNavigate();
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<MathesarStatus | null>(null);
@@ -54,6 +55,20 @@ export function Component() {
   const loadServiceUrls = useServiceUrlsStore((s) => s.load);
   useEffect(() => { void loadServiceUrls(); }, [loadServiceUrls]);
   const dashOrigin = primaryDomain ? `https://${primaryDomain}` : window.location.origin;
+
+  // Mathesar es una SPA con la base de routing horneada a "/" (no soporta subpath). Servida
+  // bajo el subpath del iframe (/api/v1/databases/ui/) su router daría 404. Al cargar la
+  // reencaminamos a su home "/" vía History API (los assets/API absolutos los sirven los
+  // proxies de rutas-raíz de Core). El iframe es same-origin (proxy del dash) → accesible.
+  const handleIframeLoad = useCallback(() => {
+    try {
+      const w = iframeRef.current?.contentWindow;
+      if (w && w.location.pathname.startsWith('/api/v1/databases/ui')) {
+        w.history.replaceState({}, '', '/');
+        w.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    } catch { /* cross-origin (no debería: es proxy same-origin) */ }
+  }, []);
 
   const checkAndStart = useCallback(async () => {
     try {
@@ -123,7 +138,9 @@ export function Component() {
           />
         </div>
         <iframe
+          ref={iframeRef}
           src={MATHESAR_UI}
+          onLoad={handleIframeLoad}
           title="Mathesar Databases"
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"
