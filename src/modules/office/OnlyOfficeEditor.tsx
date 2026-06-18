@@ -286,7 +286,7 @@ export function Component() {
   if (phase !== 'ready') {
     return (
       <div style={{
-        position: 'absolute', inset: 0, display: 'flex',
+        position: 'fixed', inset: 0, zIndex: 50, display: 'flex',
         flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 16, color: 'var(--text-dim)', background: 'var(--bg)',
       }}>
@@ -411,53 +411,55 @@ export function Component() {
     );
   }
 
-  // ─── Ready: show editor ────────────────────────────────────────────
+  // ─── Ready: show editor (pantalla completa sobre el dash) ──────────
+  // ESTRUCTURA ESTABLE: la barra y el botón de salir van SIEMPRE en el árbol
+  // (solo cambian de tamaño/opacidad, nunca se añaden/quitan) y el contenedor del
+  // editor es siempre el mismo hijo. Si se añadieran/quitaran hermanos del editor,
+  // React intentaría reconciliar junto al DOM que ONLYOFFICE inyecta → crash
+  // "insertBefore: node is not a child". position:fixed cubre todo el dash.
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* ─── Toolbar ──────────────────────────────────── */}
-      {!fullscreen && (
-        <div style={{
-          height: 36, display: 'flex', alignItems: 'center',
-          padding: '0 12px', borderBottom: '1px solid var(--border)',
-          background: 'var(--surface)', gap: 8, fontSize: 12,
-          color: 'var(--text-dim)', flexShrink: 0,
-        }}>
-          <button
-            onClick={() => navigate('/office')}
-            style={iconBtn}
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
-          <div style={{ flex: 1 }} />
-          <button
-            onClick={toggleFullscreen}
-            style={iconBtn}
-            title="Toggle fullscreen (Ctrl+Shift+F)"
-          >
-            <Maximize2 size={14} />
-          </button>
-        </div>
-      )}
-
-      {/* ─── Fullscreen exit button ───────────────────── */}
-      {fullscreen && (
-        <button
-          onClick={toggleFullscreen}
-          style={{
-            position: 'absolute', top: 8, right: 8, zIndex: 100,
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)', padding: '4px 8px',
-            cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 11,
-          }}
-        >
-          <Minimize2 size={12} /> ESC
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50, background: 'var(--bg)',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* ─── Toolbar (siempre presente; altura 0 en pantalla completa) ── */}
+      <div style={{
+        height: fullscreen ? 0 : 36, overflow: 'hidden', flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
+        padding: fullscreen ? '0' : '0 12px',
+        borderBottom: fullscreen ? 'none' : '1px solid var(--border)',
+        background: 'var(--surface)', color: 'var(--text-dim)',
+        transition: 'height 0.12s ease',
+      }}>
+        <button onClick={() => navigate('/office')} style={iconBtn} title="Volver a Office">
+          <ArrowLeft size={14} />
         </button>
-      )}
+        <span style={{ fontWeight: 500, color: 'var(--text)' }}>Office Editor</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={toggleFullscreen} style={iconBtn} title="Pantalla completa (Ctrl+Shift+F)">
+          <Maximize2 size={14} />
+        </button>
+      </div>
 
-      {/* ─── Editor container ─────────────────────────── */}
+      {/* ─── Editor container (hijo estable, nunca se reordena) ──────── */}
       <div ref={containerRef} id="onlyoffice-editor" style={{ flex: 1 }} />
+
+      {/* ─── Salir de pantalla completa (siempre en el árbol; opacidad) ── */}
+      <button
+        onClick={toggleFullscreen}
+        style={{
+          position: 'fixed', top: 8, right: 8, zIndex: 60,
+          opacity: fullscreen ? 1 : 0, pointerEvents: fullscreen ? 'auto' : 'none',
+          transition: 'opacity 0.15s ease',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)', padding: '4px 8px',
+          cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
+          fontSize: 11,
+        }}
+        title="Salir de pantalla completa (ESC)"
+      >
+        <Minimize2 size={12} /> ESC
+      </button>
     </div>
   );
 }
