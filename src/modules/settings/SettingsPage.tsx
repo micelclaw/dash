@@ -38,6 +38,7 @@ import { LicenseSection } from '@/components/settings/sections/LicenseSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
 import { SearchSection } from '@/components/settings/sections/SearchSection';
 import { UsersSection } from '@/components/settings/sections/UsersSection';
+import { SharedFoldersSection } from '@/components/settings/sections/SharedFoldersSection';
 import { NetworkSection } from '@/components/settings/sections/NetworkSection';
 import { DomainsSection } from '@/components/settings/sections/DomainsSection';
 import { EnergySection } from '@/components/settings/sections/EnergySection';
@@ -230,6 +231,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       description: 'Users, observability (logs/telemetry/env), secrets and raw JSON editor.',
       sections: [
         { id: 'users', label: 'Users', icon: Users },
+        { id: 'shared-folders', label: 'Carpetas compartidas', icon: FolderOpen },
         { id: 'observability', label: 'Observability', icon: Eye },
         { id: 'secrets', label: 'Secrets', icon: Lock },
         { id: 'raw', label: 'Raw JSON', icon: Terminal },
@@ -295,6 +297,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'dash':                 () => <DashSection />,
   'chat-tools':           () => <ChatToolsSection />,
   'users':                () => <UsersSection />,
+  'shared-folders':       () => <SharedFoldersSection />,
   'database':             () => <DatabaseSection />,
   'security':             () => <SecuritySection />,
   'license':              () => <LicenseSection />,

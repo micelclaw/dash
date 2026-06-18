@@ -19,6 +19,7 @@ import { SettingSection } from '../SettingSection';
 import type { AdminUser, UserRole } from '@/types/users';
 import { getUserAppAccess, patchUserAppAccess } from '@/services/app-access.service';
 import { OPT_IN_APPS } from '@/config/app-catalog';
+import { getUserFolderAccess, patchUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -248,11 +249,15 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
   const [saving, setSaving] = useState(false);
-  // Pestaña Aplicaciones (rediseño NAS, Fase 1).
-  const [tab, setTab] = useState<'info' | 'apps'>('info');
+  // Pestañas (rediseño NAS): Información + Aplicaciones (F1) + Permisos/carpetas (F2).
+  const [tab, setTab] = useState<'info' | 'apps' | 'permisos'>('info');
   const [appsLoaded, setAppsLoaded] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
+  // Pestaña Permisos (carpetas compartidas, F2).
+  const [foldersLoaded, setFoldersLoaded] = useState(false);
+  const [folders, setFolders] = useState<UserFolderPerm[]>([]);
+  const [folderPerm, setFolderPerm] = useState<Record<string, FolderPermission>>({});
 
   useEffect(() => {
     if (tab !== 'apps' || appsLoaded) return;
@@ -265,11 +270,33 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
     }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudieron cargar los permisos de apps'));
   }, [tab, appsLoaded, user.id]);
 
+  useEffect(() => {
+    if (tab !== 'permisos' || foldersLoaded) return;
+    getUserFolderAccess(user.id).then((rows) => {
+      setFolders(rows);
+      const m: Record<string, FolderPermission> = {};
+      for (const f of rows) m[f.id] = f.permission;
+      setFolderPerm(m);
+      setFoldersLoaded(true);
+    }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudieron cargar las carpetas'));
+  }, [tab, foldersLoaded, user.id]);
+
   const handleSaveApps = async () => {
     setSaving(true);
     try {
       await patchUserAppAccess(user.id, appAllow);
       toast.success('Permisos de aplicaciones actualizados');
+      onClose();
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'No se pudieron guardar los permisos');
+    } finally { setSaving(false); }
+  };
+
+  const handleSaveFolders = async () => {
+    setSaving(true);
+    try {
+      await patchUserFolderAccess(user.id, folderPerm);
+      toast.success('Permisos de carpetas actualizados');
       onClose();
     } catch (err: unknown) {
       toast.error((err as Error).message || 'No se pudieron guardar los permisos');
@@ -298,7 +325,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       <ModalTitle onClose={onClose}>Edit User</ModalTitle>
       {/* Pestañas estilo Synology (más se añaden en fases siguientes). */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-        {([['info', 'Información'], ['apps', 'Aplicaciones']] as const).map(([t, lbl]) => (
+        {([['info', 'Información'], ['apps', 'Aplicaciones'], ['permisos', 'Permisos']] as const).map(([t, lbl]) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -386,6 +413,48 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
               disabled={saving || !appsLoaded || isAdminUser}
             >
               {saving ? 'Saving...' : 'Save Apps'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'permisos' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+            Acceso a carpetas compartidas. Precedencia: Sin acceso &gt; Lectura/escritura &gt; Solo lectura.
+          </div>
+          {!foldersLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
+          {foldersLoaded && folders.length === 0 && (
+            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+              No hay carpetas compartidas. Créalas en Ajustes → Carpetas compartidas.
+            </div>
+          )}
+          {foldersLoaded && folders.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflow: 'auto' }}>
+              {folders.map((f) => (
+                <div key={f.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+                  <span style={{ fontSize: '0.8125rem', color: 'var(--text)', flex: 1 }}>{f.name}</span>
+                  <select
+                    style={{ ...selectStyle, width: 160 }}
+                    value={folderPerm[f.id] ?? 'none'}
+                    onChange={(e) => setFolderPerm((p) => ({ ...p, [f.id]: e.target.value as FolderPermission }))}
+                  >
+                    <option value="none">Sin acceso</option>
+                    <option value="ro">Solo lectura</option>
+                    <option value="rw">Lectura/escritura</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
+            <button style={btnSecondary} onClick={onClose}>Cancel</button>
+            <button
+              style={{ ...btnPrimary, opacity: saving ? 0.7 : 1 }}
+              onClick={handleSaveFolders}
+              disabled={saving || !foldersLoaded || folders.length === 0}
+            >
+              {saving ? 'Saving...' : 'Save Permissions'}
             </button>
           </div>
         </div>
