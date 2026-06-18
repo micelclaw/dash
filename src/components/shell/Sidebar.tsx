@@ -19,6 +19,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { useSidebarStore } from '@/stores/sidebar.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { MODULES } from '@/config/modules';
 import { SidebarItem } from './SidebarItem';
 import { SidebarGroup } from './SidebarGroup';
@@ -148,21 +149,26 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
 
   const moduleOrder = useSidebarStore((s) => s.moduleOrder);
   const setSectionOrder = useSidebarStore((s) => s.setSectionOrder);
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
 
   const { ungrouped, groups } = useMemo(() => {
-    const byId = new Map(MODULES.map((m) => [m.id, m]));
+    // Fase 0 del rediseño NAS: los módulos adminOnly (infra del sistema) solo se
+    // ven para owner/admin. La Fase 1 añade el gating per-usuario por app-access.
+    const visible = MODULES.filter((m) => isAdmin || !m.adminOnly);
+    const byId = new Map(visible.map((m) => [m.id, m]));
     const orderSection = (mods: typeof MODULES, section: string) =>
-      applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!);
+      applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!).filter(Boolean);
 
-    const ungrouped = orderSection(MODULES.filter((m) => !m.group), TOP_SECTION);
-    const grouped = MODULES.filter((m) => m.group);
+    const ungrouped = orderSection(visible.filter((m) => !m.group), TOP_SECTION);
+    const grouped = visible.filter((m) => m.group);
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups = groupNames.map((name) => ({
       name,
       modules: orderSection(grouped.filter((m) => m.group === name), name),
     }));
     return { ungrouped, groups };
-  }, [moduleOrder]);
+  }, [moduleOrder, isAdmin]);
 
   // ─── Drag & drop: reordenar módulos dentro de su sección ────────
   const [activeDragId, setActiveDragId] = useState<string | null>(null);

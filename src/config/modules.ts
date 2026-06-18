@@ -26,7 +26,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: null },
   { id: 'micelhub', label: 'MicelHub',      icon: Puzzle,        color: 'var(--mod-micelhub)', path: '/micelhub', group: null },
   { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null },
-  { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null },
+  { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null, adminOnly: true },
   { id: 'flows',    label: 'Flows',         icon: Workflow,      color: 'var(--mod-flows)',    path: '/flows',    group: null },
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
@@ -49,7 +49,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'video',    label: 'Video',         icon: Clapperboard,  color: 'var(--mod-video)',    path: '/video',    group: 'Multimedia' },
   { id: 'music',    label: 'Music',         icon: Music,         color: 'var(--mod-music)',    path: '/music',    group: 'Multimedia' },
   { id: 'books',    label: 'Books',         icon: Library,       color: 'var(--mod-books)',    path: '/books',    group: 'Multimedia' },
-  { id: 'multimedia', label: 'Servarr',     icon: Antenna,       color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia' },
+  { id: 'multimedia', label: 'Servarr',     icon: Antenna,       color: 'var(--mod-multimedia)', path: '/multimedia', group: 'Multimedia', adminOnly: true },
   // Social
   { id: 'messages', label: 'Messages',      icon: MessageCircle, color: 'var(--mod-chat)',     path: '/messages', group: 'Social' },
   { id: 'feeds',    label: 'Feeds',         icon: Rss,           color: 'var(--mod-feeds)',    path: '/feeds',    group: 'Social' },
@@ -57,16 +57,16 @@ export const MODULES: ModuleConfig[] = [
   { id: 'drive',    label: 'Drive',         icon: FolderOpen,    color: 'var(--mod-drive)',    path: '/drive',    group: 'Files' },
   { id: 'explorer', label: 'File Explorer', icon: HardDrive,     color: 'var(--mod-explorer)', path: '/explorer', group: 'Files' },
   // Network
-  { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'Network' },
-  { id: 'proxy',     label: 'Reverse Proxy', icon: Globe,        color: 'var(--mod-proxy)',     path: '/proxy',     group: 'Network' },
-  { id: 'dns',       label: 'DNS',          icon: Orbit,         color: '#3b82f6',              path: '/dns',       group: 'Network' },
-  { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'Network' },
+  { id: 'vpn',       label: 'VPN',          icon: Cable,         color: 'var(--mod-vpn)',       path: '/vpn',       group: 'Network', adminOnly: true },
+  { id: 'proxy',     label: 'Reverse Proxy', icon: Globe,        color: 'var(--mod-proxy)',     path: '/proxy',     group: 'Network', adminOnly: true },
+  { id: 'dns',       label: 'DNS',          icon: Orbit,         color: '#3b82f6',              path: '/dns',       group: 'Network', adminOnly: true },
+  { id: 'portainer', label: 'Portainer',   icon: Container,     color: 'var(--mod-portainer)', path: '/portainer', group: 'Network', adminOnly: true },
   // System
-  { id: 'mail-server', label: 'Mail Server', icon: Server, color: 'var(--mod-mail)', path: '/mail-server', group: 'System' },
-  { id: 'terminal', label: 'Terminal',      icon: Terminal,      color: 'var(--mod-terminal)', path: '/terminal', group: 'System' },
-  { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System' },
-  { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System' },
-  { id: 'activity', label: 'Activity Center', icon: LineChart,     color: '#22d3ee',             path: '/activity',  group: 'System' },
+  { id: 'mail-server', label: 'Mail Server', icon: Server, color: 'var(--mod-mail)', path: '/mail-server', group: 'System', adminOnly: true },
+  { id: 'terminal', label: 'Terminal',      icon: Terminal,      color: 'var(--mod-terminal)', path: '/terminal', group: 'System', adminOnly: true },
+  { id: 'storage',  label: 'Storage',       icon: Database,      color: 'var(--mod-storage)',  path: '/storage',  group: 'System', adminOnly: true },
+  { id: 'processes', label: 'Processes',     icon: Activity,      color: '#f97316',             path: '/processes', group: 'System', adminOnly: true },
+  { id: 'activity', label: 'Activity Center', icon: LineChart,     color: '#22d3ee',             path: '/activity',  group: 'System', adminOnly: true },
   // { id: 'approvals', label: 'Approvals',    icon: ShieldCheck,   color: 'var(--mod-settings)', path: '/approvals', group: 'System' },
   { id: 'settings', label: 'Settings',      icon: Settings,      color: 'var(--mod-settings)', path: '/settings', group: 'System' },
 ];

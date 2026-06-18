@@ -19,4 +19,7 @@ export interface ModuleConfig {
   color: string;
   path: string | null;
   group: string | null;
+  /** Solo visible para owner/admin (infraestructura del sistema). Fase 0 del
+   *  rediseño NAS; la Fase 1 añade además el gating per-usuario por app-access. */
+  adminOnly?: boolean;
 }
