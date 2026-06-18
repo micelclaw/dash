@@ -66,6 +66,12 @@ export function Component() {
     const id = setInterval(() => void fetchServices(), 10_000);
     return () => clearInterval(id);
   }, [fetchServices]);
+  // Dominio principal del sistema (victor.claw) para que "abrir en pestaña" lleve al dash
+  // por su nombre y no al origen actual (que en dev es 127.0.0.1:7100). Fallback al origen.
+  const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
+  const loadServiceUrls = useServiceUrlsStore((s) => s.load);
+  useEffect(() => { void loadServiceUrls(); }, [loadServiceUrls]);
+  const dashOrigin = primaryDomain ? `https://${primaryDomain}` : window.location.origin;
 
   // Modo de apertura: embebido en el módulo (desde OfficeLauncher) por defecto;
   // pantalla completa si se llega con ?fullscreen=1 (atajos docs/sheets/presentations).
@@ -471,8 +477,8 @@ export function Component() {
           slug="onlyoffice" fallbackUrl={ONLYOFFICE_FALLBACK_URL} ramMb={ramMb}
           openUrl={
             fileId
-              ? `${window.location.origin}/office/edit/${fileId}?fullscreen=1`
-              : `${window.location.origin}/office`
+              ? `${dashOrigin}/office/edit/${fileId}?fullscreen=1`
+              : `${dashOrigin}/office`
           }
           fullscreen={fullscreen} onToggleFullscreen={toggleFullscreen}
         />
