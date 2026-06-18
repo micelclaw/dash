@@ -50,6 +50,10 @@ export function Component() {
   const [searchParams] = useSearchParams();
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<unknown>(null);
+  // Token de la ejecución de init en curso. Cada llamada a initEditor incrementa el token;
+  // tras cada await se comprueba alive() para que una cadena cancelada (cleanup de StrictMode
+  // en dev, cambio de documento, o desmontaje real) no toque estado ni cree un editor huérfano.
+  const runTokenRef = useRef(0);
   const [phase, setPhase] = useState<Phase>('loading');
   const [error, setError] = useState<string | null>(null);
   const [startupLogs, setStartupLogs] = useState<string[]>([]);
@@ -157,30 +161,56 @@ export function Component() {
       isHttps ? resolveServiceUrl('onlyoffice', ONLYOFFICE_FALLBACK_URL) : ONLYOFFICE_FALLBACK_URL
     ).replace(/\/$/, '');
 
-    const maxAttempts = 40; // Up to ~120s of retries (3s between each)
+    const SRC = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
+
+    // DocsAPI puede asignarse un tick DESPUÉS del onload del script → micro-poll en vez de
+    // declarar fallo y esperar 3s.
+    const pollDocsApi = async (ms = 2000, step = 100): Promise<boolean> => {
+      const deadline = Date.now() + ms;
+      while (Date.now() < deadline) {
+        if ((window as any).DocsAPI) return true;
+        await new Promise((r) => setTimeout(r, step));
+      }
+      return !!(window as any).DocsAPI;
+    };
+
+    // Inyecta el <script> UNA vez o REUTILIZA el existente (clave: dos cadenas concurrentes
+    // de StrictMode no se pisan el script — antes el remove+append mutuo causaba el bucle
+    // "attempt 5/40, 10/40" aun con el document server caliente).
+    const ensureScript = (): Promise<'loaded' | 'error'> =>
+      new Promise((resolve) => {
+        const existing = document.querySelector<HTMLScriptElement>('script[data-onlyoffice-api]');
+        if (existing) {
+          if ((window as any).DocsAPI) return resolve('loaded');
+          existing.addEventListener('load', () => resolve('loaded'), { once: true });
+          existing.addEventListener('error', () => resolve('error'), { once: true });
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = SRC;
+        script.setAttribute('data-onlyoffice-api', 'true');
+        script.onload = () => resolve('loaded');
+        script.onerror = () => resolve('error');
+        document.head.appendChild(script);
+      });
+
+    const maxAttempts = 40; // techo para el cold start real del document server
+    const backoff = (n: number) => Math.min(3000, 500 * 2 ** Math.min(n, 3)); // 500,1000,2000,3000…
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0 && attempt % 5 === 0) {
         log(`Loading ONLYOFFICE editor script (attempt ${attempt}/${maxAttempts})...`);
       }
 
-      // Remove any previous failed script tags
-      const existing = document.querySelector('script[data-onlyoffice-api]');
-      if (existing) existing.remove();
+      const res = await ensureScript();
+      if (res === 'loaded' && (await pollDocsApi())) return true;
 
-      const loaded = await new Promise<boolean>((resolve) => {
-        const script = document.createElement('script');
-        script.src = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
-        script.setAttribute('data-onlyoffice-api', 'true');
-        script.onload = () => resolve(true);
-        script.onerror = () => resolve(false);
-        document.head.appendChild(script);
-      });
-
-      if (loaded && (window as any).DocsAPI) return true;
-
-      // Wait before retrying — ONLYOFFICE internal services may still be initializing
+      // Solo si el script falló DE VERDAD (error de red / 502 mientras arranca) lo quitamos
+      // para reintentar limpio. Si cargó pero DocsAPI no apareció (raro), también.
+      if (res === 'error') {
+        document.querySelector('script[data-onlyoffice-api]')?.remove();
+      }
       if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, HEALTH_POLL_MS));
+        await new Promise((r) => setTimeout(r, backoff(attempt)));
       }
     }
 
@@ -190,6 +220,11 @@ export function Component() {
   // ─── Main init flow ────────────────────────────────────────────────
   const initEditor = useCallback(async () => {
     if (!fileId) return;
+    // Token de esta ejecución: invalida cualquier cadena async anterior (p.ej. la primera
+    // pasada de StrictMode tras su cleanup, o un cambio de documento). Tras cada await
+    // comprobamos alive() para no tocar estado desde una cadena ya cancelada.
+    const myToken = ++runTokenRef.current;
+    const alive = () => runTokenRef.current === myToken;
 
     // Reset state at the beginning of a full init
     seenLogsRef.current.clear();
@@ -210,6 +245,7 @@ export function Component() {
       let ooRunning = false;
       try {
         const statusRes = await api.get<OfficeStatusResponse>('/office/status');
+        if (!alive()) return;
         const oo = statusRes.data.onlyoffice;
 
         if (!oo.installed) {
@@ -221,6 +257,7 @@ export function Component() {
         ooRunning = oo.running;
         addLog(ooRunning ? 'ONLYOFFICE container is running.' : 'ONLYOFFICE container is not running.');
       } catch {
+        if (!alive()) return;
         addLog('Could not reach status endpoint — proceeding anyway.');
       }
 
@@ -230,13 +267,16 @@ export function Component() {
         addLog('Sending start command...');
         try {
           await api.post('/office/start/onlyoffice');
+          if (!alive()) return;
           addLog('Start command sent. Waiting for container to report running...');
         } catch {
+          if (!alive()) return;
           addLog('Start command failed (RAM budget?) — polling anyway...');
         }
 
         setPhase('waiting');
         const started = await waitForOnlyOffice();
+        if (!alive()) return;
         if (!started) {
           addLog('ERROR: ONLYOFFICE did not start within the timeout.');
           setError('ONLYOFFICE did not start within the timeout. Check available RAM.');
@@ -250,10 +290,12 @@ export function Component() {
       setPhase('waiting');
       addLog('Creating editor session...');
       const session = await createSession(fileId);
+      if (!alive()) return;
       addLog('Session created. Loading ONLYOFFICE editor script...');
 
       // 4. Load ONLYOFFICE JS API (retries until ONLYOFFICE internal services are ready)
       const apiLoaded = await loadApiScript(addLog);
+      if (!alive()) return;
       if (!apiLoaded) {
         addLog('ERROR: Could not load ONLYOFFICE editor script after 40 attempts.');
         setError('Could not connect to ONLYOFFICE Document Server after multiple attempts. Check that port 8080 is accessible.');
@@ -266,6 +308,7 @@ export function Component() {
       setPendingSession(session);
       setPhase('ready');
     } catch (err) {
+      if (!alive()) return;
       const msg = err instanceof Error ? err.message : 'Failed to open editor';
       addLog(`ERROR: ${msg}`);
       setError(msg);
@@ -277,30 +320,41 @@ export function Component() {
   useEffect(() => {
     if (phase !== 'ready' || !pendingSession || editorRef.current) return;
 
-    // Small delay to ensure React has flushed the DOM
-    const raf = requestAnimationFrame(() => {
+    // setTimeout(0), NO requestAnimationFrame: rAF se PAUSA en pestañas en segundo plano
+    // (p.ej. "abrir en pestaña nueva" que se abre detrás) o sin foco → el editor no se
+    // creaba hasta enfocar la pestaña. El contenedor #onlyoffice-editor ya está en el DOM
+    // (el commit de React ya ocurrió cuando corre este efecto), así que basta diferir un tick.
+    const session = pendingSession;
+    const t = setTimeout(() => {
       if (containerRef.current && (window as any).DocsAPI) {
         editorRef.current = new (window as any).DocsAPI.DocEditor('onlyoffice-editor', {
-          ...pendingSession.config,
-          token: pendingSession.token,
+          ...session.config,
+          token: session.token,
           height: '100%',
           width: '100%',
         });
       }
       setPendingSession(null);
-    });
-    return () => cancelAnimationFrame(raf);
+    }, 0);
+    return () => clearTimeout(t);
   }, [phase, pendingSession]);
 
+  // Init + teardown (patrón idiomático StrictMode-safe). En dev StrictMode esto corre
+  // setup→cleanup→setup: el cleanup cancela la 1ª cadena (runTokenRef++) y el 2º setup
+  // arranca una nueva que sí completa. En real unmount / cambio de fileId, el cleanup cancela
+  // la cadena en vuelo y destruye el editor. El destrozo del <script> que antes causaba el
+  // bucle "attempt 5/40" lo evita loadApiScript reutilizando el script (no remove+append).
   useEffect(() => {
     initEditor();
     return () => {
+      runTokenRef.current++;
       if (editorRef.current && (editorRef.current as any).destroyEditor) {
         (editorRef.current as any).destroyEditor();
       }
+      editorRef.current = null;
       clearSession();
     };
-  }, [initEditor, clearSession]);
+  }, [fileId, initEditor, clearSession]);
 
   // Keyboard shortcut for fullscreen
   useEffect(() => {
