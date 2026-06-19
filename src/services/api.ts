@@ -97,19 +97,32 @@ class ApiClient {
       return undefined as T;
     }
 
-    let json: unknown;
-    try {
-      json = await res.json();
-    } catch (parseErr) {
-      console.error('[api] json parse threw:', parseErr, 'status:', res.status);
-      throw parseErr;
+    // Read the body ONCE as text. This is robust to empty bodies (e.g. a 502 from
+    // the proxy while Core reloads, a dropped connection, or a 200 with no content)
+    // and to non-JSON error pages — both of which would otherwise make res.json()
+    // throw the cryptic "Unexpected end of JSON input" that surfaced as a useless
+    // toast. We surface a clear ApiError instead.
+    const text = await res.text();
+    let json: unknown = undefined;
+    if (text) {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new ApiError(
+          res.ok ? 'BAD_RESPONSE' : 'HTTP_ERROR',
+          res.ok ? `Respuesta no válida del servidor (${res.status})` : `Error del servidor (${res.status})`,
+          undefined,
+          res.status,
+        );
+      }
     }
 
     if (!res.ok) {
+      const err = (json as any)?.error;
       throw new ApiError(
-        (json as any).error?.code || 'UNKNOWN',
-        (json as any).error?.message || 'Request failed',
-        (json as any).error?.details,
+        err?.code || 'HTTP_ERROR',
+        err?.message || `Error del servidor (${res.status})`,
+        err?.details,
         res.status,
       );
     }

@@ -186,9 +186,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     settings: ['native slash commands', 'shell access', 'bash mode', '/config', '/debug', '/restart'] },
 
   // ── Administración (admin only) ──
-  { sectionId: 'users', groupId: 'admin', label: 'Users',
-    tags: ['users', 'usuarios', 'admin', 'roles'],
-    settings: ['create user', 'edit user', 'change role', 'delete user', 'reset password'] },
+  { sectionId: 'users-groups', groupId: 'admin', label: 'Usuarios y grupos',
+    tags: ['users', 'usuarios', 'groups', 'grupos', 'admin', 'roles', 'members', 'miembros', 'cuota', 'quota', 'velocidad', 'speed', 'permisos', 'permissions'],
+    settings: ['create user', 'edit user', 'change role', 'delete user', 'reset password', 'create group', 'group members', 'app access', 'folder access', 'quota', 'speed limit'] },
   { sectionId: 'observability', groupId: 'admin', label: 'Observability',
     tags: ['observability', 'observabilidad', 'logging', 'logs', 'telemetry', 'telemetria', 'otel', 'env', 'environment', 'variables', 'redact'],
     settings: ['log level', 'console style', 'redact patterns', 'otel endpoint', 'otel headers', 'sample rate', 'env vars', 'shell env'] },

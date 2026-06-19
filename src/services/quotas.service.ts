@@ -12,7 +12,13 @@
 
 import { api } from './api';
 
-export interface UserQuota { quota_bytes: number; effective_bytes: number; used_bytes: number; }
+export interface UserQuota {
+  quota_bytes: number;       // override directo del usuario (0 = sin override)
+  user_bytes?: number;       // alias explícito de quota_bytes
+  group_bytes?: number;      // cuota heredada de sus grupos
+  effective_bytes: number;   // efectiva (user∪grupos)
+  used_bytes: number;
+}
 
 export async function getUserQuota(userId: string): Promise<UserQuota> {
   const res = await api.get<{ data: UserQuota }>(`/admin/users/${userId}/quota`);

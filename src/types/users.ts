@@ -17,6 +17,7 @@ export interface AdminUser {
   id: string;
   email: string;
   display_name: string;
+  description?: string | null;       // Fase 2 (columna nueva); opcional hasta entonces
   avatar_path: string | null;
   role: UserRole;
   status: UserStatus;
@@ -24,6 +25,7 @@ export interface AdminUser {
   timezone: string | null;
   last_login_at: string | null;
   storage_used_bytes: number;
+  two_factor_enabled?: boolean;      // NAS-UI F1: viaja en GET /admin/users
   created_at: string;
   updated_at: string;
 }

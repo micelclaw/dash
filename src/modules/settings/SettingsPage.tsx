@@ -37,9 +37,8 @@ import { SecuritySection } from '@/components/settings/sections/SecuritySection'
 import { LicenseSection } from '@/components/settings/sections/LicenseSection';
 import { DigestSection } from '@/components/settings/sections/DigestSection';
 import { SearchSection } from '@/components/settings/sections/SearchSection';
-import { UsersSection } from '@/components/settings/sections/UsersSection';
+import { UsersAndGroupsSection } from '@/components/settings/sections/users-groups/UsersAndGroupsSection';
 import { SharedFoldersSection } from '@/components/settings/sections/SharedFoldersSection';
-import { GroupsSection } from '@/components/settings/sections/GroupsSection';
 import { FileServicesSection } from '@/components/settings/sections/FileServicesSection';
 import { NetworkSection } from '@/components/settings/sections/NetworkSection';
 import { DomainsSection } from '@/components/settings/sections/DomainsSection';
@@ -232,10 +231,9 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       color: GROUP_COLORS.admin,
       description: 'Users, observability (logs/telemetry/env), secrets and raw JSON editor.',
       sections: [
-        { id: 'users', label: 'Users', icon: Users },
+        { id: 'users-groups', label: 'Usuarios y grupos', icon: Users },
         { id: 'shared-folders', label: 'Carpetas compartidas', icon: FolderOpen },
         { id: 'file-services', label: 'Servicios de archivos', icon: HardDrive },
-        { id: 'groups', label: 'Grupos', icon: Users },
         { id: 'observability', label: 'Observability', icon: Eye },
         { id: 'secrets', label: 'Secrets', icon: Lock },
         { id: 'raw', label: 'Raw JSON', icon: Terminal },
@@ -300,10 +298,11 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'energy':               () => <EnergySection />,
   'dash':                 () => <DashSection />,
   'chat-tools':           () => <ChatToolsSection />,
-  'users':                () => <UsersSection />,
+  'users-groups':         () => <UsersAndGroupsSection />,
+  'users':                () => <UsersAndGroupsSection initialTab="users" />,
+  'groups':               () => <UsersAndGroupsSection initialTab="groups" />,
   'shared-folders':       () => <SharedFoldersSection />,
   'file-services':        () => <FileServicesSection />,
-  'groups':               () => <GroupsSection />,
   'database':             () => <DatabaseSection />,
   'security':             () => <SecuritySection />,
   'license':              () => <LicenseSection />,

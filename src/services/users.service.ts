@@ -50,3 +50,8 @@ export async function reactivateUser(id: string): Promise<AdminUser> {
 export async function deleteUser(id: string): Promise<void> {
   await api.delete(`/admin/users/${id}`);
 }
+
+/** Cierra todas las sesiones del usuario (revoca refresh tokens). NAS-UI F1. */
+export async function revokeAllSessions(id: string): Promise<void> {
+  await api.post(`/admin/users/${id}/revoke-all-sessions`);
+}

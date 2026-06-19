@@ -13,8 +13,10 @@
 
   /* Text */
   --text: #e0e0e8;
-  --text-dim: #7a7a8a;
-  --text-muted: #6a6a7a;
+  /* Subidos para legibilidad (antes #7a7a8a/#6a6a7a daban contraste insuficiente
+     sobre el fondo oscuro; labels/emails/descripciones eran casi ilegibles). */
+  --text-dim: #a3a3b8;
+  --text-muted: #8a8a9e;
 
   /* Accent */
   --amber: #d4a017;

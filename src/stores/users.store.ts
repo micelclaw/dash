@@ -27,6 +27,7 @@ interface UsersStore {
   suspendUser: (id: string) => Promise<void>;
   reactivateUser: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  revokeAllSessions: (id: string) => Promise<void>;
 }
 
 export const useUsersStore = create<UsersStore>()((set, get) => ({
@@ -80,5 +81,9 @@ export const useUsersStore = create<UsersStore>()((set, get) => ({
   deleteUser: async (id) => {
     await usersService.deleteUser(id);
     set({ users: get().users.filter((u) => u.id !== id) });
+  },
+
+  revokeAllSessions: async (id) => {
+    await usersService.revokeAllSessions(id);
   },
 }));

@@ -31,6 +31,10 @@ export async function createGroup(input: { name: string; description?: string })
   const res = await api.post<{ data: Group }>('/groups', input);
   return res.data;
 }
+export async function updateGroup(id: string, input: { name?: string; description?: string }): Promise<Group> {
+  const res = await api.patch<{ data: Group }>(`/groups/${id}`, input);
+  return res.data;
+}
 export async function deleteGroup(id: string): Promise<void> { await api.delete(`/groups/${id}`); }
 
 export async function getGroupMembers(id: string): Promise<string[]> {
