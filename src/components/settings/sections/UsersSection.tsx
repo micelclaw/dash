@@ -598,7 +598,7 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       {tab === 'velocidad' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Límite de ancho de banda del servicio de archivos (descargas/subidas). KB/s. 0 = ilimitado.
+            Límite de ancho de banda del usuario: descargas y subidas de archivos (Drive, ZIP de carpeta, batch) y streaming de media (vídeo/música/audiolibros). KB/s. 0 = ilimitado.
           </div>
           {!speedLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
           {speedLoaded && (
