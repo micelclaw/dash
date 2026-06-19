@@ -123,13 +123,18 @@ export function Component() {
           )}
         </div>
 
+        {/* Advanced NAS sections (OMV / demo preview). Kept high — right after the
+            disks — so they're visible instead of buried under File Statistics.
+            Disks → RAID pools → volumes → shared folders → file-level stats. */}
+        {showPools && <PoolSection />}
+
         <VolumeTable />
+
+        {showShares && <ShareSection />}
 
         <FileStatsCard />
         <FileDuplicatesCard />
 
-        {showPools && <PoolSection />}
-        {showShares && <ShareSection />}
         {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
       </div>
     </div>
