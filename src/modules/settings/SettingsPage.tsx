@@ -40,6 +40,7 @@ import { SearchSection } from '@/components/settings/sections/SearchSection';
 import { UsersSection } from '@/components/settings/sections/UsersSection';
 import { SharedFoldersSection } from '@/components/settings/sections/SharedFoldersSection';
 import { GroupsSection } from '@/components/settings/sections/GroupsSection';
+import { FileServicesSection } from '@/components/settings/sections/FileServicesSection';
 import { NetworkSection } from '@/components/settings/sections/NetworkSection';
 import { DomainsSection } from '@/components/settings/sections/DomainsSection';
 import { EnergySection } from '@/components/settings/sections/EnergySection';
@@ -233,6 +234,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       sections: [
         { id: 'users', label: 'Users', icon: Users },
         { id: 'shared-folders', label: 'Carpetas compartidas', icon: FolderOpen },
+        { id: 'file-services', label: 'Servicios de archivos', icon: HardDrive },
         { id: 'groups', label: 'Grupos', icon: Users },
         { id: 'observability', label: 'Observability', icon: Eye },
         { id: 'secrets', label: 'Secrets', icon: Lock },
@@ -300,6 +302,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'chat-tools':           () => <ChatToolsSection />,
   'users':                () => <UsersSection />,
   'shared-folders':       () => <SharedFoldersSection />,
+  'file-services':        () => <FileServicesSection />,
   'groups':               () => <GroupsSection />,
   'database':             () => <DatabaseSection />,
   'security':             () => <SecuritySection />,
