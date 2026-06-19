@@ -16,12 +16,11 @@
 // X-Frame-Options; NO la URL interna 127.0.0.1:8090 (la bloquearía el navegador).
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { ArrowLeft, Database, Loader2, AlertTriangle, Minimize2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
-import { useOfficeStore } from '@/stores/office.store';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 
 // URL same-origin del proxy de Core hacia Mathesar (ver core/src/routes/databases.ts).
@@ -45,10 +44,10 @@ export function Component() {
   const [status, setStatus] = useState<MathesarStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Al salir del frame, resetear la app activa → OfficeLauncher no re-redirige aquí
-  // (su effect navega a /office/databases mientras activeApp siga siendo 'databases').
-  const setActiveApp = useOfficeStore((s) => s.setActiveApp);
-  useEffect(() => () => { setActiveApp('documents'); }, [setActiveApp]);
+  // Deep-link: ?db=<id> → abrir esa base en la SPA (en vez de su home). Lo pone la rejilla
+  // del launcher al clicar una tarjeta.
+  const [searchParams] = useSearchParams();
+  const dbParam = searchParams.get('db');
 
   // Dominio del sistema para abrir-en-pestaña-nueva la ruta del dash (no la URL del proxy).
   const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
@@ -64,11 +63,12 @@ export function Component() {
     try {
       const w = iframeRef.current?.contentWindow;
       if (w && w.location.pathname.startsWith('/api/v1/databases/ui')) {
-        w.history.replaceState({}, '', '/');
+        const target = dbParam ? `/db/${encodeURIComponent(dbParam)}/` : '/';
+        w.history.replaceState({}, '', target);
         w.dispatchEvent(new PopStateEvent('popstate'));
       }
     } catch { /* cross-origin (no debería: es proxy same-origin) */ }
-  }, []);
+  }, [dbParam]);
 
   const checkAndStart = useCallback(async () => {
     try {

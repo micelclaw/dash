@@ -22,6 +22,7 @@ import {
 import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { api } from '@/services/api';
+import { DatabasesLauncherView } from './DatabasesLauncherView';
 
 // ─── MIME groups per app tab ─────────────────────────────────────────
 
@@ -288,10 +289,10 @@ export function Component() {
     refreshDocs();
   }, [renaming, refreshDocs]);
 
-  // PDF Tools / Databases navigate away (son apps embebidas, no listado de docs)
+  // PDF Tools redirige a su app embebida. Databases NO redirige: renderiza su rejilla
+  // nativa de "recientes" (DatabasesLauncherView) dentro del launcher (abajo).
   useEffect(() => {
     if (activeApp === 'pdf-tools') navigate('/office/pdf/tools');
-    if (activeApp === 'databases') navigate('/office/databases');
   }, [activeApp, navigate]);
 
   const CardIcon = cardStyle.icon;
@@ -329,6 +330,10 @@ export function Component() {
 
       {/* ─── Content area ────────────────────────────────── */}
       <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+        {activeApp === 'databases' ? (
+          <DatabasesLauncherView />
+        ) : (
+        <>
         {/* New button */}
         {newType && (
           <button
@@ -396,6 +401,8 @@ export function Component() {
               {newType ? 'Create your first document' : 'No recent files'}
             </span>
           </div>
+        )}
+        </>
         )}
       </div>
 
