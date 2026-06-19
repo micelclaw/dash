@@ -135,6 +135,21 @@ export function FileServicesSection() {
             )}
           </div>
 
+          {/* Última reconciliación (NAS1c) */}
+          {status.enabled && status.last_reconcile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem' }}>
+              {status.last_reconcile.ok
+                ? <Check size={14} style={{ color: 'var(--green, #22c55e)' }} />
+                : <X size={14} style={{ color: 'var(--red, #ef4444)' }} />}
+              <span style={{ color: 'var(--text-dim)' }}>
+                Última sincronización: <strong style={{ color: status.last_reconcile.ok ? 'var(--text)' : 'var(--red, #ef4444)' }}>
+                  {status.last_reconcile.ok ? 'OK' : `fallo — ${status.last_reconcile.detail}`}
+                </strong>
+                {' · '}{new Date(status.last_reconcile.at).toLocaleString()}
+              </span>
+            </div>
+          )}
+
           {/* Rutas de red */}
           {status.enabled && (
             <div>

@@ -21,6 +21,7 @@ export interface FileServicesStatus {
   smb_port: number;
   setup_command: string;
   shares: FileServicesShare[];
+  last_reconcile: { ok: boolean; at: string; detail: string } | null;
 }
 
 export async function getFileServices(): Promise<FileServicesStatus> {
