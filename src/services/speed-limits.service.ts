@@ -14,10 +14,12 @@ import { api } from './api';
 
 export interface UserSpeedLimit {
   service: string;
-  up_kbps: number;          // override directo (0 = sin override → hereda/ilimitado)
+  up_kbps: number;          // override directo 'files' (0 = sin override → hereda/ilimitado)
   down_kbps: number;
   effective_up_kbps: number;
   effective_down_kbps: number;
+  media_down_kbps: number;            // NAS3b: límite 'media' (solo bajada)
+  effective_media_down_kbps: number;
 }
 
 export async function getUserSpeedLimits(userId: string): Promise<UserSpeedLimit> {
@@ -25,6 +27,6 @@ export async function getUserSpeedLimits(userId: string): Promise<UserSpeedLimit
   return res.data;
 }
 
-export async function patchUserSpeedLimits(userId: string, upKbps: number, downKbps: number): Promise<void> {
-  await api.patch(`/admin/users/${userId}/speed-limits`, { up_kbps: upKbps, down_kbps: downKbps });
+export async function patchUserSpeedLimits(userId: string, upKbps: number, downKbps: number, mediaDownKbps: number): Promise<void> {
+  await api.patch(`/admin/users/${userId}/speed-limits`, { up_kbps: upKbps, down_kbps: downKbps, media_down_kbps: mediaDownKbps });
 }

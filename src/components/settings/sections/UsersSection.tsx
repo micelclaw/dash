@@ -273,7 +273,8 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
   const [speedLoaded, setSpeedLoaded] = useState(false);
   const [downKbps, setDownKbps] = useState('0');
   const [upKbps, setUpKbps] = useState('0');
-  const [speedEff, setSpeedEff] = useState<{ down: number; up: number }>({ down: 0, up: 0 });
+  const [mediaDownKbps, setMediaDownKbps] = useState('0'); // NAS3b: límite de media (streaming)
+  const [speedEff, setSpeedEff] = useState<{ down: number; up: number; media: number }>({ down: 0, up: 0, media: 0 });
 
   useEffect(() => {
     if (tab !== 'apps' || appsLoaded) return;
@@ -368,17 +369,18 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
     getUserSpeedLimits(user.id).then((s) => {
       setDownKbps(String(s.down_kbps || 0));
       setUpKbps(String(s.up_kbps || 0));
-      setSpeedEff({ down: s.effective_down_kbps, up: s.effective_up_kbps });
+      setMediaDownKbps(String(s.media_down_kbps || 0));
+      setSpeedEff({ down: s.effective_down_kbps, up: s.effective_up_kbps, media: s.effective_media_down_kbps });
       setSpeedLoaded(true);
     }).catch((e: unknown) => toast.error((e as Error).message || 'No se pudo cargar el límite de velocidad'));
   }, [tab, speedLoaded, user.id]);
 
   const handleSaveSpeed = async () => {
-    const down = Number(downKbps), up = Number(upKbps);
-    if (![down, up].every((v) => Number.isFinite(v) && v >= 0)) { toast.error('Introduce KB/s >= 0 (0 = ilimitado)'); return; }
+    const down = Number(downKbps), up = Number(upKbps), mediaDown = Number(mediaDownKbps);
+    if (![down, up, mediaDown].every((v) => Number.isFinite(v) && v >= 0)) { toast.error('Introduce KB/s >= 0 (0 = ilimitado)'); return; }
     setSaving(true);
     try {
-      await patchUserSpeedLimits(user.id, Math.round(up), Math.round(down));
+      await patchUserSpeedLimits(user.id, Math.round(up), Math.round(down), Math.round(mediaDown));
       toast.success('Límite de velocidad actualizado');
       onClose();
     } catch (err: unknown) {
@@ -598,11 +600,12 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
       {tab === 'velocidad' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Límite de ancho de banda del usuario: descargas y subidas de archivos (Drive, ZIP de carpeta, batch) y streaming de media (vídeo/música/audiolibros). KB/s. 0 = ilimitado.
+            Límites de ancho de banda del usuario, por servicio. KB/s. 0 = ilimitado.
           </div>
           {!speedLoaded && <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Cargando…</div>}
           {speedLoaded && (
             <>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase' }}>Archivos (Drive: descargas, ZIP, batch, subidas)</div>
               <div>
                 <label style={labelStyle}>Bajada (KB/s) — 0 = ilimitado</label>
                 <input style={inputStyle} type="number" min={0} step="64" value={downKbps} onChange={(e) => setDownKbps(e.target.value)} />
@@ -611,9 +614,15 @@ function EditUserModal({ user, isSelf, onClose, onSave }: {
                 <label style={labelStyle}>Subida (KB/s) — 0 = ilimitado</label>
                 <input style={inputStyle} type="number" min={0} step="64" value={upKbps} onChange={(e) => setUpKbps(e.target.value)} />
               </div>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', marginTop: 4 }}>Media (streaming: vídeo/música/audiolibros)</div>
+              <div>
+                <label style={labelStyle}>Bajada media (KB/s) — 0 = ilimitado</label>
+                <input style={inputStyle} type="number" min={0} step="64" value={mediaDownKbps} onChange={(e) => setMediaDownKbps(e.target.value)} />
+              </div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                Efectivo (usuario ∪ grupos): bajada <strong style={{ color: 'var(--text)' }}>{speedEff.down === 0 ? 'ilimitado' : `${speedEff.down} KB/s`}</strong>,
-                {' '}subida <strong style={{ color: 'var(--text)' }}>{speedEff.up === 0 ? 'ilimitado' : `${speedEff.up} KB/s`}</strong>
+                Efectivo (usuario ∪ grupos): archivos ↓ <strong style={{ color: 'var(--text)' }}>{speedEff.down === 0 ? 'ilimitado' : `${speedEff.down} KB/s`}</strong>,
+                {' '}↑ <strong style={{ color: 'var(--text)' }}>{speedEff.up === 0 ? 'ilimitado' : `${speedEff.up} KB/s`}</strong>;
+                {' '}media ↓ <strong style={{ color: 'var(--text)' }}>{speedEff.media === 0 ? 'ilimitado' : `${speedEff.media} KB/s`}</strong>
               </div>
             </>
           )}
