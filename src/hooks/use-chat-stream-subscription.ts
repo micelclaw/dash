@@ -16,75 +16,85 @@
 // → done perdido → mensaje colgado → había que hacer F5). ChatPage/BottomBar
 // ahora solo RENDERIZAN del store. DB-authoritative: este handler actualiza el
 // store en vivo; `loadMessages` reconcilia desde DB como red (ver use-chat-reconcile).
+//
+// IMPORTANTE: nos suscribimos DIRECTO al cliente WS (no vía `useWebSocket`, que
+// devuelve solo el ÚLTIMO evento por estado de React). En una RÁFAGA de varios
+// `chat.stream.tool` en el mismo tick, `useWebSocket`+`useEffect` perdía los
+// intermedios (React batchea los setEvent → el efecto solo ve el último). El
+// `dispatch` del cliente (services/websocket.ts) invoca este callback por CADA
+// frame → cero pérdida. Ver docs/reference/chat-streaming-sync.md.
 
 import { useEffect } from 'react';
-import { useWebSocket } from './use-websocket';
+import { useWebSocketStore } from '@/stores/websocket.store';
 import { useChatStore } from '@/stores/chat.store';
 import type { ToolCallRecord } from '@/types/chat';
+import type { WsEvent } from '@/types/websocket';
 
 export function useChatStreamSubscription(): void {
-  const streamEvent = useWebSocket('chat.stream.*');
+  const client = useWebSocketStore((s) => s.client);
 
   useEffect(() => {
-    if (!streamEvent) return;
-    const data = streamEvent.data;
-    const convId = data.conversation_id as string;
-    // Acciones estables de Zustand → getState evita re-suscripción por deps.
-    const s = useChatStore.getState();
+    if (!client) return;
+    return client.on('chat.stream.*', (streamEvent: WsEvent) => {
+      const data = streamEvent.data;
+      const convId = data.conversation_id as string;
+      // Acciones estables de Zustand → getState evita re-suscripción por deps.
+      const s = useChatStore.getState();
 
-    switch (streamEvent.event) {
-      case 'chat.stream.start':
-        s.setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
-        break;
-      case 'chat.stream.token':
-        s.appendStreamToken(convId, data.token as string);
-        break;
-      case 'chat.stream.thinking':
-        s.appendStreamToken(convId, data.token as string, 'thinking');
-        break;
-      case 'chat.stream.tool':
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        s.addToolEvent(convId, data as any);
-        break;
-      case 'chat.stream.gateway_down':
-        s.finalizeStream(convId, '', '__gateway_down__', 0);
-        break;
-      case 'chat.stream.system_message':
-        s.addSystemMessage(
-          convId,
-          data.text as string,
-          typeof data.command === 'string' ? data.command : null,
-          typeof data.command_args === 'string' ? data.command_args : null,
-        );
-        break;
-      case 'chat.stream.cleared':
-        s.clearConversationMessages(convId);
-        break;
-      case 'chat.stream.new_session':
-        s.startNewConversation();
-        break;
-      case 'chat.stream.done':
-        s.finalizeStream(
-          convId,
-          data.full_text as string,
-          data.model as string | undefined,
-          data.tokens_used as number | undefined,
-          data.error_type as string | undefined,
-          Array.isArray(data.tool_calls) ? (data.tool_calls as ToolCallRecord[]) : undefined,
-          typeof data.thinking === 'string' ? (data.thinking as string) : null,
-          {
-            clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
-            userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
-            assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
-          },
-        );
-        // TTS auto-play (ChatInput escucha este evento de window).
-        if (data.model !== 'error') {
-          window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
-            detail: { text: data.full_text as string },
-          }));
-        }
-        break;
-    }
-  }, [streamEvent]);
+      switch (streamEvent.event) {
+        case 'chat.stream.start':
+          s.setStreamingMessage({ conversationId: convId, tokens: '', thinking: '', isThinking: false, tools: [] });
+          break;
+        case 'chat.stream.token':
+          s.appendStreamToken(convId, data.token as string);
+          break;
+        case 'chat.stream.thinking':
+          s.appendStreamToken(convId, data.token as string, 'thinking');
+          break;
+        case 'chat.stream.tool':
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          s.addToolEvent(convId, data as any);
+          break;
+        case 'chat.stream.gateway_down':
+          s.finalizeStream(convId, '', '__gateway_down__', 0);
+          break;
+        case 'chat.stream.system_message':
+          s.addSystemMessage(
+            convId,
+            data.text as string,
+            typeof data.command === 'string' ? data.command : null,
+            typeof data.command_args === 'string' ? data.command_args : null,
+          );
+          break;
+        case 'chat.stream.cleared':
+          s.clearConversationMessages(convId);
+          break;
+        case 'chat.stream.new_session':
+          s.startNewConversation();
+          break;
+        case 'chat.stream.done':
+          s.finalizeStream(
+            convId,
+            data.full_text as string,
+            data.model as string | undefined,
+            data.tokens_used as number | undefined,
+            data.error_type as string | undefined,
+            Array.isArray(data.tool_calls) ? (data.tool_calls as ToolCallRecord[]) : undefined,
+            typeof data.thinking === 'string' ? (data.thinking as string) : null,
+            {
+              clientTempId: typeof data.client_temp_id === 'string' ? data.client_temp_id : null,
+              userMessageId: typeof data.user_message_id === 'string' ? data.user_message_id : null,
+              assistantMessageId: typeof data.assistant_message_id === 'string' ? data.assistant_message_id : null,
+            },
+          );
+          // TTS auto-play (ChatInput escucha este evento de window).
+          if (data.model !== 'error') {
+            window.dispatchEvent(new CustomEvent('claw:tts-autoplay', {
+              detail: { text: data.full_text as string },
+            }));
+          }
+          break;
+      }
+    });
+  }, [client]);
 }
