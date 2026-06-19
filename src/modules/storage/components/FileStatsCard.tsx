@@ -15,12 +15,18 @@ import { Files, HardDrive, Camera } from 'lucide-react';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 
+interface MimeStat {
+  mime_type: string | null;
+  count: number;
+  total_bytes: number;
+}
+
 interface FileStats {
   total_files: number;
   total_directories: number;
-  total_size: number;
-  mime_distribution: Record<string, number>;
-  duplicates_count?: number;
+  total_size_bytes: number;
+  mime_distribution: MimeStat[];
+  duplicates?: { groups: number; files: number; wasted_bytes: number };
 }
 
 interface SnapshotStats {
@@ -52,8 +58,8 @@ export function FileStatsCard() {
 
   if (loading || !stats) return null;
 
-  const topMimes = Object.entries(stats.mime_distribution ?? {})
-    .sort(([, a], [, b]) => b - a)
+  const topMimes = [...(stats.mime_distribution ?? [])]
+    .sort((a, b) => b.count - a.count)
     .slice(0, 5);
 
   return (
@@ -66,9 +72,9 @@ export function FileStatsCard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <StatItem label="Files" value={stats.total_files.toLocaleString()} />
         <StatItem label="Directories" value={stats.total_directories.toLocaleString()} />
-        <StatItem label="Total Size" value={formatFileSize(stats.total_size)} />
-        {stats.duplicates_count != null && stats.duplicates_count > 0 && (
-          <StatItem label="Duplicates" value={stats.duplicates_count.toLocaleString()} warn />
+        <StatItem label="Total Size" value={formatFileSize(stats.total_size_bytes)} />
+        {stats.duplicates && stats.duplicates.files > 0 && (
+          <StatItem label="Duplicates" value={stats.duplicates.files.toLocaleString()} warn />
         )}
       </div>
 
@@ -93,9 +99,9 @@ export function FileStatsCard() {
             Top file types
           </div>
           <div className="flex flex-wrap gap-2">
-            {topMimes.map(([mime, count]) => (
-              <span key={mime} className="px-2 py-0.5 text-[10px] rounded bg-[var(--surface-hover)] text-[var(--text-dim)]">
-                {mime.split('/').pop()} <span className="text-[var(--text-muted)]">({count})</span>
+            {topMimes.map((m, i) => (
+              <span key={m.mime_type ?? i} className="px-2 py-0.5 text-[10px] rounded bg-[var(--surface-hover)] text-[var(--text-dim)]">
+                {(m.mime_type ?? 'unknown').split('/').pop()} <span className="text-[var(--text-muted)]">({m.count})</span>
               </span>
             ))}
           </div>
