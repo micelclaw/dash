@@ -42,6 +42,7 @@ interface StorageState {
   createShare: (config: ShareConfig) => Promise<void>;
   deleteShare: (shareId: string) => Promise<void>;
   detectProvider: () => Promise<void>;
+  setPreviewMode: (enabled: boolean) => Promise<void>;
 }
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
@@ -148,6 +149,12 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
 
   detectProvider: async () => {
     await api.post('/hal/storage/detect-provider');
+    await get().fetchAll();
+  },
+
+  // Toggle the simulated "NAS preview" provider (demo disks/RAID/shares).
+  setPreviewMode: async (enabled: boolean) => {
+    await api.post('/hal/storage/preview', { enabled });
     await get().fetchAll();
   },
 }));

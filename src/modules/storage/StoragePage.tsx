@@ -22,6 +22,7 @@ import { SmartStatusCard } from './components/SmartStatusCard';
 import { PoolSection } from './components/PoolSection';
 import { ShareSection } from './components/ShareSection';
 import { NasLayerBanner } from './components/NasLayerBanner';
+import { DemoModeBanner } from './components/DemoModeBanner';
 import { FileStatsCard } from './components/FileStatsCard';
 import { FileDuplicatesCard } from './components/FileDuplicatesCard';
 
@@ -32,6 +33,7 @@ export function Component() {
   const capabilities = useStorageStore((s) => s.capabilities);
   const provider = useStorageStore((s) => s.provider);
   const fetchAll = useStorageStore((s) => s.fetchAll);
+  const setPreviewMode = useStorageStore((s) => s.setPreviewMode);
   const isMobile = useIsMobile();
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -39,6 +41,7 @@ export function Component() {
   const showSmart = capabilities?.can_get_smart ?? false;
   const showPools = capabilities?.can_create_pool ?? false;
   const showShares = capabilities?.can_manage_shares ?? false;
+  const isDemo = provider === 'demo';
 
   if (error && !status) {
     return (
@@ -101,6 +104,7 @@ export function Component() {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {isDemo && <DemoModeBanner onExit={() => setPreviewMode(false)} />}
         <StorageSummaryCard status={status} />
         <DataUsageChart />
 
@@ -126,7 +130,7 @@ export function Component() {
 
         {showPools && <PoolSection />}
         {showShares && <ShareSection />}
-        {!showPools && provider && <NasLayerBanner provider={provider} />}
+        {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
       </div>
     </div>
   );
