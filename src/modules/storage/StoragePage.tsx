@@ -102,8 +102,11 @@ export function Component() {
         </button>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Content. `[&>*]:shrink-0` evita que flexbox aplaste a 0 las secciones con
+          overflow:hidden (PoolSection/VolumeTable/ShareSection → min-height:0) cuando
+          una tarjeta grande (Duplicate Files) genera overflow: deben mantener su alto
+          natural y dejar que el contenedor haga scroll. */}
+      <div className="[&>*]:shrink-0" style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {isDemo && <DemoModeBanner onExit={() => setPreviewMode(false)} />}
         <StorageSummaryCard status={status} />
         <DataUsageChart />
