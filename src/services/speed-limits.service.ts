@@ -20,6 +20,7 @@ export interface UserSpeedLimit {
   effective_down_kbps: number;
   media_down_kbps: number;            // NAS3b: límite 'media' (solo bajada)
   effective_media_down_kbps: number;
+  has_override?: boolean;             // Fase 2: ¿override propio o hereda de grupos?
 }
 
 export async function getUserSpeedLimits(userId: string): Promise<UserSpeedLimit> {
@@ -27,6 +28,12 @@ export async function getUserSpeedLimits(userId: string): Promise<UserSpeedLimit
   return res.data;
 }
 
+/** Modo "personalizar": fija el override del usuario. */
 export async function patchUserSpeedLimits(userId: string, upKbps: number, downKbps: number, mediaDownKbps: number): Promise<void> {
-  await api.patch(`/admin/users/${userId}/speed-limits`, { up_kbps: upKbps, down_kbps: downKbps, media_down_kbps: mediaDownKbps });
+  await api.patch(`/admin/users/${userId}/speed-limits`, { mode: 'custom', up_kbps: upKbps, down_kbps: downKbps, media_down_kbps: mediaDownKbps });
+}
+
+/** Modo "aplicar configuración de grupo": borra el override → hereda de sus grupos. */
+export async function clearUserSpeedLimits(userId: string): Promise<void> {
+  await api.patch(`/admin/users/${userId}/speed-limits`, { mode: 'group' });
 }

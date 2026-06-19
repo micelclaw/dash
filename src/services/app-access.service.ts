@@ -14,7 +14,7 @@ import { api } from './api';
 
 export interface UserAppAccessState {
   is_admin: boolean;
-  apps: { key: string; allowed: boolean }[];
+  apps: { key: string; allowed: boolean; group_allowed?: boolean }[];
 }
 
 /** Apps que el usuario actual puede ver (para el gating del dash). */

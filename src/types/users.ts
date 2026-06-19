@@ -26,6 +26,9 @@ export interface AdminUser {
   last_login_at: string | null;
   storage_used_bytes: number;
   two_factor_enabled?: boolean;      // NAS-UI F1: viaja en GET /admin/users
+  password_changed_at?: string | null; // Fase 2: "última modificación" de la contraseña
+  password_change_disabled?: boolean;   // Fase 2: bloqueo de cambio self-service
+  deactivate_at?: string | null;        // Fase 2: desactivación programada (ISO)
   created_at: string;
   updated_at: string;
 }
@@ -40,4 +43,7 @@ export interface UpdateUserPayload {
   display_name?: string;
   email?: string;
   role?: string;
+  description?: string | null;
+  password_change_disabled?: boolean;
+  deactivate_at?: string | null;
 }

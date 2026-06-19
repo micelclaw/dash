@@ -83,6 +83,17 @@ class ApiClient {
     });
 
     if (res.status === 401 && !options?._isRetry && !path.startsWith('/auth/')) {
+      // Timeout de sesión por inactividad (Fase 2): NO intentar refresh (un refresh
+      // re-mintaría la sesión y burlaría el cierre por inactividad) → logout directo.
+      let code: string | undefined;
+      try {
+        const t = await res.clone().text();
+        if (t) code = (JSON.parse(t) as { error?: { code?: string } })?.error?.code;
+      } catch { /* cuerpo no-JSON: tratar como 401 normal */ }
+      if (code === 'SESSION_IDLE_TIMEOUT') {
+        useAuthStore.getState().logout();
+        throw new ApiError('SESSION_IDLE_TIMEOUT', 'Sesión cerrada por inactividad', undefined, 401);
+      }
       try {
         await useAuthStore.getState().refresh();
         return this.request(method, path, { ...options, _isRetry: true });

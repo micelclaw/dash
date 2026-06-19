@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs } from '@/components/shared/Tabs';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ export function GroupEditDialog({ group, open, onOpenChange, onSaved }: {
   const [tab, setTab] = useState('info');
   const [state, setState] = useState<'loading' | 'ready'>('loading');
   const [saving, setSaving] = useState(false);
+  const [errs, setErrs] = useState<Record<string, string>>({});
 
   const [name, setName] = useState(group.name);
   const [description, setDescription] = useState(group.description ?? '');
@@ -55,16 +57,19 @@ export function GroupEditDialog({ group, open, onOpenChange, onSaved }: {
   useEffect(() => {
     if (!open) return;
     setState('loading');
+    setErrs({});
     Promise.allSettled([
       listUsers(), getGroupMembers(group.id), getGroupAppAccess(group.id), getGroupFolderAccess(group.id),
       getGroupQuota(group.id), getGroupSpeedLimits(group.id),
     ]).then(([u, m, a, f, q, s]) => {
-      if (u.status === 'fulfilled') setUsers(u.value);
-      if (m.status === 'fulfilled') setMember(Object.fromEntries(m.value.map((id) => [id, true])));
-      if (a.status === 'fulfilled') setAppAllow(Object.fromEntries(a.value.map((x) => [x.key, x.allowed])));
-      if (f.status === 'fulfilled') { setFolders(f.value); setFolderPerm(Object.fromEntries(f.value.map((x) => [x.id, x.permission]))); }
-      if (q.status === 'fulfilled') setQuotaGb(String((q.value.quota_bytes || 0) / 1e9));
-      if (s.status === 'fulfilled') { setSDown(String(s.value.down_kbps || 0)); setSUp(String(s.value.up_kbps || 0)); setSMedia(String(s.value.media_down_kbps || 0)); }
+      const e: Record<string, string> = {};
+      if (u.status === 'fulfilled') setUsers(u.value); else e.members = 'No se pudo cargar la lista de usuarios.';
+      if (m.status === 'fulfilled') setMember(Object.fromEntries(m.value.map((id) => [id, true]))); else e.members = 'No se pudieron cargar los miembros.';
+      if (a.status === 'fulfilled') setAppAllow(Object.fromEntries(a.value.map((x) => [x.key, x.allowed]))); else e.apps = 'No se pudieron cargar los permisos de aplicaciones.';
+      if (f.status === 'fulfilled') { setFolders(f.value); setFolderPerm(Object.fromEntries(f.value.map((x) => [x.id, x.permission]))); } else e.permisos = 'No se pudieron cargar los permisos de carpetas.';
+      if (q.status === 'fulfilled') setQuotaGb(String((q.value.quota_bytes || 0) / 1e9)); else e.cuota = 'No se pudo cargar la cuota.';
+      if (s.status === 'fulfilled') { setSDown(String(s.value.down_kbps || 0)); setSUp(String(s.value.up_kbps || 0)); setSMedia(String(s.value.media_down_kbps || 0)); } else e.velocidad = 'No se pudieron cargar los límites de velocidad.';
+      setErrs(e);
       setState('ready');
     });
   }, [open, group.id]);
@@ -76,11 +81,13 @@ export function GroupEditDialog({ group, open, onOpenChange, onSaved }: {
       if (name.trim() !== group.name || (description.trim() || null) !== (group.description ?? null)) {
         ops.push(updateGroup(group.id, { name: name.trim(), description: description.trim() }));
       }
-      ops.push(patchGroupMembers(group.id, member));
-      ops.push(patchGroupAppAccess(group.id, appAllow));
-      ops.push(patchGroupFolderAccess(group.id, folderPerm));
-      ops.push(patchGroupQuota(group.id, Math.round(Number(quotaGb) * 1e9)));
-      ops.push(patchGroupSpeedLimits(group.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
+      // Gatear cada patch por su precarga: si un aspecto no cargó, no lo
+      // sobrescribimos con estado vacío (R-1).
+      if (!errs.members) ops.push(patchGroupMembers(group.id, member));
+      if (!errs.apps) ops.push(patchGroupAppAccess(group.id, appAllow));
+      if (!errs.permisos) ops.push(patchGroupFolderAccess(group.id, folderPerm));
+      if (!errs.cuota) ops.push(patchGroupQuota(group.id, Math.round(Number(quotaGb) * 1e9)));
+      if (!errs.velocidad) ops.push(patchGroupSpeedLimits(group.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
       await Promise.all(ops);
       toast.success('Grupo actualizado');
       onSaved(); onOpenChange(false);
@@ -100,6 +107,11 @@ export function GroupEditDialog({ group, open, onOpenChange, onSaved }: {
         <div className="mt-4 min-h-[280px] max-h-[55vh] overflow-auto pr-1">
           {state === 'loading' && <div className="py-10 text-center text-sm text-[var(--text-dim)]">Cargando…</div>}
           {state === 'ready' && (<>
+            {errs[tab] && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--error)]/40 bg-[var(--error)]/10 px-3 py-2 text-xs text-[var(--error)]">
+                <AlertTriangle className="h-3.5 w-3.5" /> {errs[tab]}
+              </div>
+            )}
             {tab === 'info' && (
               <div className="flex flex-col gap-3 max-w-sm">
                 <div><label className={label}>Nombre</label><Input value={name} onChange={(e) => setName(e.target.value)} disabled={group.is_system} /></div>

@@ -161,6 +161,16 @@ export function SecuritySection() {
     }
   };
 
+  const handleIdleChange = async (value: string) => {
+    const n = Math.max(0, Math.min(10080, parseInt(value) || 0));
+    try {
+      await updateConfig({ session_idle_minutes: n });
+      toast.success(n === 0 ? 'Cierre por inactividad desactivado' : `Cierre por inactividad: ${n} min`);
+    } catch (err) {
+      toast.error(describeError(err, 'No se pudo actualizar el tiempo de inactividad'));
+    }
+  };
+
   // ─── Render ───────────────────────────────────────────
 
   return (
@@ -355,6 +365,19 @@ export function SecuritySection() {
           onChange={(v) => handleTimeoutChange('expiry_minutes', v)}
           min={5}
           max={1440}
+        />
+      </SettingSection>
+
+      {/* Session idle timeout (Fase 2) */}
+      <SettingSection title="Cierre de sesión por inactividad" description="Cierra tu sesión automáticamente tras un periodo sin actividad (estilo Synology). Solo afecta a tu sesión del navegador; los agentes no se ven afectados.">
+        <SettingInput
+          label="Minutos de inactividad"
+          description="0 = desactivado. Tras este tiempo sin actividad se pedirá iniciar sesión de nuevo. Rango: 0 a 10080 (1 semana)."
+          type="number"
+          value={String(config.session_idle_minutes ?? 0)}
+          onChange={handleIdleChange}
+          min={0}
+          max={10080}
         />
       </SettingSection>
 

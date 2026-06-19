@@ -24,7 +24,12 @@ export interface SharedFolder {
   created_at: string;
 }
 
-export interface UserFolderPerm { id: string; name: string; permission: FolderPermission; }
+export interface UserFolderPerm {
+  id: string;
+  name: string;
+  permission: FolderPermission;          // permiso DIRECTO del usuario (editable)
+  group_permission?: FolderPermission;   // Fase 2: heredado de grupos (read-only)
+}
 
 export async function listSharedFolders(): Promise<SharedFolder[]> {
   const res = await api.get<{ data: SharedFolder[] }>('/shared-folders');

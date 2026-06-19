@@ -71,7 +71,7 @@ export interface Settings {
     snooze_default_options: Array<{ label: string; relative: string }>;
   };
   dash: {
-    theme: 'dark' | 'light' | 'midnight' | 'ember' | 'moss' | 'lucid';
+    theme: 'dark' | 'light' | 'midnight' | 'ember' | 'moss' | 'lucid' | 'blush';
     accent_color: string;
     sidebar_collapsed: boolean;
     default_module: string;
@@ -130,6 +130,7 @@ export interface SecurityConfig {
     expiry_minutes: number;
   };
   approval_levels: Record<string, number>;
+  session_idle_minutes?: number;   // Fase 2: cierre por inactividad (0 = desactivado)
   pin_configured: boolean;
   operation_defaults: OperationLevelDefinition[];
 }
