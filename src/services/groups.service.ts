@@ -57,6 +57,23 @@ export async function patchGroupFolderAccess(id: string, folders: Record<string,
   await api.patch(`/groups/${id}/folder-access`, { folders });
 }
 
+// Cuota + velocidad del grupo (NAS7). Los miembros heredan (resolver user∪grupos).
+export async function getGroupQuota(id: string): Promise<{ quota_bytes: number }> {
+  const res = await api.get<{ data: { quota_bytes: number } }>(`/groups/${id}/quota`);
+  return res.data;
+}
+export async function patchGroupQuota(id: string, quotaBytes: number): Promise<void> {
+  await api.patch(`/groups/${id}/quota`, { quota_bytes: quotaBytes });
+}
+export interface GroupSpeed { up_kbps: number; down_kbps: number; media_down_kbps: number; }
+export async function getGroupSpeedLimits(id: string): Promise<GroupSpeed> {
+  const res = await api.get<{ data: GroupSpeed }>(`/groups/${id}/speed-limits`);
+  return res.data;
+}
+export async function patchGroupSpeedLimits(id: string, upKbps: number, downKbps: number, mediaDownKbps: number): Promise<void> {
+  await api.patch(`/groups/${id}/speed-limits`, { up_kbps: upKbps, down_kbps: downKbps, media_down_kbps: mediaDownKbps });
+}
+
 // Membresía vista desde el usuario (pestaña "Grupos de usuarios").
 export async function getUserGroups(userId: string): Promise<UserGroup[]> {
   const res = await api.get<{ data: { groups: UserGroup[] } }>(`/admin/users/${userId}/groups`);

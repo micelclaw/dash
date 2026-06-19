@@ -16,7 +16,8 @@ import { Plus, Trash2, Users, Settings2, X } from 'lucide-react';
 import { SettingSection } from '../SettingSection';
 import {
   listGroups, createGroup, deleteGroup, getGroupMembers, patchGroupMembers,
-  getGroupAppAccess, patchGroupAppAccess, getGroupFolderAccess, patchGroupFolderAccess, type Group,
+  getGroupAppAccess, patchGroupAppAccess, getGroupFolderAccess, patchGroupFolderAccess,
+  getGroupQuota, patchGroupQuota, getGroupSpeedLimits, patchGroupSpeedLimits, type Group,
 } from '@/services/groups.service';
 import { listUsers } from '@/services/users.service';
 import type { AdminUser } from '@/types/users';
@@ -29,12 +30,16 @@ const btnPrimary: React.CSSProperties = { padding: '7px 14px', fontSize: '0.8125
 const btnGhost: React.CSSProperties = { padding: '6px 10px', fontSize: '0.8125rem', background: 'none', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' };
 
 function ManageModal({ group, onClose }: { group: Group; onClose: () => void }) {
-  const [tab, setTab] = useState<'members' | 'apps' | 'folders'>('members');
+  const [tab, setTab] = useState<'members' | 'apps' | 'folders' | 'quota' | 'speed'>('members');
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [member, setMember] = useState<Record<string, boolean>>({});
   const [appAllow, setAppAllow] = useState<Record<string, boolean>>({});
   const [folders, setFolders] = useState<UserFolderPerm[]>([]);
   const [folderPerm, setFolderPerm] = useState<Record<string, FolderPermission>>({});
+  const [quotaGb, setQuotaGb] = useState('0');       // NAS7: cuota del grupo
+  const [sDown, setSDown] = useState('0');            // NAS7: velocidad del grupo
+  const [sUp, setSUp] = useState('0');
+  const [sMedia, setSMedia] = useState('0');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -42,6 +47,8 @@ function ManageModal({ group, onClose }: { group: Group; onClose: () => void }) 
     getGroupMembers(group.id).then((ids) => { const m: Record<string, boolean> = {}; ids.forEach((id) => { m[id] = true; }); setMember(m); }).catch(() => {});
     getGroupAppAccess(group.id).then((a) => { const m: Record<string, boolean> = {}; a.forEach((x) => { m[x.key] = x.allowed; }); setAppAllow(m); }).catch(() => {});
     getGroupFolderAccess(group.id).then((rows) => { setFolders(rows); const m: Record<string, FolderPermission> = {}; rows.forEach((f) => { m[f.id] = f.permission; }); setFolderPerm(m); }).catch(() => {});
+    getGroupQuota(group.id).then((q) => setQuotaGb(String((q.quota_bytes || 0) / 1e9))).catch(() => {});
+    getGroupSpeedLimits(group.id).then((s) => { setSDown(String(s.down_kbps || 0)); setSUp(String(s.up_kbps || 0)); setSMedia(String(s.media_down_kbps || 0)); }).catch(() => {});
   }, [group.id]);
 
   const save = async () => {
@@ -49,7 +56,16 @@ function ManageModal({ group, onClose }: { group: Group; onClose: () => void }) 
     try {
       if (tab === 'members') await patchGroupMembers(group.id, member);
       else if (tab === 'apps') await patchGroupAppAccess(group.id, appAllow);
-      else await patchGroupFolderAccess(group.id, folderPerm);
+      else if (tab === 'folders') await patchGroupFolderAccess(group.id, folderPerm);
+      else if (tab === 'quota') {
+        const gb = Number(quotaGb);
+        if (!Number.isFinite(gb) || gb < 0) { toast.error('GB >= 0 (0 = ilimitado)'); setSaving(false); return; }
+        await patchGroupQuota(group.id, Math.round(gb * 1e9));
+      } else {
+        const d = Number(sDown), u = Number(sUp), m = Number(sMedia);
+        if (![d, u, m].every((v) => Number.isFinite(v) && v >= 0)) { toast.error('KB/s >= 0 (0 = ilimitado)'); setSaving(false); return; }
+        await patchGroupSpeedLimits(group.id, Math.round(u), Math.round(d), Math.round(m));
+      }
       toast.success('Grupo actualizado');
       onClose();
     } catch (e) { toast.error((e as Error).message || 'Error'); } finally { setSaving(false); }
@@ -63,7 +79,7 @@ function ManageModal({ group, onClose }: { group: Group; onClose: () => void }) 
           <button style={{ ...btnGhost, padding: 4 }} onClick={onClose}><X size={16} /></button>
         </div>
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 12 }}>
-          {([['members', 'Miembros'], ['apps', 'Aplicaciones'], ['folders', 'Carpetas']] as const).map(([t, lbl]) => (
+          {([['members', 'Miembros'], ['apps', 'Aplicaciones'], ['folders', 'Carpetas'], ['quota', 'Cuota'], ['speed', 'Velocidad']] as const).map(([t, lbl]) => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 12px', fontSize: '0.8125rem', background: 'none', border: 'none', cursor: 'pointer', borderBottom: `2px solid ${tab === t ? 'var(--amber)' : 'transparent'}`, color: tab === t ? 'var(--text)' : 'var(--text-dim)' }}>{lbl}</button>
           ))}
         </div>
@@ -91,6 +107,28 @@ function ManageModal({ group, onClose }: { group: Group; onClose: () => void }) 
                 </select>
               </div>
             )))}
+          {tab === 'quota' && (
+            <>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Cuota heredada por los miembros (se compone con la del usuario; el override del usuario gana). 0 = ilimitado.</div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Cuota (GB)
+                <input style={input} type="number" min={0} step="0.5" value={quotaGb} onChange={(e) => setQuotaGb(e.target.value)} />
+              </label>
+            </>
+          )}
+          {tab === 'speed' && (
+            <>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Velocidad heredada por los miembros (más restrictiva entre grupos; override del usuario gana). KB/s, 0 = ilimitado.</div>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Archivos — bajada (KB/s)
+                <input style={input} type="number" min={0} step="64" value={sDown} onChange={(e) => setSDown(e.target.value)} />
+              </label>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Archivos — subida (KB/s)
+                <input style={input} type="number" min={0} step="64" value={sUp} onChange={(e) => setSUp(e.target.value)} />
+              </label>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Media — bajada (KB/s)
+                <input style={input} type="number" min={0} step="64" value={sMedia} onChange={(e) => setSMedia(e.target.value)} />
+              </label>
+            </>
+          )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
           <button style={btnGhost} onClick={onClose}>Cancelar</button>
@@ -124,7 +162,7 @@ export function GroupsSection() {
   };
 
   return (
-    <SettingSection title="Grupos de usuarios" description="Los miembros heredan los permisos del grupo (apps, carpetas).">
+    <SettingSection title="Grupos de usuarios" description="Los miembros heredan los permisos del grupo (apps, carpetas, cuota, velocidad).">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!creating && <button style={{ ...btnPrimary, alignSelf: 'flex-start', display: 'flex', gap: 6, alignItems: 'center' }} onClick={() => setCreating(true)}><Plus size={15} /> Nuevo grupo</button>}
         {creating && (
