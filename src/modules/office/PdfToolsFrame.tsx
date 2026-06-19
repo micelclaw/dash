@@ -19,7 +19,6 @@ import { ArrowLeft, Wrench, Loader2, AlertTriangle, Minimize2 } from 'lucide-rea
 import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
-import { useOfficeStore } from '@/stores/office.store';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 
 interface StirlingStatus {
@@ -38,10 +37,6 @@ export function Component() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [status, setStatus] = useState<StirlingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // Al salir del frame, resetear la app activa → OfficeLauncher no re-redirige aquí.
-  const setActiveApp = useOfficeStore((s) => s.setActiveApp);
-  useEffect(() => () => { setActiveApp('documents'); }, [setActiveApp]);
 
   // Dominio del sistema para abrir-en-pestaña-nueva la ruta del dash (no la URL del proxy).
   const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);

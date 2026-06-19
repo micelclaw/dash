@@ -17,7 +17,7 @@ import { useEffect, useState, useRef, useCallback, type MouseEvent } from 'react
 import { useNavigate } from 'react-router';
 import {
   FileText, Table2, Presentation, FileImage, Wrench, Database,
-  Plus, Loader2, Pencil, Copy, Trash2, Files,
+  Plus, Loader2, Pencil, Copy, Trash2, Files, Eye,
 } from 'lucide-react';
 import { useOfficeStore, type OfficeApp, type RecentDoc } from '@/stores/office.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
@@ -30,8 +30,7 @@ const APP_MIME_FILTER: Record<OfficeApp, string | undefined> = {
   documents: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   spreadsheets: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   presentations: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'pdf-viewer': 'application/pdf',
-  'pdf-tools': undefined,
+  pdf: 'application/pdf',
   databases: undefined,
 };
 
@@ -47,8 +46,7 @@ const APP_CARD_STYLE: Record<OfficeApp, { icon: typeof FileText; color: string }
   documents:     { icon: FileText,     color: '#3b82f6' },   // blue
   spreadsheets:  { icon: Table2,       color: '#22c55e' },   // green
   presentations: { icon: Presentation, color: '#eab308' },   // yellow
-  'pdf-viewer':  { icon: FileImage,    color: '#ef4444' },   // red
-  'pdf-tools':   { icon: Wrench,       color: '#7f1d1d' },   // maroon
+  pdf:           { icon: FileImage,    color: '#ef4444' },   // red
   databases:     { icon: Database,     color: '#a855f7' },   // purple
 };
 
@@ -56,8 +54,7 @@ const TABS: { id: OfficeApp; label: string; icon: typeof FileText; color: string
   { id: 'documents',     label: 'Documents',     icon: FileText,     color: '#3b82f6' },
   { id: 'spreadsheets',  label: 'Spreadsheets',  icon: Table2,       color: '#22c55e' },
   { id: 'presentations', label: 'Presentations',  icon: Presentation, color: '#eab308' },
-  { id: 'pdf-viewer',    label: 'PDF Viewer',     icon: FileImage,    color: '#ef4444' },
-  { id: 'pdf-tools',     label: 'PDF Tools',      icon: Wrench,       color: '#7f1d1d' },
+  { id: 'pdf',           label: 'PDF',            icon: FileImage,    color: '#ef4444' },
   { id: 'databases',     label: 'Databases',      icon: Database,     color: '#a855f7' },
 ];
 
@@ -110,6 +107,58 @@ function FileContextMenu({ state, onClose, onAction }: {
             style={{
               display: 'flex', alignItems: 'center', gap: 8, width: '100%',
               padding: '7px 14px', fontSize: 13, color: item.id === 'delete' ? '#ef4444' : 'var(--text)',
+              background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--border)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon size={14} />
+            {item.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PDF Action Menu (Preview / Edit) ────────────────────────────────
+// Desplegable que sale al clicar (izquierdo o derecho) un PDF reciente en la tab PDF.
+
+function PdfActionMenu({ state, onClose, onPreview, onEdit }: {
+  state: ContextMenuState;
+  onClose: () => void;
+  onPreview: (doc: RecentDoc) => void;
+  onEdit: (doc: RecentDoc) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  const items = [
+    { id: 'preview', label: 'Preview PDF', icon: Eye, run: () => onPreview(state.doc) },
+    { id: 'edit', label: 'Edit PDF', icon: Wrench, run: () => onEdit(state.doc) },
+  ];
+
+  return (
+    <div ref={ref} style={{
+      position: 'fixed', left: state.x, top: state.y, zIndex: 9999,
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 'var(--radius-md)', padding: '4px 0',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.2)', minWidth: 160,
+    }}>
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.id}
+            onClick={() => { item.run(); onClose(); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '7px 14px', fontSize: 13, color: 'var(--text)',
               background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--border)')}
@@ -218,6 +267,7 @@ export function Component() {
   const navigate = useNavigate();
   const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading } = useOfficeStore();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
+  const [pdfMenu, setPdfMenu] = useState<ContextMenuState | null>(null);
   const [renaming, setRenaming] = useState<RecentDoc | null>(null);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
@@ -250,6 +300,13 @@ export function Component() {
     e.preventDefault();
     e.stopPropagation();
     setCtxMenu({ doc, x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Tab PDF: clic (izq o der) en un PDF reciente → desplegable Preview/Edit.
+  const openPdfMenu = useCallback((e: MouseEvent, doc: RecentDoc) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPdfMenu({ doc, x: e.clientX, y: e.clientY });
   }, []);
 
   const refreshDocs = useCallback(() => {
@@ -289,11 +346,8 @@ export function Component() {
     refreshDocs();
   }, [renaming, refreshDocs]);
 
-  // PDF Tools redirige a su app embebida. Databases NO redirige: renderiza su rejilla
-  // nativa de "recientes" (DatabasesLauncherView) dentro del launcher (abajo).
-  useEffect(() => {
-    if (activeApp === 'pdf-tools') navigate('/office/pdf/tools');
-  }, [activeApp, navigate]);
+  // Databases y PDF se quedan EN el launcher (rejilla nativa de recientes); ya no hay
+  // redirect a un iframe al pulsar la tab.
 
   const CardIcon = cardStyle.icon;
   const cardColor = cardStyle.color;
@@ -352,6 +406,22 @@ export function Component() {
           </button>
         )}
 
+        {/* Acceso general a las herramientas PDF (Stirling), sin un archivo concreto. */}
+        {activeApp === 'pdf' && (
+          <button
+            onClick={() => navigate('/office/pdf/tools')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 20px', marginBottom: 20,
+              background: 'var(--surface)', color: 'var(--text)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+              cursor: 'pointer', fontSize: 13, fontWeight: 500,
+            }}
+          >
+            <Wrench size={14} /> Herramientas PDF
+          </button>
+        )}
+
         {/* Recent documents grid */}
         {recentDocs.length > 0 ? (
           <>
@@ -364,8 +434,8 @@ export function Component() {
               {recentDocs.map((doc) => (
                 <button
                   key={doc.id}
-                  onClick={() => handleOpenFile(doc.id, doc.mime_type)}
-                  onContextMenu={(e) => handleContextMenu(e, doc)}
+                  onClick={(e) => (activeApp === 'pdf' ? openPdfMenu(e, doc) : handleOpenFile(doc.id, doc.mime_type))}
+                  onContextMenu={(e) => (activeApp === 'pdf' ? openPdfMenu(e, doc) : handleContextMenu(e, doc))}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 4,
                     padding: 16, background: 'var(--surface)',
@@ -425,6 +495,16 @@ export function Component() {
           state={ctxMenu}
           onClose={() => setCtxMenu(null)}
           onAction={handleCtxAction}
+        />
+      )}
+
+      {/* ─── PDF Action Menu (Preview / Edit) ─────────────── */}
+      {pdfMenu && (
+        <PdfActionMenu
+          state={pdfMenu}
+          onClose={() => setPdfMenu(null)}
+          onPreview={(doc) => navigate(`/office/pdf/${doc.id}`)}
+          onEdit={() => navigate('/office/pdf/tools')}
         />
       )}
 

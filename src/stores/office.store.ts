@@ -18,7 +18,7 @@ import { api } from '@/services/api';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf-viewer' | 'pdf-tools' | 'databases';
+export type OfficeApp = 'documents' | 'spreadsheets' | 'presentations' | 'pdf' | 'databases';
 
 interface ServiceSubStatus {
   installed: boolean;
