@@ -25,7 +25,13 @@ const FULLSCREEN_STYLE: React.CSSProperties = {
 const EMPTY: React.CSSProperties = {};
 
 export function useEmbedFullscreen() {
-  const [fullscreen, setFullscreen] = useState(false);
+  // Arranca en fullscreen si la URL trae ?fullscreen=1 (lo usa "abrir en pestaña nueva":
+  // abre el embebido a pantalla completa SIN el chrome del dash, igual que el editor Office).
+  // Lazy-init desde window.location → sin flash y sin depender del Router.
+  const [fullscreen, setFullscreen] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('fullscreen') === '1'; }
+    catch { return false; }
+  });
   const toggle = useCallback(() => setFullscreen((f) => !f), []);
 
   useEffect(() => {

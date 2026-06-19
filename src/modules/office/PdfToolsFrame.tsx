@@ -15,7 +15,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Wrench, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Wrench, Loader2, AlertTriangle, Minimize2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
@@ -97,9 +97,11 @@ export function Component() {
   if (phase === 'ready' && status?.url) {
     return (
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
+        {/* En fullscreen (abrir-en-pestaña ?fullscreen=1) el header se colapsa → la app
+            ocupa toda la pestaña, igual que el editor Office. */}
         <div style={{
-          height: 36, display: 'flex', alignItems: 'center',
-          padding: '0 12px', borderBottom: '1px solid var(--border)',
+          height: fullscreen ? 0 : 36, overflow: 'hidden', display: 'flex', alignItems: 'center',
+          padding: fullscreen ? 0 : '0 12px', borderBottom: fullscreen ? 'none' : '1px solid var(--border)',
           background: 'var(--surface)', gap: 8, fontSize: 12,
           color: 'var(--text-dim)', flexShrink: 0,
         }}>
@@ -112,7 +114,7 @@ export function Component() {
           <div style={{ flex: 1 }} />
           <EmbedActions
             slug="stirling-pdf" fallbackUrl={status.url} ramMb={status.ram_mb}
-            openUrl={`${dashOrigin}/office/pdf/tools`}
+            openUrl={`${dashOrigin}/office/pdf/tools?fullscreen=1`}
             fullscreen={fullscreen} onToggleFullscreen={toggle}
           />
         </div>
@@ -122,6 +124,22 @@ export function Component() {
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"
         />
+        {/* Salir de pantalla completa (visible solo en fullscreen; ESC también sale). */}
+        <button
+          onClick={toggle}
+          style={{
+            position: 'fixed', top: 8, right: 8, zIndex: 60,
+            opacity: fullscreen ? 1 : 0, pointerEvents: fullscreen ? 'auto' : 'none',
+            transition: 'opacity 0.15s ease',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: '4px 8px',
+            cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 11,
+          }}
+          title="Salir de pantalla completa (ESC)"
+        >
+          <Minimize2 size={12} /> ESC
+        </button>
       </div>
     );
   }
