@@ -43,6 +43,21 @@ interface StorageState {
   deleteShare: (shareId: string) => Promise<void>;
   detectProvider: () => Promise<void>;
   setPreviewMode: (enabled: boolean) => Promise<void>;
+
+  // ── Storage ZFS (Ola 0, contract-first) — backend stub (501) ──
+  // Firmas de acción CONGELADAS para los implementadores de pantallas (olas
+  // posteriores). El backend ZFS aún no existe (rutas 501) → fetchZfs degrada a
+  // arrays vacíos sin romper la UI. Los tipos precisos de config/vista llegan con
+  // sus pantallas; aquí se fija el contrato de nombres/forma.
+  zfs_pools: Record<string, unknown>[];
+  zfs_datasets: Record<string, unknown>[];
+  zfs_snapshots: Record<string, unknown>[];
+  zfs_jobs: Record<string, unknown>[];
+  fetchZfs: () => Promise<void>;
+  createZfsPool: (config: Record<string, unknown>) => Promise<void>;
+  destroyZfsPool: (poolId: string, token: string) => Promise<void>;
+  startScrub: (pool: string) => Promise<void>;
+  createSnapshot: (target: string, snapName: string) => Promise<void>;
 }
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
@@ -58,6 +73,10 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   loading: false,
   error: null,
   expanded_disks: [],
+  zfs_pools: [],
+  zfs_datasets: [],
+  zfs_snapshots: [],
+  zfs_jobs: [],
 
   fetchAll: async () => {
     set({ loading: true, error: null });
@@ -156,5 +175,35 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   setPreviewMode: async (enabled: boolean) => {
     await api.post('/hal/storage/preview', { enabled });
     await get().fetchAll();
+  },
+
+  // ── Storage ZFS (Ola 0, contract-first) ──
+  // Lee el inventario ZFS de los endpoints nuevos; tolerante al 501 (backend no
+  // implementado todavía) → deja los arrays vacíos sin romper la UI.
+  fetchZfs: async () => {
+    try {
+      const [pools, datasets, snapshots, jobs] = await Promise.all([
+        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/datasets').then(() => [] as Record<string, unknown>[]).catch(() => []),
+        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/zvols').then(() => [] as Record<string, unknown>[]).catch(() => []),
+        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/snapshots').then(() => [] as Record<string, unknown>[]).catch(() => []),
+        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/jobs').then(() => [] as Record<string, unknown>[]).catch(() => []),
+      ]);
+      set({ zfs_pools: pools, zfs_datasets: datasets, zfs_snapshots: snapshots, zfs_jobs: jobs });
+    } catch {
+      // Backend ZFS no implementado (501) — degradación silenciosa.
+    }
+  },
+  // Acciones de escritura: contrato congelado; backend 501 hasta su fase (roadmap §7).
+  createZfsPool: async (_config: Record<string, unknown>) => {
+    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
+  },
+  destroyZfsPool: async (_poolId: string, _token: string) => {
+    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
+  },
+  startScrub: async (_pool: string) => {
+    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
+  },
+  createSnapshot: async (_target: string, _snapName: string) => {
+    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
   },
 }));
