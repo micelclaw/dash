@@ -136,3 +136,81 @@ export interface ShareConfig {
   path: string;
   protocol: 'smb' | 'nfs';
 }
+
+// ─── ZFS NAS backend (Olas 0-6) — espejo de core/src/hal/storage/zfs.types.ts ──
+export type ZfsStorageLevel = 'zfs-hardened' | 'flexible' | 'read-only';
+
+export interface ZfsCapabilities {
+  backend: 'zfs' | 'linux-basic' | 'demo';
+  platform: 'bare-metal' | 'wsl2' | 'container' | 'vm' | 'preview' | 'unknown';
+  level: ZfsStorageLevel;
+  can_inspect: boolean;
+  can_create_pool: boolean;
+  can_destroy_pool: boolean;
+  can_expand_vdev: boolean;
+  can_replace_disk: boolean;
+  can_wipe_disk: boolean;
+  can_create_dataset: boolean;
+  can_create_zvol: boolean;
+  can_snapshot: boolean;
+  can_rollback: boolean;
+  can_scrub: boolean;
+  can_smart_test: boolean;
+  can_replicate: boolean;
+  can_encrypt: boolean;
+  can_vm: boolean;
+  degraded_reason?: string;
+}
+
+export interface ZfsDiskObservation {
+  name: string;
+  state: string;
+  read_errors: number;
+  write_errors: number;
+  cksum_errors: number;
+}
+export interface ZfsVdevObservation {
+  name: string;
+  type: string;
+  state: string;
+  read_errors: number;
+  write_errors: number;
+  cksum_errors: number;
+  disks: ZfsDiskObservation[];
+}
+export interface ZfsPoolObservation {
+  name: string;
+  guid: string | null;
+  health: string;
+  size_bytes: number | null;
+  alloc_bytes: number | null;
+  free_bytes: number | null;
+  frag_pct: number | null;
+  cap_pct: number | null;
+  vdevs: ZfsVdevObservation[];
+}
+export interface ZfsDatasetObservation {
+  name: string;
+  type: 'filesystem' | 'volume';
+  used_bytes: number | null;
+  referenced_bytes: number | null;
+  available_bytes: number | null;
+  mountpoint: string | null;
+  volsize_bytes: number | null;
+  refquota_bytes: number | null;
+  quota_bytes: number | null;
+  compression: string | null;
+  encryption: string | null;
+}
+export interface ZfsSnapshotObservation {
+  full_name: string;
+  snap_name: string;
+  guid: string | null;
+  used_bytes: number | null;
+  referenced_bytes: number | null;
+  creation: number | null;
+}
+export interface VmObservation {
+  name: string;
+  state: string;
+}

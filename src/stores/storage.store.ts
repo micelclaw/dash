@@ -16,6 +16,7 @@ import type {
   StorageStatus, StorageCapabilities, DataUsageResult,
   Disk, Volume, SmartStatus, StoragePool, StorageShare,
   PoolConfig, ShareConfig,
+  ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation, ZfsSnapshotObservation, VmObservation,
 } from '@/modules/storage/types';
 
 // ─── Store ──────────────────────────────────────────────
@@ -44,20 +45,20 @@ interface StorageState {
   detectProvider: () => Promise<void>;
   setPreviewMode: (enabled: boolean) => Promise<void>;
 
-  // ── Storage ZFS (Ola 0, contract-first) — backend stub (501) ──
-  // Firmas de acción CONGELADAS para los implementadores de pantallas (olas
-  // posteriores). El backend ZFS aún no existe (rutas 501) → fetchZfs degrada a
-  // arrays vacíos sin romper la UI. Los tipos precisos de config/vista llegan con
-  // sus pantallas; aquí se fija el contrato de nombres/forma.
-  zfs_pools: Record<string, unknown>[];
-  zfs_datasets: Record<string, unknown>[];
-  zfs_snapshots: Record<string, unknown>[];
-  zfs_jobs: Record<string, unknown>[];
+  // ── Storage ZFS (Olas 0-6) — backend nativo ──
+  // Read-path real: capabilities (plataforma-aware, degradado honesto) + inventario
+  // observado del FS (pools/datasets/zvols/snapshots/VMs). En WSL2/read-only el
+  // inventario llega vacío y las capabilities marcan degraded_reason → la UI lo
+  // muestra en vez de fingir. Las escrituras (pool/dataset/VM) son wizards gated
+  // que llegan con bare-metal (diseño §9); aquí el read-path + las acciones safe.
+  zfs_capabilities: ZfsCapabilities | null;
+  zfs_pools: ZfsPoolObservation[];
+  zfs_datasets: ZfsDatasetObservation[];
+  zfs_zvols: ZfsDatasetObservation[];
+  zfs_snapshots: ZfsSnapshotObservation[];
+  zfs_vms: VmObservation[];
+  zfs_loading: boolean;
   fetchZfs: () => Promise<void>;
-  createZfsPool: (config: Record<string, unknown>) => Promise<void>;
-  destroyZfsPool: (poolId: string, token: string) => Promise<void>;
-  startScrub: (pool: string) => Promise<void>;
-  createSnapshot: (target: string, snapName: string) => Promise<void>;
 }
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
@@ -73,10 +74,13 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   loading: false,
   error: null,
   expanded_disks: [],
+  zfs_capabilities: null,
   zfs_pools: [],
   zfs_datasets: [],
+  zfs_zvols: [],
   zfs_snapshots: [],
-  zfs_jobs: [],
+  zfs_vms: [],
+  zfs_loading: false,
 
   fetchAll: async () => {
     set({ loading: true, error: null });
@@ -177,33 +181,34 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
     await get().fetchAll();
   },
 
-  // ── Storage ZFS (Ola 0, contract-first) ──
-  // Lee el inventario ZFS de los endpoints nuevos; tolerante al 501 (backend no
-  // implementado todavía) → deja los arrays vacíos sin romper la UI.
+  // ── Storage ZFS (Olas 0-6) — read-path real ──
+  // Capabilities primero (gobierna el render); luego, si se puede observar, el
+  // inventario en paralelo. Cada llamada es tolerante (un endpoint que falle no
+  // tumba el resto). Las VMs son admin-only → 403 para no-admin → [] silencioso.
   fetchZfs: async () => {
+    set({ zfs_loading: true });
     try {
-      const [pools, datasets, snapshots, jobs] = await Promise.all([
-        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/datasets').then(() => [] as Record<string, unknown>[]).catch(() => []),
-        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/zvols').then(() => [] as Record<string, unknown>[]).catch(() => []),
-        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/snapshots').then(() => [] as Record<string, unknown>[]).catch(() => []),
-        api.get<{ data: Record<string, unknown>[] }>('/hal/storage/jobs').then(() => [] as Record<string, unknown>[]).catch(() => []),
+      const capsRes = await api
+        .get<{ data: ZfsCapabilities }>('/hal/storage/zfs/capabilities')
+        .catch(() => null);
+      const caps = capsRes?.data ?? null;
+
+      const empty = { zfs_pools: [], zfs_datasets: [], zfs_zvols: [], zfs_snapshots: [], zfs_vms: [] };
+      if (!caps?.can_inspect) {
+        set({ zfs_capabilities: caps, ...empty, zfs_loading: false });
+        return;
+      }
+
+      const [pools, datasets, zvols, snapshots, vms] = await Promise.all([
+        api.get<{ data: ZfsPoolObservation[] }>('/hal/storage/zfs/pools').then((r) => r.data).catch(() => []),
+        api.get<{ data: ZfsDatasetObservation[] }>('/hal/storage/datasets').then((r) => r.data).catch(() => []),
+        api.get<{ data: ZfsDatasetObservation[] }>('/hal/storage/zvols').then((r) => r.data).catch(() => []),
+        api.get<{ data: ZfsSnapshotObservation[] }>('/hal/storage/snapshots').then((r) => r.data).catch(() => []),
+        api.get<{ data: VmObservation[] }>('/hal/storage/vms').then((r) => r.data).catch(() => []),
       ]);
-      set({ zfs_pools: pools, zfs_datasets: datasets, zfs_snapshots: snapshots, zfs_jobs: jobs });
+      set({ zfs_capabilities: caps, zfs_pools: pools, zfs_datasets: datasets, zfs_zvols: zvols, zfs_snapshots: snapshots, zfs_vms: vms, zfs_loading: false });
     } catch {
-      // Backend ZFS no implementado (501) — degradación silenciosa.
+      set({ zfs_loading: false });
     }
-  },
-  // Acciones de escritura: contrato congelado; backend 501 hasta su fase (roadmap §7).
-  createZfsPool: async (_config: Record<string, unknown>) => {
-    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
-  },
-  destroyZfsPool: async (_poolId: string, _token: string) => {
-    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
-  },
-  startScrub: async (_pool: string) => {
-    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
-  },
-  createSnapshot: async (_target: string, _snapName: string) => {
-    throw new Error('Storage ZFS aún no implementado (Ola 0, contract-first).');
   },
 }));

@@ -23,6 +23,7 @@ import { PoolSection } from './components/PoolSection';
 import { ShareSection } from './components/ShareSection';
 import { NasLayerBanner } from './components/NasLayerBanner';
 import { DemoModeBanner } from './components/DemoModeBanner';
+import { ZfsSection } from './components/ZfsSection';
 import { FileStatsCard } from './components/FileStatsCard';
 import { FileDuplicatesCard } from './components/FileDuplicatesCard';
 
@@ -130,6 +131,10 @@ export function Component() {
             disks — so they're visible instead of buried under File Statistics.
             Disks → RAID pools → volumes → shared folders → file-level stats. */}
         {showPools && <PoolSection />}
+
+        {/* ZFS NAS (Olas 0-6): read-path + capabilities. Se auto-oculta si el
+            backend ZFS no aplica a este entorno (capabilities null). */}
+        <ZfsSection />
 
         <VolumeTable />
 
