@@ -191,8 +191,11 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   },
 
   // Toggle the simulated "NAS preview" provider (demo disks/RAID/shares).
+  // Unifica la demo: el mismo Preview también enciende/apaga el demo ZFS, para que
+  // "modo demo" muestre TODAS las interfaces (capa legacy + NAS ZFS) de una vez.
   setPreviewMode: async (enabled: boolean) => {
     await api.post('/hal/storage/preview', { enabled });
+    get().setZfsDemo(enabled);
     await get().fetchAll();
   },
 
