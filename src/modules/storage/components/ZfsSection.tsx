@@ -17,10 +17,18 @@
 // en vez de fingir. Las escrituras (wizards de pool/dataset/VM) son gated y
 // llegan con bare-metal (diseño §9); aquí solo lectura.
 
-import { useEffect } from 'react';
-import { HardDrive, Boxes, Camera, MonitorPlay, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { HardDrive, Boxes, Camera, MonitorPlay, ShieldAlert, ShieldCheck, FlaskConical, Waves, Trash2, Play, Square } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
 import type { ZfsPoolObservation } from '../types';
+import { ZfsManageBar, CreateSnapshotForm } from './ZfsModals';
+
+const actBtn: React.CSSProperties = {
+  padding: '3px 8px', fontSize: '0.6875rem', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+  border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)',
+  display: 'inline-flex', alignItems: 'center', gap: 4,
+};
 
 function fmtBytes(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -52,6 +60,14 @@ function healthColor(state: string): string {
 }
 
 function PoolCard({ pool }: { pool: ZfsPoolObservation }) {
+  const caps = useStorageStore((s) => s.zfs_capabilities);
+  const scrub = useStorageStore((s) => s.zfsScrub);
+  const destroy = useStorageStore((s) => s.zfsDestroyPool);
+  const onScrub = async () => { try { await scrub(pool.name); toast.success(`Scrub iniciado en ${pool.name}`); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); } };
+  const onDestroy = async () => {
+    if (!window.confirm(`¿Destruir el pool "${pool.name}"? Esto borra TODOS sus datos.`)) return;
+    try { await destroy(pool.name); toast.success(`Pool ${pool.name} destruido`); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
+  };
   const cap = pool.cap_pct;
   const capColor = cap == null ? 'var(--text-dim)' : cap >= 90 ? 'var(--error,#ef4444)' : cap >= 80 ? 'var(--warning,#f59e0b)' : 'var(--success,#22c55e)';
   return (
@@ -93,6 +109,12 @@ function PoolCard({ pool }: { pool: ZfsPoolObservation }) {
           </div>
         ))}
       </div>
+      {(caps?.can_scrub || caps?.can_destroy_pool) && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          {caps?.can_scrub && <button style={actBtn} onClick={onScrub}><Waves size={11} /> Scrub</button>}
+          {caps?.can_destroy_pool && <button style={{ ...actBtn, color: 'var(--error,#ef4444)' }} onClick={onDestroy}><Trash2 size={11} /> Destruir</button>}
+        </div>
+      )}
     </div>
   );
 }
@@ -105,14 +127,54 @@ export function ZfsSection() {
   const snapshots = useStorageStore((s) => s.zfs_snapshots);
   const vms = useStorageStore((s) => s.zfs_vms);
   const fetchZfs = useStorageStore((s) => s.fetchZfs);
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const setZfsDemo = useStorageStore((s) => s.setZfsDemo);
+  const destroySnap = useStorageStore((s) => s.zfsDestroySnapshot);
+  const vmAction = useStorageStore((s) => s.zfsVmAction);
+  const [snapTarget, setSnapTarget] = useState<string | null>(null);
+
+  const onDestroySnap = async (full: string) => {
+    if (!window.confirm(`¿Destruir el snapshot "${full}"?`)) return;
+    try { await destroySnap(full); toast.success('Snapshot destruido'); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
+  };
+  const onVm = async (name: string, action: 'start' | 'stop' | 'destroy') => {
+    if (action === 'destroy' && !window.confirm(`¿Eliminar la VM "${name}"? (no borra su disco)`)) return;
+    try { await vmAction(name, action); toast.success(`VM ${name}: ${action}`); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
+  };
 
   useEffect(() => { fetchZfs(); }, [fetchZfs]);
 
-  // El backend ZFS no aplica a este entorno (provider linux-basic sin la sección) →
-  // no renderizar nada (no confundir con el camino B del módulo).
-  if (!caps) return null;
+  const hardened = caps?.level === 'zfs-hardened';
 
-  const hardened = caps.level === 'zfs-hardened';
+  // Cabecera con el toggle Demo — SIEMPRE visible (incluso si el backend no aplica),
+  // para poder explorar todas las interfaces sin bare-metal.
+  const demoToggle = (
+    <button
+      onClick={() => setZfsDemo(!demo)}
+      title="Modo demo: entorno ZFS fabricado, 100% local (no toca el backend)"
+      style={{
+        marginLeft: 'auto', padding: '3px 10px', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+        fontSize: '0.6875rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5,
+        border: `1px solid ${demo ? 'var(--mod-storage, var(--accent))' : 'var(--border)'}`,
+        background: demo ? 'var(--mod-storage, var(--accent))' : 'transparent',
+        color: demo ? '#fff' : 'var(--text-dim)',
+      }}
+    >
+      <FlaskConical size={12} /> Demo {demo ? 'ON' : 'OFF'}
+    </button>
+  );
+
+  if (!caps) {
+    // Backend ZFS no aplica a este entorno y demo apagado: ofrecer activar la demo.
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <HardDrive size={16} style={{ color: 'var(--mod-storage)' }} />
+        <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>ZFS NAS</h2>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>no disponible en este entorno</span>
+        {demoToggle}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -128,6 +190,8 @@ export function ZfsSection() {
           {caps.level}
         </span>
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{caps.platform}</span>
+        {demo && <span style={{ fontSize: '0.6875rem', color: 'var(--mod-storage, var(--accent))', fontWeight: 600 }}>· DEMO</span>}
+        {demoToggle}
       </div>
 
       {/* Banner de degradado honesto (no zfs-hardened) */}
@@ -143,9 +207,12 @@ export function ZfsSection() {
       )}
       {hardened && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.75rem', color: 'var(--success, #22c55e)' }}>
-          <ShieldCheck size={14} /> Gestión ZFS activa (escritura gated por token + approval).
+          <ShieldCheck size={14} /> Gestión ZFS activa{demo ? ' (demo: cambios locales)' : ' (escritura gated por token + approval)'}.
         </div>
       )}
+
+      {/* Barra de creación (pool / dataset / zvol / VM), gated por capabilities */}
+      <ZfsManageBar />
 
       {/* Pools */}
       {pools.length > 0 && (
@@ -164,7 +231,7 @@ export function ZfsSection() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
               <th style={th}>Nombre</th><th style={th}>Tipo</th><th style={th}>Usado</th>
-              <th style={th}>Disp.</th><th style={th}>Compresión</th><th style={th}>Cifrado</th>
+              <th style={th}>Disp.</th><th style={th}>Compresión</th><th style={th}>Cifrado</th><th style={th}></th>
             </tr></thead>
             <tbody>
               {[...datasets, ...zvols].map((d) => (
@@ -175,6 +242,11 @@ export function ZfsSection() {
                   <td style={td}>{fmtBytes(d.available_bytes)}</td>
                   <td style={td}>{d.compression ?? '—'}</td>
                   <td style={td}>{d.encryption && d.encryption !== 'off' ? d.encryption : '—'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>
+                    {caps.can_snapshot && (
+                      <button style={actBtn} onClick={() => setSnapTarget(d.name)}><Camera size={11} /> Snapshot</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -191,16 +263,25 @@ export function ZfsSection() {
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
-              <th style={th}>Snapshot</th><th style={th}>Usado</th><th style={th}>Creado</th>
+              <th style={th}>Snapshot</th><th style={th}>Usado</th><th style={th}>Creado</th><th style={th}></th>
             </tr></thead>
             <tbody>
-              {snapshots.slice(0, 50).map((s) => (
-                <tr key={s.full_name}>
-                  <td style={{ ...td, ...mono }}>{s.full_name}</td>
-                  <td style={td}>{fmtBytes(s.used_bytes)}</td>
-                  <td style={td}>{s.creation ? new Date(s.creation * 1000).toLocaleString() : '—'}</td>
-                </tr>
-              ))}
+              {snapshots.slice(0, 50).map((s) => {
+                const auto = s.snap_name.startsWith('claw-auto-');
+                return (
+                  <tr key={s.full_name}>
+                    <td style={{ ...td, ...mono }}>
+                      {s.full_name}
+                      {auto && <span style={{ marginLeft: 6, fontSize: '0.625rem', color: 'var(--text-dim)', border: '1px solid var(--border)', borderRadius: 3, padding: '0 4px' }}>auto</span>}
+                    </td>
+                    <td style={td}>{fmtBytes(s.used_bytes)}</td>
+                    <td style={td}>{s.creation ? new Date(s.creation * 1000).toLocaleString() : '—'}</td>
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      {caps.can_snapshot && <button style={{ ...actBtn, color: 'var(--error,#ef4444)' }} onClick={() => onDestroySnap(s.full_name)}><Trash2 size={11} /></button>}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -214,25 +295,41 @@ export function ZfsSection() {
             <strong style={{ fontSize: '0.8125rem' }}>Máquinas virtuales</strong>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}>Nombre</th><th style={th}>Estado</th></tr></thead>
+            <thead><tr><th style={th}>Nombre</th><th style={th}>Estado</th><th style={th}></th></tr></thead>
             <tbody>
-              {vms.map((v) => (
-                <tr key={v.name}>
-                  <td style={{ ...td, ...mono }}>{v.name}</td>
-                  <td style={{ ...td, color: healthColor(v.state) }}>{v.state}</td>
-                </tr>
-              ))}
+              {vms.map((v) => {
+                const running = v.state.toLowerCase().includes('run');
+                return (
+                  <tr key={v.name}>
+                    <td style={{ ...td, ...mono }}>{v.name}</td>
+                    <td style={{ ...td, color: healthColor(v.state) }}>{v.state}</td>
+                    <td style={{ ...td, textAlign: 'right' }}>
+                      {caps.can_vm && (
+                        <span style={{ display: 'inline-flex', gap: 4 }}>
+                          {running
+                            ? <button style={actBtn} onClick={() => onVm(v.name, 'stop')}><Square size={11} /> Parar</button>
+                            : <button style={actBtn} onClick={() => onVm(v.name, 'start')}><Play size={11} /> Iniciar</button>}
+                          <button style={{ ...actBtn, color: 'var(--error,#ef4444)' }} onClick={() => onVm(v.name, 'destroy')}><Trash2 size={11} /></button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       {/* Hardened pero sin inventario observado (pools vacíos): mensaje honesto */}
-      {hardened && pools.length === 0 && (
+      {hardened && pools.length === 0 && !demo && (
         <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: 8 }}>
-          No se observan pools todavía. Crea uno desde la gestión de discos (gated por token + approval).
+          No se observan pools todavía. Crea uno con "+ Crear pool" (gated por token + approval).
         </div>
       )}
+
+      {/* Modal de crear snapshot (desde la fila de un dataset) */}
+      {snapTarget && <CreateSnapshotForm target={snapTarget} onClose={() => setSnapTarget(null)} />}
     </div>
   );
 }
