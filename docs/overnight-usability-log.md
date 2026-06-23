@@ -726,3 +726,36 @@ necesita empty state (un calendario vacío sigue siendo navegable).
 
 **Verificación:** `tsc -b` → 0 errores nuevos en CalendarView. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 18 — 2026-06-23 23:## — inventory/LocationsTab + INCIDENTE de staging
+
+**Ficheros:** `inventory/tabs/LocationsTab.tsx`
+
+**Implementado:**
+
+1. **`ux(inventory): confirmar antes de borrar una ubicación`** — commit `c29799a`
+   El botón Delete de `LocationsTab` borraba la ubicación al instante.
+   Destructivo: las ubicaciones tienen jerarquía (sub-ubicaciones) e ítems
+   que las referencian, que quedan sin ubicación. `ConfirmDialog` (danger)
+   nombrando la ubicación. (`StockTab` ya confirmaba; `LocationsTab` no.)
+   Otras tabs (Lending/Maintenance/Reports) no tienen borrados destructivos
+   directos.
+
+**⚠️ INCIDENTE de proceso (corregido):** mi primer commit (3c49283,
+deshecho) arrastró 2 ficheros de storage del usuario
+(`DeleteConfirmDialog.tsx`, `SmartStatusCard.tsx`) que estaban **PRE-STAGED**
+en el índice (por el usuario/linter). El patrón `git add <mío> && git
+commit` barre TODO lo que ya esté en el índice. Recuperación: `git reset
+--soft HEAD~1` → desstagear los 2 de storage → recommit solo el mío
+(c29799a) → re-stagear los 2 de storage para restaurar el estado del
+usuario. **Nada perdido; commit final limpio (1 fichero).**
+
+**CAMBIO DE PROCESO para el resto del loop:** usar `git commit -- <fichero>`
+(commit por pathspec, ignora el resto del índice) en vez de `git add X &&
+git commit`, porque el índice del usuario tiene ficheros pre-staged. Este
+mismo commit de log se hace así.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en LocationsTab. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
