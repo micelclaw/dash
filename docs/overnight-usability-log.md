@@ -20,7 +20,7 @@ commit por fix, staging selectivo, sin push.
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
-| embed-corner | pendiente | — |
+| embed-corner | ✅ revisado (1ª pasada) | 2026-06-23 19:39 |
 | command-palette | pendiente | — |
 
 ---
@@ -391,3 +391,42 @@ patrón "overlay/panel/modal que no cierra con Escape" apareció en **office
 (ItemDrawer) y projects (CardDetailPanel/ShareBoardModal)**. Recomendación
 para 2ª pasada: retrofittear esos componentes al hook compartido para que el
 comportamiento sea uniforme y haya un solo sitio que mantener.
+
+---
+
+## Iteración 10 — 2026-06-23 19:39 — módulo `embed-corner`
+
+**Ubicación:** `src/components/shared/EmbedActions.tsx` + `src/hooks/use-embed-fullscreen.ts`
+(la "esquina" estándar compartida por TODOS los embeds: multimedia, office,
+finance, crypto, vpn, pdf, app-host).
+
+**Ficheros:** `src/components/shared/EmbedActions.tsx`
+
+**Implementado:**
+
+1. **`ux(embed-corner): a11y de los controles del embed (aria-label + aria-pressed)`** — commit `4a86471`
+   Los dos controles del corner (toggle pantalla completa + abrir en
+   pestaña) eran icon-only con `title` pero sin `aria-label`, y el toggle
+   no exponía su estado. Se añade `aria-label` a ambos y `aria-pressed` al
+   toggle. Al ser un componente compartido, mejora la lectura por pantalla
+   de la esquina en TODOS los embeds del dash de una sola vez.
+
+**Revisado y YA correcto (no se tocó):**
+
+- **`useEmbedFullscreen`**: maneja Escape para salir de fullscreen
+  (listener guardado por `fullscreen`), lazy-init desde `?fullscreen=1`,
+  `rootStyle` condicional que no toca el layout normal. Sólido.
+
+**Descartado (anotado como hallazgo):**
+
+- **`ExternalLink size={13}` vs `Maximize2/Minimize2 size={14}`**:
+  micro-inconsistencia visual (1px), no merece commit.
+- **Hit target pequeño** (icono 14 + padding 2 ≈ 18px, < 24px
+  recomendado): subir el padding afecta el layout del header en todos los
+  embeds → cambio visual transversal, lo dejo para decisión de diseño.
+- **`href` vacío**: si un servicio no tiene dominio ni `fallbackUrl` ni
+  `openUrl`, el `<a>` quedaría con href vacío. En la práctica los callers
+  siempre pasan `fallbackUrl`; marginal.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en EmbedActions. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
