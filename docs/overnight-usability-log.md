@@ -837,3 +837,36 @@ loop está cerrando su propia deuda de hallazgos, no solo abriendo nuevos.
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
 por commit) + `git diff --cached` (solo storage del usuario, intacto). Sin
 Playwright (Firefox roto en WSL).
+
+---
+
+## Iteración 22 — 2026-06-24 — 2ª pasada: roles ARIA de tabs (transversal + office)
+
+**Ficheros:** `components/shared/Tabs.tsx`, `office/OfficeLauncher.tsx` (pathspec).
+
+**Implementado (cierra el hallazgo "tabs sin ARIA" de la it3, a 2 niveles):**
+
+1. **`ux(office): roles ARIA de tabs en el componente Tabs compartido`** — commit `73eb451`
+   El `Tabs` compartido (usado por ~10 módulos: media, users-groups, drive,
+   finance, inventory, dev…) no exponía semántica de pestañas: contenedor
+   `<div>` plano y tabs sin `role`/`aria-selected`. Se añade `role="tablist"`
+   al contenedor y `role="tab"` + `aria-selected` a cada tab (botón y `<a>`).
+   **Un solo sitio → propaga a TODOS los consumidores.**
+
+2. **`ux(office): roles ARIA en la barra de tabs del launcher`** — commit `7d6f1ae`
+   `OfficeLauncher` tiene su PROPIA barra de tabs inline (no usa el
+   componente compartido): se le añaden `role="tablist"` + `role="tab"` +
+   `aria-selected`. Cierra el hallazgo específico de la it3 para office.
+
+**Nota:** alto apalancamiento — el fix del componente compartido mejora la
+a11y de pestañas en ~10 módulos a la vez, no solo office.
+
+**Descartado / pendiente:** la navegación por flechas (roving tabindex, el
+patrón WAI-ARIA completo de tabs) NO se implementó — las tabs ya son
+focusables (botones/enlaces reales) y `role`+`aria-selected` es la mejora
+de alto valor/bajo riesgo; las flechas serían una mejora futura más
+involucrada.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos. `git show --stat`
+(1 fichero por commit) + `git diff --cached` (solo storage del usuario,
+intacto). Sin Playwright (Firefox roto en WSL).
