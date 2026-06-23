@@ -77,8 +77,13 @@ function FileContextMenu({ state, onClose, onAction }: {
     const handler = (e: Event) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [onClose]);
 
   const items = [
@@ -134,8 +139,13 @@ function PdfActionMenu({ state, onClose, onPreview, onEdit }: {
 
   useEffect(() => {
     const handler = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [onClose]);
 
   const items = [
@@ -200,6 +210,12 @@ function RenameDialog({ doc, onClose, onConfirm }: {
   useEffect(() => {
     inputRef.current?.select();
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -485,7 +501,6 @@ export function Component() {
         }}>
           <StatusDot label="ONLYOFFICE" ok={status.onlyoffice.running} />
           <StatusDot label="Stirling PDF" ok={status.stirling_pdf.running} />
-          <StatusDot label="Documenso" ok={status.documenso.running} />
         </div>
       )}
 
