@@ -23,7 +23,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { HardDrive, Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { HardDrive, Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload, Database } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
 import { ZfsManageBar, CreateSnapshotForm, ImportPoolModal } from './ZfsModals';
 import { ZfsPoolCard } from './ZfsPoolCard';
