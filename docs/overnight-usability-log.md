@@ -759,3 +759,31 @@ mismo commit de log se hace así.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en LocationsTab. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 19 — 2026-06-24 — 2ª pasada: projects ListView/FilterBar
+
+**Ficheros:** `projects/components/FilterBar.tsx`, `projects/views/ListView.tsx`
+(commits por pathspec `git commit -- <f>` para no tocar el índice pre-staged
+del usuario; ver incidente it18).
+
+**Implementado:**
+
+1. **`ux(projects): a11y del FilterBar`** — commit `71c0e1d`
+   FilterBar es COMPARTIDO por todas las vistas de projects. Sus chips de
+   filtro (prioridad/tag/deps/blocked/archived) son toggles que solo
+   indicaban estado por color → invisibles para lectores de pantalla. Se
+   añade `aria-pressed` a los chips, `aria-expanded` al botón "Filters" (que
+   controla la región colapsable) y `aria-label` a la X de limpiar búsqueda.
+
+2. **`ux(projects): la lista muestra la dirección de orden`** — commit `481332a`
+   La cabecera ordenable de ListView mostraba `ArrowUpDown` (icono
+   bidireccional, AMBIGUO) en la columna activa → no se veía si ordenaba
+   ascendente o descendente. Ahora muestra `ArrowUp`/`ArrowDown` según
+   `sortDir` (feedback real, no a11y). Ajustado el import (ArrowUpDown era
+   su único uso).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Commits
+verificados con `git show --stat` (1 fichero cada uno) + `git diff --cached`
+(solo storage del usuario, intacto). Sin Playwright (Firefox roto en WSL).
