@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Plus, Trash2, RefreshCw, TestTube, Pencil, ArrowRight, Globe, Loader2, X } from 'lucide-react';
 import type { ProxyHost, ProxyHostInput, UpstreamTestResult } from '../hooks/use-proxy-hosts';
 import { HostEditorDialog } from '../components/HostEditorDialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface ProxyHostsSectionProps {
   hosts: ProxyHost[];
@@ -34,6 +35,7 @@ export function ProxyHostsSection({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; result: UpstreamTestResult } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ProxyHost | null>(null);
 
   const handleCreate = async (input: ProxyHostInput) => {
     const result = await onCreate(input);
@@ -238,7 +240,7 @@ export function ProxyHostsSection({
                 <SmallIconBtn
                   icon={Trash2}
                   title="Delete"
-                  onClick={() => handleDelete(host.id)}
+                  onClick={() => setConfirmDelete(host)}
                   danger
                   disabled={deleting === host.id}
                 />
@@ -292,6 +294,20 @@ export function ProxyHostsSection({
           onClose={() => { setShowEditor(false); setEditHost(null); }}
         />
       )}
+
+      {/* Confirmación de borrado (acción destructiva: tumba la ruta del host) */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        title="Delete proxy host"
+        description={confirmDelete
+          ? `This removes the proxy route for ${confirmDelete.domain_names?.join(', ') || confirmDelete.label || 'this host'}. Traffic to it will stop being forwarded.`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
