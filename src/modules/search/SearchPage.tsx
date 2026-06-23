@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
-import { Search, X } from 'lucide-react';
+import { Search, X, Loader2 } from 'lucide-react';
 import { useSearchStore } from '@/stores/search.store';
 import { SEARCHABLE_DOMAINS } from '@/config/search-domains';
 import { SearchResultsList } from './SearchResultsList';
@@ -161,6 +161,16 @@ export function Component() {
               fontSize: '0.8125rem', color: 'var(--error)',
             }}>
               {error}
+            </div>
+          )}
+
+          {loading && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              padding: '24px 16px', color: 'var(--text-muted)', fontSize: '0.875rem',
+            }}>
+              <Loader2 size={18} className="animate-spin" />
+              Searching…
             </div>
           )}
 
