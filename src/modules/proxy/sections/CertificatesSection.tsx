@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw, Lock, ShieldCheck } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface Certificate {
   id: string;
@@ -34,6 +35,7 @@ export function CertificatesSection() {
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Certificate | null>(null);
 
   // Form
   const [domains, setDomains] = useState('');
@@ -169,11 +171,24 @@ export function CertificatesSection() {
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                 {cert.expires_at ? new Date(cert.expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' }) : '-'}
               </span>
-              <button onClick={() => handleDelete(cert.id)} disabled={deleting === cert.id} title="Delete" style={deleteBtnStyle}><Trash2 size={13} /></button>
+              <button onClick={() => setConfirmDelete(cert)} disabled={deleting === cert.id} title="Delete" style={deleteBtnStyle}><Trash2 size={13} /></button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        title="Delete certificate"
+        description={confirmDelete
+          ? `Delete the TLS certificate for ${confirmDelete.domain_names?.join(', ') || 'this domain'}? HTTPS for hosts using it will break until reissued.`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
