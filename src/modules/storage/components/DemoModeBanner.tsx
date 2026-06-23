@@ -36,9 +36,10 @@ export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> 
     }}>
       <FlaskConical size={18} style={{ color: 'var(--mod-storage)', flexShrink: 0, marginTop: 1 }} />
       <div style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }}>
-        <strong style={{ color: 'var(--text)' }}>Preview mode (demo)</strong> — disks, RAID pools, volumes and
-        shared folders below are <strong style={{ color: 'var(--text)' }}>simulated</strong>, not real hardware.
-        This is how the Storage module looks with the NAS layer (OpenMediaVault) on bare-metal.
+        <strong style={{ color: 'var(--text)' }}>Modo vista previa (demo)</strong> — los discos, el NAS ZFS, los
+        pools RAID, los volúmenes y las carpetas compartidas de abajo están{' '}
+        <strong style={{ color: 'var(--text)' }}>simulados</strong>, no es hardware real.
+        Así se ve el módulo de Almacenamiento con la capa NAS (ZFS y OpenMediaVault) sobre bare-metal.
       </div>
       <button
         onClick={handleExit}
@@ -51,7 +52,7 @@ export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> 
           opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap',
         }}
       >
-        {busy ? 'Exiting…' : 'Exit preview'}
+        {busy ? 'Saliendo…' : 'Salir de la vista previa'}
       </button>
     </div>
   );

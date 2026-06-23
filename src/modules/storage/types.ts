@@ -35,6 +35,9 @@ export interface Disk {
   smart_status: 'healthy' | 'warning' | 'critical' | null;
   pool: string | null;
   partitions: Partition[];
+  firmware?: string | null;
+  vendor?: string | null;
+  allocation?: 'system' | 'pool' | 'spare' | 'unconfigured' | null;
 }
 
 export interface Volume {
@@ -77,6 +80,15 @@ export interface SmartStatus {
   pending_sectors: number;
   attributes: SmartAttribute[];
   last_test: string | null;
+}
+
+export interface SmartHistoryEntry {
+  sampled_at: string;
+  overall_status: 'healthy' | 'warning' | 'critical';
+  temperature_c: number | null;
+  power_on_hours: number | null;
+  reallocated_sectors: number;
+  pending_sectors: number;
 }
 
 export interface DataCategoryResult {

@@ -12,14 +12,15 @@
 
 // ─── Demo ZFS — entorno fabricado para "ver todas las interfaces" sin bare-metal ──
 // 100% cliente: NO toca el backend gated. Simula un host zfs-hardened con dos pools
-// (uno ONLINE RAIDZ2, otro DEGRADED mirror con un disco con errores → para ver el
-// estado degradado), datasets/zvols, snapshots auto (marcador namespaced) y VMs.
-// El store clona estas estructuras al activar el modo (las mutaciones del wizard no
-// corrompen la fuente). Útil para revisar UX de pools/protección/recuperación.
+// (uno ONLINE RAIDZ2 con caché L2ARC y log SLOG en mirror, otro DEGRADED mirror con
+// un disco con errores → para ver el estado degradado), datasets/zvols y snapshots
+// auto (marcador namespaced). El store clona estas estructuras al activar el modo
+// (las mutaciones del wizard no corrompen la fuente). Útil para revisar UX de
+// pools/protección/recuperación.
 
 import type {
   ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation,
-  ZfsSnapshotObservation, VmObservation,
+  ZfsSnapshotObservation,
 } from './types';
 
 const GB = 1024 ** 3;
@@ -62,7 +63,6 @@ export interface ZfsDemoState {
   datasets: ZfsDatasetObservation[];
   zvols: ZfsDatasetObservation[];
   snapshots: ZfsSnapshotObservation[];
-  vms: VmObservation[];
 }
 
 /** Construye un snapshot of estado fresco (clonable). epochNow se inyecta para
@@ -81,14 +81,33 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
       free_bytes: 19 * TB,
       frag_pct: 8,
       cap_pct: 47,
-      vdevs: [{
-        name: 'raidz2-0', type: 'raidz2', state: 'ONLINE',
-        read_errors: 0, write_errors: 0, cksum_errors: 0,
-        disks: Array.from({ length: 6 }, (_, i) => ({
-          name: `/dev/disk/by-id/ata-WDC_WD80EFZZ-68B_VDL${i + 1}A`,
-          state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0,
-        })),
-      }],
+      vdevs: [
+        {
+          name: 'raidz2-0', type: 'raidz2', state: 'ONLINE',
+          read_errors: 0, write_errors: 0, cksum_errors: 0,
+          disks: Array.from({ length: 6 }, (_, i) => ({
+            name: `/dev/disk/by-id/ata-WDC_WD80EFZZ-68B_VDL${i + 1}A`,
+            state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0,
+          })),
+        },
+        // Caché de lectura L2ARC (1 SSD NVMe)
+        {
+          name: 'cache', type: 'cache', state: 'ONLINE',
+          read_errors: 0, write_errors: 0, cksum_errors: 0,
+          disks: [
+            { name: '/dev/disk/by-id/nvme-Samsung_990_PRO_2TB_CACHE', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+          ],
+        },
+        // Log de escritura SLOG (mirror de 2 SSD)
+        {
+          name: 'log', type: 'log', state: 'ONLINE',
+          read_errors: 0, write_errors: 0, cksum_errors: 0,
+          disks: [
+            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG1', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG2', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+          ],
+        },
+      ],
     },
     {
       name: 'vault',
@@ -145,13 +164,8 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
     { full_name: 'tank/backups@antes-de-migrar', snap_name: 'antes-de-migrar', guid: 'manual1', used_bytes: 12 * GB, referenced_bytes: 36 * GB, creation: epochNow - 30 * 24 * H },
   ];
 
-  const vms: VmObservation[] = [
-    { name: 'claw-win11', state: 'running' },
-    { name: 'claw-debian', state: 'shut off' },
-  ];
-
   // Clonado profundo barato (estructuras JSON puras) para aislar mutaciones.
   return JSON.parse(JSON.stringify({
-    capabilities: DEMO_ZFS_CAPABILITIES, pools, datasets, zvols, snapshots, vms,
+    capabilities: DEMO_ZFS_CAPABILITIES, pools, datasets, zvols, snapshots,
   })) as ZfsDemoState;
 }

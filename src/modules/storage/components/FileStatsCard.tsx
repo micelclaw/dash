@@ -15,6 +15,19 @@ import { Files, HardDrive, Camera } from 'lucide-react';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 
+// Guarda contra valores nulos/undefined/NaN: formatFileSize(undefined)
+// devuelve "NaN undefined". Si no es un número finito, mostramos "—".
+function safeSize(bytes: number | null | undefined): string {
+  if (bytes == null || typeof bytes !== 'number' || !Number.isFinite(bytes)) return '—';
+  return formatFileSize(bytes);
+}
+
+// Cuenta segura: number.toLocaleString() peta si el valor es undefined.
+function safeCount(n: number | null | undefined): string {
+  if (n == null || typeof n !== 'number' || !Number.isFinite(n)) return '—';
+  return n.toLocaleString();
+}
+
 interface MimeStat {
   mime_type: string | null;
   count: number;
@@ -58,8 +71,8 @@ export function FileStatsCard() {
 
   if (loading || !stats) return null;
 
-  const topMimes = [...(stats.mime_distribution ?? [])]
-    .sort((a, b) => b.count - a.count)
+  const topMimes = (Array.isArray(stats.mime_distribution) ? [...stats.mime_distribution] : [])
+    .sort((a, b) => (Number(b.count) || 0) - (Number(a.count) || 0))
     .slice(0, 5);
 
   return (
@@ -70,25 +83,25 @@ export function FileStatsCard() {
       </h3>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <StatItem label="Files" value={stats.total_files.toLocaleString()} />
-        <StatItem label="Directories" value={stats.total_directories.toLocaleString()} />
-        <StatItem label="Total Size" value={formatFileSize(stats.total_size_bytes)} />
-        {stats.duplicates && stats.duplicates.files > 0 && (
-          <StatItem label="Duplicates" value={stats.duplicates.files.toLocaleString()} warn />
+        <StatItem label="Files" value={safeCount(stats.total_files)} />
+        <StatItem label="Directories" value={safeCount(stats.total_directories)} />
+        <StatItem label="Total Size" value={safeSize(stats.total_size_bytes)} />
+        {stats.duplicates && Number(stats.duplicates.files) > 0 && (
+          <StatItem label="Duplicates" value={safeCount(stats.duplicates.files)} warn />
         )}
       </div>
 
-      {snapStats && snapStats.count > 0 && (
+      {snapStats && Number(snapStats.count) > 0 && (
         <div className="flex items-center gap-4 mb-3 text-xs text-[var(--text-muted)]">
           <span className="flex items-center gap-1.5">
             <Camera size={12} />
-            <span className="font-medium text-[var(--text)]">{snapStats.count}</span> snapshots
+            <span className="font-medium text-[var(--text)]">{safeCount(snapStats.count)}</span> snapshots
           </span>
           <span>
-            <span className="font-medium text-[var(--text)]">{snapStats.files_with_snapshots}</span> files versioned
+            <span className="font-medium text-[var(--text)]">{safeCount(snapStats.files_with_snapshots)}</span> files versioned
           </span>
           <span>
-            <span className="font-medium text-[var(--text)]">{formatFileSize(snapStats.total_snapshot_size)}</span> used
+            <span className="font-medium text-[var(--text)]">{safeSize(snapStats.total_snapshot_size)}</span> used
           </span>
         </div>
       )}
@@ -101,7 +114,7 @@ export function FileStatsCard() {
           <div className="flex flex-wrap gap-2">
             {topMimes.map((m, i) => (
               <span key={m.mime_type ?? i} className="px-2 py-0.5 text-[10px] rounded bg-[var(--surface-hover)] text-[var(--text-dim)]">
-                {(m.mime_type ?? 'unknown').split('/').pop()} <span className="text-[var(--text-muted)]">({m.count})</span>
+                {(m.mime_type ?? 'unknown').split('/').pop()} <span className="text-[var(--text-muted)]">({safeCount(m.count)})</span>
               </span>
             ))}
           </div>

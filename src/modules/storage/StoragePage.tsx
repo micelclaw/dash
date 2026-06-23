@@ -11,7 +11,7 @@
  */
 
 import { useEffect } from 'react';
-import { Database, RefreshCw } from 'lucide-react';
+import { Database, RefreshCw, Server, FileText } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useStorageStore } from '@/stores/storage.store';
 import { StorageSummaryCard } from './components/StorageSummaryCard';
@@ -26,6 +26,7 @@ import { DemoModeBanner } from './components/DemoModeBanner';
 import { ZfsSection } from './components/ZfsSection';
 import { FileStatsCard } from './components/FileStatsCard';
 import { FileDuplicatesCard } from './components/FileDuplicatesCard';
+import { CollapsibleSection } from './components/CollapsibleSection';
 
 export function Component() {
   const loading = useStorageStore((s) => s.loading);
@@ -103,47 +104,77 @@ export function Component() {
         </button>
       </div>
 
-      {/* Content. `[&>*]:shrink-0` evita que flexbox aplaste a 0 las secciones con
-          overflow:hidden (PoolSection/VolumeTable/ShareSection → min-height:0) cuando
-          una tarjeta grande (Duplicate Files) genera overflow: deben mantener su alto
-          natural y dejar que el contenedor haga scroll. */}
-      <div className="[&>*]:shrink-0" style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {isDemo && <DemoModeBanner onExit={() => setPreviewMode(false)} />}
-        <StorageSummaryCard status={status} />
-        <DataUsageChart />
-
-        {/* Disks + SMART: side-by-side on desktop, stacked on mobile */}
+      {/* Scroll container. `[&>*]:shrink-0` evita que flexbox aplaste a 0 las
+          secciones con overflow:hidden (PoolSection/VolumeTable/ShareSection →
+          min-height:0) cuando una tarjeta grande genera overflow: deben mantener
+          su alto natural y dejar que este contenedor haga scroll. El inner wrapper
+          centra el contenido y le pone un ancho máximo cómodo de lectura. */}
+      <div className="[&>*]:shrink-0" style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         <div style={{
-          display: 'flex', gap: 16,
-          flexDirection: isMobile || !showSmart ? 'column' : 'row',
+          maxWidth: 1400, margin: '0 auto',
+          display: 'flex', flexDirection: 'column', gap: 24,
         }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <DiskList />
-          </div>
-          {showSmart && (
+          {isDemo && <DemoModeBanner onExit={() => setPreviewMode(false)} />}
+
+          {/* Resumen de capacidad: contexto rápido arriba del todo. */}
+          <StorageSummaryCard status={status} />
+
+          {/* HÉROE: el NAS ZFS es el protagonista — primero y bien visible.
+              Se auto-oculta si el backend ZFS no aplica (capabilities null). */}
+          <ZfsSection />
+
+          {/* Discos físicos + SMART: lado a lado en escritorio, apilado en móvil. */}
+          <div style={{
+            display: 'flex', gap: 24,
+            flexDirection: isMobile || !showSmart ? 'column' : 'row',
+          }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <SmartStatusCard />
+              <DiskList />
+            </div>
+            {showSmart && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SmartStatusCard />
+              </div>
+            )}
+          </div>
+
+          {/* Uso de datos a lo largo del tiempo. */}
+          <DataUsageChart />
+
+          {/* NAS clásico (OpenMediaVault): pools/volúmenes/carpetas. Solo cuando
+              el proveedor expone estas capacidades (OMV o vista previa demo). */}
+          {(showPools || showShares) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)',
+                fontFamily: 'var(--font-sans)', textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                <Server size={14} style={{ color: 'var(--mod-storage)' }} />
+                NAS clásico (OpenMediaVault)
+              </div>
+              {showPools && <PoolSection />}
+              <VolumeTable />
+              {showShares && <ShareSection />}
             </div>
           )}
+
+          {/* Secundario: estadísticas y duplicados de archivos, colapsado por
+              defecto para que no compita con el NAS. */}
+          <CollapsibleSection
+            title="Detalles de archivos"
+            icon={<FileText size={16} />}
+            defaultOpen={false}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <FileStatsCard />
+              <FileDuplicatesCard />
+            </div>
+          </CollapsibleSection>
+
+          {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
         </div>
-
-        {/* Advanced NAS sections (OMV / demo preview). Kept high — right after the
-            disks — so they're visible instead of buried under File Statistics.
-            Disks → RAID pools → volumes → shared folders → file-level stats. */}
-        {showPools && <PoolSection />}
-
-        {/* ZFS NAS (Olas 0-6): read-path + capabilities. Se auto-oculta si el
-            backend ZFS no aplica a este entorno (capabilities null). */}
-        <ZfsSection />
-
-        <VolumeTable />
-
-        {showShares && <ShareSection />}
-
-        <FileStatsCard />
-        <FileDuplicatesCard />
-
-        {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
       </div>
     </div>
   );

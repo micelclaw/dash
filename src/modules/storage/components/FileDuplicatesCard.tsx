@@ -16,6 +16,14 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 
+// Guarda contra valores nulos/undefined/NaN: formatFileSize(undefined)
+// devuelve "NaN undefined". Si el byte-count no es un número finito,
+// mostramos un guion en vez de la cadena rota.
+function safeSize(bytes: number | null | undefined): string {
+  if (bytes == null || typeof bytes !== 'number' || !Number.isFinite(bytes)) return '—';
+  return formatFileSize(bytes);
+}
+
 interface DuplicateFile {
   id: string;
   filename: string;
@@ -55,8 +63,8 @@ export function FileDuplicatesCard() {
       toast.success('File deleted');
       setGroups(prev => prev.map(g => ({
         ...g,
-        files: g.files.filter(f => f.id !== fileId),
-      })).filter(g => g.files.length > 1));
+        files: (Array.isArray(g.files) ? g.files : []).filter(f => f.id !== fileId),
+      })).filter(g => (Array.isArray(g.files) ? g.files.length : 0) > 1));
     } catch {
       toast.error('Failed to delete file');
     }
@@ -66,7 +74,11 @@ export function FileDuplicatesCard() {
   if (loading) return null;
   if (groups.length === 0) return null;
 
-  const totalWaste = groups.reduce((sum, g) => sum + g.size_bytes * (g.files.length - 1), 0);
+  const totalWaste = groups.reduce((sum, g) => {
+    const fileCount = Array.isArray(g.files) ? g.files.length : 0;
+    const size = Number.isFinite(g.size_bytes) ? g.size_bytes : 0;
+    return sum + size * Math.max(0, fileCount - 1);
+  }, 0);
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -75,7 +87,7 @@ export function FileDuplicatesCard() {
           <Copy size={14} />
           Duplicate Files
           <span className="text-xs font-normal text-amber-400">
-            {formatFileSize(totalWaste)} recoverable
+            {safeSize(totalWaste)} recoverable
           </span>
         </h3>
         <button onClick={load} className="p-1.5 rounded hover:bg-[var(--surface-hover)] text-[var(--text-muted)]">
@@ -84,13 +96,15 @@ export function FileDuplicatesCard() {
       </div>
 
       <div className="space-y-3">
-        {groups.map(group => (
+        {groups.map(group => {
+          const files = Array.isArray(group.files) ? group.files : [];
+          return (
           <div key={group.checksum} className="rounded border border-[var(--border)] bg-[var(--bg)] p-3">
             <div className="text-[10px] text-[var(--text-muted)] mb-2">
-              {group.files.length} copies · {formatFileSize(group.size_bytes)} each
+              {files.length} copies · {safeSize(group.size_bytes)} each
             </div>
             <div className="space-y-1">
-              {group.files.map((file, i) => (
+              {files.map((file, i) => (
                 <div key={file.id} className="flex items-center gap-2 text-xs">
                   <span className="flex-1 truncate text-[var(--text)]" title={file.filepath}>
                     {file.filepath}
@@ -109,7 +123,8 @@ export function FileDuplicatesCard() {
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

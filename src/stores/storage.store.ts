@@ -15,8 +15,8 @@ import { api } from '@/services/api';
 import type {
   StorageStatus, StorageCapabilities, DataUsageResult,
   Disk, Volume, SmartStatus, StoragePool, StorageShare,
-  PoolConfig, ShareConfig,
-  ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation, ZfsSnapshotObservation, VmObservation,
+  PoolConfig, ShareConfig, SmartHistoryEntry,
+  ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation, ZfsSnapshotObservation,
 } from '@/modules/storage/types';
 import { buildZfsDemo } from '@/modules/storage/zfs-demo';
 
@@ -57,7 +57,6 @@ interface StorageState {
   zfs_datasets: ZfsDatasetObservation[];
   zfs_zvols: ZfsDatasetObservation[];
   zfs_snapshots: ZfsSnapshotObservation[];
-  zfs_vms: VmObservation[];
   zfs_loading: boolean;
   zfs_demo: boolean;               // demo 100% cliente (no toca el backend gated)
   fetchZfs: () => Promise<void>;
@@ -71,8 +70,14 @@ interface StorageState {
   zfsCreateZvol: (config: { name: string; volsize_gb: number; thin?: boolean }) => Promise<void>;
   zfsCreateSnapshot: (target: string, snapName: string) => Promise<void>;
   zfsDestroySnapshot: (fullName: string) => Promise<void>;
-  zfsCreateVm: (config: { name: string; vcpus: number; mem_mib: number; disk_zvol: string; iso_path?: string }) => Promise<void>;
-  zfsVmAction: (name: string, action: 'start' | 'stop' | 'destroy') => Promise<void>;
+
+  // ── SMART tests/history + ZFS cache/log/special vdevs ──
+  // smartTest dispara un autotest SMART (corto o largo) en un disco; fetchSmartHistory
+  // recupera el histórico de muestras SMART de ese disco; zfsAddCache añade un vdev
+  // auxiliar (cache=L2ARC, log=SLOG, special=metadata) a una pool existente.
+  smartTest: (diskId: string, kind: 'short' | 'long') => Promise<void>;
+  fetchSmartHistory: (diskId: string) => Promise<SmartHistoryEntry[]>;
+  zfsAddCache: (pool: string, kind: 'cache' | 'log' | 'special', disk_by_ids: string[]) => Promise<void>;
 }
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
@@ -93,7 +98,6 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   zfs_datasets: [],
   zfs_zvols: [],
   zfs_snapshots: [],
-  zfs_vms: [],
   zfs_loading: false,
   zfs_demo: false,
 
@@ -202,7 +206,7 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   // ── Storage ZFS (Olas 0-6) — read-path real ──
   // Capabilities primero (gobierna el render); luego, si se puede observar, el
   // inventario en paralelo. Cada llamada es tolerante (un endpoint que falle no
-  // tumba el resto). Las VMs son admin-only → 403 para no-admin → [] silencioso.
+  // tumba el resto).
   fetchZfs: async () => {
     if (get().zfs_demo) { loadZfsDemo(set); return; }
     set({ zfs_loading: true });
@@ -212,20 +216,19 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
         .catch(() => null);
       const caps = capsRes?.data ?? null;
 
-      const empty = { zfs_pools: [], zfs_datasets: [], zfs_zvols: [], zfs_snapshots: [], zfs_vms: [] };
+      const empty = { zfs_pools: [], zfs_datasets: [], zfs_zvols: [], zfs_snapshots: [] };
       if (!caps?.can_inspect) {
         set({ zfs_capabilities: caps, ...empty, zfs_loading: false });
         return;
       }
 
-      const [pools, datasets, zvols, snapshots, vms] = await Promise.all([
+      const [pools, datasets, zvols, snapshots] = await Promise.all([
         api.get<{ data: ZfsPoolObservation[] }>('/hal/storage/zfs/pools').then((r) => r.data).catch(() => []),
         api.get<{ data: ZfsDatasetObservation[] }>('/hal/storage/datasets').then((r) => r.data).catch(() => []),
         api.get<{ data: ZfsDatasetObservation[] }>('/hal/storage/zvols').then((r) => r.data).catch(() => []),
         api.get<{ data: ZfsSnapshotObservation[] }>('/hal/storage/snapshots').then((r) => r.data).catch(() => []),
-        api.get<{ data: VmObservation[] }>('/hal/storage/vms').then((r) => r.data).catch(() => []),
       ]);
-      set({ zfs_capabilities: caps, zfs_pools: pools, zfs_datasets: datasets, zfs_zvols: zvols, zfs_snapshots: snapshots, zfs_vms: vms, zfs_loading: false });
+      set({ zfs_capabilities: caps, zfs_pools: pools, zfs_datasets: datasets, zfs_zvols: zvols, zfs_snapshots: snapshots, zfs_loading: false });
     } catch {
       set({ zfs_loading: false });
     }
@@ -327,24 +330,53 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
     await api.post('/hal/storage/snapshots/destroy', { full_name: fullName });
     await get().fetchZfs();
   },
-  zfsCreateVm: async (config) => {
-    if (get().zfs_demo) {
-      const name = config.name.startsWith('claw-') ? config.name : `claw-${config.name}`;
-      set({ zfs_vms: [...get().zfs_vms, { name, state: 'shut off' }] });
-      return;
-    }
-    await api.post('/hal/storage/vms', config);
-    await get().fetchZfs();
+  // ── SMART tests/history (por disco) ──
+  smartTest: async (diskId, kind) => {
+    // En demo no hay disco real que testear: la UI muestra el toast simulado.
+    if (get().zfs_demo) return;
+    await api.post(`/hal/storage/disks/${encodeURIComponent(diskId)}/smart-test`, { type: kind });
   },
-  zfsVmAction: async (name, action) => {
+  fetchSmartHistory: async (diskId) => {
     if (get().zfs_demo) {
-      if (action === 'destroy') set({ zfs_vms: get().zfs_vms.filter((v) => v.name !== name) });
-      else set({ zfs_vms: get().zfs_vms.map((v) => v.name === name ? { ...v, state: action === 'start' ? 'running' : 'shut off' } : v) });
+      // Histórico fabricado: ~8 muestras con fechas decrecientes (cada 6 h),
+      // temperaturas/horas/sectores plausibles para una unidad sana.
+      const now = Date.now();
+      return Array.from({ length: 8 }, (_, i) => ({
+        sampled_at: new Date(now - i * 6 * 3600 * 1000).toISOString(),
+        overall_status: 'healthy' as const,
+        temperature_c: 34 + (i % 4),
+        power_on_hours: 18250 - i * 6,
+        reallocated_sectors: 0,
+        pending_sectors: 0,
+      }));
+    }
+    return (await api.get<{ data: SmartHistoryEntry[] }>(`/hal/storage/disks/${encodeURIComponent(diskId)}/smart-history`)).data;
+  },
+
+  // ── Añadir vdev auxiliar (cache/log/special) a una pool ──
+  zfsAddCache: async (pool, kind, disk_by_ids) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool
+            ? {
+                ...p,
+                vdevs: [
+                  ...p.vdevs,
+                  {
+                    name: `${kind}-0`, type: kind, state: 'ONLINE',
+                    read_errors: 0, write_errors: 0, cksum_errors: 0,
+                    disks: disk_by_ids.map((d) => ({ name: d, state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 })),
+                  },
+                ],
+              }
+            : p,
+        ),
+      });
       return;
     }
-    const short = name.replace(/^claw-/, '');
-    if (action === 'destroy') await api.post('/hal/storage/vms/destroy', { name: short });
-    else await api.post(`/hal/storage/vms/${encodeURIComponent(short)}/${action}`, {});
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/add-vdev/plan', { pool, topology: kind, disk_by_ids });
+    await api.post('/hal/storage/zfs/pools/add-vdev', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
     await get().fetchZfs();
   },
 }));
@@ -358,7 +390,6 @@ function loadZfsDemo(set: (partial: Partial<StorageState>) => void): void {
     zfs_datasets: demo.datasets,
     zfs_zvols: demo.zvols,
     zfs_snapshots: demo.snapshots,
-    zfs_vms: demo.vms,
     zfs_loading: false,
   });
 }
