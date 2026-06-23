@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Download, Copy, Check, AlertTriangle } from 'lucide-react';
 import type { VpnPeerConfig, VpnPeerUpdate } from '../hooks/use-vpn';
 
@@ -28,6 +28,15 @@ export function AddPeerDialog({ open, onClose, onAdd }: AddPeerDialogProps) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<VpnPeerConfig | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Cerrar con Escape, igual que la X o el clic en el backdrop.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 

@@ -37,6 +37,14 @@ export function PeerDetailDialog({ open, peer, onClose, onSave }: PeerDetailDial
     }
   }, [peer]);
 
+  // Cerrar con Escape, igual que la X / Cancel / clic en el backdrop.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open || !peer) return null;
 
   const handleSave = async () => {
