@@ -281,7 +281,7 @@ const dialogBtnStyle: React.CSSProperties = {
 
 export function Component() {
   const navigate = useNavigate();
-  const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading } = useOfficeStore();
+  const { activeApp, setActiveApp, recentDocs, fetchRecentDocs, fetchStatus, status, loading, docsLoading } = useOfficeStore();
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null);
   const [pdfMenu, setPdfMenu] = useState<ContextMenuState | null>(null);
   const [renaming, setRenaming] = useState<RecentDoc | null>(null);
@@ -439,7 +439,16 @@ export function Component() {
         )}
 
         {/* Recent documents grid */}
-        {recentDocs.length > 0 ? (
+        {docsLoading && recentDocs.length === 0 ? (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 12, padding: '60px 0',
+            color: 'var(--text-dim)',
+          }}>
+            <Loader2 size={28} style={{ animation: 'spin 1s linear infinite', color: cardColor }} />
+            <span style={{ fontSize: 13 }}>Loading…</span>
+          </div>
+        ) : recentDocs.length > 0 ? (
           <>
             <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>Recent</h3>
             <div style={{

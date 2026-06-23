@@ -31,7 +31,6 @@ interface ServiceSubStatus {
 interface OfficeStatus {
   onlyoffice: ServiceSubStatus;
   stirling_pdf: ServiceSubStatus;
-  documenso: ServiceSubStatus;
   mathesar: ServiceSubStatus;
 }
 
@@ -61,6 +60,7 @@ interface OfficeState {
   recentDocs: RecentDoc[];
   fullscreen: boolean;
   loading: boolean;
+  docsLoading: boolean;
 
   setActiveApp: (app: OfficeApp) => void;
   toggleFullscreen: () => void;
@@ -80,6 +80,7 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   recentDocs: [],
   fullscreen: false,
   loading: false,
+  docsLoading: false,
 
   setActiveApp: (app) => set({ activeApp: app }),
 
@@ -96,13 +97,14 @@ export const useOfficeStore = create<OfficeState>((set, get) => ({
   },
 
   fetchRecentDocs: async (mimeFilter?: string) => {
+    set({ docsLoading: true });
     try {
       const params: Record<string, string | number> = { sort: 'updated_at', limit: 12 };
       if (mimeFilter) params.mime_type = mimeFilter;
       const res = await api.get<{ data: RecentDoc[] }>('/files', params);
-      set({ recentDocs: res.data ?? [] });
+      set({ recentDocs: res.data ?? [], docsLoading: false });
     } catch {
-      set({ recentDocs: [] });
+      set({ recentDocs: [], docsLoading: false });
     }
   },
 
