@@ -97,7 +97,7 @@ export function UsersListView() {
       render: (u) => (
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Acciones de ${u.display_name}`}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setEditing(u)}><Pencil className="mr-2 h-3.5 w-3.5" /> Editar</DropdownMenuItem>
               <DropdownMenuItem onClick={() => setPwUser(u)}><KeyRound className="mr-2 h-3.5 w-3.5" /> Cambiar contraseña</DropdownMenuItem>

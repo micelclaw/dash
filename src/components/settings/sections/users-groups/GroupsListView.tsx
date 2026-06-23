@@ -73,7 +73,7 @@ export function GroupsListView() {
       render: (g) => (
         <div onClick={(e) => e.stopPropagation()} className="flex justify-end">
           <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Acciones de ${g.name}`}><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setEditing(g)}><Pencil className="mr-2 h-3.5 w-3.5" /> Editar</DropdownMenuItem>
               <DropdownMenuSeparator />
