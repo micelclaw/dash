@@ -729,7 +729,7 @@ Playwright (Firefox roto en WSL); gate = type-check diferencial.
 
 ---
 
-## Iteración 18 — 2026-06-23 23:## — inventory/LocationsTab + INCIDENTE de staging
+## Iteración 18 — 2026-06-23 23:39 — inventory/LocationsTab + INCIDENTE de staging
 
 **Ficheros:** `inventory/tabs/LocationsTab.tsx`
 
