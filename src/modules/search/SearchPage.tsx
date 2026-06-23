@@ -96,7 +96,10 @@ export function Component() {
               ref={inputRef}
               value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSearch(); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSearch();
+                else if (e.key === 'Escape' && query) { setQuery(''); useSearchStore.getState().clear(); }
+              }}
               placeholder="Search across all modules..."
               style={{
                 flex: 1,
