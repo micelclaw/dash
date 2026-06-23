@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { FileText, X, ChevronRight } from 'lucide-react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import type { DnsTemplate } from '../hooks/use-dns-zones';
 
 interface ApplyTemplateModalProps {
@@ -24,6 +25,9 @@ export function ApplyTemplateModal({ templates, onApply, onClose }: ApplyTemplat
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
+
+  // Cerrar con Escape (se ignora mientras se rellenan las variables).
+  useEscapeToClose(onClose);
 
   const selected = templates.find(t => t.id === selectedId) ?? null;
 
