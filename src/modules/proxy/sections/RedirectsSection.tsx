@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, RefreshCw, ArrowLeftRight, X } from 'lucide-react';
 import type { ProxyHost, ProxyHostInput } from '../hooks/use-proxy-hosts';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface RedirectsSectionProps {
   hosts: ProxyHost[];
@@ -27,6 +28,7 @@ export function RedirectsSection({ hosts, loading, onCreate, onDelete, onToggle,
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<ProxyHost | null>(null);
 
   const [domainInput, setDomainInput] = useState('');
   const [domains, setDomains] = useState<string[]>([]);
@@ -119,11 +121,24 @@ export function RedirectsSection({ hosts, loading, onCreate, onDelete, onToggle,
               <ArrowLeftRight size={14} style={{ color: 'var(--text-muted)' }} />
               <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{host.redirect_url}</span>
               <span style={{ fontSize: '0.75rem', fontWeight: 600, color: host.redirect_code === 301 ? '#22c55e' : '#f59e0b', fontFamily: 'var(--font-mono, monospace)' }}>{host.redirect_code}</span>
-              <button onClick={() => handleDelete(host.id)} disabled={deleting === host.id} title="Delete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', cursor: deleting === host.id ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', opacity: deleting === host.id ? 0.4 : 1 }}><Trash2 size={13} /></button>
+              <button onClick={() => setConfirmDelete(host)} disabled={deleting === host.id} title="Delete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', cursor: deleting === host.id ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', opacity: deleting === host.id ? 0.4 : 1 }}><Trash2 size={13} /></button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        title="Delete redirection"
+        description={confirmDelete
+          ? `Remove the redirect for ${confirmDelete.domain_names?.[0] ?? 'this host'}? Visitors will no longer be forwarded.`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

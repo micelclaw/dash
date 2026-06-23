@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, RefreshCw, Ban, X } from 'lucide-react';
 import type { ProxyHost, ProxyHostInput } from '../hooks/use-proxy-hosts';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface NotFoundHostsSectionProps {
   hosts: ProxyHost[];
@@ -26,6 +27,7 @@ interface NotFoundHostsSectionProps {
 export function NotFoundHostsSection({ hosts, loading, onCreate, onDelete, onToggle, onRefresh }: NotFoundHostsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ProxyHost | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [domainInput, setDomainInput] = useState('');
@@ -119,11 +121,24 @@ export function NotFoundHostsSection({ hosts, loading, onCreate, onDelete, onTog
               <button onClick={() => onToggle(host.id, !host.enabled)} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', display: 'flex' }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: host.enabled ? '#22c55e' : '#6b7280' }} /></button>
               <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', color: '#f59e0b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{host.domain_names.join(', ')}</span>
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(host.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-              <button onClick={() => handleDelete(host.id)} disabled={deleting === host.id} title="Delete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', cursor: deleting === host.id ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', opacity: deleting === host.id ? 0.4 : 1 }}><Trash2 size={13} /></button>
+              <button onClick={() => setConfirmDelete(host)} disabled={deleting === host.id} title="Delete" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', cursor: deleting === host.id ? 'not-allowed' : 'pointer', color: 'var(--text-muted)', opacity: deleting === host.id ? 0.4 : 1 }}><Trash2 size={13} /></button>
             </div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        title="Delete 404 host"
+        description={confirmDelete
+          ? `Remove the 404 host for ${confirmDelete.domain_names?.join(', ') || 'this host'}?`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
