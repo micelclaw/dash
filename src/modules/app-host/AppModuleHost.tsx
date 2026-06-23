@@ -75,7 +75,7 @@ export function Component() {
         padding: fullscreen ? 0 : '0 12px', borderBottom: fullscreen ? 'none' : '1px solid var(--border)',
         background: 'var(--surface)', gap: 8, fontSize: 12, color: 'var(--text-dim)', flexShrink: 0,
       }}>
-        <button onClick={() => navigate('/chat')} style={iconBtn}>
+        <button onClick={() => navigate('/chat')} style={iconBtn} title="Volver al panel" aria-label="Volver al panel">
           <ArrowLeft size={14} />
         </button>
         <Icon size={14} style={{ color: accent }} />
