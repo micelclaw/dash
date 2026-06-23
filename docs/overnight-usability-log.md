@@ -16,7 +16,7 @@ commit por fix, staging selectivo, sin push.
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
-| network (dns/proxy/vpn) | 🟡 parcial: VPN + modales clave de proxy/dns; secciones grandes pendientes | 2026-06-23 20:39 |
+| network (dns/proxy/vpn) | 🟡 parcial: VPN + modales + borrados de proxy; secciones de dns pendientes | 2026-06-23 21:12 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
@@ -540,4 +540,39 @@ seguir migrando los modales inline previos (office, vpn, inventory) al hook.
   cerrado: solo VPN (it6) + 2 modales (it12).
 
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 13 — 2026-06-23 21:12 — `network`/proxy (2ª pasada, fix sustantivo)
+
+**Ficheros:** `proxy/sections/ProxyHostsSection.tsx`, `proxy/sections/RedirectsSection.tsx`, `proxy/sections/NotFoundHostsSection.tsx`
+
+**Implementado (gap de SEGURIDAD real, no estético):**
+
+1. **`ux(proxy): confirmar antes de borrar un proxy host`** — commit `2b3adf0`
+   El botón de borrar host del reverse-proxy llamaba a `onDelete` AL
+   INSTANTE, sin confirmación. Es destructivo: borra la ruta y el
+   sitio/servicio deja de servirse. Se interpone el `ConfirmDialog`
+   compartido (variant danger) nombrando los dominios afectados. (Proxy no
+   usaba `ConfirmDialog` en ninguna sección.)
+
+2. **`ux(proxy): confirmar antes de borrar redirecciones y 404 hosts`** — commit `d253eee`
+   Mismo gap en `RedirectsSection` y `NotFoundHostsSection` (borraban sin
+   confirmar). Mismo `ConfirmDialog`. Consistencia: los TRES tipos de host
+   del reverse-proxy confirman ahora el borrado.
+
+**Por qué importa:** borrar un host de reverse-proxy por error tira un
+servicio público; un clic accidental no debería poder hacerlo sin red de
+seguridad. Es el tipo de fallo que el usuario nota tarde y mal.
+
+**Descartado / pendiente:**
+- **Otras secciones de proxy** (Streams, AccessLists, Certificates, Audit,
+  Settings, Subdomain, Dashboard, DDNS) — sin pasada profunda.
+- **dns completo** sigue pendiente (ZoneEditor 915, LocalDomains 782, DDNS
+  641, Providers 500). Network NO cerrado.
+- ¿`CertificatesSection`/`AccessListsSection` borran sin confirmar? No
+  verificado aún → revisar en próxima iteración de proxy.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en los 3 ficheros. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
