@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, QrCode, Download, Power, Copy, Check, X, AlertTriangle } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { WgClient } from '../hooks/use-wg-clients';
@@ -396,6 +396,13 @@ function IconButton({ children, title, onClick }: { children: React.ReactNode; t
 }
 
 function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  // Cerrar con Escape (antes solo cerraba clicando el backdrop, sin X visible).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       onClick={onClose}
