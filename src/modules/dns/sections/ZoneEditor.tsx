@@ -16,6 +16,7 @@ import {
   CheckCircle, AlertTriangle, FileText, Zap, Lock, Info,
 } from 'lucide-react';
 import type { DnsZone, DnsRecord, DnsRecordInput, DnsRecordType, DnssecStatus } from '../hooks/use-dns-zones';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DnsCallout } from '../components/DnsCallout';
 import { InfoTooltip } from '../components/InfoTooltip';
 import { CopyBlock } from '../components/CopyBlock';
@@ -60,6 +61,7 @@ export function ZoneEditor({
   const [editForm, setEditForm] = useState<Partial<DnsRecordInput>>({});
   const [adding, setAdding] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<DnsRecord | null>(null);
 
   const handleAdd = async () => {
     if (!form.name || !form.content) return;
@@ -327,7 +329,7 @@ export function ZoneEditor({
                     {!record.locked && (
                       <>
                         <IconBtn icon={Pencil} onClick={() => startEdit(record)} title="Edit" />
-                        <IconBtn icon={Trash2} onClick={() => onDeleteRecord(record.id)} title="Delete" color="#f43f5e" />
+                        <IconBtn icon={Trash2} onClick={() => setConfirmDeleteRecord(record)} title="Delete" color="#f43f5e" />
                       </>
                     )}
                   </div>
@@ -383,6 +385,19 @@ export function ZoneEditor({
           </button>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmDeleteRecord}
+        onClose={() => setConfirmDeleteRecord(null)}
+        onConfirm={() => { if (confirmDeleteRecord) void onDeleteRecord(confirmDeleteRecord.id); setConfirmDeleteRecord(null); }}
+        title="Delete DNS record"
+        description={confirmDeleteRecord
+          ? `Delete the ${confirmDeleteRecord.type} record "${confirmDeleteRecord.name || '@'}"? This can break services that rely on it (mail, web, verification…).`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </>
   );
 }
