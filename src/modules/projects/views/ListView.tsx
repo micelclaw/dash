@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
-import { ArrowUpDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
+import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
 import { PriorityBadge } from '../components/PriorityDot';
@@ -245,7 +245,7 @@ export function ListView() {
               >
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   {label}
-                  {sortField === field && <ArrowUpDown size={10} />}
+                  {sortField === field && (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />)}
                 </span>
               </th>
             ))}
