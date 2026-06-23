@@ -16,7 +16,7 @@ commit por fix, staging selectivo, sin push.
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
-| network (dns/proxy/vpn) | 🟡 parcial: VPN revisado; dns/proxy pendientes | 2026-06-23 17:40 |
+| network (dns/proxy/vpn) | 🟡 parcial: VPN + modales clave de proxy/dns; secciones grandes pendientes | 2026-06-23 20:39 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
@@ -499,3 +499,45 @@ intactos).
    ES/EN; ver iteración 1).
 6. **Tabs/vistas grandes sin revisar a fondo**: inventory (6 tabs),
    projects (Timeline/Calendar/List/Kanban) → profundizar en 2ª pasada.
+
+---
+
+## Iteración 12 — 2026-06-23 20:39 — `network` (2ª pasada: cerrar dns/proxy) + 1er retrofit del hook
+
+**Ficheros:** `proxy/components/HostEditorDialog.tsx`, `dns/sections/ApplyTemplateModal.tsx`
+
+**Implementado (ambos vía el hook `useEscapeToClose` de la iteración 9):**
+
+1. **`ux(proxy): ESC cierra el editor de host`** — commit `0a37dfc`
+   `HostEditorDialog` (crear/editar host del reverse-proxy) cerraba con X/
+   Cancel/backdrop, no con Escape. `useEscapeToClose(onClose)` con
+   `ignoreWhenTyping` por defecto (es un formulario con muchos campos).
+
+2. **`ux(dns): ESC cierra el modal de aplicar plantilla`** — commit `1feb279`
+   `ApplyTemplateModal` cerraba con X/backdrop, no con Escape.
+   `useEscapeToClose(onClose)` (ignora Escape mientras se rellenan las
+   variables de la plantilla).
+
+**Nota metodológica:** primer uso del hook compartido FUERA de projects →
+empieza a pagar el retrofit transversal que recomendé. La 2ª pasada debería
+seguir migrando los modales inline previos (office, vpn, inventory) al hook.
+
+**Revisado y YA correcto:**
+
+- `ProxyPage` / `DnsModule`: shells limpios (sidebar + secciones, badges,
+  loading propagado). `ZonesSection`: `if (loading) return Loading…` +
+  empty `zones.length === 0` bien separados.
+
+**Descartado / pendiente (anotado):**
+
+- **`AddZoneWizard` no tiene prop `onClose`** (lo controla el padre, no es
+  un modal auto-cerrable) → no se le puede aplicar el hook sin tocar el
+  contrato; queda como hallazgo.
+- **`ZoneEditor` (915 líneas)** sin revisar a fondo; secciones grandes de
+  proxy (ProxyHostsSection, SubdomainSection, DdnsSection, Dashboard,
+  Certificates…) y de dns (LocalDomainsSection 782, DdnsSection 641,
+  ProvidersSection 500…) **siguen sin pasada profunda**. Network NO está
+  cerrado: solo VPN (it6) + 2 modales (it12).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
