@@ -54,6 +54,8 @@ export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, on
         onClick={onToggleFullscreen}
         style={iconBtn}
         title={fullscreen ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa'}
+        aria-label={fullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+        aria-pressed={fullscreen}
       >
         {fullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
       </button>
@@ -63,6 +65,7 @@ export function EmbedActions({ slug, fallbackUrl, openUrl, ramMb, fullscreen, on
         rel="noopener noreferrer"
         style={{ ...iconBtn, textDecoration: 'none' }}
         title="Abrir en pestaña nueva"
+        aria-label="Abrir en pestaña nueva"
       >
         <ExternalLink size={13} />
       </a>
