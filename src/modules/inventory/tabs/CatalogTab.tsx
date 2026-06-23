@@ -563,6 +563,13 @@ export function CatalogTab() {
     void fetchItems(next);
   };
 
+  const clearFilters = () => {
+    setSearch('');
+    const cleared: ItemFilters = {};
+    setFilters(cleared);
+    void fetchItems(cleared);
+  };
+
   const onSearchChange = (value: string) => {
     setSearch(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -573,6 +580,8 @@ export function CatalogTab() {
 
   const systemStatuses = meta?.system_statuses ?? [];
   const empty = items.length === 0 && !loading;
+  // Distinguir "inventario vacío" de "el filtro/búsqueda no casó nada".
+  const hasActiveFilters = Object.values(filters).some(v => v !== undefined && v !== null && v !== '' && v !== false);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -642,12 +651,21 @@ export function CatalogTab() {
       {/* Body */}
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {empty ? (
-          <EmptyState
-            icon={Boxes}
-            title="No items yet"
-            description="Add your first possession or send a photo of a receipt to your agent."
-            actions={[{ label: '+ New item', onClick: () => setShowModal(true), variant: 'primary' }]}
-          />
+          hasActiveFilters ? (
+            <EmptyState
+              icon={Search}
+              title="No matching items"
+              description="No items match your current search or filters."
+              actions={[{ label: 'Clear filters', onClick: clearFilters, variant: 'primary' }]}
+            />
+          ) : (
+            <EmptyState
+              icon={Boxes}
+              title="No items yet"
+              description="Add your first possession or send a photo of a receipt to your agent."
+              actions={[{ label: '+ New item', onClick: () => setShowModal(true), variant: 'primary' }]}
+            />
+          )
         ) : view === 'list' ? (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
