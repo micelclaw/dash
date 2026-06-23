@@ -19,7 +19,7 @@ commit por fix, staging selectivo, sin push.
 | network (dns/proxy/vpn) | 🟡 parcial: VPN revisado; dns/proxy pendientes | 2026-06-23 17:40 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
-| projects | pendiente | — |
+| projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
 | embed-corner | pendiente | — |
 | command-palette | pendiente | — |
 
@@ -340,3 +340,54 @@ Superficies revisadas: `app-host/AppModuleHost.tsx` (el embed) +
 
 **Verificación:** `tsc -b` → 0 errores nuevos en AppModuleHost. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 9 — 2026-06-23 19:11 — módulo `projects`
+
+**Ficheros:** `src/hooks/use-escape-to-close.ts` (NUEVO), `projects/components/CardDetailPanel.tsx`, `projects/components/ShareBoardModal.tsx`
+
+**Implementado:**
+
+1. **`ux(projects): ESC cierra el panel de detalle de tarjeta (+ hook useEscapeToClose)`** — commit `c211785`
+   El `CardDetailPanel` (panel lateral de edición de tarjeta) solo cerraba
+   con la X. Se **introduce un hook compartido `useEscapeToClose`**
+   (`src/hooks/`) que cierra al pulsar Escape e IGNORA el evento si el foco
+   está en un campo de texto (respeta el Escape interno de la edición de
+   checklist y no cierra a media edición). Resuelve de forma REUTILIZABLE
+   el patrón "modal/panel sin ESC" que llevo detectando desde la iteración
+   3 (office, vpn×2, inventory). Futuras pasadas pueden retrofittear esos a
+   este hook.
+
+2. **`ux(projects): ESC cierra el modal de compartir tablero`** — commit `27ed4da`
+   `ShareBoardModal` solo cerraba con X/backdrop. Se aplica
+   `useEscapeToClose(onClose, { ignoreWhenTyping: false })` → contrato
+   estándar de modal (Escape cierra siempre).
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **Deuda TS pre-existente en projects** (no es usabilidad, no la toco):
+  `ShareBoardModal:14` ChevronDown sin usar (TS6133),
+  `use-card-context-menu:266` `string|null` vs `undefined` (TS2322),
+  `TimelineView` 3× declaraciones sin usar. Candidatas a una pasada de
+  lint/tipos dedicada.
+- **Vistas grandes sin revisar a fondo**: TimelineView (989), CalendarView
+  (537), ListView (471), KanbanBoard (363) — solo cubiertos panel+modal de
+  compartir. 2ª pasada.
+- **NewBoardModal** ya tenía Escape (en el input); podría unificarse al
+  hook en una pasada de consistencia.
+
+**Verificación:** `tsc -b` → 0 errores NUEVOS (el único en mis ficheros es
+el ChevronDown pre-existente, confirmado sin cambios). Sin Playwright
+(Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Hallazgo transversal (recurrente) — hook `useEscapeToClose`
+
+A partir de la iteración 9 existe `src/hooks/use-escape-to-close.ts`. El
+patrón "overlay/panel/modal que no cierra con Escape" apareció en **office
+(RenameDialog + menús), vpn (AddPeer/PeerDetail/ModalOverlay), inventory
+(ItemDrawer) y projects (CardDetailPanel/ShareBoardModal)**. Recomendación
+para 2ª pasada: retrofittear esos componentes al hook compartido para que el
+comportamiento sea uniforme y haya un solo sitio que mantener.
