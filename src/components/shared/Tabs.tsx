@@ -41,6 +41,7 @@ export function Tabs({ tabs, activeTab, onChange, variant = 'underline', classNa
   return (
     <div
       className={className}
+      role="tablist"
       style={{
         display: 'flex',
         gap: isUnderline ? 0 : 4,
@@ -108,13 +109,15 @@ export function Tabs({ tabs, activeTab, onChange, variant = 'underline', classNa
           <a
             key={tab.id}
             href={tab.href}
+            role="tab"
+            aria-selected={isActive}
             onClick={(e) => handleSpaAnchorClick(e, () => onChange(tab.id))}
             style={tabStyle}
           >
             {content}
           </a>
         ) : (
-          <button key={tab.id} onClick={() => onChange(tab.id)} style={tabStyle}>
+          <button key={tab.id} role="tab" aria-selected={isActive} onClick={() => onChange(tab.id)} style={tabStyle}>
             {content}
           </button>
         );
