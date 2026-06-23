@@ -16,7 +16,7 @@ commit por fix, staging selectivo, sin push.
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
-| network (dns/proxy/vpn) | 🟡 parcial: proxy CASI completo (5 borrados confirmados); dns aún pendiente | 2026-06-23 21:38 |
+| network (dns/proxy/vpn) | ✅ 1ª pasada (it6/12/13/14/15): ESC + borrados destructivos confirmados en VPN/proxy/dns. Pulida profunda de secciones grandes = pendiente | 2026-06-23 22:10 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
@@ -607,6 +607,51 @@ seguridad → caída de servicio público o exposición de un host protegido.
 - Otras secciones de proxy (Streams, Audit, Settings, Subdomain, DDNS,
   Dashboard) — sin pasada profunda, pero las destructivas principales ya
   están cubiertas.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 15 — 2026-06-23 22:10 — `network`/dns (cierre de network, 1ª pasada)
+
+**Ficheros:** `dns/sections/ZoneEditor.tsx`, `dns/sections/DdnsSection.tsx`
+
+**Implementado:**
+
+1. **`ux(dns): confirmar antes de borrar un registro DNS`** — commit `77ea2ee`
+   El botón de borrar registro en `ZoneEditor` llamaba a `onDeleteRecord`
+   al instante. Destructivo: borrar un A/MX/CNAME/TXT por error rompe web,
+   correo o verificaciones. `ConfirmDialog` (danger) nombrando tipo+nombre.
+   (La ZONA ya tenía confirm inline; el registro no.)
+
+2. **`ux(dns): confirmar antes de quitar un proveedor DDNS`** — commit `5ed34cb`
+   `ProviderRow.onRemove` (DdnsSection) borraba al instante → cortaba las
+   actualizaciones automáticas de IP. `ConfirmDialog` (danger) nombrando el
+   tipo de proveedor.
+
+**Revisado y YA correcto en dns (confirm inline pre-existente):**
+- `ZonesSection`/`ZoneEditor`: borrado de ZONA ("Remove this zone and all
+  its records?" inline).
+- `LocalDomainsSection`: borrado de dominio local (estado `confirmDelete`).
+- `ProvidersSection`: borrado de provider (estado `confirmRemove`).
+
+## ✅ NETWORK CERRADO (1ª pasada) — iteraciones 6, 12, 13, 14, 15
+
+Enfoque: cerrar los **gaps críticos** (no pulir cada píxel de ~14.500
+líneas). Hecho en las 3 sub-áreas:
+- **VPN** (it6): ESC en AddPeerDialog, PeerDetailDialog y ModalOverlay
+  (config/QR).
+- **proxy** (it12-14): ESC en HostEditorDialog + **confirmación en los 5
+  borrados destructivos** (hosts, redirects, 404, certificados, ACLs).
+- **dns** (it12,15): ESC en ApplyTemplateModal + confirmación en borrado de
+  registro y de proveedor DDNS (zona/dominios-locales/providers ya tenían).
+
+**Pendiente (pasada MÁS profunda, no crítico):** loading/empty/microcopy
+fino de las secciones más grandes (ZoneEditor 915, LocalDomains 782, DDNS
+641, Providers 500; proxy Subdomain/Dashboard/Streams/Audit/Settings). Los
+fallos de **seguridad** (borrar algo público de un clic) y de **teclado**
+(modales sin ESC) ya están resueltos en todo network.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
