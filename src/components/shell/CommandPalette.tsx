@@ -297,6 +297,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       />
       {/* Palette */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Paleta de comandos"
         style={{
           position: 'fixed',
           top: '20%',
