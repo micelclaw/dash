@@ -17,7 +17,7 @@ commit por fix, staging selectivo, sin push.
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
 | network (dns/proxy/vpn) | 🟡 parcial: VPN revisado; dns/proxy pendientes | 2026-06-23 17:40 |
-| inventory | pendiente | — |
+| inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | pendiente | — |
 | projects | pendiente | — |
 | embed-corner | pendiente | — |
@@ -259,4 +259,42 @@ pasadas posteriores (marcado 🟡 parcial en la tabla).
 - **dns y proxy enteros** sin revisar (submódulos grandes).
 
 **Verificación:** `tsc -b` → 0 errores nuevos en los 3 ficheros de vpn.
+Sin Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 7 — 2026-06-23 18:10 — módulo `inventory`
+
+**Ficheros:** `inventory/components/ItemDrawer.tsx`, `inventory/tabs/CatalogTab.tsx`
+
+**Implementado:**
+
+1. **`ux(inventory): Escape cierra el drawer de item`** — commit `fcff051`
+   El `ItemDrawer` (panel lateral, 1397 líneas) solo se cerraba con la X;
+   Escape no hacía nada a nivel de panel. Se añade un keydown global que
+   cierra (`selectItem(null)`) en Escape, PERO ignora el evento si el foco
+   está en `input/textarea/select/contenteditable` → respeta el Escape
+   interno de los formularios de medidor (`resetMeterForms`, líneas 731/802)
+   y no cierra el panel a media edición.
+
+2. **`ux(inventory): distinguir 'sin items' de 'sin resultados de filtro'`** — commit `eef719d`
+   `CatalogTab` filtra del servidor (`fetchItems(filters)`), así que una
+   búsqueda/filtro sin coincidencias mostraba el MISMO "No items yet" +
+   "Add your first possession" + CTA "+ New item" que el inventario vacío
+   → engañoso (sí hay items). Ahora, con filtros activos
+   (`hasActiveFilters`), muestra "No matching items" + acción "Clear
+   filters" (resetea search+filtros y re-fetch); el vacío real solo
+   aparece sin filtros. (Mismo patrón "falso vacío durante filtro" que en
+   office, aquí resuelto con microcopy + acción de limpiar.)
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **Tabs grandes sin revisar**: StockTab, MaintenanceTab, LocationsTab,
+  LendingTab, ReportsTab, PanelTab (cada una 300-900 líneas). Solo cubierto
+  Catalog + el drawer. Quedan para 2ª pasada.
+- **Patrón transversal "modal/overlay sin Escape"** ya detectado en office,
+  vpn e inventory → merece una pasada global con un hook compartido
+  (`useEscapeToClose`) en vez de repetirlo por componente.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ItemDrawer ni CatalogTab.
 Sin Playwright (Firefox roto en WSL); gate = type-check diferencial.
