@@ -691,3 +691,38 @@ cancela) — coste ~3 líneas, gran ganancia de a11y.
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. dnd-kit
 exporta ambos símbolos (verificado en node_modules). Sin Playwright (Firefox
 roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 17 — 2026-06-23 23:09 — 2ª pasada: projects/CalendarView (a11y/teclado)
+
+**Ficheros:** `projects/views/CalendarView.tsx`
+
+**Implementado:**
+
+1. **`ux(projects): aria-label en la navegación del calendario`** — commit `07d3ac4`
+   Los botones de mes anterior/siguiente y de año ±/picker eran icon-only
+   (Chevrons) sin nombre accesible. `aria-label` + `title` en los 4.
+
+2. **`ux(projects): tarjetas del calendario abribles por teclado`** — commit `561e73e`
+   Las tarjetas de evento en las celdas eran `<div onClick>`: no se podían
+   enfocar con Tab ni abrir con teclado. Se añade `role="button"`,
+   `tabIndex={0}`, `aria-label` (título) y `onKeyDown` (Enter/Espacio →
+   `selectCard`). Ahora se navegan y abren sin ratón.
+
+**Revisado:** el `useEffect` "sin deps" de la línea ~158 es un handler de
+**wheel** (scroll-para-navegar-mes) y SÍ limpia su listener cada render →
+intencional para capturar el último prev/next, no es una fuga. ListView y
+TimelineView ya tienen empty state ("No cards yet…"). El calendario no
+necesita empty state (un calendario vacío sigue siendo navegable).
+
+**Descartado / pendiente:**
+- **Celda de día = `<div onClick>`** (abre el input de nueva tarjeta): no es
+  accesible por teclado, pero contiene el input inline de creación →
+  hacerla button es más invasivo; diferido.
+- Vistas grandes que faltan a fondo: TimelineView (989), ListView (471),
+  inventory tabs (Lending/Maintenance/Reports/Stock/Locations).
+- `PhotosPeople` drag libre por teclado (it16).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en CalendarView. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
