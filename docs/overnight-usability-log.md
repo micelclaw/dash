@@ -787,3 +787,32 @@ del usuario; ver incidente it18).
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Commits
 verificados con `git show --stat` (1 fichero cada uno) + `git diff --cached`
 (solo storage del usuario, intacto). Sin Playwright (Firefox roto en WSL).
+
+---
+
+## Iteración 20 — 2026-06-24 — 2ª pasada: multimedia (cierre de hallazgos diferidos de la it2)
+
+**Ficheros:** `multimedia/MultimediaPage.tsx`, `multimedia/MediaDownloads.tsx`
+(commits por pathspec).
+
+**Implementado (los 2 hallazgos que dejé anotados en la iteración 2):**
+
+1. **`ux(multimedia): no fallar en silencio si start/stop agota el tiempo`** — commit `b695c3f`
+   `handleAction` sondeaba 30s a que el servicio alcanzara running/stopped;
+   si NO lo lograba, el bucle salía en silencio, el spinner paraba y la card
+   se quedaba igual SIN avisar → el usuario no sabía que la acción no
+   completó. Ahora un flag `reached` detecta el timeout y muestra el motivo
+   en el banner de error ("…may still be starting/stopping. Use refresh to
+   check."). Además limpia errores stale al iniciar una nueva acción.
+
+2. **`ux(multimedia): botón de borrar descarga con nombre accesible y hover`** — commit `5e21ef9`
+   El botón de papelera de cada descarga era icon-only sin `aria-label`/
+   `title` y sin feedback de hover. Se añade `aria-label` (con el título de
+   la descarga), `title` y hover a color de error (transición suave).
+
+**Nota:** ambos hallazgos venían anotados desde la it2 ("diferido"). El
+loop está cerrando su propia deuda de hallazgos, no solo abriendo nuevos.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` confirma
+1 fichero por commit; `git diff --cached` solo el storage del usuario
+(intacto). Sin Playwright (Firefox roto en WSL).
