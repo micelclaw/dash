@@ -120,7 +120,7 @@ export function UsersListView() {
       <div className="flex items-center gap-2">
         <Button onClick={() => setCreating(true)} className="gap-1.5"><Plus className="h-4 w-4" /> Crear</Button>
         <Button variant="outline" disabled={selectedUsers.length !== 1} onClick={() => setEditing(selectedUsers[0])} className="gap-1.5"><Pencil className="h-4 w-4" /> Editar</Button>
-        <Button variant="outline" disabled={selectedUsers.length === 0 || selectedUsers.some((u) => u.id === selfId)} onClick={() => selectedUsers.length === 1 && setConfirm({ kind: 'delete', user: selectedUsers[0] })} className="gap-1.5"><Trash2 className="h-4 w-4" /> Eliminar</Button>
+        <Button variant="outline" disabled={selectedUsers.length !== 1 || selectedUsers.some((u) => u.id === selfId)} onClick={() => selectedUsers.length === 1 && setConfirm({ kind: 'delete', user: selectedUsers[0] })} className="gap-1.5"><Trash2 className="h-4 w-4" /> Eliminar</Button>
         <Button variant="outline" onClick={exportCsv} className="gap-1.5"><Download className="h-4 w-4" /> Exportar</Button>
         <div className="relative ml-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-dim)]" />
