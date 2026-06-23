@@ -159,6 +159,20 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
 
       // SMART de TODOS los discos de golpe (no bloquea el render principal).
       if (caps.can_get_smart) void get().fetchAllSmart();
+
+      // El preview legacy se PERSISTE server-side (provider='demo' sobrevive a recargas),
+      // pero zfs_demo es estado en memoria → se resetea al recargar la página. Sin esto,
+      // tras un reload quedas en "demo legacy + ZFS real" y no se ven las pools tank/vault.
+      // Re-sincroniza el demo ZFS con el provider para que las pools demo aparezcan siempre
+      // que el preview esté activo (recién pulsado o restaurado tras recarga).
+      if (provider === 'demo') {
+        set({ zfs_demo: true });
+        loadZfsDemo(set);
+      } else if (get().zfs_demo) {
+        // El provider real ya no es demo (se salió del preview) → apaga el demo ZFS.
+        set({ zfs_demo: false });
+        void get().fetchZfs();
+      }
     } catch {
       set({ error: 'Failed to load storage data', loading: false });
     }
