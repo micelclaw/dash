@@ -816,3 +816,24 @@ loop está cerrando su propia deuda de hallazgos, no solo abriendo nuevos.
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` confirma
 1 fichero por commit; `git diff --cached` solo el storage del usuario
 (intacto). Sin Playwright (Firefox roto en WSL).
+
+---
+
+## Iteración 21 — 2026-06-24 — 2ª pasada: search (cierre de hallazgos diferidos de la it5)
+
+**Ficheros:** `search/SearchPage.tsx` (commits por pathspec).
+
+**Implementado (hallazgos anotados en la it5):**
+
+1. **`ux(search): Escape limpia el campo de búsqueda`** — commit `5c4dc37`
+   El input solo reaccionaba a Enter (lanzar). Escape no hacía nada pese a
+   existir una X de limpiar. Ahora Escape (con texto) limpia query +
+   resultados, igual que la X. Comportamiento esperado en un buscador.
+
+2. **`ux(search): nombre accesible en la X de limpiar`** — commit `228ccc5`
+   El botón X de limpiar era icon-only sin nombre accesible. `aria-label`
+   + `title` (que además menciona el atajo Esc recién añadido).
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
+por commit) + `git diff --cached` (solo storage del usuario, intacto). Sin
+Playwright (Firefox roto en WSL).
