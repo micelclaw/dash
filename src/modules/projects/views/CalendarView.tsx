@@ -227,7 +227,7 @@ export function CalendarView() {
         borderBottom: '1px solid var(--border)',
         background: 'var(--surface)',
       }}>
-        <button onClick={prev} style={navBtnStyle}><ChevronLeft size={14} /></button>
+        <button onClick={prev} style={navBtnStyle} aria-label="Previous month" title="Previous month"><ChevronLeft size={14} /></button>
 
         {/* Header label with picker */}
         <div style={{ position: 'relative' }} ref={pickerRef}>
@@ -258,9 +258,9 @@ export function CalendarView() {
             <div style={pickerPanelStyle}>
               {/* Year nav */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>
-                <button onClick={() => setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1))} style={pickerNavBtn}><ChevronLeft size={12} /></button>
+                <button onClick={() => setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1))} style={pickerNavBtn} aria-label="Previous year" title="Previous year"><ChevronLeft size={12} /></button>
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{viewDate.getFullYear()}</span>
-                <button onClick={() => setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1))} style={pickerNavBtn}><ChevronRight size={12} /></button>
+                <button onClick={() => setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1))} style={pickerNavBtn} aria-label="Next year" title="Next year"><ChevronRight size={12} /></button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: 4 }}>
                 {MONTH_NAMES.map((name, i) => {
@@ -330,7 +330,7 @@ export function CalendarView() {
           )}
         </div>
 
-        <button onClick={next} style={navBtnStyle}><ChevronRight size={14} /></button>
+        <button onClick={next} style={navBtnStyle} aria-label="Next month" title="Next month"><ChevronRight size={14} /></button>
         <button onClick={goToday} style={{ ...navBtnStyle, fontSize: 11, padding: '4px 8px' }}>Today</button>
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 2 }}>
@@ -525,7 +525,7 @@ const pickerPanelStyle: React.CSSProperties = {
   left: '50%',
   transform: 'translateX(-50%)',
   marginTop: 4,
-  background: 'rgba(17, 17, 24, 0.95)',
+  background: 'var(--glass-95)',
   border: '1px solid var(--border)',
   borderRadius: 8,
   boxShadow: '0 8px 24px rgba(0,0,0,.4)',
