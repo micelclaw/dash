@@ -655,3 +655,39 @@ fallos de **seguridad** (borrar algo público de un clic) y de **teclado**
 
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 16 — 2026-06-23 22:41 — 2ª pasada profunda: accesibilidad de teclado en drag&drop
+
+**Ficheros:** `projects/views/KanbanBoard.tsx`, `components/shell/Sidebar.tsx`
+
+**Tema:** barrido transversal de los DnD del dash. La mayoría montaban SOLO
+`PointerSensor` → el drag&drop era **exclusivamente de ratón** (inoperable
+por teclado). dnd-kit soporta `KeyboardSensor` + `sortableKeyboardCoordinates`
+para listas sortable (Espacio coge, flechas mueven, Espacio suelta, Esc
+cancela) — coste ~3 líneas, gran ganancia de a11y.
+
+**Implementado:**
+
+1. **`ux(projects): tablero Kanban operable por teclado`** — commit `ba67091`
+   `KanbanBoard.useSensors` solo tenía PointerSensor → no se podían
+   reordenar tarjetas/columnas sin ratón. Añadido KeyboardSensor. Superficie
+   PRINCIPAL de projects.
+
+2. **`ux(sidebar): reordenar módulos por teclado`** — commit `45ff9e8`
+   El reordenamiento de módulos del sidebar (sortable, vertical) tenía el
+   mismo gap. Añadido KeyboardSensor.
+
+**Auditoría de DnD (los 4 `useSensors` del dash):**
+- `KanbanBoard` → ARREGLADO.
+- `Sidebar` → ARREGLADO.
+- `FlowEditor` → ya tenía KeyboardSensor (correcto, no tocado).
+- `PhotosPeople` → usa `useDraggable`/`useDroppable` (drag LIBRE foto→persona,
+  NO sortable). `sortableKeyboardCoordinates` no aplica; el teclado para
+  draggable/droppable libre necesita un coordinateGetter a medida →
+  DIFERIDO como hallazgo (riesgo/complejidad mayor, no es un quick win).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. dnd-kit
+exporta ambos símbolos (verificado en node_modules). Sin Playwright (Firefox
+roto en WSL); gate = type-check diferencial.
