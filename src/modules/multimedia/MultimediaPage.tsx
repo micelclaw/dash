@@ -63,6 +63,7 @@ export function Component() {
   const [showWizard, setShowWizard] = useState(false);
   const [startingApps, setStartingApps] = useState<Set<string>>(new Set());
   const [stoppingApps, setStoppingApps] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -80,6 +81,14 @@ export function Component() {
     refresh();
     const id = setInterval(refresh, 30_000);
     return () => clearInterval(id);
+  }, [refresh]);
+
+  // Manual refresh: surface feedback (spin + disabled) so the click is
+  // acknowledged. The 30s background poll stays silent to avoid a periodic blink.
+  const handleManualRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
   }, [refresh]);
 
   const handleAction = async (app: string, action: 'start' | 'stop') => {
@@ -151,8 +160,14 @@ export function Component() {
     <div className="mm-page">
       <div className="mm-header">
         <h2>Servarr</h2>
-        <button className="mm-btn-icon" onClick={refresh} title="Refresh">
-          <RefreshCw size={14} />
+        <button
+          className="mm-btn-icon"
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+          title="Refresh"
+          aria-label="Refresh service status"
+        >
+          <RefreshCw size={14} className={refreshing ? 'mm-spin' : undefined} />
         </button>
       </div>
 
