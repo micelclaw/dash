@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 import { X, Plus, Globe, Server, Mail, Zap } from 'lucide-react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import type { ProxyHostInput, ProxyHost } from '../hooks/use-proxy-hosts';
 
 interface HostEditorDialogProps {
@@ -55,6 +56,9 @@ export function HostEditorDialog({ host, onSave, onClose }: HostEditorDialogProp
   const isEdit = !!host;
   const [tab, setTab] = useState<'details' | 'ssl' | 'advanced'>('details');
   const [saving, setSaving] = useState(false);
+
+  // Cerrar con Escape (formulario: se ignora si el foco está en un campo).
+  useEscapeToClose(onClose);
 
   // Form state
   const [domainInput, setDomainInput] = useState('');
