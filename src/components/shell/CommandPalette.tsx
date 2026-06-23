@@ -26,6 +26,8 @@ import { useSidebarStore } from '@/stores/sidebar.store';
 import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { api } from '@/services/api';
 import { usePlayerStore } from '@/stores/player.store';
+import { useSettingsStore } from '@/stores/settings.store';
+import { isLightThemeId } from '@/hooks/use-theme';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { resolveEntity } from '@/config/entity-registry';
 import { SEARCHABLE_DOMAINS, searchableByKey, iconDomainOf, labelOfResultDomain } from '@/config/search-domains';
@@ -138,7 +140,13 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       window.dispatchEvent(new CustomEvent('claw:open-download-dialog'));
     }},
     { id: 'toggle-sidebar', label: 'Toggle sidebar', icon: PanelLeft, group: 'UI', action: sidebarToggle },
-    { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {} },
+    { id: 'toggle-theme', label: 'Toggle dark/light', icon: Moon, group: 'UI', action: () => {
+      // Alterna entre el tema claro y el oscuro y lo persiste (useTheme re-aplica
+      // al cambiar settings.dash.theme). Antes era un no-op (action vacía).
+      const st = useSettingsStore.getState();
+      const current = st.settings?.dash?.theme ?? 'dark';
+      void st.updateSection('dash', { theme: isLightThemeId(current) ? 'dark' : 'light' });
+    } },
   ], [navigate, sidebarToggle, openPanel]);
 
   // Detect mode from input prefix
