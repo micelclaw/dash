@@ -114,6 +114,8 @@ export function Component() {
             {query && (
               <button
                 onClick={() => { setQuery(''); useSearchStore.getState().clear(); }}
+                aria-label="Clear search"
+                title="Clear search (Esc)"
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   color: 'var(--text-muted)', padding: 2, display: 'flex',
