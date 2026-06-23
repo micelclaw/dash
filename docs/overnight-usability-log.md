@@ -21,7 +21,7 @@ commit por fix, staging selectivo, sin push.
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
 | embed-corner | ✅ revisado (1ª pasada) | 2026-06-23 19:39 |
-| command-palette | pendiente | — |
+| command-palette | ✅ revisado (1ª pasada) | 2026-06-23 20:10 |
 
 ---
 
@@ -430,3 +430,72 @@ finance, crypto, vpn, pdf, app-host).
 
 **Verificación:** `tsc -b` → 0 errores nuevos en EmbedActions. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 11 — 2026-06-23 20:10 — módulo `command-palette`
+
+**Ficheros:** `src/components/shell/CommandPalette.tsx`
+
+**Implementado:**
+
+1. **`ux(command-palette): el comando 'Toggle dark/light' ya funciona (era no-op)`** — commit `2e26db5`
+   El comando "Toggle dark/light" tenía `action: () => {}` → el usuario lo
+   seleccionaba y NO pasaba nada (bug funcional real, no cosmético). Ahora
+   alterna entre tema claro y oscuro leyendo `settings.dash.theme` y
+   persistiendo con `updateSection('dash', {theme})`; `useTheme` re-aplica
+   al cambiar el setting. `isLightThemeId` decide la dirección
+   (claro→dark, oscuro/otros→light).
+
+2. **`ux(command-palette): semántica de diálogo para lectores de pantalla`** — commit `5ff1f65`
+   El contenedor de la paleta era un `<div>` plano: un lector de pantalla
+   no anunciaba que se abría un diálogo modal. Se añade `role="dialog"` +
+   `aria-modal="true"` + `aria-label`. (cmdk ya aporta la semántica
+   combobox/listbox del input+lista.)
+
+**Revisado y YA correcto (no se tocó):**
+
+- **Estados loading/empty**: modo search y modo domain muestran
+  "Searching…" y el "No results" va guardado por `!isSearching` (sin flash
+  de falso vacío). Bien.
+- **Teclado**: `handleKeyDown` cubre Escape (limpia input → cierra),
+  Backspace (sale de modo), Tab (autocompleta dominio); cmdk aporta
+  flechas/enter. Cierre al seleccionar (`action(); onClose()`). Sólido.
+- **Comando "Download Media from URL"**: dispara `claw:open-download-dialog`
+  y SÍ tiene listener en `Shell.tsx:706` → no estaba roto.
+
+**Descartado (anotado como hallazgo):**
+
+- **Import `Boxes` sin usar** (TS6133 pre-existente, línea 20). Lint, no
+  usabilidad → pasada de limpieza aparte.
+
+**Verificación:** `tsc -b` → 0 errores NUEVOS (solo el `Boxes`
+pre-existente). Sin Playwright (Firefox roto en WSL); gate = type-check
+diferencial.
+
+---
+
+## 🏁 1ª PASADA COMPLETA (iteraciones 1–11)
+
+Cubiertos los 11 ítems de la rotación: finance, multimedia, office,
+users-groups, search, **network (solo VPN — dns/proxy pendientes)**,
+inventory, automation, projects, embed-corner, command-palette.
+**~28 commits `ux(...)`**, todos con gate `tsc -b` diferencial (0 errores
+nuevos) y staging selectivo (los 83+ ficheros en curso del usuario,
+intactos).
+
+### Pendiente para la 2ª pasada / cierre
+1. **network: dns y proxy** (submódulos enormes aún sin revisar) — cerrar
+   antes de marcar network completo.
+2. **Retrofit `useEscapeToClose`**: unificar a este hook los modales que
+   resolví inline (office RenameDialog/menús, vpn AddPeer/PeerDetail/
+   ModalOverlay, inventory ItemDrawer) — un solo sitio que mantener.
+3. **Bugs reales hallados** (ya arreglados): crash `ImageIcon` en search,
+   no-op del theme toggle, botón Eliminar muerto en users-groups.
+4. **Deuda TS pre-existente** (lint, NO tocada por ser fuera de alcance):
+   `Boxes`/`ChevronDown` sin usar, `noUncheckedIndexedAccess` en
+   users-groups y projects, etc. → candidata a una pasada dedicada.
+5. **Decisión del usuario pendiente**: política de idioma (dash mixto
+   ES/EN; ver iteración 1).
+6. **Tabs/vistas grandes sin revisar a fondo**: inventory (6 tabs),
+   projects (Timeline/Calendar/List/Kanban) → profundizar en 2ª pasada.
