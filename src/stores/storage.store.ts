@@ -14,25 +14,25 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type {
-  StorageStatus, StorageCapabilities, DataUsageResult,
-  Disk, Volume, SmartStatus, StoragePool, StorageShare,
-  PoolConfig, ShareConfig, SmartHistoryEntry,
+  StorageStatus, DataUsageResult,
+  Disk, SmartStatus, SmartHistoryEntry,
   ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation, ZfsSnapshotObservation,
   ZfsDiskObservation,
 } from '@/modules/storage/types';
 import { buildZfsDemo } from '@/modules/storage/zfs-demo';
 
+// Persistencia (cliente) del modo demo: sobrevive a recargas sin estado en servidor.
+const DEMO_KEY = 'claw-storage-demo';
+function readDemoFlag(): boolean {
+  try { return localStorage.getItem(DEMO_KEY) === '1'; } catch { return false; }
+}
+
 // ─── Store ──────────────────────────────────────────────
 
 interface StorageState {
   status: StorageStatus | null;
-  capabilities: StorageCapabilities | null;
-  provider: string | null;
   data_usage: DataUsageResult | null;
   disks: Disk[];
-  volumes: Volume[];
-  pools: StoragePool[];
-  shares: StorageShare[];
   smart_cache: Record<string, SmartStatus>;
   loading: boolean;
   error: string | null;
@@ -41,11 +41,6 @@ interface StorageState {
   fetchAll: () => Promise<void>;
   fetchSmart: (diskId: string) => Promise<void>;
   toggleDisk: (diskId: string) => void;
-  createPool: (config: PoolConfig) => Promise<void>;
-  deletePool: (poolId: string) => Promise<void>;
-  createShare: (config: ShareConfig) => Promise<void>;
-  deleteShare: (shareId: string) => Promise<void>;
-  detectProvider: () => Promise<void>;
   setPreviewMode: (enabled: boolean) => Promise<void>;
 
   // ── Storage ZFS (Olas 0-6) — backend nativo ──
@@ -103,13 +98,8 @@ interface StorageState {
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
   status: null,
-  capabilities: null,
-  provider: null,
   data_usage: null,
   disks: [],
-  volumes: [],
-  pools: [],
-  shares: [],
   smart_cache: {},
   loading: false,
   error: null,
@@ -120,59 +110,35 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   zfs_zvols: [],
   zfs_snapshots: [],
   zfs_loading: false,
-  zfs_demo: false,
+  zfs_demo: readDemoFlag(),
 
   fetchAll: async () => {
+    // Demo 100% cliente: carga el entorno fabricado y NO toca el backend.
+    if (get().zfs_demo) {
+      loadZfsDemo(set);
+      set({ loading: false, error: null });
+      return;
+    }
+
     set({ loading: true, error: null });
     try {
-      // Phase 1: status + capabilities in parallel
-      const [statusRes, capsRes] = await Promise.all([
+      // Read-path real: estado agregado + discos + uso de datos en paralelo.
+      const [statusRes, disksRes, usageRes] = await Promise.all([
         api.get<{ data: StorageStatus }>('/hal/storage/status'),
-        api.get<{ data: { provider: string; capabilities: StorageCapabilities; missing_for_full: string | null } }>('/hal/storage/capabilities'),
-      ]);
-
-      const caps = capsRes.data.capabilities;
-      const provider = capsRes.data.provider;
-
-      // Phase 2: data depending on capabilities, in parallel
-      const disksP = api.get<{ data: Disk[] }>('/hal/storage/disks');
-      const volumesP = api.get<{ data: Volume[] }>('/hal/storage/volumes');
-      const usageP = api.get<{ data: DataUsageResult }>('/hal/storage/data-usage');
-      const poolsP = caps.can_create_pool ? api.get<{ data: StoragePool[] }>('/hal/storage/pools') : null;
-      const sharesP = caps.can_manage_shares ? api.get<{ data: StorageShare[] }>('/hal/storage/shares') : null;
-
-      const [disksRes, volumesRes, usageRes, poolsRes, sharesRes] = await Promise.all([
-        disksP, volumesP, usageP, poolsP, sharesP,
+        api.get<{ data: Disk[] }>('/hal/storage/disks'),
+        api.get<{ data: DataUsageResult }>('/hal/storage/data-usage'),
       ]);
 
       set({
         status: statusRes.data,
-        capabilities: caps,
-        provider,
         disks: disksRes.data,
-        volumes: volumesRes.data,
         data_usage: usageRes.data,
-        pools: poolsRes?.data ?? [],
-        shares: sharesRes?.data ?? [],
         loading: false,
       });
 
-      // SMART de TODOS los discos de golpe (no bloquea el render principal).
-      if (caps.can_get_smart) void get().fetchAllSmart();
-
-      // El preview legacy se PERSISTE server-side (provider='demo' sobrevive a recargas),
-      // pero zfs_demo es estado en memoria → se resetea al recargar la página. Sin esto,
-      // tras un reload quedas en "demo legacy + ZFS real" y no se ven las pools tank/vault.
-      // Re-sincroniza el demo ZFS con el provider para que las pools demo aparezcan siempre
-      // que el preview esté activo (recién pulsado o restaurado tras recarga).
-      if (provider === 'demo') {
-        set({ zfs_demo: true });
-        loadZfsDemo(set);
-      } else if (get().zfs_demo) {
-        // El provider real ya no es demo (se salió del preview) → apaga el demo ZFS.
-        set({ zfs_demo: false });
-        void get().fetchZfs();
-      }
+      // SMART de TODOS los discos de golpe + inventario ZFS (no bloquean el render).
+      void get().fetchAllSmart();
+      void get().fetchZfs();
     } catch {
       set({ error: 'Failed to load storage data', loading: false });
     }
@@ -190,55 +156,24 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
   },
 
   toggleDisk: (diskId: string) => {
-    const { expanded_disks, capabilities, smart_cache } = get();
+    const { expanded_disks, smart_cache, zfs_demo } = get();
     const isExpanded = expanded_disks.includes(diskId);
     if (isExpanded) {
       set({ expanded_disks: expanded_disks.filter((id) => id !== diskId) });
     } else {
       set({ expanded_disks: [...expanded_disks, diskId] });
-      // Auto-fetch SMART if available and not cached
-      if (capabilities?.can_get_smart && !smart_cache[diskId]) {
+      // Auto-fetch SMART si no está cacheado (en demo ya viene precargado).
+      if (!zfs_demo && !smart_cache[diskId]) {
         get().fetchSmart(diskId);
       }
     }
   },
 
-  createPool: async (config: PoolConfig) => {
-    await api.post('/hal/storage/pools', config);
-    const res = await api.get<{ data: StoragePool[] }>('/hal/storage/pools');
-    set({ pools: res.data });
-  },
-
-  deletePool: async (poolId: string) => {
-    await api.delete(`/hal/storage/pools/${encodeURIComponent(poolId)}`);
-    const res = await api.get<{ data: StoragePool[] }>('/hal/storage/pools');
-    set({ pools: res.data });
-  },
-
-  createShare: async (config: ShareConfig) => {
-    await api.post('/hal/storage/shares', config);
-    const res = await api.get<{ data: StorageShare[] }>('/hal/storage/shares');
-    set({ shares: res.data });
-  },
-
-  deleteShare: async (shareId: string) => {
-    await api.delete(`/hal/storage/shares/${encodeURIComponent(shareId)}`);
-    const res = await api.get<{ data: StorageShare[] }>('/hal/storage/shares');
-    set({ shares: res.data });
-  },
-
-  detectProvider: async () => {
-    await api.post('/hal/storage/detect-provider');
-    await get().fetchAll();
-  },
-
-  // Toggle the simulated "NAS preview" provider (demo disks/RAID/shares).
-  // Unifica la demo: el mismo Preview también enciende/apaga el demo ZFS, para que
-  // "modo demo" muestre TODAS las interfaces (capa legacy + NAS ZFS) de una vez.
+  // Alias CLIENTE del modo demo: NO toca el backend (sin POST, sin badge).
+  // El demo es 100% en memoria; setZfsDemo carga/limpia el entorno fabricado
+  // (discos/SMART/estado/uso + pools/datasets/zvols/snapshots).
   setPreviewMode: async (enabled: boolean) => {
-    await api.post('/hal/storage/preview', { enabled });
     get().setZfsDemo(enabled);
-    await get().fetchAll();
   },
 
   // ── Storage ZFS (Olas 0-6) — read-path real ──
@@ -274,8 +209,16 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
 
   setZfsDemo: (enabled: boolean) => {
     set({ zfs_demo: enabled });
+    // Persistir el flag (cliente) para que la vista previa SOBREVIVA a recargas:
+    // el demo es 100% en memoria, sin estado en el servidor.
+    try {
+      if (enabled) localStorage.setItem(DEMO_KEY, '1');
+      else localStorage.removeItem(DEMO_KEY);
+    } catch { /* SSR / storage no disponible: ignorar */ }
+    // Al ENTRAR en demo: carga el entorno fabricado (cliente, sin backend).
+    // Al SALIR: recarga el read-path real completo (status/disks/uso + ZFS + SMART).
     if (enabled) loadZfsDemo(set);
-    else void get().fetchZfs();
+    else void get().fetchAll();
   },
 
   // ── Escrituras ZFS (demo = mutación local; real = backend gated) ──
@@ -627,9 +570,16 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
 }));
 
 // Carga el entorno demo fabricado en el store (clon fresco, aislado de la fuente).
+// Setea TANTO la capa básica (discos/SMART/estado/uso) como la ZFS.
 function loadZfsDemo(set: (partial: Partial<StorageState>) => void): void {
   const demo = buildZfsDemo();
   set({
+    // Capa básica (read-service simulado).
+    disks: demo.disks,
+    smart_cache: demo.smartCache,
+    status: demo.status,
+    data_usage: demo.dataUsage,
+    // Capa ZFS.
     zfs_capabilities: demo.capabilities,
     zfs_pools: demo.pools,
     zfs_datasets: demo.datasets,

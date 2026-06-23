@@ -20,7 +20,7 @@
 
 import type {
   ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation,
-  ZfsSnapshotObservation,
+  ZfsSnapshotObservation, Disk, SmartStatus, StorageStatus, DataUsageResult,
 } from './types';
 
 const GB = 1024 ** 3;
@@ -76,6 +76,64 @@ export interface ZfsDemoState {
   datasets: ZfsDatasetObservation[];
   zvols: ZfsDatasetObservation[];
   snapshots: ZfsSnapshotObservation[];
+  // ── Capa "básica" (read-service) simulada para los componentes legacy ──
+  // (lista de discos físicos, SMART por disco, estado agregado, uso de datos).
+  disks: Disk[];
+  smartCache: Record<string, SmartStatus>;
+  status: StorageStatus;
+  dataUsage: DataUsageResult;
+}
+
+// ─── Discos físicos demo (espejo de demo.provider.ts) ──────────────
+// 7 unidades: 3× WD Red Plus 4TB en pool, 1 SSD de sistema, 1 Seagate con AVISO
+// (bad sectors), 2 NVMe libres. Los ids cumplen /^disk_[a-z0-9]+$/ (guard SMART).
+function buildDemoDisks(): Disk[] {
+  return [
+    { id: 'disk_sda', device: '/dev/sda', model: 'WD Red Plus 4TB', vendor: 'Western Digital', firmware: '83.00A83', serial: 'WD-WCC7K0DA0001', size_bytes: 4 * TB, type: 'hdd', transport: 'sata', removable: false, temperature_c: 38, smart_status: 'healthy', pool: 'tank', allocation: 'pool', partitions: [{ id: 'disk_sda1', mount: null, size_bytes: 4 * TB, used_bytes: null, filesystem: 'linux_raid_member' }] },
+    { id: 'disk_sdb', device: '/dev/sdb', model: 'WD Red Plus 4TB', vendor: 'Western Digital', firmware: '83.00A83', serial: 'WD-WCC7K0DA0002', size_bytes: 4 * TB, type: 'hdd', transport: 'sata', removable: false, temperature_c: 39, smart_status: 'healthy', pool: 'tank', allocation: 'pool', partitions: [{ id: 'disk_sdb1', mount: null, size_bytes: 4 * TB, used_bytes: null, filesystem: 'linux_raid_member' }] },
+    { id: 'disk_sdc', device: '/dev/sdc', model: 'WD Red Plus 4TB', vendor: 'Western Digital', firmware: '83.00A83', serial: 'WD-WCC7K0DA0003', size_bytes: 4 * TB, type: 'hdd', transport: 'sata', removable: false, temperature_c: 41, smart_status: 'healthy', pool: 'tank', allocation: 'pool', partitions: [{ id: 'disk_sdc1', mount: null, size_bytes: 4 * TB, used_bytes: null, filesystem: 'linux_raid_member' }] },
+    { id: 'disk_sdd', device: '/dev/sdd', model: 'Samsung 870 EVO 1TB', vendor: 'Samsung', firmware: 'SVQ01B6Q', serial: 'S6P0NX0T123456', size_bytes: 1 * TB, type: 'ssd', transport: 'sata', removable: false, temperature_c: 34, smart_status: 'healthy', pool: null, allocation: 'system', partitions: [{ id: 'disk_sdd1', mount: '/', size_bytes: 900 * GB, used_bytes: 120 * GB, filesystem: 'ext4' }, { id: 'disk_sdd2', mount: '[SWAP]', size_bytes: 16 * GB, used_bytes: 0, filesystem: 'swap' }] },
+    // ── Unidad con AVISO: sectores reasignados/pendientes > 0, temperatura alta ──
+    { id: 'disk_sde', device: '/dev/sde', model: 'Seagate IronWolf 2TB', vendor: 'Seagate', firmware: 'SC60', serial: 'ZA2ABCDE0001', size_bytes: 2 * TB, type: 'hdd', transport: 'sata', removable: false, temperature_c: 44, smart_status: 'warning', pool: null, allocation: 'unconfigured', partitions: [{ id: 'disk_sde1', mount: '/srv/scratch', size_bytes: 2 * TB, used_bytes: 600 * GB, filesystem: 'ext4' }] },
+    // ── Dos NVMe "libres" (cache/log/special en el wizard de pool) ──
+    { id: 'disk_nvme0n1', device: '/dev/nvme0n1', model: 'Samsung 990 PRO 2TB', vendor: 'Samsung', firmware: '4B2QJXD7', serial: 'S6Z1NX0W900001', size_bytes: 2 * TB, type: 'ssd', transport: 'nvme', removable: false, temperature_c: 36, smart_status: 'healthy', pool: null, allocation: 'unconfigured', partitions: [] },
+    { id: 'disk_nvme1n1', device: '/dev/nvme1n1', model: 'Samsung 990 PRO 2TB', vendor: 'Samsung', firmware: '4B2QJXD7', serial: 'S6Z1NX0W900002', size_bytes: 2 * TB, type: 'ssd', transport: 'nvme', removable: false, temperature_c: 37, smart_status: 'healthy', pool: null, allocation: 'unconfigured', partitions: [] },
+  ];
+}
+
+// SMART por disco. El de aviso (disk_sde) lleva reallocated/pending > 0.
+function smartFor(diskId: string, tempC: number, hours: number, status: 'healthy' | 'warning' = 'healthy'): SmartStatus {
+  const reallocated = status === 'warning' ? 8 : 0;
+  const pending = status === 'warning' ? 2 : 0;
+  return {
+    disk_id: diskId,
+    overall_status: status,
+    power_on_hours: hours,
+    temperature_c: tempC,
+    reallocated_sectors: reallocated,
+    pending_sectors: pending,
+    last_test: '2026-06-15T03:00:00.000Z',
+    attributes: [
+      { id: 1, name: 'Raw_Read_Error_Rate', value: 200, worst: 200, threshold: 51, raw: 0 },
+      { id: 5, name: 'Reallocated_Sector_Ct', value: status === 'warning' ? 96 : 100, worst: 100, threshold: 10, raw: reallocated },
+      { id: 9, name: 'Power_On_Hours', value: 99, worst: 99, threshold: 0, raw: hours },
+      { id: 194, name: 'Temperature_Celsius', value: 100 + tempC, worst: 95 + tempC, threshold: 0, raw: tempC },
+      { id: 197, name: 'Current_Pending_Sector', value: 100, worst: 100, threshold: 0, raw: pending },
+      { id: 198, name: 'Offline_Uncorrectable', value: 100, worst: 100, threshold: 0, raw: 0 },
+    ],
+  };
+}
+
+function buildDemoSmartCache(): Record<string, SmartStatus> {
+  return {
+    disk_sda: smartFor('disk_sda', 38, 14210),
+    disk_sdb: smartFor('disk_sdb', 39, 14208),
+    disk_sdc: smartFor('disk_sdc', 41, 14195),
+    disk_sdd: smartFor('disk_sdd', 34, 9870),
+    disk_sde: smartFor('disk_sde', 44, 31540, 'warning'),
+    disk_nvme0n1: smartFor('disk_nvme0n1', 36, 1240),
+    disk_nvme1n1: smartFor('disk_nvme1n1', 37, 1238),
+  };
 }
 
 /** Construye un snapshot of estado fresco (clonable). epochNow se inyecta para
@@ -218,8 +276,41 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
     { full_name: 'tank/backups@antes-de-migrar', snap_name: 'antes-de-migrar', guid: 'manual1', used_bytes: 12 * GB, referenced_bytes: 36 * GB, creation: epochNow - 30 * 24 * H },
   ];
 
+  // ── Capa básica simulada ──
+  const disks = buildDemoDisks();
+  const smartCache = buildDemoSmartCache();
+
+  // Estado agregado coherente (volumen de datos del pool tank + sistema).
+  // tank usable ≈ 8 TB (RAIDZ de las 3 WD), ~3.2 TB usados; sistema 900 GB / 120 GB.
+  const totalBytes = 8 * TB + 900 * GB;
+  const usedBytes = Math.round(3.2 * TB) + 120 * GB;
+  const status: StorageStatus = {
+    provider: 'demo',
+    total_bytes: totalBytes,
+    used_bytes: usedBytes,
+    free_bytes: totalBytes - usedBytes,
+    health: 'warning', // hay un disco con aviso (disk_sde) → no es 'healthy'
+    disk_count: disks.length,
+    volume_count: 2,
+  };
+
+  // Uso de datos por categorías (lo que pinta el donut "tus datos"): usuario, otros, sistema.
+  const dataUsage: DataUsageResult = {
+    total_data_bytes: 1180 * GB,
+    cache_age_seconds: 0,
+    categories: [
+      { name: 'media', label: 'Multimedia', size_bytes: 620 * GB, status: 'ok', group: 'user' },
+      { name: 'drive', label: 'Mis archivos', size_bytes: 240 * GB, status: 'ok', group: 'user' },
+      { name: 'photos', label: 'Fotos', size_bytes: 95 * GB, status: 'ok', group: 'user' },
+      { name: 'backups', label: 'Copias de seguridad', size_bytes: 150 * GB, status: 'ok', group: 'others' },
+      { name: 'containers', label: 'Contenedores', size_bytes: 45 * GB, status: 'ok', group: 'system' },
+      { name: 'system', label: 'Sistema', size_bytes: 30 * GB, status: 'ok', group: 'system' },
+    ],
+  };
+
   // Clonado profundo barato (estructuras JSON puras) para aislar mutaciones.
   return JSON.parse(JSON.stringify({
     capabilities: DEMO_ZFS_CAPABILITIES, pools, datasets, zvols, snapshots,
+    disks, smartCache, status, dataUsage,
   })) as ZfsDemoState;
 }

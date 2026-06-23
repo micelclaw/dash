@@ -195,14 +195,3 @@ export async function updateFirewallServicePolicy(
 ): Promise<void> {
   await api.put(`/hal/firewall/services/${name}`, policy);
 }
-
-// ─── Storage ────────────────────────────────────────────────────────
-
-export async function getStorageProvider(): Promise<{ provider: string }> {
-  const res = await api.get<{ data: { provider: string } }>('/hal/storage/capabilities');
-  return res.data;
-}
-
-export async function detectStorageProvider(): Promise<void> {
-  await api.post('/hal/storage/detect-provider');
-}

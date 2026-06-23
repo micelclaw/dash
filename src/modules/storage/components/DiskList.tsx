@@ -412,8 +412,10 @@ function DiskRow({ disk, showSmart }: { disk: Disk; showSmart: boolean }) {
 
 export function DiskList() {
   const disks = useStorageStore((s) => s.disks);
-  const capabilities = useStorageStore((s) => s.capabilities);
-  const showSmart = capabilities?.can_get_smart ?? false;
+  const smart_cache = useStorageStore((s) => s.smart_cache);
+  // Mostramos las columnas SMART cuando hay datos SMART para algún disco
+  // (ya no dependemos del tipo 'capabilities' legacy que se ha eliminado).
+  const showSmart = Object.keys(smart_cache).length > 0;
 
   return (
     <div style={{

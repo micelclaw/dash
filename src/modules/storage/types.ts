@@ -40,18 +40,6 @@ export interface Disk {
   allocation?: 'system' | 'pool' | 'spare' | 'unconfigured' | null;
 }
 
-export interface Volume {
-  id: string;
-  label: string;
-  mount_point: string;
-  filesystem: string;
-  size_bytes: number;
-  used_bytes: number;
-  free_bytes: number;
-  pool: string | null;
-  status: 'mounted' | 'unmounted';
-}
-
 export interface StorageStatus {
   provider: string;
   total_bytes: number;
@@ -103,50 +91,6 @@ export interface DataUsageResult {
   total_data_bytes: number;
   categories: DataCategoryResult[];
   cache_age_seconds: number;
-}
-
-export interface StorageCapabilities {
-  can_list_disks: boolean;
-  can_list_volumes: boolean;
-  can_get_usage: boolean;
-  can_get_data_usage: boolean;
-  can_get_smart: boolean;
-  can_create_pool: boolean;
-  can_delete_pool: boolean;
-  can_create_volume: boolean;
-  can_delete_volume: boolean;
-  can_manage_shares: boolean;
-  can_mount: boolean;
-}
-
-export interface StoragePool {
-  id: string;
-  name: string;
-  type: 'raid0' | 'raid1' | 'raid5' | 'raid6' | 'raid10';
-  status: 'active' | 'degraded' | 'inactive';
-  size_bytes: number;
-  used_bytes: number;
-  disks: string[];
-}
-
-export interface PoolConfig {
-  name: string;
-  type: StoragePool['type'];
-  disk_ids: string[];
-}
-
-export interface StorageShare {
-  id: string;
-  name: string;
-  path: string;
-  protocol: 'smb' | 'nfs';
-  enabled: boolean;
-}
-
-export interface ShareConfig {
-  name: string;
-  path: string;
-  protocol: 'smb' | 'nfs';
 }
 
 // ─── ZFS NAS backend (Olas 0-6) — espejo de core/src/hal/storage/zfs.types.ts ──

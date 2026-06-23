@@ -11,15 +11,11 @@
  */
 
 import { useEffect } from 'react';
-import { Database, RefreshCw, Server, FileText } from 'lucide-react';
+import { Database, RefreshCw, FileText, FlaskConical } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
 import { StorageSummaryCard } from './components/StorageSummaryCard';
 import { DataUsageChart } from './components/DataUsageChart';
 import { DiskList } from './components/DiskList';
-import { VolumeTable } from './components/VolumeTable';
-import { PoolSection } from './components/PoolSection';
-import { ShareSection } from './components/ShareSection';
-import { NasLayerBanner } from './components/NasLayerBanner';
 import { DemoModeBanner } from './components/DemoModeBanner';
 import { ZfsSection } from './components/ZfsSection';
 import { FileStatsCard } from './components/FileStatsCard';
@@ -30,16 +26,13 @@ export function Component() {
   const loading = useStorageStore((s) => s.loading);
   const error = useStorageStore((s) => s.error);
   const status = useStorageStore((s) => s.status);
-  const capabilities = useStorageStore((s) => s.capabilities);
-  const provider = useStorageStore((s) => s.provider);
+  const zfsDemo = useStorageStore((s) => s.zfs_demo);
   const fetchAll = useStorageStore((s) => s.fetchAll);
   const setPreviewMode = useStorageStore((s) => s.setPreviewMode);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const showPools = capabilities?.can_create_pool ?? false;
-  const showShares = capabilities?.can_manage_shares ?? false;
-  const isDemo = provider === 'demo';
+  const isDemo = zfsDemo;
 
   if (error && !status) {
     return (
@@ -76,14 +69,19 @@ export function Component() {
         }}>
           Storage
         </h1>
-        {provider && (
-          <span style={{
-            padding: '2px 8px', background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', fontSize: '0.6875rem', color: 'var(--text-dim)',
-            fontFamily: 'var(--font-mono, monospace)',
-          }}>
-            {provider}
-          </span>
+        {!isDemo && (
+          <button
+            onClick={() => setPreviewMode(true)}
+            title="Ver una demo simulada del NAS ZFS"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem',
+              fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            <FlaskConical size={14} /> Vista previa (demo)
+          </button>
         )}
         <button
           onClick={fetchAll}
@@ -101,10 +99,10 @@ export function Component() {
       </div>
 
       {/* Scroll container. `[&>*]:shrink-0` evita que flexbox aplaste a 0 las
-          secciones con overflow:hidden (PoolSection/VolumeTable/ShareSection →
-          min-height:0) cuando una tarjeta grande genera overflow: deben mantener
-          su alto natural y dejar que este contenedor haga scroll. El inner wrapper
-          centra el contenido y le pone un ancho máximo cómodo de lectura. */}
+          secciones con overflow:hidden cuando una tarjeta grande genera overflow:
+          deben mantener su alto natural y dejar que este contenedor haga scroll.
+          El inner wrapper centra el contenido y le pone un ancho máximo cómodo de
+          lectura. */}
       <div className="[&>*]:shrink-0" style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         <div style={{
           maxWidth: 1400, margin: '0 auto',
@@ -120,30 +118,11 @@ export function Component() {
           <DataUsageChart />
 
           {/* HÉROE: el NAS ZFS es el protagonista — primero y bien visible.
-              Se auto-oculta si el backend ZFS no aplica (capabilities null). */}
+              Se auto-oculta si el backend ZFS no aplica. */}
           <ZfsSection />
 
           {/* Discos físicos (cuadro unificado con columnas SMART por fila). */}
           <DiskList />
-
-          {/* NAS clásico (OpenMediaVault): pools/volúmenes/carpetas. Solo cuando
-              el proveedor expone estas capacidades (OMV o vista previa demo). */}
-          {(showPools || showShares) && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)',
-                fontFamily: 'var(--font-sans)', textTransform: 'uppercase',
-                letterSpacing: '0.04em',
-              }}>
-                <Server size={14} style={{ color: 'var(--mod-storage)' }} />
-                NAS clásico (OpenMediaVault)
-              </div>
-              {showPools && <PoolSection />}
-              <VolumeTable />
-              {showShares && <ShareSection />}
-            </div>
-          )}
 
           {/* Secundario: estadísticas y duplicados de archivos, colapsado por
               defecto para que no compita con el NAS. El data-attr es el ancla del
@@ -160,8 +139,6 @@ export function Component() {
             </div>
           </CollapsibleSection>
           </div>
-
-          {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
         </div>
       </div>
     </div>
