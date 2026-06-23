@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw, ShieldCheck, User, Globe, X } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface AccessList {
   id: string;
@@ -31,6 +32,7 @@ export function AccessListsSection() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AccessList | null>(null);
   const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<AccessList | null>(null);
@@ -213,7 +215,7 @@ export function AccessListsSection() {
                     {list.pass_auth && ' \u00b7 Pass Auth'}
                   </div>
                 </div>
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(list.id); }} disabled={deleting === list.id} title="Delete" style={deleteBtnStyle}><Trash2 size={13} /></button>
+                <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(list); }} disabled={deleting === list.id} title="Delete" style={deleteBtnStyle}><Trash2 size={13} /></button>
               </div>
 
               {expanded === list.id && detail && (
@@ -250,6 +252,19 @@ export function AccessListsSection() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => { if (confirmDelete) void handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        title="Delete access list"
+        description={confirmDelete
+          ? `Delete the access list "${confirmDelete.name}"? Hosts protected by it will lose that auth/IP restriction.`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
