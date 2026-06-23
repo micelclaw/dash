@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router';
 import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
 import { useProjectsStore } from '@/stores/projects.store';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { api } from '@/services/api';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
@@ -140,6 +141,9 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   }, [showDeps, cardId, boardId]);
 
   const handleClose = useCallback(() => selectCard(null), [selectCard]);
+  // Cerrar con Escape (salvo escribiendo en un campo: hay edición inline de
+  // checklist con su propio Escape, y no queremos cerrar a media edición).
+  useEscapeToClose(handleClose);
 
   const handleSaveField = useCallback(
     (field: string, value: unknown) => {
