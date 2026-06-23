@@ -82,6 +82,8 @@ export function FilterBar() {
         {filters.search && (
           <button
             onClick={() => updateFilter('search', '')}
+            aria-label="Clear search"
+            title="Clear search"
             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}
           >
             <X size={12} />
@@ -92,6 +94,7 @@ export function FilterBar() {
       {/* Filter toggle */}
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -188,6 +191,7 @@ function FilterChip({ label, active, color, onClick }: {
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
