@@ -12,7 +12,7 @@ commit por fix, staging selectivo, sin push.
 | Módulo | Estado | Última pasada |
 |---|---|---|
 | finance | ✅ revisado (1ª pasada) | 2026-06-23 12:11 |
-| multimedia | pendiente | — |
+| multimedia | ✅ revisado (1ª pasada) | 2026-06-23 12:45 |
 | office | pendiente | — |
 | users-groups | pendiente | — |
 | search | pendiente | — |
@@ -61,3 +61,43 @@ commit por fix, staging selectivo, sin push.
 **Verificación:** `tsc -b` → 0 errores en `modules/finance` (los 132
 errores del proyecto son todos pre-existentes). Sin verificación visual
 Playwright (Firefox roto en WSL); el gate efectivo fue el type-check.
+
+---
+
+## Iteración 2 — 2026-06-23 12:45 — módulo `multimedia`
+
+**Ficheros:** `src/modules/multimedia/MultimediaPage.tsx`, `src/modules/multimedia/MediaDownloads.tsx`
+
+**Implementado:**
+
+1. **`ux(multimedia): feedback al pulsar refresh del estado`** — commit `cc15bdd`
+   El botón de refresh del launcher no daba feedback al pulsarlo: `loading`
+   solo es `true` en el montaje inicial, así que un clic manual refrescaba
+   en silencio (sin giro ni `disabled`), aunque la clase `.mm-spin` ya
+   existía sin usarse ahí. Ahora un estado `refreshing` hace girar el icono
+   + deshabilita el botón durante la petición + `aria-label`. El poll de
+   fondo de 30s se mantiene silencioso para no parpadear cada medio minuto.
+
+2. **`ux(multimedia): progreso de descargas en vivo (auto-poll)`** — commit `f61a076`
+   La lista de Media Downloads solo cargaba al montar → una descarga en
+   curso nunca actualizaba su `%` salvo refresh manual, la lista se sentía
+   congelada. Se añade poll cada 3s SOLO mientras haya descargas
+   `pending`/`downloading` (guard `hasActive`: si el endpoint no existe,
+   `downloads` queda `[]` y no se sondea nada). El intervalo se limpia al
+   completar.
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **Fallo silencioso de start/stop tras timeout.** En `MultimediaPage.handleAction`
+  el bucle de polling (30s) sale en silencio si el servicio nunca alcanza el
+  estado esperado: el spinner para y la card se queda como esté, sin mensaje
+  de "se agotó el tiempo". Arreglarlo bien exige distinguir timeout de éxito
+  (riesgo medio) → diferido para no meter lógica nueva de noche.
+- **Botón de borrar descarga sin nombre accesible** (`MediaDownloads`, icono
+  `Trash2` sin `aria-label`/`title` ni hover). Trivial, pero queda para una
+  pasada de a11y dedicada para no mezclar concerns en el commit de polling.
+- **Sin barra de progreso visual** en descargas (`%` solo como texto). Mejora
+  de "progreso percibido", pero es más feature que fix → futuro.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en `modules/multimedia`. Sin
+Playwright (Firefox roto en WSL); gate efectivo = type-check.
