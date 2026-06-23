@@ -432,7 +432,11 @@ export function CalendarView() {
               {dayCards.slice(0, MAX_VISIBLE).map((card) => (
                 <div
                   key={card.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={card.title}
                   onClick={(e) => { e.stopPropagation(); selectCard(card.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); selectCard(card.id); } }}
                   onContextMenu={(e) => onCardContextMenu(e, card)}
                   style={{
                     padding: '2px 6px',
