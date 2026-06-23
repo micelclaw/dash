@@ -52,6 +52,16 @@ export function MediaDownloads() {
 
   useEffect(() => { load(); }, [load]);
 
+  // While a download is pending/in-progress, poll so its % updates live.
+  // Otherwise the list (and progress) stays frozen until a manual refresh.
+  // Guard on hasActive so we never poll a missing endpoint (downloads stays []).
+  const hasActive = downloads.some(d => d.status === 'pending' || d.status === 'downloading');
+  useEffect(() => {
+    if (!hasActive) return;
+    const id = setInterval(load, 3_000);
+    return () => clearInterval(id);
+  }, [hasActive, load]);
+
   const fetchInfo = async () => {
     if (!url.trim()) return;
     setFetching(true);
