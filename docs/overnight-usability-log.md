@@ -18,7 +18,7 @@ commit por fix, staging selectivo, sin push.
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
 | network (dns/proxy/vpn) | 🟡 parcial: VPN revisado; dns/proxy pendientes | 2026-06-23 17:40 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
-| automation | pendiente | — |
+| automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | pendiente | — |
 | embed-corner | pendiente | — |
 | command-palette | pendiente | — |
@@ -298,3 +298,45 @@ Sin Playwright (Firefox roto en WSL); gate = type-check diferencial.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en ItemDrawer ni CatalogTab.
 Sin Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 8 — 2026-06-23 18:39 — módulo `automation`
+
+**Nota:** "automation" no existe como módulo en `src/modules`. Se sirve vía
+el **app-host** (n8n y otras apps L3 dinámicas se embeben en `/app/:appName`).
+Superficies revisadas: `app-host/AppModuleHost.tsx` (el embed) +
+`settings/sections/AutomationSection`/`CronConfigSection`/`HooksSection`.
+
+**Ficheros:** `src/modules/app-host/AppModuleHost.tsx`
+
+**Implementado:**
+
+1. **`ux(automation): overlay de carga en el iframe de apps dinámicas`** — commit `01575da`
+   `AppModuleHost` montaba el iframe sin feedback: mientras la app carga
+   (n8n hace **cold-start del contenedor**, puede tardar) se veía el iframe
+   en blanco → parece roto. Se añade overlay con spinner ("Cargando
+   <app>…") hasta el `onLoad` del iframe, reseteando el flag al cambiar de
+   app (el iframe se remonta por `key`). Es la mejora de latencia percibida
+   más relevante del dominio automation.
+
+2. **`ux(automation): aria-label en el botón de volver del embed`** — commit `367c025`
+   El botón de volver (icono `ArrowLeft`, solo-icono) no tenía nombre
+   accesible. Se añade `title` + `aria-label` "Volver al panel".
+
+**Revisado y YA correcto (no se tocó):**
+
+- **`AutomationSection`**: contenedor limpio con bloques colapsables que
+  persisten su estado en localStorage. Sin gaps.
+- **`CronConfigSection` / `HooksSection`**: loading manejado vía
+  `SectionShell` (no flashean), errores con `describeError`+toast,
+  validación de backoff. Ya sólidos → no fabriqué cambios marginales.
+
+**Descartado (anotado como hallazgo):**
+
+- **Botón de volver hardcodea `navigate('/chat')`** en vez de back real
+  (`navigate(-1)`); cambiarlo es ambiguo (¿/chat es "home"?) → decisión de
+  diseño, no lo toco.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en AppModuleHost. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
