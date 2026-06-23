@@ -22,10 +22,11 @@ import { toast } from 'sonner';
 import {
   ChevronRight, ChevronDown, Cpu, Disc3, Zap, Activity, History,
   Lightbulb, MoreHorizontal, FlaskConical, Eraser, Power, PenLine, UploadCloud,
+  AlertTriangle,
 } from 'lucide-react';
 import { formatFileSize } from '@/lib/file-utils';
 import { useStorageStore } from '@/stores/storage.store';
-import type { Disk, Partition } from '../types';
+import type { Disk, Partition, SmartStatus } from '../types';
 import { InfoTip } from './ZfsHelp';
 import { SmartHistoryModal } from './SmartHistoryModal';
 
@@ -45,6 +46,13 @@ const SMART_LABELS: Record<string, string> = {
   warning: 'Aviso',
   critical: 'Crítico',
 };
+
+// Horas de encendido en formato compacto (igual que SmartStatusCard).
+function formatHours(hours: number | null): string {
+  if (hours == null) return '—';
+  if (hours < 1000) return `${hours} h`;
+  return `${(hours / 1000).toFixed(1)}k h`;
+}
 
 // Tipo "humano": NVMe se detecta por el transporte aunque el backend lo
 // clasifique como ssd (no hay un literal 'nvme' en Disk['type']).
@@ -291,56 +299,105 @@ function DiskActions({ disk }: { disk: Disk }) {
   );
 }
 
-function DiskRow({ disk }: { disk: Disk }) {
+// ── Rejilla compartida cabecera/fila ──────────────────────────────
+// Una sola plantilla de columnas para que las celdas SMART queden alineadas
+// fila a fila. Cuando hay datos SMART: chevron · disco · modelo · tipo ·
+// estado · temp · power-on · sectores · capacidad. Sin SMART: degrada a
+// chevron · disco · modelo · tipo · capacidad.
+const GRID_WITH_SMART = '16px minmax(80px, max-content) minmax(0, 1fr) max-content max-content 56px 64px 84px max-content';
+const GRID_NO_SMART = '16px minmax(80px, max-content) minmax(0, 1fr) max-content max-content';
+
+const headCell: React.CSSProperties = {
+  fontSize: '0.6875rem', fontWeight: 500, color: 'var(--text-muted)',
+  fontFamily: 'var(--font-sans)', textTransform: 'uppercase', letterSpacing: '0.04em',
+  whiteSpace: 'nowrap',
+};
+
+// Semáforo + etiqueta del estado SMART (con icono de aviso ámbar/rojo).
+function SmartHealthCell({ smart }: { smart: SmartStatus | undefined }) {
+  if (!smart) {
+    return <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>—</span>;
+  }
+  const color = SMART_COLORS[smart.overall_status] ?? '#6b7280';
+  const label = SMART_LABELS[smart.overall_status] ?? smart.overall_status;
+  const warn = smart.overall_status === 'warning' || smart.overall_status === 'critical';
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+      {warn
+        ? <AlertTriangle size={13} style={{ color, flexShrink: 0 }} />
+        : <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />}
+      <span style={{
+        fontSize: '0.75rem', color: 'var(--text)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function DiskRow({ disk, showSmart }: { disk: Disk; showSmart: boolean }) {
   const expanded_disks = useStorageStore((s) => s.expanded_disks);
   const toggleDisk = useStorageStore((s) => s.toggleDisk);
   const smart_cache = useStorageStore((s) => s.smart_cache);
-  const capabilities = useStorageStore((s) => s.capabilities);
 
   const isExpanded = expanded_disks.includes(disk.id);
   const cfg = diskTypeConfig(disk);
   const Icon = cfg.icon;
   const smart = smart_cache[disk.id];
+  const badSectors = smart ? smart.reallocated_sectors + smart.pending_sectors : 0;
 
   return (
     <Fragment>
       <div
         onClick={() => toggleDisk(disk.id)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+          display: 'grid', gridTemplateColumns: showSmart ? GRID_WITH_SMART : GRID_NO_SMART,
+          alignItems: 'center', gap: 10, padding: '10px 14px',
           cursor: 'pointer', borderBottom: isExpanded ? 'none' : '1px solid var(--border)',
         }}
         onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
       >
         {isExpanded ? <ChevronDown size={14} style={{ color: 'var(--text-dim)' }} /> : <ChevronRight size={14} style={{ color: 'var(--text-dim)' }} />}
-        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', color: 'var(--text)' }}>{disk.device}</span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{disk.model}</span>
+        <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8125rem', color: 'var(--text)', whiteSpace: 'nowrap' }}>{disk.device}</span>
         <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: '0.75rem', color: 'var(--text-dim)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }} title={disk.model}>{disk.model}</span>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, justifySelf: 'start',
           padding: '1px 6px', background: `${cfg.color}18`, borderRadius: 'var(--radius-sm)',
-          fontSize: '0.6875rem', color: cfg.color,
+          fontSize: '0.6875rem', color: cfg.color, whiteSpace: 'nowrap',
         }}>
           <Icon size={10} /> {cfg.label}
         </span>
-        {disk.smart_status && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.6875rem',
-            color: 'var(--text-dim)',
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: SMART_COLORS[disk.smart_status] ?? '#6b7280' }} />
-            {SMART_LABELS[disk.smart_status] ?? disk.smart_status}
-          </span>
+
+        {showSmart && (
+          <>
+            {/* Estado SMART */}
+            <SmartHealthCell smart={smart} />
+            {/* Temperatura */}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', textAlign: 'right' }}>
+              {smart?.temperature_c != null ? `${smart.temperature_c}°C` : '—'}
+            </span>
+            {/* Horas de encendido */}
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', textAlign: 'right' }}>
+              {formatHours(smart?.power_on_hours ?? null)}
+            </span>
+            {/* Sectores defectuosos (rojo si >0) */}
+            <span style={{
+              fontSize: '0.75rem', fontFamily: 'var(--font-mono, monospace)', textAlign: 'right',
+              color: badSectors > 0 ? '#f43f5e' : 'var(--text-dim)', fontWeight: badSectors > 0 ? 600 : 400,
+            }}>
+              {smart ? badSectors : '—'}
+            </span>
+          </>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
+
+        <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', textAlign: 'right', whiteSpace: 'nowrap' }}>
           {formatFileSize(disk.size_bytes)}
         </span>
-        {/* Inline SMART temp if expanded + available */}
-        {isExpanded && capabilities?.can_get_smart && smart && (
-          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            {smart.temperature_c != null ? `${smart.temperature_c}°C` : ''}
-          </span>
-        )}
       </div>
       {isExpanded && (
         <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
@@ -355,6 +412,8 @@ function DiskRow({ disk }: { disk: Disk }) {
 
 export function DiskList() {
   const disks = useStorageStore((s) => s.disks);
+  const capabilities = useStorageStore((s) => s.capabilities);
+  const showSmart = capabilities?.can_get_smart ?? false;
 
   return (
     <div style={{
@@ -380,7 +439,28 @@ export function DiskList() {
           No se han detectado discos
         </div>
       ) : (
-        disks.map((disk) => <DiskRow key={disk.id} disk={disk} />)
+        <>
+          {/* Cabeceras de columna (solo si hay datos SMART que alinear). */}
+          {showSmart && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: GRID_WITH_SMART, alignItems: 'center', gap: 10,
+              padding: '8px 14px', borderBottom: '1px solid var(--border)', background: 'var(--surface)',
+            }}>
+              <span />
+              <span style={headCell}>Disco</span>
+              <span style={headCell}>Modelo</span>
+              <span style={headCell}>Tipo</span>
+              <span style={headCell}>Estado</span>
+              <span style={{ ...headCell, textAlign: 'right' }}>Temp.</span>
+              <span style={{ ...headCell, textAlign: 'right' }}>Encendido</span>
+              <span style={{ ...headCell, textAlign: 'right', display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                Sectores <InfoTip text="Sectores reasignados + pendientes. Cualquier valor mayor que 0 indica deterioro del disco; vigílalo de cerca." />
+              </span>
+              <span style={{ ...headCell, textAlign: 'right' }}>Capacidad</span>
+            </div>
+          )}
+          {disks.map((disk) => <DiskRow key={disk.id} disk={disk} showSmart={showSmart} />)}
+        </>
       )}
     </div>
   );

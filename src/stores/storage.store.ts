@@ -11,12 +11,14 @@
  */
 
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 import type {
   StorageStatus, StorageCapabilities, DataUsageResult,
   Disk, Volume, SmartStatus, StoragePool, StorageShare,
   PoolConfig, ShareConfig, SmartHistoryEntry,
   ZfsCapabilities, ZfsPoolObservation, ZfsDatasetObservation, ZfsSnapshotObservation,
+  ZfsDiskObservation,
 } from '@/modules/storage/types';
 import { buildZfsDemo } from '@/modules/storage/zfs-demo';
 
@@ -78,6 +80,25 @@ interface StorageState {
   smartTest: (diskId: string, kind: 'short' | 'long') => Promise<void>;
   fetchSmartHistory: (diskId: string) => Promise<SmartHistoryEntry[]>;
   zfsAddCache: (pool: string, kind: 'cache' | 'log' | 'special', disk_by_ids: string[]) => Promise<void>;
+
+  // ── SMART bulk + acciones avanzadas ZFS (F2) ──
+  // fetchAllSmart trae el SMART de TODOS los discos de una (se llama dentro de
+  // fetchAll cuando la plataforma lo soporta). Las 12 acciones siguen el mismo
+  // patrón que el resto de escrituras: rama demo = mutación local del store;
+  // rama real = POST al endpoint documentado + fetchZfs() (gated por caps falsy,
+  // así que hoy solo se alcanza la rama demo — el cableado queda listo).
+  fetchAllSmart: () => Promise<void>;
+  zfsClearErrors: (pool: string) => Promise<void>;
+  zfsTrim: (pool: string) => Promise<void>;
+  zfsSetAutotrim: (pool: string, on: boolean) => Promise<void>;
+  zfsStopScrub: (pool: string) => Promise<void>;
+  zfsAddSpare: (pool: string, disk_by_ids: string[]) => Promise<void>;
+  zfsRemoveAuxVdev: (pool: string, vdev_name: string) => Promise<void>;
+  zfsDiskAction: (pool: string, disk_name: string, action: 'offline' | 'online' | 'detach') => Promise<void>;
+  zfsExportPool: (pool: string) => Promise<void>;
+  zfsImportPool: (name: string) => Promise<void>;
+  zfsUpgradePool: (pool: string) => Promise<void>;
+  zfsSetPoolProp: (pool: string, prop: string, value: string) => Promise<void>;
 }
 
 export const useStorageStore = create<StorageState>()((set, get) => ({
@@ -135,6 +156,9 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
         shares: sharesRes?.data ?? [],
         loading: false,
       });
+
+      // SMART de TODOS los discos de golpe (no bloquea el render principal).
+      if (caps.can_get_smart) void get().fetchAllSmart();
     } catch {
       set({ error: 'Failed to load storage data', loading: false });
     }
@@ -377,6 +401,213 @@ export const useStorageStore = create<StorageState>()((set, get) => ({
     }
     const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/add-vdev/plan', { pool, topology: kind, disk_by_ids });
     await api.post('/hal/storage/zfs/pools/add-vdev', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  // ── SMART en bloque: trae el estado de TODOS los discos a la vez ──
+  fetchAllSmart: async () => {
+    try {
+      const res = await api.get<{ data: SmartStatus[] }>('/hal/storage/smart');
+      const next: Record<string, SmartStatus> = { ...get().smart_cache };
+      for (const s of res.data) next[s.disk_id] = s;
+      set({ smart_cache: next });
+    } catch {
+      // No fatal — SMART puede no estar disponible en la plataforma.
+    }
+  },
+
+  // ── Acciones avanzadas ZFS (F2) ──
+  // Patrón: demo = mutación local; real = POST documentado + fetchZfs (gated por
+  // caps falsy → hoy solo se ejecuta la rama demo; el cableado real queda listo).
+  zfsClearErrors: async (pool) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool
+            ? {
+                ...p,
+                read_errors: 0, write_errors: 0, cksum_errors: 0, scrub_errors: 0,
+                vdevs: p.vdevs.map((v) => ({
+                  ...v,
+                  read_errors: 0, write_errors: 0, cksum_errors: 0,
+                  disks: v.disks.map((d) => ({ ...d, read_errors: 0, write_errors: 0, cksum_errors: 0 })),
+                })),
+              }
+            : p,
+        ),
+      });
+      return;
+    }
+    await api.post('/hal/storage/zfs/clear-errors', { pool });
+    await get().fetchZfs();
+  },
+
+  zfsTrim: async (pool) => {
+    if (get().zfs_demo) {
+      toast.success(`TRIM iniciado en «${pool}»`);
+      return;
+    }
+    await api.post('/hal/storage/zfs/trim', { pool });
+    await get().fetchZfs();
+  },
+
+  zfsSetAutotrim: async (pool, on) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool ? { ...p, autotrim: on ? 'on' : 'off' } : p,
+        ),
+      });
+      return;
+    }
+    await api.post('/hal/storage/zfs/pool/set-prop', { pool, prop: 'autotrim', value: on ? 'on' : 'off' });
+    await get().fetchZfs();
+  },
+
+  zfsStopScrub: async (pool) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool ? { ...p, scrub_state: 'canceled', scrub_progress_pct: null } : p,
+        ),
+      });
+      return;
+    }
+    await api.post('/hal/storage/zfs/scrub', { pool, action: 'stop' });
+    await get().fetchZfs();
+  },
+
+  zfsAddSpare: async (pool, disk_by_ids) => {
+    if (get().zfs_demo) {
+      const newSpares: ZfsDiskObservation[] = disk_by_ids.map((d) => ({
+        name: d, state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0,
+      }));
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool ? { ...p, spares: [...(p.spares ?? []), ...newSpares] } : p,
+        ),
+      });
+      return;
+    }
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/add-spare/plan', { pool, disk_by_ids });
+    await api.post('/hal/storage/zfs/pools/add-spare', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  zfsRemoveAuxVdev: async (pool, vdev_name) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool ? { ...p, vdevs: p.vdevs.filter((v) => v.name !== vdev_name) } : p,
+        ),
+      });
+      return;
+    }
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/remove-vdev/plan', { pool, vdev_name });
+    await api.post('/hal/storage/zfs/pools/remove-vdev', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  zfsDiskAction: async (pool, disk_name, action) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) => {
+          if (p.name !== pool) return p;
+          const vdevs = p.vdevs
+            .map((v) => {
+              if (action === 'detach') {
+                return { ...v, disks: v.disks.filter((d) => d.name !== disk_name) };
+              }
+              return {
+                ...v,
+                disks: v.disks.map((d) =>
+                  d.name === disk_name ? { ...d, state: action === 'offline' ? 'OFFLINE' : 'ONLINE' } : d,
+                ),
+              };
+            })
+            // detach puede vaciar un vdev auxiliar; lo quitamos si se queda sin discos.
+            .filter((v) => v.disks.length > 0);
+          return { ...p, vdevs };
+        }),
+      });
+      return;
+    }
+    if (action === 'online') {
+      await api.post('/hal/storage/zfs/pools/online', { pool, disk_name });
+    } else {
+      const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>(`/hal/storage/zfs/pools/${action}/plan`, { pool, disk_name });
+      await api.post(`/hal/storage/zfs/pools/${action}`, { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    }
+    await get().fetchZfs();
+  },
+
+  zfsExportPool: async (pool) => {
+    if (get().zfs_demo) {
+      set({ zfs_pools: get().zfs_pools.filter((p) => p.name !== pool) });
+      return;
+    }
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/export/plan', { pool });
+    await api.post('/hal/storage/zfs/pools/export', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  zfsImportPool: async (name) => {
+    if (get().zfs_demo) {
+      // Re-fabricamos un pool mínimo ONLINE para "importar" en demo.
+      const TB = 1024 ** 4;
+      const pool: ZfsPoolObservation = {
+        name, guid: String(1e15 + Math.floor(Math.random() * 1e14)), health: 'ONLINE',
+        size_bytes: 8 * TB, alloc_bytes: 0, free_bytes: 8 * TB, frag_pct: 0, cap_pct: 0,
+        scrub_state: 'none', scrub_progress_pct: null, scrub_errors: 0, scrub_finished_at: null,
+        read_errors: 0, write_errors: 0, cksum_errors: 0, autotrim: 'off', ashift: 12,
+        features: [], spares: [],
+        vdevs: [{
+          name: 'mirror-0', type: 'mirror', state: 'ONLINE',
+          read_errors: 0, write_errors: 0, cksum_errors: 0,
+          disks: [
+            { name: `/dev/disk/by-id/imported-${name}-A`, state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+            { name: `/dev/disk/by-id/imported-${name}-B`, state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+          ],
+        }],
+      };
+      set({ zfs_pools: [...get().zfs_pools, pool] });
+      return;
+    }
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/import/plan', { name });
+    await api.post('/hal/storage/zfs/pools/import', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  zfsUpgradePool: async (pool) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) =>
+          p.name === pool
+            ? { ...p, features: (p.features ?? []).map((f) => ({ ...f, active: true })) }
+            : p,
+        ),
+      });
+      return;
+    }
+    const plan = await api.post<{ data: { plan_id: string; expected_token?: string } }>('/hal/storage/zfs/pools/upgrade/plan', { pool });
+    await api.post('/hal/storage/zfs/pools/upgrade', { plan_id: plan.data.plan_id, token: plan.data.expected_token });
+    await get().fetchZfs();
+  },
+
+  zfsSetPoolProp: async (pool, prop, value) => {
+    if (get().zfs_demo) {
+      set({
+        zfs_pools: get().zfs_pools.map((p) => {
+          if (p.name !== pool) return p;
+          // Reflejamos en el estado local las props que la UI conoce.
+          if (prop === 'autotrim') return { ...p, autotrim: value === 'on' ? 'on' : 'off' };
+          if (prop === 'ashift') return { ...p, ashift: Number(value) || p.ashift };
+          return p;
+        }),
+      });
+      return;
+    }
+    await api.post('/hal/storage/zfs/pool/set-prop', { pool, prop, value });
     await get().fetchZfs();
   },
 }));

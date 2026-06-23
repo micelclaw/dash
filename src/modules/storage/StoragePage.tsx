@@ -12,13 +12,11 @@
 
 import { useEffect } from 'react';
 import { Database, RefreshCw, Server, FileText } from 'lucide-react';
-import { useIsMobile } from '@/hooks/use-media-query';
 import { useStorageStore } from '@/stores/storage.store';
 import { StorageSummaryCard } from './components/StorageSummaryCard';
 import { DataUsageChart } from './components/DataUsageChart';
 import { DiskList } from './components/DiskList';
 import { VolumeTable } from './components/VolumeTable';
-import { SmartStatusCard } from './components/SmartStatusCard';
 import { PoolSection } from './components/PoolSection';
 import { ShareSection } from './components/ShareSection';
 import { NasLayerBanner } from './components/NasLayerBanner';
@@ -36,11 +34,9 @@ export function Component() {
   const provider = useStorageStore((s) => s.provider);
   const fetchAll = useStorageStore((s) => s.fetchAll);
   const setPreviewMode = useStorageStore((s) => s.setPreviewMode);
-  const isMobile = useIsMobile();
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const showSmart = capabilities?.can_get_smart ?? false;
   const showPools = capabilities?.can_create_pool ?? false;
   const showShares = capabilities?.can_manage_shares ?? false;
   const isDemo = provider === 'demo';
@@ -119,27 +115,16 @@ export function Component() {
           {/* Resumen de capacidad: contexto rápido arriba del todo. */}
           <StorageSummaryCard status={status} />
 
+          {/* Uso de datos a lo largo del tiempo: contexto temprano, justo debajo
+              del resumen de capacidad. */}
+          <DataUsageChart />
+
           {/* HÉROE: el NAS ZFS es el protagonista — primero y bien visible.
               Se auto-oculta si el backend ZFS no aplica (capabilities null). */}
           <ZfsSection />
 
-          {/* Discos físicos + SMART: lado a lado en escritorio, apilado en móvil. */}
-          <div style={{
-            display: 'flex', gap: 24,
-            flexDirection: isMobile || !showSmart ? 'column' : 'row',
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <DiskList />
-            </div>
-            {showSmart && (
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <SmartStatusCard />
-              </div>
-            )}
-          </div>
-
-          {/* Uso de datos a lo largo del tiempo. */}
-          <DataUsageChart />
+          {/* Discos físicos (cuadro unificado con columnas SMART por fila). */}
+          <DiskList />
 
           {/* NAS clásico (OpenMediaVault): pools/volúmenes/carpetas. Solo cuando
               el proveedor expone estas capacidades (OMV o vista previa demo). */}
@@ -161,7 +146,9 @@ export function Component() {
           )}
 
           {/* Secundario: estadísticas y duplicados de archivos, colapsado por
-              defecto para que no compita con el NAS. */}
+              defecto para que no compita con el NAS. El data-attr es el ancla del
+              "Ver detalles de archivos" del panel Uso de datos (scrollIntoView). */}
+          <div data-storage-file-stats>
           <CollapsibleSection
             title="Detalles de archivos"
             icon={<FileText size={16} />}
@@ -172,6 +159,7 @@ export function Component() {
               <FileDuplicatesCard />
             </div>
           </CollapsibleSection>
+          </div>
 
           {!showPools && provider && <NasLayerBanner provider={provider} onPreview={() => setPreviewMode(true)} />}
         </div>

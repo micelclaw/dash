@@ -45,6 +45,19 @@ export const DEMO_ZFS_CAPABILITIES: ZfsCapabilities = {
   can_replicate: true,
   can_encrypt: true,
   can_vm: true,
+  // ── Acciones avanzadas (contrato F1/F2) ──
+  can_clear: true,
+  can_trim: true,
+  can_autotrim: true,
+  can_offline: true,
+  can_online: true,
+  can_detach: true,
+  can_add_spare: true,
+  can_remove_aux_vdev: true,
+  can_export: true,
+  can_import: true,
+  can_upgrade: true,
+  can_set_pool_prop: true,
 };
 
 // Discos "libres" simulados para el wizard de crear pool en modo demo.
@@ -81,6 +94,25 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
       free_bytes: 19 * TB,
       frag_pct: 8,
       cap_pct: 47,
+      // ── Estado sano: scrub terminado limpio, sin errores, autotrim on ──
+      scrub_state: 'finished',
+      scrub_progress_pct: 100,
+      scrub_errors: 0,
+      scrub_finished_at: new Date((epochNow - 6 * 24 * 3600) * 1000).toISOString(),
+      read_errors: 0,
+      write_errors: 0,
+      cksum_errors: 0,
+      autotrim: 'on',
+      ashift: 12,
+      features: [
+        { name: 'lz4_compress', active: true },
+        { name: 'draid', active: false },
+        { name: 'zstd', active: false },
+      ],
+      // Disco de repuesto en caliente (hot spare) — ONLINE a la espera.
+      spares: [
+        { name: '/dev/disk/by-id/ata-WDC_WD80EFZZ-68B_SPARE1', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0, temperature_c: 33 },
+      ],
       vdevs: [
         {
           name: 'raidz2-0', type: 'raidz2', state: 'ONLINE',
@@ -88,6 +120,7 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
           disks: Array.from({ length: 6 }, (_, i) => ({
             name: `/dev/disk/by-id/ata-WDC_WD80EFZZ-68B_VDL${i + 1}A`,
             state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0,
+            temperature_c: 34 + (i % 5), // 34-38 °C
           })),
         },
         // Caché de lectura L2ARC (1 SSD NVMe)
@@ -95,7 +128,7 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
           name: 'cache', type: 'cache', state: 'ONLINE',
           read_errors: 0, write_errors: 0, cksum_errors: 0,
           disks: [
-            { name: '/dev/disk/by-id/nvme-Samsung_990_PRO_2TB_CACHE', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+            { name: '/dev/disk/by-id/nvme-Samsung_990_PRO_2TB_CACHE', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0, temperature_c: 41 },
           ],
         },
         // Log de escritura SLOG (mirror de 2 SSD)
@@ -103,8 +136,8 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
           name: 'log', type: 'log', state: 'ONLINE',
           read_errors: 0, write_errors: 0, cksum_errors: 0,
           disks: [
-            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG1', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
-            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG2', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
+            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG1', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0, temperature_c: 38 },
+            { name: '/dev/disk/by-id/nvme-Samsung_983_DCT_240GB_SLOG2', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0, temperature_c: 39 },
           ],
         },
       ],
@@ -118,12 +151,29 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
       free_bytes: 1.7 * TB,
       frag_pct: 21,
       cap_pct: 58,
+      // ── Estado degradado: scrub en curso, errores reales, autotrim off, sin spare ──
+      scrub_state: 'scanning',
+      scrub_progress_pct: 47,
+      scrub_errors: 0,
+      scrub_finished_at: null,
+      read_errors: 12,
+      write_errors: 0,
+      cksum_errors: 4,
+      autotrim: 'off',
+      ashift: 12,
+      features: [
+        { name: 'lz4_compress', active: true },
+        { name: 'draid', active: false },
+        { name: 'encryption', active: true },
+        { name: 'zstd', active: false },
+      ],
+      spares: [],
       vdevs: [{
         name: 'mirror-0', type: 'mirror', state: 'DEGRADED',
         read_errors: 0, write_errors: 0, cksum_errors: 4,
         disks: [
-          { name: '/dev/disk/by-id/ata-Samsung_870_QVO_4TB_S1A', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0 },
-          { name: '/dev/disk/by-id/ata-Samsung_870_QVO_4TB_S1B', state: 'FAULTED', read_errors: 12, write_errors: 0, cksum_errors: 4 },
+          { name: '/dev/disk/by-id/ata-Samsung_870_QVO_4TB_S1A', state: 'ONLINE', read_errors: 0, write_errors: 0, cksum_errors: 0, temperature_c: 36 },
+          { name: '/dev/disk/by-id/ata-Samsung_870_QVO_4TB_S1B', state: 'FAULTED', read_errors: 12, write_errors: 0, cksum_errors: 4, temperature_c: 44 },
         ],
       }],
     },
@@ -133,6 +183,10 @@ export function buildZfsDemo(epochNow = Math.floor(Date.now() / 1000)): ZfsDemoS
     { name: 'tank/media', type: 'filesystem', used_bytes: 12 * TB, referenced_bytes: 12 * TB, available_bytes: 19 * TB, mountpoint: '/data/media', volsize_bytes: null, refquota_bytes: null, quota_bytes: null, compression: 'lz4', encryption: 'off' },
     { name: 'tank/media/music', type: 'filesystem', used_bytes: 480 * GB, referenced_bytes: 480 * GB, available_bytes: 19 * TB, mountpoint: '/data/media/music', volsize_bytes: null, refquota_bytes: 1 * TB, quota_bytes: null, compression: 'lz4', encryption: 'off' },
     { name: 'tank/backups', type: 'filesystem', used_bytes: 4.2 * TB, referenced_bytes: 4.2 * TB, available_bytes: 19 * TB, mountpoint: '/data/backups', volsize_bytes: null, refquota_bytes: null, quota_bytes: null, compression: 'zstd', encryption: 'aes-256-gcm' },
+    // ── Carpetas de usuario (home) con cuota de referencia (refquota) ──
+    { name: 'tank/home/paco', type: 'filesystem', used_bytes: 85 * GB, referenced_bytes: 85 * GB, available_bytes: 200 * GB - 85 * GB, mountpoint: '/data/home/paco', volsize_bytes: null, refquota_bytes: 200 * GB, quota_bytes: null, compression: 'lz4', encryption: 'aes-256-gcm' },
+    // lucia está cerca del límite de su cuota (140/150 GB) → buen caso para ver el aviso.
+    { name: 'tank/home/lucia', type: 'filesystem', used_bytes: 140 * GB, referenced_bytes: 140 * GB, available_bytes: 150 * GB - 140 * GB, mountpoint: '/data/home/lucia', volsize_bytes: null, refquota_bytes: 150 * GB, quota_bytes: null, compression: 'lz4', encryption: 'aes-256-gcm' },
     { name: 'vault/docs', type: 'filesystem', used_bytes: 220 * GB, referenced_bytes: 220 * GB, available_bytes: 1.7 * TB, mountpoint: '/data/docs', volsize_bytes: null, refquota_bytes: 500 * GB, quota_bytes: null, compression: 'zstd', encryption: 'aes-256-gcm' },
   ];
 

@@ -136,4 +136,78 @@ export const ZFS_COPY = {
     'Special (METADATOS): guarda metadatos y archivos pequeños en SSD para que todo responda más rápido. ' +
     'OJO: el dispositivo special es PERMANENTE — pasa a formar parte del pool y, si lo pierdes sin ' +
     'redundancia, pierdes el pool. Ponlo siempre en espejo.',
+
+  clear:
+    'Borra el contador de errores acumulados del pool (lectura, escritura y checksum). No repara nada: ' +
+    'solo pone los avisos a cero. Hazlo cuando ya hayas solucionado la causa (cambiar un cable, sustituir ' +
+    'un disco) y quieras volver a ver claro si vuelven a aparecer errores nuevos.',
+
+  trim:
+    'Avisa a los discos SSD de qué bloques ya no se usan, para que se mantengan rápidos y duren más. No ' +
+    'afecta a tus datos. Lánzalo de vez en cuando si tu pool está sobre SSD; en discos duros normales no ' +
+    'hace nada.',
+
+  autotrim:
+    'Si lo activas, ZFS hace el "trim" de los SSD automáticamente en segundo plano, sin que tengas que ' +
+    'acordarte. Recomendado en pools de SSD. En discos duros normales déjalo apagado, no aporta nada.',
+
+  spare:
+    'Un disco de repuesto (spare) está conectado pero en reserva, sin usarse. Si un disco del pool falla, ' +
+    'ZFS lo sustituye solo por el repuesto al instante y empieza a reconstruir sin esperar a que llegues ' +
+    'tú. Muy útil para no quedarte desprotegido mientras consigues un disco nuevo.',
+
+  offline:
+    'Marca un disco como "fuera de servicio" a propósito: ZFS deja de usarlo pero no lo borra del pool. ' +
+    'Útil para revisar o mover un disco sin desmontar nada. El pool sigue funcionando si tiene suficiente ' +
+    'redundancia; vuelve a ponerlo con "online" cuando termines.',
+
+  online:
+    'Vuelve a poner en servicio un disco que estaba marcado como fuera de servicio (offline). ZFS lo ' +
+    'reincorpora al pool y, si hace falta, lo pone al día con los datos que se hayan escrito mientras ' +
+    'estaba parado.',
+
+  detach:
+    'Saca de forma definitiva un disco de un espejo (mirror). El espejo se queda con un disco menos, así ' +
+    'que pierdes esa copia de seguridad. Úsalo solo si quieres reducir el espejo a propósito o vas a ' +
+    'reutilizar ese disco en otro sitio.',
+
+  scrub_stop:
+    'Detiene la revisión (scrub) que está en marcha. El scrub lee todo el pool buscando errores y los ' +
+    'repara; es bueno dejarlo terminar, pero si necesitas que el sistema vaya más rápido un rato puedes ' +
+    'pararlo y reanudarlo más tarde sin riesgo.',
+
+  export:
+    'Desconecta el pool del sistema de forma limpia y segura, sin borrar nada. Es el paso previo para ' +
+    'llevarte los discos a otro equipo o desmontarlos: deja todo bien cerrado para poder volver a ' +
+    'conectarlo después con "importar".',
+
+  import_pool:
+    'Vuelve a conectar al sistema un pool que estaba desconectado (exportado), o uno que viene de otro ' +
+    'equipo. ZFS detecta los discos y monta el pool con todos sus datos tal cual estaban.',
+
+  upgrade:
+    'Activa en el pool las mejoras nuevas que trae tu versión de ZFS (más rendimiento o funciones ' +
+    'nuevas). OJO: una vez actualizado, equipos con una versión más antigua de ZFS quizá ya no puedan ' +
+    'abrir el pool. Hazlo solo cuando no necesites volver atrás.',
+
+  ashift:
+    'Es el tamaño de bloque con el que ZFS habla con los discos, y se fija al crear el pool: no se puede ' +
+    'cambiar después. El valor 12 (bloques de 4 KB) es el correcto para casi todos los discos modernos. ' +
+    'Un valor mal elegido hace que el pool rinda peor para siempre.',
+
+  features:
+    'Son las funciones avanzadas de ZFS que el pool tiene disponibles (por ejemplo tipos de compresión). ' +
+    'Las que están "activas" ya se usan; las inactivas pueden activarse con "actualizar el pool". Solo es ' +
+    'informativo: no necesitas tocarlo en el día a día.',
+
+  usage_logical_vs_physical:
+    'El tamaño "lógico" es lo que ocuparían tus datos tal cual; el "físico" es lo que ocupan de verdad en ' +
+    'los discos. Suelen diferir porque ZFS comprime al guardar: si el físico es menor que el lógico, la ' +
+    'compresión te está ahorrando espacio.',
+
+  usage_snapshots:
+    'Las instantáneas (snapshots) son "fotos" del estado de tus datos en un momento dado, para poder ' +
+    'volver atrás si borras o estropeas algo. Ocupan espacio porque conservan las versiones antiguas de ' +
+    'los archivos que cambias o borras; por eso el espacio usado puede subir aunque tú no añadas nada ' +
+    'nuevo. Borra las instantáneas viejas que ya no necesites para recuperar sitio.',
 } as const;

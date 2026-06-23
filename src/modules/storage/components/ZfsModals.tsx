@@ -22,8 +22,9 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { X, HardDrive, Boxes, Database, Camera, Zap } from 'lucide-react';
+import { X, HardDrive, Boxes, Database, Camera, Zap, ShieldCheck, Download, Upload, ArrowUpCircle, Settings2, PlugZap } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
+import type { ZfsPoolObservation } from '../types';
 import { DEMO_AVAILABLE_DISKS } from '../zfs-demo';
 import { SectionIntro, InfoTip, ZFS_COPY } from './ZfsHelp';
 
@@ -553,6 +554,295 @@ export function CreateSnapshotForm({ target, onClose }: { target: string; onClos
           Nombre de la instantánea
         </Field>
         <input style={input} value={snap} onChange={(e) => setSnap(e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Modal: añadir disco de repuesto (hot spare) al pool ──────────
+// Reusa la plantilla de AddCacheForm: elige uno o más discos libres → store.zfsAddSpare.
+export function AddSpareForm({ pool, onClose }: { pool: string; onClose: () => void }) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const disksStore = useStorageStore((s) => s.disks);
+  const addSpare = useStorageStore((s) => s.zfsAddSpare);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const available: AvailDisk[] = demo
+    ? DEMO_AVAILABLE_DISKS
+    : disksStore.filter((d) => !d.pool).map((d) => ({ by_id: d.serial ? `/dev/disk/by-id/${d.serial}` : d.device, size_bytes: d.size_bytes, model: d.model }));
+
+  const toggle = (id: string) => setPicked((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await addSpare(pool, picked);
+      toast.success(`Repuesto añadido a "${pool}"${demo ? ' (demo)' : ''}`);
+      onClose();
+    } catch (e) {
+      toast.error(`No se pudo añadir el repuesto: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`Añadir disco de repuesto a "${pool}"`} icon={<ShieldCheck size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><button style={btn()} onClick={onClose}>Cancelar</button><button style={btn(true)} disabled={busy || picked.length === 0} onClick={submit}>{busy ? 'Añadiendo…' : 'Añadir repuesto'}</button></>}>
+      <SectionIntro>{ZFS_COPY.spare}</SectionIntro>
+      <div>
+        <Field hint="Elige los discos que quedarán en reserva. No se borran datos del pool: el repuesto solo entra en juego si un disco del pool falla.">
+          Discos libres para repuesto
+        </Field>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {available.length === 0 && <div style={{ fontSize: '0.875rem', color: 'var(--text-dim)' }}>No hay discos libres disponibles.</div>}
+          {available.map((d) => {
+            const sel = picked.includes(d.by_id);
+            return (
+              <label key={d.by_id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: 10,
+                border: `1px solid ${sel ? 'var(--mod-storage, var(--accent))' : 'var(--border)'}`,
+                borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+              }}>
+                <input type="checkbox" checked={sel} onChange={() => toggle(d.by_id)} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text)' }}>{d.model}</div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', wordBreak: 'break-all' }}>{d.by_id}</div>
+                </div>
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', flexShrink: 0 }}>{fmtTB(d.size_bytes)}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Modal: quitar un vdev auxiliar (caché/log) ───────────────────
+// Destructivo en el sentido de quitar aceleración: aviso ámbar + confirmar.
+export function RemoveAuxVdevConfirm({ pool, vdevName, vdevLabel, onClose }: { pool: string; vdevName: string; vdevLabel: string; onClose: () => void }) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const removeAux = useStorageStore((s) => s.zfsRemoveAuxVdev);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await removeAux(pool, vdevName);
+      toast.success(`«${vdevLabel}» retirado de "${pool}"${demo ? ' (demo)' : ''}`);
+      onClose();
+    } catch (e) {
+      toast.error(`No se pudo quitar el dispositivo: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  };
+  return (
+    <Modal title={`Quitar «${vdevLabel}» de "${pool}"`} icon={<Zap size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><button style={btn()} onClick={onClose}>Cancelar</button><button style={btn(false, true)} disabled={busy} onClick={submit}>{busy ? 'Quitando…' : 'Quitar dispositivo'}</button></>}>
+      <div style={{ padding: 12, background: 'var(--warning-bg, #f59e0b18)', border: '1px solid var(--warning,#f59e0b)55', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+        Vas a retirar el dispositivo de aceleración <strong>«{vdevLabel}»</strong> del almacén <strong>{pool}</strong>.
+        El pool seguirá funcionando con todos sus datos, pero perderá esta aceleración hasta que vuelvas a añadir otro.
+        No se borra ningún dato.
+      </div>
+      <SectionIntro>{ZFS_COPY.cache}</SectionIntro>
+    </Modal>
+  );
+}
+
+// ─── Modal: mantenimiento de un disco (offline / online / detach) ─
+// El "plan" legible avisa según haya o no redundancia: offline/detach de un
+// disco sin redundancia pone los datos en riesgo → aviso ámbar fuerte.
+export function DiskMaintenanceModal({
+  pool, diskName, action, hasRedundancy, onClose,
+}: {
+  pool: string; diskName: string; action: 'offline' | 'online' | 'detach'; hasRedundancy: boolean; onClose: () => void;
+}) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const diskAction = useStorageStore((s) => s.zfsDiskAction);
+  const [busy, setBusy] = useState(false);
+
+  const META = {
+    offline: { title: 'Desconectar disco', verb: 'desconectar', copy: ZFS_COPY.offline, danger: !hasRedundancy, btn: 'Desconectar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+    online: { title: 'Reconectar disco', verb: 'reconectar', copy: ZFS_COPY.online, danger: false, btn: 'Reconectar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+    detach: { title: 'Separar disco', verb: 'separar', copy: ZFS_COPY.detach, danger: !hasRedundancy, btn: 'Separar', icon: <PlugZap size={18} style={{ color: 'var(--mod-storage)' }} /> },
+  }[action];
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await diskAction(pool, diskName, action);
+      toast.success(`Disco ${action === 'offline' ? 'desconectado' : action === 'online' ? 'reconectado' : 'separado'}${demo ? ' (demo)' : ''}`);
+      onClose();
+    } catch (e) {
+      toast.error(`No se pudo ${META.verb} el disco: ${e instanceof Error ? e.message : String(e)}`);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={META.title} icon={META.icon} onClose={onClose}
+      footer={<><button style={btn()} onClick={onClose}>Cancelar</button><button style={btn(!META.danger, META.danger)} disabled={busy} onClick={submit}>{busy ? 'Aplicando…' : META.btn}</button></>}>
+      <SectionIntro>{META.copy}</SectionIntro>
+      <div style={{ fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.6 }}>
+        <div>Almacén: <strong>{pool}</strong></div>
+        <div style={{ wordBreak: 'break-all', fontFamily: 'var(--font-mono, monospace)' }}>Disco: <strong>{diskName}</strong></div>
+        <div>Acción: <strong>{META.verb}</strong>.</div>
+      </div>
+      {META.danger ? (
+        <div style={{ padding: 12, background: 'var(--warning-bg, #f59e0b18)', border: '1px solid var(--warning,#f59e0b)55', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+          Atención: este disco <strong>no tiene redundancia suficiente</strong> ahora mismo. Si lo {META.verb}s, el almacén
+          puede quedar sin protección o con sus datos en riesgo. Asegúrate de tener una copia antes de continuar.
+          {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+        </div>
+      ) : (
+        action !== 'online' && (
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            El almacén tiene redundancia suficiente: seguirá funcionando con normalidad mientras este disco está fuera.
+            {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+          </div>
+        )
+      )}
+    </Modal>
+  );
+}
+
+// ─── Modal: propiedades del pool (autotrim + comentario + features/upgrade) ─
+export function PoolPropsModal({ pool, onClose }: { pool: ZfsPoolObservation; onClose: () => void }) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const setProp = useStorageStore((s) => s.zfsSetPoolProp);
+  const setAutotrim = useStorageStore((s) => s.zfsSetAutotrim);
+  const upgrade = useStorageStore((s) => s.zfsUpgradePool);
+  const [autotrim, setAutotrimLocal] = useState(pool.autotrim === 'on');
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const features = pool.features ?? [];
+  const inactive = features.filter((f) => !f.active);
+
+  const onToggleAutotrim = async (on: boolean) => {
+    setAutotrimLocal(on);
+    try { await setAutotrim(pool.name, on); toast.success(`TRIM automático ${on ? 'activado' : 'desactivado'}${demo ? ' (demo)' : ''}`); }
+    catch (e) { setAutotrimLocal(!on); toast.error(`No se pudo cambiar el TRIM automático: ${e instanceof Error ? e.message : String(e)}`); }
+  };
+
+  const onSaveComment = async () => {
+    if (!comment.trim()) return;
+    setBusy(true);
+    try { await setProp(pool.name, 'comment', comment.trim()); toast.success(`Comentario guardado${demo ? ' (demo)' : ''}`); }
+    catch (e) { toast.error(`No se pudo guardar el comentario: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  };
+
+  const onUpgrade = async () => {
+    setBusy(true);
+    try { await upgrade(pool.name); toast.success(`Funciones del pool actualizadas${demo ? ' (demo)' : ''}`); }
+    catch (e) { toast.error(`No se pudo actualizar el pool: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal title={`Propiedades de "${pool.name}"`} icon={<Settings2 size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<button style={btn(true)} onClick={onClose}>Cerrar</button>}>
+      {/* ashift (informativo, no editable) */}
+      <div>
+        <Field hint={ZFS_COPY.ashift}>Tamaño de bloque (ashift)</Field>
+        <div style={{ fontSize: '0.875rem', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }}>
+          {pool.ashift != null ? `${pool.ashift} (bloques de ${2 ** (pool.ashift) >= 1024 ? `${2 ** pool.ashift / 1024} KB` : `${2 ** pool.ashift} B`})` : '—'}
+          <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginLeft: 8, fontSize: '0.75rem' }}>fijado al crear el pool</span>
+        </div>
+      </div>
+
+      {/* autotrim TOGGLE */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+        <input type="checkbox" checked={autotrim} onChange={(e) => onToggleAutotrim(e.target.checked)} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>TRIM automático</div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>{ZFS_COPY.autotrim}</div>
+        </div>
+      </label>
+
+      {/* comentario */}
+      <div>
+        <Field hint="Un texto libre para anotar para qué usas este almacén (p. ej. «copias de seguridad de la oficina»). Es solo informativo.">
+          Comentario
+        </Field>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input style={{ ...input, flex: 1 }} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Anotación para este almacén" />
+          <button style={btn(true)} disabled={busy || !comment.trim()} onClick={onSaveComment}>Guardar</button>
+        </div>
+      </div>
+
+      {/* features + upgrade */}
+      <div>
+        <Field hint={ZFS_COPY.features}>Funciones del almacén</Field>
+        {features.length === 0 ? (
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>No hay información de funciones para este almacén.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            {features.map((f) => (
+              <span key={f.name} style={{
+                fontSize: '0.6875rem', padding: '2px 8px', borderRadius: 'var(--radius-pill, 999px)',
+                border: '1px solid var(--border)', fontFamily: 'var(--font-mono, monospace)',
+                background: f.active ? 'color-mix(in srgb, var(--success, #22c55e) 12%, transparent)' : 'transparent',
+                color: f.active ? 'var(--success, #22c55e)' : 'var(--text-dim)',
+              }} title={f.active ? 'Activa' : 'Inactiva (puede activarse al actualizar)'}>
+                {f.active ? '● ' : '○ '}{f.name}
+              </span>
+            ))}
+          </div>
+        )}
+        <button style={btn()} disabled={busy || inactive.length === 0} onClick={onUpgrade}>
+          <ArrowUpCircle size={14} style={{ marginRight: 6 }} />
+          {inactive.length > 0 ? `Actualizar funciones (${inactive.length} nuevas)` : 'Todo actualizado'}
+          <span style={{ marginLeft: 4 }}><InfoTip text={ZFS_COPY.upgrade} /></span>
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Modal: exportar pool (desconectar limpio) ────────────────────
+export function ExportPoolConfirm({ pool, onClose }: { pool: string; onClose: () => void }) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const exportPool = useStorageStore((s) => s.zfsExportPool);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try { await exportPool(pool); toast.success(`Almacén "${pool}" exportado${demo ? ' (demo)' : ''}`); onClose(); }
+    catch (e) { toast.error(`No se pudo exportar: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal title={`Exportar "${pool}"`} icon={<Download size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><button style={btn()} onClick={onClose}>Cancelar</button><button style={btn(false, true)} disabled={busy} onClick={submit}>{busy ? 'Exportando…' : 'Exportar almacén'}</button></>}>
+      <SectionIntro>{ZFS_COPY.export}</SectionIntro>
+      <div style={{ padding: 12, background: 'var(--warning-bg, #f59e0b18)', border: '1px solid var(--warning,#f59e0b)55', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+        El almacén <strong>{pool}</strong> dejará de estar disponible en este sistema (sus carpetas se desmontarán). No se
+        borra ningún dato: podrás volver a conectarlo con «Importar pool». Asegúrate de que nadie esté usando sus datos.
+        {!demo && ' Esta operación requiere token + aprobación en el servidor.'}
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Modal: importar pool (reconectar) ────────────────────────────
+export function ImportPoolModal({ onClose }: { onClose: () => void }) {
+  const demo = useStorageStore((s) => s.zfs_demo);
+  const importPool = useStorageStore((s) => s.zfsImportPool);
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setBusy(true);
+    try { await importPool(name.trim()); toast.success(`Almacén "${name.trim()}" importado${demo ? ' (demo)' : ''}`); onClose(); }
+    catch (e) { toast.error(`No se pudo importar: ${e instanceof Error ? e.message : String(e)}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal title="Importar un almacén (pool)" icon={<Upload size={18} style={{ color: 'var(--mod-storage)' }} />} onClose={onClose}
+      footer={<><button style={btn()} onClick={onClose}>Cancelar</button><button style={btn(true)} disabled={busy || !name.trim()} onClick={submit}>{busy ? 'Importando…' : 'Importar'}</button></>}>
+      <SectionIntro>{ZFS_COPY.import_pool}</SectionIntro>
+      <div>
+        <Field hint="El nombre del almacén que quieres reconectar. Debe coincidir con el nombre con el que se creó/exportó (p. ej. tank, vault).">
+          Nombre del almacén
+        </Field>
+        <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="tank" />
       </div>
     </Modal>
   );

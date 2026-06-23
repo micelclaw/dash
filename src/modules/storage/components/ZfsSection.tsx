@@ -23,10 +23,10 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { HardDrive, Boxes, Camera, ShieldAlert, ShieldCheck, Waves, Trash2, Zap, Database } from 'lucide-react';
+import { HardDrive, Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
-import type { ZfsPoolObservation, ZfsVdevObservation } from '../types';
-import { ZfsManageBar, CreateSnapshotForm, AddCacheForm } from './ZfsModals';
+import { ZfsManageBar, CreateSnapshotForm, ImportPoolModal } from './ZfsModals';
+import { ZfsPoolCard } from './ZfsPoolCard';
 import { SectionIntro, InfoTip, ZFS_COPY } from './ZfsHelp';
 
 const actBtn: React.CSSProperties = {
@@ -35,7 +35,10 @@ const actBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 500,
 };
 
-function fmtBytes(n: number | null | undefined): string {
+// ─── Helpers compartidos (los consume ZfsPoolCard) ─────────────────
+// Se exportan desde aquí (SSOT del módulo ZFS): formato de bytes, color/etiqueta
+// de salud, etiqueta humana de vdev, texto de errores y estado de disco.
+export function fmtBytes(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return '—';
   if (n === 0) return '0 B';
   const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
@@ -56,16 +59,16 @@ const td: React.CSSProperties = {
 };
 const mono: React.CSSProperties = { fontFamily: 'var(--font-mono, monospace)' };
 
-function healthColor(state: string): string {
+export function healthColor(state: string): string {
   const s = state.toUpperCase();
   if (s === 'ONLINE' || s === 'RUNNING') return 'var(--success, #22c55e)';
-  if (s === 'DEGRADED' || s === 'SCRUBBING' || s === 'RESILVERING') return 'var(--warning, #f59e0b)';
+  if (s === 'DEGRADED' || s === 'SCRUBBING' || s === 'RESILVERING' || s === 'OFFLINE') return 'var(--warning, #f59e0b)';
   if (s === 'FAULTED' || s === 'SUSPENDED' || s === 'UNAVAIL' || s === 'REMOVED') return 'var(--error, #ef4444)';
   return 'var(--text-dim)';
 }
 
 // Salud del pool en lenguaje llano (no la etiqueta cruda de ZFS).
-function healthLabel(state: string): string {
+export function healthLabel(state: string): string {
   const s = state.toUpperCase();
   if (s === 'ONLINE') return 'Saludable';
   if (s === 'DEGRADED') return 'Degradado (sigue funcionando, repáralo cuanto antes)';
@@ -77,7 +80,7 @@ function healthLabel(state: string): string {
 }
 
 // Etiqueta humana del tipo de vdev (caché/log/metadatos vs vdev de datos).
-function vdevLabel(type: string): { label: string; aux: boolean } {
+export function vdevLabel(type: string): { label: string; aux: boolean } {
   const t = type.toLowerCase();
   if (t === 'cache') return { label: 'Caché SSD (lectura)', aux: true };
   if (t === 'log') return { label: 'Log SSD (escritura)', aux: true };
@@ -91,7 +94,7 @@ function vdevLabel(type: string): { label: string; aux: boolean } {
 }
 
 // Convierte los contadores de error de un disco en texto humano.
-function errorText(read: number, write: number, cksum: number): string | null {
+export function errorText(read: number, write: number, cksum: number): string | null {
   const parts: string[] = [];
   if (read > 0) parts.push(`${read} error${read === 1 ? '' : 'es'} de lectura`);
   if (write > 0) parts.push(`${write} error${write === 1 ? '' : 'es'} de escritura`);
@@ -100,7 +103,7 @@ function errorText(read: number, write: number, cksum: number): string | null {
 }
 
 // Estado de disco en lenguaje llano.
-function diskStateLabel(state: string): string {
+export function diskStateLabel(state: string): string {
   const s = state.toUpperCase();
   if (s === 'ONLINE') return 'En línea';
   if (s === 'FAULTED') return 'Con fallo';
@@ -109,127 +112,6 @@ function diskStateLabel(state: string): string {
   if (s === 'REMOVED') return 'Retirado';
   if (s === 'OFFLINE') return 'Desconectado';
   return state;
-}
-
-function VdevBlock({ vdev }: { vdev: ZfsVdevObservation }) {
-  const { label, aux } = vdevLabel(vdev.type);
-  return (
-    <div style={{
-      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 12,
-      background: aux ? 'color-mix(in srgb, var(--mod-storage) 4%, var(--surface))' : 'var(--surface)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        {aux && <Zap size={13} style={{ color: 'var(--mod-storage)', flexShrink: 0 }} />}
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>{label}</span>
-        <span style={{ fontSize: '0.75rem', color: healthColor(vdev.state), fontWeight: 600 }}>
-          ● {diskStateLabel(vdev.state)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {vdev.disks.map((d) => {
-          const err = errorText(d.read_errors, d.write_errors, d.cksum_errors);
-          return (
-            <div key={d.name} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <span style={{ color: healthColor(d.state), flexShrink: 0, marginTop: 2, fontSize: '0.75rem' }}>●</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ ...mono, fontSize: '0.75rem', color: 'var(--text)', wordBreak: 'break-all', lineHeight: 1.4 }} title={d.name}>
-                  {d.name}
-                </div>
-                <div style={{ fontSize: '0.6875rem', color: err ? 'var(--error,#ef4444)' : 'var(--text-dim)', marginTop: 1 }}>
-                  {diskStateLabel(d.state)}{err ? ` — ${err}` : ''}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function PoolCard({ pool }: { pool: ZfsPoolObservation }) {
-  const caps = useStorageStore((s) => s.zfs_capabilities);
-  const scrub = useStorageStore((s) => s.zfsScrub);
-  const destroy = useStorageStore((s) => s.zfsDestroyPool);
-  const [cacheOpen, setCacheOpen] = useState(false);
-
-  const onScrub = async () => { try { await scrub(pool.name); toast.success(`Verificación iniciada en ${pool.name}`); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); } };
-  const onDestroy = async () => {
-    if (!window.confirm(`¿Destruir el almacén "${pool.name}"? Esto borra TODOS sus datos y no se puede deshacer.`)) return;
-    try { await destroy(pool.name); toast.success(`Almacén ${pool.name} destruido`); } catch (e) { toast.error(String(e instanceof Error ? e.message : e)); }
-  };
-
-  const cap = pool.cap_pct;
-  const capColor = cap == null ? 'var(--text-dim)' : cap >= 90 ? 'var(--error,#ef4444)' : cap >= 80 ? 'var(--warning,#f59e0b)' : 'var(--success,#22c55e)';
-  const dataVdevs = pool.vdevs.filter((v) => !vdevLabel(v.type).aux);
-  const auxVdevs = pool.vdevs.filter((v) => vdevLabel(v.type).aux);
-
-  return (
-    <div style={card}>
-      {/* Cabecera: nombre + salud humana + uso */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-        <HardDrive size={18} style={{ color: 'var(--mod-storage)', flexShrink: 0 }} />
-        <strong style={{ ...mono, fontSize: '1.0625rem', color: 'var(--text)' }}>{pool.name}</strong>
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', ...mono }}>
-          {fmtBytes(pool.alloc_bytes)} / {fmtBytes(pool.size_bytes)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: healthColor(pool.health) }}>● {healthLabel(pool.health)}</span>
-      </div>
-
-      {/* Barra de capacidad ALTA */}
-      {cap != null && (
-        <>
-          <div style={{ height: 12, background: 'var(--bg, #0001)', borderRadius: 6, overflow: 'hidden', marginBottom: 6, border: '1px solid var(--border)' }}>
-            <div style={{ width: `${Math.min(cap, 100)}%`, height: '100%', background: capColor, transition: 'width .2s' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 14 }}>
-            <span>{cap}% ocupado · {fmtBytes(pool.free_bytes)} libres</span>
-            <span>Fragmentación {pool.frag_pct ?? '—'}%</span>
-          </div>
-        </>
-      )}
-
-      {/* Discos de datos por vdev */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {dataVdevs.map((v) => <VdevBlock key={v.name} vdev={v} />)}
-      </div>
-
-      {/* Caché / log / metadatos (si los hay) */}
-      {auxVdevs.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-          {auxVdevs.map((v) => <VdevBlock key={v.name} vdev={v} />)}
-        </div>
-      )}
-
-      {/* Acciones del pool */}
-      {(caps?.can_scrub || caps?.can_expand_vdev || caps?.can_destroy_pool) && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          {caps?.can_scrub && (
-            <button style={actBtn} onClick={onScrub}>
-              <Waves size={14} /> Verificar
-              <InfoTip text="Lanza un «scrub»: ZFS lee todos los datos del almacén y repara silenciosamente cualquier corrupción (bit-rot) usando la protección RAID. Conviene hacerlo cada mes." />
-            </button>
-          )}
-          {caps?.can_expand_vdev && (
-            <button style={actBtn} onClick={() => setCacheOpen(true)}>
-              <Zap size={14} /> + Caché SSD
-              <InfoTip text="Añade uno o más SSD para acelerar el almacén: caché de lectura (L2ARC), log de escritura (SLOG) o metadatos (special)." />
-            </button>
-          )}
-          {caps?.can_destroy_pool && (
-            <button style={{ ...actBtn, color: 'var(--error,#ef4444)', marginLeft: 'auto' }} onClick={onDestroy}>
-              <Trash2 size={14} /> Destruir
-            </button>
-          )}
-        </div>
-      )}
-
-      {cacheOpen && <AddCacheForm pool={pool.name} onClose={() => setCacheOpen(false)} />}
-    </div>
-  );
 }
 
 export function ZfsSection() {
@@ -242,6 +124,7 @@ export function ZfsSection() {
   const demo = useStorageStore((s) => s.zfs_demo);
   const destroySnap = useStorageStore((s) => s.zfsDestroySnapshot);
   const [snapTarget, setSnapTarget] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const onDestroySnap = async (full: string) => {
     if (!window.confirm(`¿Destruir la instantánea "${full}"?`)) return;
@@ -301,13 +184,21 @@ export function ZfsSection() {
         </div>
       )}
 
-      {/* Barra de creación (almacén / carpeta / disco virtual), gated por capabilities */}
-      <ZfsManageBar />
+      {/* Barra de creación (almacén / carpeta / disco virtual) + Importar pool, gated por capabilities */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <ZfsManageBar />
+        {caps.can_import !== false && (
+          <button style={actBtn} onClick={() => setImportOpen(true)}>
+            <Upload size={14} /> Importar pool
+            <InfoTip text={ZFS_COPY.import_pool} />
+          </button>
+        )}
+      </div>
 
-      {/* Pools — tarjetas grandes (1-2 por fila) */}
+      {/* Pools — tarjetas densas (1-2 por fila) */}
       {pools.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 16 }}>
-          {pools.map((p) => <PoolCard key={p.name} pool={p} />)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
+          {pools.map((p) => <ZfsPoolCard key={p.name} pool={p} />)}
         </div>
       )}
 
@@ -409,6 +300,9 @@ export function ZfsSection() {
 
       {/* Modal de crear instantánea (desde la fila de un dataset) */}
       {snapTarget && <CreateSnapshotForm target={snapTarget} onClose={() => setSnapTarget(null)} />}
+
+      {/* Modal de importar pool (a nivel sección) */}
+      {importOpen && <ImportPoolModal onClose={() => setImportOpen(false)} />}
     </div>
   );
 }

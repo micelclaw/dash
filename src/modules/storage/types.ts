@@ -172,6 +172,18 @@ export interface ZfsCapabilities {
   can_encrypt: boolean;
   can_vm: boolean;
   degraded_reason?: string;
+  can_clear?: boolean;
+  can_trim?: boolean;
+  can_autotrim?: boolean;
+  can_offline?: boolean;
+  can_online?: boolean;
+  can_detach?: boolean;
+  can_add_spare?: boolean;
+  can_remove_aux_vdev?: boolean;
+  can_export?: boolean;
+  can_import?: boolean;
+  can_upgrade?: boolean;
+  can_set_pool_prop?: boolean;
 }
 
 export interface ZfsDiskObservation {
@@ -180,6 +192,7 @@ export interface ZfsDiskObservation {
   read_errors: number;
   write_errors: number;
   cksum_errors: number;
+  temperature_c?: number | null;
 }
 export interface ZfsVdevObservation {
   name: string;
@@ -200,6 +213,17 @@ export interface ZfsPoolObservation {
   frag_pct: number | null;
   cap_pct: number | null;
   vdevs: ZfsVdevObservation[];
+  scrub_state?: 'none' | 'scanning' | 'finished' | 'canceled';
+  scrub_progress_pct?: number | null;
+  scrub_errors?: number | null;
+  scrub_finished_at?: string | null;
+  read_errors?: number;
+  write_errors?: number;
+  cksum_errors?: number;
+  spares?: ZfsDiskObservation[];
+  autotrim?: 'on' | 'off' | null;
+  ashift?: number | null;
+  features?: Array<{ name: string; active: boolean }>;
 }
 export interface ZfsDatasetObservation {
   name: string;
