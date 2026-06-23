@@ -11,18 +11,22 @@ import {
   DragOverlay,
   closestCenter,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useAppAccessStore } from '@/stores/app-access.store';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { DEFAULT_APP_KEYS } from '@/config/app-catalog';
 import { MODULES } from '@/config/modules';
+import { lucideLookup } from '@/config/lucide-lookup';
+import type { ModuleConfig } from '@/types/modules';
 import { SidebarItem } from './SidebarItem';
 import { SidebarGroup } from './SidebarGroup';
 import { SortableSidebarItem } from './SortableSidebarItem';
@@ -155,33 +159,65 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const appAllowed = useAppAccessStore((s) => s.allowed);
   const appLoaded = useAppAccessStore((s) => s.loaded);
+  const dynamicModules = useUiModulesStore((s) => s.modules);
+
+  // Módulos dinámicos (apps L3 servidas por Core como iframe) → ModuleConfig.
+  // Navegan a la ruta catch-all /app/<app_name> (AppModuleHost). Ya vienen
+  // pre-filtrados por el backend (instalada+activa+cargada+concedida).
+  const dynConfigs = useMemo<ModuleConfig[]>(
+    () => dynamicModules.map((d) => ({
+      id: d.id,
+      label: d.label,
+      icon: lucideLookup(d.icon),
+      color: d.color ?? 'var(--accent)',
+      path: `/app/${d.app_name}`,
+      group: d.group,
+    })),
+    [dynamicModules],
+  );
 
   const { ungrouped, groups } = useMemo(() => {
     // Gating de módulos (rediseño NAS): adminOnly → solo owner/admin (Fase 0);
     // default → siempre; opt_in → solo si concedida (Fase 1, /me/app-access).
     // Antes de cargar el app-access: fail-open en opt_in (evita parpadeo/bloqueo).
-    const visible = MODULES.filter((m) => {
+    const staticVisible = MODULES.filter((m) => {
       if (m.adminOnly) return isAdmin;
       if (DEFAULT_APP_KEYS.includes(m.id)) return true;
       return !appLoaded || appAllowed.has(m.id);
     });
-    const byId = new Map(visible.map((m) => [m.id, m]));
-    const orderSection = (mods: typeof MODULES, section: string) =>
+
+    // Fusionar los dinámicos: insertar cada uno tras su `order_after` (p.ej. n8n
+    // justo debajo de Flows); si no hay target, append a su sección.
+    const merged = [...staticVisible];
+    for (const d of dynamicModules) {
+      const cfg = dynConfigs.find((c) => c.id === d.id);
+      if (!cfg || merged.some((m) => m.id === cfg.id)) continue;
+      const idx = d.order_after ? merged.findIndex((m) => m.id === d.order_after) : -1;
+      if (idx >= 0) merged.splice(idx + 1, 0, cfg);
+      else merged.push(cfg);
+    }
+
+    const byId = new Map(merged.map((m) => [m.id, m]));
+    const orderSection = (mods: ModuleConfig[], section: string) =>
       applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!).filter(Boolean);
 
-    const ungrouped = orderSection(visible.filter((m) => !m.group), TOP_SECTION);
-    const grouped = visible.filter((m) => m.group);
+    const ungrouped = orderSection(merged.filter((m) => !m.group), TOP_SECTION);
+    const grouped = merged.filter((m) => m.group);
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups = groupNames.map((name) => ({
       name,
       modules: orderSection(grouped.filter((m) => m.group === name), name),
     }));
     return { ungrouped, groups };
-  }, [moduleOrder, isAdmin, appLoaded, appAllowed]);
+  }, [moduleOrder, isAdmin, appLoaded, appAllowed, dynamicModules, dynConfigs]);
 
   // ─── Drag & drop: reordenar módulos dentro de su sección ────────
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
-  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Reordenar los módulos del sidebar también con teclado (Espacio/flechas/Esc).
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const onDragStart = useCallback((e: DragStartEvent) => {
     setActiveDragId(e.active.id as string);
@@ -206,7 +242,9 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
     setSectionOrder(activeSection, arrayMove(ids, oldIdx, newIdx));
   }, [ungrouped, groups, setSectionOrder]);
 
-  const activeDragModule = activeDragId ? MODULES.find((m) => m.id === activeDragId) ?? null : null;
+  const activeDragModule = activeDragId
+    ? (MODULES.find((m) => m.id === activeDragId) ?? dynConfigs.find((m) => m.id === activeDragId) ?? null)
+    : null;
 
   return (
     <div
