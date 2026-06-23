@@ -16,7 +16,7 @@ commit por fix, staging selectivo, sin push.
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
-| network (dns/proxy/vpn) | 🟡 parcial: VPN + modales + borrados de proxy; secciones de dns pendientes | 2026-06-23 21:12 |
+| network (dns/proxy/vpn) | 🟡 parcial: proxy CASI completo (5 borrados confirmados); dns aún pendiente | 2026-06-23 21:38 |
 | inventory | ✅ revisado (1ª pasada) | 2026-06-23 18:10 |
 | automation | ✅ revisado (1ª pasada) | 2026-06-23 18:39 |
 | projects | ✅ revisado (1ª pasada) | 2026-06-23 19:11 |
@@ -575,4 +575,38 @@ seguridad. Es el tipo de fallo que el usuario nota tarde y mal.
   verificado aún → revisar en próxima iteración de proxy.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en los 3 ficheros. Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 14 — 2026-06-23 21:38 — `network`/proxy (cierre del patrón de borrado destructivo)
+
+**Ficheros:** `proxy/sections/CertificatesSection.tsx`, `proxy/sections/AccessListsSection.tsx`
+
+**Implementado (cierre del gap de seguridad de it13):**
+
+1. **`ux(proxy): confirmar antes de borrar un certificado TLS`** — commit `95c3ba3`
+   `CertificatesSection` borraba al instante. Destructivo: los hosts que
+   usan el cert se quedan sin HTTPS hasta reemitirlo. `ConfirmDialog`
+   (danger) nombrando los dominios.
+
+2. **`ux(proxy): confirmar antes de borrar una access list`** — commit `fd1ab37`
+   `AccessListsSection` borraba al instante. Destructivo: los hosts
+   protegidos pierden la restricción de auth/IP (pueden quedar expuestos).
+   `ConfirmDialog` (danger) nombrando la lista.
+
+**Patrón CERRADO en proxy:** los **5** borrados del reverse-proxy ahora
+confirman (proxy hosts, redirects, 404 hosts [it13] + certificados,
+access lists [it14]). Antes, cualquiera era un clic accidental sin red de
+seguridad → caída de servicio público o exposición de un host protegido.
+
+**Pendiente para cerrar network:**
+- **dns ENTERO** sigue sin pasada profunda (ZoneEditor 915, LocalDomains
+  782, DDNS 641, Providers 500, ZonesSection records…). Revisar también si
+  los borrados de dns (zonas/registros/dominios locales) confirman.
+- Otras secciones de proxy (Streams, Audit, Settings, Subdomain, DDNS,
+  Dashboard) — sin pasada profunda, pero las destructivas principales ya
+  están cubiertas.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
