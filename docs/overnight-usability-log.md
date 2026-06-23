@@ -14,7 +14,7 @@ commit por fix, staging selectivo, sin push.
 | finance | ✅ revisado (1ª pasada) | 2026-06-23 12:11 |
 | multimedia | ✅ revisado (1ª pasada) | 2026-06-23 12:45 |
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
-| users-groups | pendiente | — |
+| users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | pendiente | — |
 | network (dns/proxy/vpn) | pendiente | — |
 | inventory | pendiente | — |
@@ -142,3 +142,44 @@ Playwright (Firefox roto en WSL); gate efectivo = type-check.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en `modules/office` ni
 `stores/office.store`. Sin Playwright (Firefox roto en WSL); gate = type-check.
+
+---
+
+## Iteración 4 — 2026-06-23 16:11 — módulo `users-groups`
+
+**Ubicación:** `src/components/settings/sections/users-groups/` (no vive en `src/modules`).
+**Ficheros:** `UsersListView.tsx`, `GroupsListView.tsx`
+
+**Implementado:**
+
+1. **`ux(users-groups): botón Eliminar honesto (exige 1 seleccionado)`** — commit `baa9e7a`
+   El botón "Eliminar" de la barra de usuarios se habilitaba con 2+
+   usuarios seleccionados (`disabled` solo con `length===0`), pero su
+   `onClick` solo actúa si `length===1` → con varios seleccionados parecía
+   clicable y no hacía NADA (botón muerto). Ahora exige exactamente 1
+   (`disabled length!==1`), igual que el "Editar" de su misma barra y que
+   el "Eliminar" de la vista de Grupos (que ya lo hacía bien). Mantiene el
+   guard de no auto-borrarse.
+
+2. **`ux(users-groups): aria-label en botones de acciones por fila`** — commit `5ad1d21`
+   Los disparadores del menú de acciones (icono `MoreVertical`,
+   `size="icon"`) no tenían nombre accesible → un lector de pantalla los
+   anuncia como "botón" sin contexto. Se añade `aria-label` con el nombre
+   de la fila (usuario/grupo) en ambas vistas.
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **2+2 errores TS pre-existentes `noUncheckedIndexedAccess`** en estos
+  ficheros (`UsersListView` 122-123, `GroupsListView` 92-93): `selectedX[0]`
+  es `T | undefined` aunque el `disabled` garantiza `length===1` al
+  clicar. VERIFICADO por stash que son PRE-EXISTENTES (parte de los ~132,
+  no los reportaba `tsc -b` incremental porque nunca había re-chequeado
+  estos ficheros). No los toqué: son deuda TS, no usabilidad. Fix trivial
+  (`!` justificado por el guard) para una pasada de tipos dedicada.
+- **Exportar CSV ignora el filtro** (`UsersListView.exportCsv` usa `users`,
+  no `rows`): si filtras y exportas, salen TODOS. Ambiguo (exportar-todo vs
+  exportar-visible) → decisión de producto, no lo cambio unilateralmente.
+
+**Verificación:** `tsc -b` → 0 errores NUEVOS en ambos ficheros (los 4
+mostrados son pre-existentes, confirmado por stash de mis cambios). Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
