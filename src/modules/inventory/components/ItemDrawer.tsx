@@ -300,6 +300,21 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     [],
   );
 
+  // Cerrar el drawer con Escape — salvo si se está escribiendo en un campo
+  // (los inputs del medidor ya usan Escape para resetear su propio formulario,
+  // y no queremos robarle ese Escape ni cerrar el panel a media edición).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+      selectItem(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [selectItem]);
+
   /** Re-fetch the local copy after a mutation when the item lives outside the store list. */
   const refreshLocal = async () => {
     if (storeItem) return;
