@@ -16,7 +16,7 @@ commit por fix, staging selectivo, sin push.
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
 | search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
-| network (dns/proxy/vpn) | pendiente | — |
+| network (dns/proxy/vpn) | 🟡 parcial: VPN revisado; dns/proxy pendientes | 2026-06-23 17:40 |
 | inventory | pendiente | — |
 | automation | pendiente | — |
 | projects | pendiente | — |
@@ -221,3 +221,42 @@ Playwright (Firefox roto en WSL); gate = type-check diferencial.
 **Verificación:** `tsc -b` → 0 errores nuevos; además el módulo search
 pasa de 1 error pre-existente a 0 (resuelto el de ImageIcon). Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 6 — 2026-06-23 17:40 — módulo `network` → submódulo `vpn`
+
+**Nota:** "network" agrupa 3 submódulos grandes (dns ~4900 líneas, proxy
+~5200, vpn ~4400). Esta iteración cubre **VPN**; dns y proxy quedan para
+pasadas posteriores (marcado 🟡 parcial en la tabla).
+
+**Ficheros:** `vpn/components/AddPeerDialog.tsx`, `vpn/components/PeerDetailDialog.tsx`, `vpn/sections/WgPeersSection.tsx`
+
+**Implementado:**
+
+1. **`ux(vpn): ESC cierra los diálogos de peer (Add / Edit)`** — commit `7a696f6`
+   `AddPeerDialog` y `PeerDetailDialog` son modales que cerraban con X,
+   Cancel o backdrop, pero no con Escape. Se añade keydown→Escape en ambos
+   (AddPeer resetea vía `handleClose` como la X; PeerDetail llama `onClose`),
+   con guard de `open` y cleanup. El efecto va ANTES del early return para
+   respetar Rules of Hooks.
+
+2. **`ux(vpn): ESC cierra los modales de config y QR de peer`** — commit `d300f7e`
+   El `ModalOverlay` compartido (modal de configuración + modal de código
+   QR de un peer) SOLO cerraba clicando el backdrop: sin Escape y sin botón
+   X visible → había que adivinar que se cierra clicando fuera. Se añade
+   keydown→Escape en el componente compartido, así ambos modales lo heredan.
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **`ModalOverlay` sin botón X visible.** Solo backdrop + (ahora) ESC.
+  Añadir una X requiere reestructurar el layout de los children → futuro.
+- **Fallo silencioso al crear peer.** `AddPeerDialog.handleSubmit`: si
+  `onAdd` devuelve `null` (fallo) no se muestra error en el diálogo (queda
+  por confirmar si el hook ya hace toast). Pendiente de revisar el hook.
+- **Botón submit con cursor pointer mientras `submitting`** (disabled pero
+  visualmente clicable). Polish menor.
+- **dns y proxy enteros** sin revisar (submódulos grandes).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en los 3 ficheros de vpn.
+Sin Playwright (Firefox roto en WSL); gate = type-check diferencial.
