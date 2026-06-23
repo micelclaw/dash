@@ -371,7 +371,7 @@ export function Component() {
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
       {/* ─── Tab bar ─────────────────────────────────────── */}
-      <div style={{
+      <div role="tablist" style={{
         display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',
         background: 'var(--surface)', overflowX: 'auto', flexShrink: 0,
       }}>
@@ -381,6 +381,8 @@ export function Component() {
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={active}
               onClick={() => setActiveApp(tab.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
