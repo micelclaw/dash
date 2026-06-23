@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 
 interface ShareUser {
   id: string;
@@ -46,6 +47,9 @@ export function ShareBoardModal({ boardId, onClose }: { boardId: string; onClose
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedPermission, setSelectedPermission] = useState<'view' | 'edit'>('view');
   const [transferTarget, setTransferTarget] = useState<string | null>(null);
+
+  // Modal: Escape cierra siempre (contrato estándar de modal).
+  useEscapeToClose(onClose, { ignoreWhenTyping: false });
 
   // Fetch shares and users
   const fetchData = useCallback(async () => {
