@@ -15,7 +15,7 @@ commit por fix, staging selectivo, sin push.
 | multimedia | ✅ revisado (1ª pasada) | 2026-06-23 12:45 |
 | office | ✅ revisado (1ª pasada) | 2026-06-23 15:38 |
 | users-groups | ✅ revisado (1ª pasada) | 2026-06-23 16:11 |
-| search | pendiente | — |
+| search | ✅ revisado (1ª pasada) | 2026-06-23 17:22 |
 | network (dns/proxy/vpn) | pendiente | — |
 | inventory | pendiente | — |
 | automation | pendiente | — |
@@ -182,4 +182,42 @@ Playwright (Firefox roto en WSL); gate efectivo = type-check.
 
 **Verificación:** `tsc -b` → 0 errores NUEVOS en ambos ficheros (los 4
 mostrados son pre-existentes, confirmado por stash de mis cambios). Sin
+Playwright (Firefox roto en WSL); gate = type-check diferencial.
+
+---
+
+## Iteración 5 — 2026-06-23 17:22 — módulo `search`
+
+**Ficheros:** `src/modules/search/SearchResultsList.tsx`, `src/modules/search/SearchPage.tsx`
+
+**Implementado:**
+
+1. **`ux(search): arregla crash en fallback de miniatura rota (ImageIcon sin importar)`** — commit `964b49b`
+   `PhotoThumb` renderiza `<ImageIcon>` cuando una miniatura de foto falla
+   al cargar (`onError` → `setErr`), pero `ImageIcon` NO estaba en el import
+   de lucide-react → referencia indefinida → React crashea justo en el
+   camino de imagen-rota (el que más necesita el fallback). Se añade al
+   import existente. Bonus: elimina uno de los ~132 errores TS
+   pre-existentes (`SearchResultsList:85 'Cannot find name ImageIcon'`).
+   **No era cosmético: era un bug de runtime real.**
+
+2. **`ux(search): indicador 'Searching…' mientras carga`** — commit `d85545b`
+   La búsqueda cross-módulo (`searchAdvanced`) no daba ningún feedback
+   mientras estaba en vuelo: solo se veían los estados vacío/error/
+   resultados, nunca un "buscando". En una búsqueda que puede tardar, se
+   siente como que no pasa nada. Se añade un indicador con spinner
+   (`Loader2` + `animate-spin`) mientras `loading=true`; el estado "No
+   results" ya estaba guardado por `!loading`, así que no hay conflicto.
+
+**Descartado (NO implementado, anotado como hallazgo):**
+
+- **Escape no limpia el input de búsqueda** (solo el botón X). Mejora de
+  teclado menor; pendiente.
+- **Botón X (limpiar) sin `aria-label`**. a11y menor.
+- **Resultados stale durante re-búsqueda**: al re-buscar, los resultados
+  previos siguen visibles bajo el spinner "Searching…". Decidí mantenerlos
+  (mejor que parpadear a vacío); si se prefiere, se podrían atenuar.
+
+**Verificación:** `tsc -b` → 0 errores nuevos; además el módulo search
+pasa de 1 error pre-existente a 0 (resuelto el de ImageIcon). Sin
 Playwright (Firefox roto en WSL); gate = type-check diferencial.
