@@ -15,6 +15,7 @@ import {
   RefreshCw, Plus, Trash2, Power, PowerOff, Clock, Globe, Zap,
   CloudLightning, ChevronDown, ChevronUp, X, Info,
 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { DnsCallout } from '../components/DnsCallout';
 import { InfoTooltip } from '../components/InfoTooltip';
 import type {
@@ -326,6 +327,7 @@ function ProviderRow({ provider, onToggle, onRemove }: {
   onToggle: () => void;
   onRemove: () => void;
 }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
@@ -372,12 +374,22 @@ function ProviderRow({ provider, onToggle, onRemove }: {
         {provider.enabled ? <Power size={14} /> : <PowerOff size={14} />}
       </button>
       <button
-        onClick={onRemove}
+        onClick={() => setConfirmRemove(true)}
         title="Remove"
         style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4, color: '#ef4444' }}
       >
         <Trash2 size={14} />
       </button>
+      <ConfirmDialog
+        open={confirmRemove}
+        onClose={() => setConfirmRemove(false)}
+        onConfirm={() => { onRemove(); setConfirmRemove(false); }}
+        title="Remove DDNS provider"
+        description={`Remove the ${provider.type} dynamic DNS provider? Automatic IP updates for it will stop.`}
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
