@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Trash2, ExternalLink, Square, CheckSquare, X } from 'lucide-react';
+import { Trash2, ExternalLink, Square, CheckSquare, X, ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { HeatBadge } from '@/components/shared/HeatBadge';
