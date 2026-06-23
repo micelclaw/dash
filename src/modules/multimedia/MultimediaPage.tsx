@@ -98,16 +98,23 @@ export function Component() {
       } else {
         setStoppingApps(prev => new Set(prev).add(app));
       }
+      setError(null);
       await api.post(`/multimedia/${app}/${action}`);
       // Poll aggressively until state matches expected, or timeout
       const deadline = Date.now() + 30_000;
+      let reached = false;
       while (Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 2_000));
         const res = await api.get<{ data: MultimediaSuiteStatus }>('/multimedia/status');
         setStatus(res.data);
         const appStatus = res.data.apps.find(a => a.name === app);
-        if (action === 'start' && appStatus?.running) break;
-        if (action === 'stop' && !appStatus?.running) break;
+        if (action === 'start' && appStatus?.running) { reached = true; break; }
+        if (action === 'stop' && !appStatus?.running) { reached = true; break; }
+      }
+      // No fallar en silencio en timeout: el spinner para, y sin esto el
+      // usuario no sabe que el start/stop no llegó a completarse.
+      if (!reached) {
+        setError(`${app} did not ${action} in time — it may still be ${action === 'start' ? 'starting' : 'stopping'}. Use refresh to check.`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action} ${app}`);
