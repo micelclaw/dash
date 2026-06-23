@@ -16,6 +16,7 @@ import {
   DragOverlay,
   closestCenter,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -24,6 +25,7 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
   verticalListSortingStrategy,
+  sortableKeyboardCoordinates,
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -258,6 +260,10 @@ export function KanbanBoard() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Teclado: el tablero solo era operable con ratón. Con KeyboardSensor +
+    // sortableKeyboardCoordinates se puede coger (Espacio), mover (flechas) y
+    // soltar una tarjeta/columna sin ratón.
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   // Determine overlay content
