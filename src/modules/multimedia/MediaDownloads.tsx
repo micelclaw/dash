@@ -215,7 +215,11 @@ export function MediaDownloads() {
               </div>
               <button
                 onClick={() => deleteDownload(dl.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex' }}
+                aria-label={`Remove download: ${dl.title}`}
+                title="Remove download"
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--error)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', transition: 'color 0.12s ease' }}
               >
                 <Trash2 size={14} />
               </button>
