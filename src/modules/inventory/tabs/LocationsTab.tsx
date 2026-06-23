@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
 
@@ -112,6 +113,7 @@ export function LocationsTab() {
   const [editName, setEditName] = useState('');
   const [editKind, setEditKind] = useState<LocationKind>('room');
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // -- Items of selected location (local state, do NOT clobber Catalog filters) --
   const [locItems, setLocItems] = useState<InventoryItem[]>([]);
@@ -493,7 +495,7 @@ export function LocationsTab() {
                     <Pencil size={13} />
                     Edit
                   </button>
-                  <button onClick={handleDelete} style={secondaryBtn}>
+                  <button onClick={() => setConfirmingDelete(true)} style={secondaryBtn}>
                     <Trash2 size={13} />
                     Delete
                   </button>
@@ -606,6 +608,19 @@ export function LocationsTab() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingDelete && !!selected}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => { void handleDelete(); setConfirmingDelete(false); }}
+        title="Delete location"
+        description={selected
+          ? `Delete "${selected.name}"? Items and sub-locations inside it will be left without a location.`
+          : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
