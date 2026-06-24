@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { Rss, Star, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, MoreVertical, FileUp } from 'lucide-react';
 import { useFeedsStore, type RssFeed } from '@/stores/feeds.store';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { AddFeedDialog } from './AddFeedDialog';
 import { OpmlDialog } from './OpmlDialog';
 
@@ -204,6 +205,7 @@ function FeedItem({ feed, active, unread, onClick }: {
   const unsubscribe = useFeedsStore(s => s.unsubscribe);
   const refreshFeed = useFeedsStore(s => s.refreshFeed);
   const [showMenu, setShowMenu] = useState(false);
+  const [confirmUnsub, setConfirmUnsub] = useState(false);
 
   return (
     <div className="relative group">
@@ -246,12 +248,23 @@ function FeedItem({ feed, active, unread, onClick }: {
           </button>
           <button
             className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-[var(--error)] hover:bg-[var(--surface-hover)]"
-            onClick={() => { unsubscribe(feed.id); setShowMenu(false); }}
+            onClick={() => { setShowMenu(false); setConfirmUnsub(true); }}
           >
             <Trash2 size={12} /> Unsubscribe
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmUnsub}
+        onClose={() => setConfirmUnsub(false)}
+        onConfirm={() => { setConfirmUnsub(false); void unsubscribe(feed.id); }}
+        title="Unsubscribe from feed"
+        description={`Unsubscribe from "${feed.title}"? Its articles will be removed from your reader.`}
+        confirmLabel="Unsubscribe"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
