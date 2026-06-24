@@ -73,6 +73,7 @@ export function YouTubeOverlay({ videoId, onClose }: YouTubeOverlayProps) {
           </button>
         </div>
         <iframe
+          title="YouTube video"
           src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
           allowFullScreen

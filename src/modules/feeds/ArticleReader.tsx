@@ -149,6 +149,7 @@ export function ArticleReader() {
         {isYoutube && youtubeId && (
           <div className="mb-4">
             <iframe
+              title={article.title || 'Video'}
               src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
