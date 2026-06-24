@@ -1231,3 +1231,35 @@ confirmaciones distintas para la misma acción).
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. `git show
 --stat` (2 ficheros coherentes) + `git diff --cached` (solo storage del
 usuario, intacto).
+
+---
+
+## Iteración 34 — 2026-06-24 — borrados destructivos: bookmarks + calendar
+
+**Ficheros:** `modules/bookmarks/BookmarksPage.tsx`, `modules/calendar/CalendarMiniSidebar.tsx` (pathspec).
+
+**Escaneo de CRUD no revisados (calendar/notes/diary/bookmarks/books/music):**
+- notes: YA confirma (`deleteDialogId`). music/calendar-event: ok/pendiente.
+- **bookmarks**: borrado de marcador SIN confirmar → gap real.
+- **calendar (mini-sidebar)**: borrar calendario con `window.confirm` nativo.
+
+**Implementado:**
+
+1. **`ux(bookmarks): confirmar antes de borrar un marcador`** — commit `8f69859`
+   `handleDelete` borraba el marcador al instante desde el botón Delete del
+   item. → `ConfirmDialog` (danger) nombrando el marcador (título o url).
+
+2. **`ux(calendar): borrar calendario con ConfirmDialog (no window.confirm)`** — commit `cc14c95`
+   `handleDeleteCalendar` usaba `window.confirm()` nativo. → `ConfirmDialog`
+   estilado, PRESERVANDO el mensaje dinámico (cuenta los eventos del
+   calendario + "cannot be undone"). Borrar un calendario borra TODOS sus
+   eventos → el diálogo deja claro el alcance. (Cierra otro `window.confirm`
+   del hallazgo de it26.)
+
+**Pendiente anotado:** verificar si el borrado de un EVENTO concreto
+(`CalendarGrid` EventBlock onDelete) confirma; diary (`DiaryEditor` api.delete
+×2) y books (`ReaderView` handleDeleteAnnotation) tienen borrados con
+`confirms:0` → revisar en próximas iteraciones.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos. `git show --stat`
+(1 fichero por commit) + `git diff --cached` (solo storage del usuario, intacto).
