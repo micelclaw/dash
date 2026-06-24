@@ -578,6 +578,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         {/* Body */}
         {email.body_html ? (
           <iframe
+            title={email.subject || 'Email content'}
             srcDoc={DARK_MODE_STYLES + email.body_html}
             sandbox="allow-same-origin"
             style={{ width: '100%', border: 'none', minHeight: 300, background: 'var(--bg)' }}

@@ -170,6 +170,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
       <div style={{ padding: '0 12px 12px' }}>
         {email.body_html ? (
           <iframe
+            title={email.subject || 'Email content'}
             srcDoc={DARK_MODE_STYLES + email.body_html}
             sandbox=""
             style={{ width: '100%', border: 'none', minHeight: 100 }}
