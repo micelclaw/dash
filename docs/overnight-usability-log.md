@@ -969,3 +969,48 @@ direccionales (ArrowUp/ArrowDown) — no como ListView; correcto.
 **Verificación:** `tsc -b` → 0 errores NUEVOS (sortMenuRef resuelto; quedan
 ArrowUpDown/idx pre-existentes). `git show --stat` (1 fichero por commit) +
 `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 26 — 2026-06-24 — inventory/StockTab + HALLAZGO SISTÉMICO (window.confirm)
+
+**Ficheros:** `inventory/tabs/StockTab.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(inventory): reversar movimiento con ConfirmDialog en vez de window.confirm`** — commit `3e99ff9`
+   `handleUndo` (revertir un movimiento de stock) usaba `window.confirm()`
+   NATIVO: diálogo del SO que rompe el lenguaje visual de la app, bloquea
+   el hilo y es incoherente con el `ConfirmDialog` estilado del resto. Se
+   sustituye por `ConfirmDialog` (variant warning; explica que el ledger
+   nunca borra → añade un contra-asiento). `handleUndo` abre el diálogo,
+   `confirmUndo` ejecuta.
+
+**Resuelto sin tocar:** PanelTab:567 (hallazgo de it24) resultó ser un
+`HoverRow`, NO un `<div onClick>` suelto → ya quedó keyboard-accesible con
+el fix de it24. (El log de it24 lo describió mal.)
+
+## ⚠️ HALLAZGO SISTÉMICO (para una pasada dedicada del usuario)
+
+**~30 sitios usan `window.confirm`/`window.prompt`/`window.alert` nativos**
+en lugar del `ConfirmDialog` estilado de la app. Es el mismo anti-patrón
+(diálogo del SO, bloqueante, rompe el look). Mapa (excluye storage = tu WIP):
+
+- `settings/sections/DevicesSection.tsx` (×3: remove device, rotate/revoke token)
+- `settings/sections/AccountSection.tsx` (×2)
+- `settings/sections/PhotoPipelineProgress.tsx` (abort queue)
+- `modules/sketches/DiagramToolbar.tsx` (×2: unsaved changes)
+- `modules/studio/StudioPage.tsx` (delete project) + `phases/v2/BuildPhase.tsx`
+- `modules/notes/NoteEditor.tsx` (a texto plano) + `NoteEditorToolbar.tsx` (×3 `prompt` URL/imagen/YouTube)
+- `modules/mail/MailPage.tsx` / `MailComposer.tsx` / `MailReadingPane.tsx` (×3: unsync, discard, delete)
+- `modules/crypto/monero/.../ReceiveTab.tsx` (subaddress sin label)
+- … (~30 en total)
+
+**Recomendación:** sweep dedicado convirtiendo a `ConfirmDialog` (confirms)
+y a un input-modal propio (los `prompt` de URL en notes). NO lo hago aquí
+de uno en uno porque (a) están fuera de la rotación y dispersos, (b)
+convertir uno al azar es incoherente, (c) 3 están en `storage` que es tu
+WIP staged (intocable). StockTab (it26) queda como patrón de referencia.
+
+**Verificación:** `tsc -b` → 0 errores nuevos en StockTab. `git show --stat`
+(1 fichero) + `git diff --cached` (solo storage del usuario, intacto).
