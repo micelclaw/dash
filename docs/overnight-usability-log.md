@@ -1263,3 +1263,37 @@ usuario, intacto).
 
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos. `git show --stat`
 (1 fichero por commit) + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 35 — 2026-06-24 — calendar: borrado rápido de evento (+ juicios)
+
+**Ficheros:** `modules/calendar/CalendarPage.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(calendar): confirmar el borrado rápido de evento desde la rejilla`** — commit `7c1e988`
+   El borrado de evento desde la REJILLA (menú/X del `EventBlock` →
+   `onEventDelete={deleteEvent}`) era directo, sin confirmación → clic
+   accidental = evento borrado. Se añade `ConfirmDialog` (danger) nombrando
+   el evento, SOLO para la vía de la rejilla.
+
+**Revisado y NO cambiado (con criterio):**
+- **`EventModal` (detalle/edición)**: YA confirma con un patrón two-click
+  inline (`confirmingDelete`) → no se toca; el fix cubre solo la rejilla.
+- **diary `handleDiscardNarrative`** (botón "Discard"): borra la entrada vía
+  API, pero "Discard" convencionalmente NO confirma (semántica de tirar un
+  borrador). Añadir confirm podría molestar → JUICIO del usuario, no un gap
+  claro. NO lo toco.
+- **books `handleDeleteAnnotation`**: borrar un subrayado es una acción
+  frecuente de BAJO riesgo (fácil de recrear); confirmar cada una molestaría
+  → NO lo toco (confirmar aquí sería peor UX).
+- **diary `handleRegenerateNarrative`**: el `api.delete` es intencional
+  (borra y regenera) → correcto.
+
+**Nota:** no toda acción destructiva merece confirm — los subrayados y los
+"discard de borrador" son excepciones donde confirmar empeora la UX. El
+criterio importa tanto como el patrón.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
