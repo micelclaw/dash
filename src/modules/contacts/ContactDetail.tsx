@@ -275,7 +275,7 @@ export function ContactDetail({
               />
               <div style={{
                 position: 'absolute', top: '100%', left: 0, marginTop: 4,
-                background: 'rgba(17,17,24,0.92)', border: '1px solid var(--border)',
+                background: 'var(--glass-92)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
                 backdropFilter: 'blur(8px)', padding: '4px 0', minWidth: 220,
                 zIndex: 10,
@@ -594,11 +594,7 @@ export function ContactDetail({
             Edit
           </button>
           <button
-            onClick={() => {
-              if (window.confirm(`Delete "${contact.display_name}"? This action can be undone.`)) {
-                onDelete();
-              }
-            }}
+            onClick={onDelete}
             onMouseEnter={() => setDeleteHover(true)}
             onMouseLeave={() => setDeleteHover(false)}
             style={{

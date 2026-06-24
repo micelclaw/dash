@@ -15,6 +15,7 @@ import { useSearchParams } from 'react-router';
 import { Users } from 'lucide-react';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
 import { useContacts } from './hooks/use-contacts';
@@ -115,13 +116,19 @@ export function Component() {
     }
   }, [selectedId, updateContact]);
 
-  const handleDelete = useCallback(async (id: string) => {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const performDelete = useCallback(async (id: string) => {
     await deleteContact(id);
     if (selectedId === id) {
       setSelectedId(null);
       setSearchParams({}, { replace: true });
     }
   }, [deleteContact, selectedId, setSearchParams]);
+
+  // Todas las vías de borrado (lista + detalle) pasan por aquí → un único
+  // ConfirmDialog estilado (antes: lista sin confirmar + detalle con window.confirm).
+  const handleDelete = useCallback((id: string) => setConfirmDeleteId(id), []);
 
   // Keyboard shortcut: Cmd+N / Ctrl+N to create
   useEffect(() => {
@@ -244,9 +251,24 @@ export function Component() {
   }
 
   return (
-    <SplitPane defaultSizes={[35, 65]} minSizes={[260, 400]} id="contacts-split">
-      {listPanel}
-      {detailPanel}
-    </SplitPane>
+    <>
+      <SplitPane defaultSizes={[35, 65]} minSizes={[260, 400]} id="contacts-split">
+        {listPanel}
+        {detailPanel}
+      </SplitPane>
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={() => { if (confirmDeleteId) void performDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+        title="Delete contact"
+        description={(() => {
+          const c = contacts.find(x => x.id === confirmDeleteId) ?? (selectedContact?.id === confirmDeleteId ? selectedContact : null);
+          return c ? `Delete "${c.display_name}"? You can undo this.` : 'Delete this contact? You can undo this.';
+        })()}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
+    </>
   );
 }
