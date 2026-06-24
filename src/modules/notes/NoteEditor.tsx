@@ -45,6 +45,7 @@ import { TagInput } from '@/components/shared/TagInput';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useNoteLinks } from './hooks/use-note-links';
 import { NoteEditorToolbar } from './NoteEditorToolbar';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
@@ -127,6 +128,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const navigate = useNavigate();
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirmPlain, setConfirmPlain] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
@@ -274,12 +276,8 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
   // Cambio de formato: convierte el contenido actual con el propio editor y
   // persiste content + content_format JUNTOS (una sola PATCH).
-  const handleFormatChange = useCallback(async (target: NoteFormat) => {
+  const applyFormatChange = useCallback(async (target: NoteFormat) => {
     if (!note || !editor || target === note.content_format) return;
-    if (target === 'plain' && note.content_format !== 'plain') {
-      const ok = window.confirm('Convertir a texto plano pierde el formato (negritas, listas, enlaces…). ¿Continuar?');
-      if (!ok) return;
-    }
     // En modo código el doc de TipTap puede ir por detrás del textarea —
     // recargar el contenido vivo antes de convertir.
     if (sourceMode && note.content_format !== 'plain') {
@@ -315,6 +313,14 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
       setSaving(false);
     }
   }, [note, noteId, editor, onSaved, sourceMode]);
+
+  // Convertir a texto plano pierde el formato → confirma antes; el resto
+  // de conversiones (md↔html) se aplican directo.
+  const handleFormatChange = useCallback((target: NoteFormat) => {
+    if (!note) return;
+    if (target === 'plain' && note.content_format !== 'plain') { setConfirmPlain(true); return; }
+    void applyFormatChange(target);
+  }, [note, applyFormatChange]);
 
   // Toggle renderizado ↔ código fuente. Al entrar, el textarea toma
   // note.content (que onUpdate mantiene al día); al salir, se re-parsea lo
@@ -618,6 +624,17 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         <SimilarContentPanel sourceType="note" sourceId={noteId} />
         <GraphProximityPanel sourceType="note" sourceId={noteId} />
       </div>
+
+      <ConfirmDialog
+        open={confirmPlain}
+        onClose={() => setConfirmPlain(false)}
+        onConfirm={() => { setConfirmPlain(false); void applyFormatChange('plain'); }}
+        title="Convert to plain text?"
+        description="Converting to plain text loses formatting (bold, lists, links…). Continue?"
+        confirmLabel="Convert"
+        cancelLabel="Cancel"
+        variant="warning"
+      />
     </div>
   );
 }
