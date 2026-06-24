@@ -24,6 +24,12 @@ interface SidebarStore {
    * (módulos nuevos se añaden al final, los retirados se ignoran).
    */
   moduleOrder: Record<string, string[]>;
+  /**
+   * Módulos ocultados por el usuario (clic derecho → Ocultar). Se filtran del
+   * sidebar al renderizar; se restauran desde el pie del sidebar. Persistido en
+   * localStorage (per-browser, igual que moduleOrder), no sincronizado.
+   */
+  hiddenModules: string[];
   /** Toggle user preference (Cmd+B / button) — sets both userCollapsed and collapsed */
   toggle: () => void;
   /** Set effective collapsed only (used by Shell for viewport auto-collapse) */
@@ -35,6 +41,10 @@ interface SidebarStore {
   setMobileOpen: (open: boolean) => void;
   /** Persiste el orden de una sección tras un drag & drop. */
   setSectionOrder: (section: string, ids: string[]) => void;
+  /** Oculta un módulo del sidebar. */
+  hideModule: (id: string) => void;
+  /** Restaura un módulo oculto. */
+  unhideModule: (id: string) => void;
 }
 
 export const useSidebarStore = create<SidebarStore>()(
@@ -46,6 +56,7 @@ export const useSidebarStore = create<SidebarStore>()(
       hoverExpanded: false,
       mobileOpen: false,
       moduleOrder: {},
+      hiddenModules: [],
       toggle: () => set((s) => {
         const next = !s.collapsed;
         return { collapsed: next, userCollapsed: next, hoverExpanded: false };
@@ -69,6 +80,10 @@ export const useSidebarStore = create<SidebarStore>()(
       setMobileOpen: (open: boolean) => set({ mobileOpen: open }),
       setSectionOrder: (section: string, ids: string[]) =>
         set((s) => ({ moduleOrder: { ...s.moduleOrder, [section]: ids } })),
+      hideModule: (id: string) =>
+        set((s) => (s.hiddenModules.includes(id) ? s : { hiddenModules: [...s.hiddenModules, id] })),
+      unhideModule: (id: string) =>
+        set((s) => ({ hiddenModules: s.hiddenModules.filter((x) => x !== id) })),
     }),
     {
       name: 'claw-sidebar',
@@ -76,6 +91,7 @@ export const useSidebarStore = create<SidebarStore>()(
         userCollapsed: state.userCollapsed,
         pinned: state.pinned,
         moduleOrder: state.moduleOrder,
+        hiddenModules: state.hiddenModules,
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<SidebarStore>;
@@ -85,6 +101,7 @@ export const useSidebarStore = create<SidebarStore>()(
           collapsed: p.userCollapsed ?? false,
           pinned: p.pinned ?? true,
           moduleOrder: p.moduleOrder ?? {},
+          hiddenModules: p.hiddenModules ?? [],
         };
       },
     },
