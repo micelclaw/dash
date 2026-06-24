@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { X, Plus, Link2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { useNotificationStore } from '@/stores/notification.store';
@@ -56,6 +57,7 @@ export function EntityShareModal({ open, entityType, entityId, entityTitle, onCl
   const [done, setDone] = useState(false);
   const [addHover, setAddHover] = useState(false);
   const [shareHover, setShareHover] = useState(false);
+  useEscapeToClose(onClose, { enabled: open });
 
   // Search contacts as user types
   useEffect(() => {

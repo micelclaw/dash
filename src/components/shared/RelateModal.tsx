@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { X, Link2, Search, Type, Brain, Lock, Layers } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
@@ -73,6 +74,7 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
   });
   const [lastSearchType, setLastSearchType] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEscapeToClose(onClose, { enabled: open });
 
   // Reset state when modal opens
   useEffect(() => {
