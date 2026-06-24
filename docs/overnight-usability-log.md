@@ -1046,3 +1046,31 @@ input-modal), mail ×3, crypto. NO toco `storage` (WIP staged del usuario).
 **Verificación:** `tsc -b` → 0 errores nuevos en DevicesSection (verifiqué
 que los botones siguen llamando handleRemove/Rotate/Revoke). `git show
 --stat` (1 fichero) + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 28 — 2026-06-24 — settings/AccountSection (sweep window.confirm, 2/N)
+
+**Ficheros:** `components/settings/sections/AccountSection.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(settings): confirmar revocación de sesiones con ConfirmDialog`** — commit `f75b788`
+   `ActiveSessionsBlock` usaba `window.confirm()` nativo en 2 acciones de
+   seguridad: revocar la sesión ACTUAL (= logout) y revocar las demás/todas.
+   → `ConfirmDialog` con estado discriminado `RevokeConfirm` (self|others) y
+   descripción dinámica (según si se conoce la sesión actual: "stay logged
+   in here" vs "you will be logged out"). La sesión actual confirma; las no-
+   actuales se revocan directo (sin cambio de UX). Botones intactos.
+
+**Progreso del sweep window.confirm (it26 → ...):**
+- ✅ inventory/StockTab (it26)
+- ✅ settings/DevicesSection ×3 (it27)
+- ✅ settings/AccountSection ×2 (it28)
+- Quedan (~25): settings/PhotoPipelineProgress, sketches/DiagramToolbar ×2
+  (unsaved-changes, gatean import/load), studio (WIP, evitar), notes
+  (`window.prompt` ×3 → necesitan input-modal propio), mail ×3, crypto.
+  NO se toca `storage` (WIP staged del usuario).
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
