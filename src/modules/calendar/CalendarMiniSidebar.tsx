@@ -13,6 +13,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, LayoutGrid } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import {
@@ -67,6 +68,7 @@ export function CalendarMiniSidebar({
   const [miniMonth, setMiniMonth] = useState(() => new Date(currentDate));
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameTo, setRenameTo] = useState('');
+  const [confirmDeleteCal, setConfirmDeleteCal] = useState<CalendarInfo | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,12 +92,7 @@ export function CalendarMiniSidebar({
     }
   };
 
-  const handleDeleteCalendar = async (cal: CalendarInfo) => {
-    const matching = events.filter(e => e.calendar_name === cal.name);
-    const msg = matching.length > 0
-      ? `Delete "${cal.name}" and its ${matching.length} events? This cannot be undone.`
-      : `Delete calendar "${cal.name}"?`;
-    if (!confirm(msg)) return;
+  const performDeleteCalendar = async (cal: CalendarInfo) => {
     try {
       // Delete via API (also deletes events on the backend)
       await api.delete(`/calendars/${cal.id}`);
@@ -106,6 +103,9 @@ export function CalendarMiniSidebar({
       toast.error('Failed to delete calendar');
     }
   };
+
+  // Antes: window.confirm nativo. Ahora abre el ConfirmDialog estilado.
+  const handleDeleteCalendar = (cal: CalendarInfo) => setConfirmDeleteCal(cal);
 
   const gridDays = useMemo(() => getMonthGridDays(miniMonth), [miniMonth]);
 
@@ -472,6 +472,23 @@ export function CalendarMiniSidebar({
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteCal !== null}
+        onClose={() => setConfirmDeleteCal(null)}
+        onConfirm={() => { if (confirmDeleteCal) void performDeleteCalendar(confirmDeleteCal); setConfirmDeleteCal(null); }}
+        title="Delete calendar"
+        description={(() => {
+          if (!confirmDeleteCal) return '';
+          const n = events.filter(e => e.calendar_name === confirmDeleteCal.name).length;
+          return n > 0
+            ? `Delete "${confirmDeleteCal.name}" and its ${n} event${n === 1 ? '' : 's'}? This cannot be undone.`
+            : `Delete calendar "${confirmDeleteCal.name}"?`;
+        })()}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
