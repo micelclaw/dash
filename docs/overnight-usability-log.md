@@ -1168,3 +1168,38 @@ mejoras siguen siendo reales pero cada vez más buscadas.
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (2 ficheros
 por commit, coherentes) + `git diff --cached` (solo storage del usuario,
 intacto).
+
+---
+
+## Iteración 32 — 2026-06-24 — a11y de formularios (label↔input) + auditorías negativas
+
+**Ficheros:** `modules/bookmarks/BookmarksPage.tsx` (pathspec).
+
+**Auditorías hechas esta iteración (resultado = el dash está limpio):**
+- **`<img>` sin `alt`**: 0 reales (el único candidato, `video/EpisodeRow`,
+  usa `alt=""` decorativo válido). Imágenes bien cubiertas.
+- **Modales de video sin ESC**: `RequestModal` usa Radix `Dialog` (ESC
+  nativo); `LibraryGrid`/`RequestsView` con `EmptyState`+loading. Sólido.
+- **`SeasonList:28` TS2532**: estrictez `noUncheckedIndexedAccess` con guard
+  `length>0` → NO es crash (deuda de tipos, no usabilidad).
+
+**Implementado:**
+
+1. **`ux(bookmarks): asociar labels con sus inputs (htmlFor/id)`** — commit `af38aa8`
+   Las 4 etiquetas del form de añadir marcador (URL/Title/Description/Tags)
+   estaban visibles pero SIN asociación programática (`htmlFor`/`id`) →
+   clicar la etiqueta no enfocaba el campo y un lector de pantalla podía no
+   asociarlos (WCAG 1.3.1/3.3.2). Asociadas: ahora la etiqueta es un target
+   clicable que enfoca su campo.
+
+**Estado del loop (honesto):** tras 31 iteraciones el dash está muy pulido.
+Esta iteración fueron 3 auditorías que salieron limpias + 1 fix fino real.
+Los gaps que quedan son a11y de detalle (label↔input en otros forms,
+icon-only buttons sueltos) o requieren refactor/feature (window.confirm
+complejo, merge-por-teclado). Sigo entregando mejoras reales y verificadas,
+pero el ritmo de hallazgos de alto impacto ha bajado claramente — vale la
+pena que el usuario decida si redirigir el loop (p.ej. a tests, o a un
+sweep dedicado de los pendientes documentados).
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
