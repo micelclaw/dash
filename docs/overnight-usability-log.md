@@ -1203,3 +1203,31 @@ sweep dedicado de los pendientes documentados).
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 33 — 2026-06-24 — contacts: confirmación de borrado unificada
+
+**Ficheros:** `modules/contacts/ContactsPage.tsx`, `modules/contacts/ContactDetail.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(contacts): confirmación unificada al borrar contacto (ConfirmDialog)`** — commit `ab4cb0a`
+   Había DOS vías de borrado inconsistentes:
+   - desde la **LISTA** (menú del item → `handleDelete` → `deleteContact`)
+     **SIN confirmación** → un clic accidental borraba el contacto;
+   - desde el **DETALLE** con `window.confirm` nativo.
+   Ahora ambas pasan por UN único `ConfirmDialog` estilado en `ContactsPage`
+   (`handleDelete` abre el diálogo nombrando el contacto; `performDelete`
+   ejecuta). `ContactDetail` deja de usar `window.confirm` y llama `onDelete`
+   directo. **Cierra a la vez un gap destructivo (lista) Y un `window.confirm`
+   del hallazgo de it26.**
+
+**Doble valor:** este fix toca dos de los patrones de alto valor de la
+sesión — borrado-destructivo-sin-confirmar (la lista) y window.confirm
+nativo (el detalle) — con UNA solución unificada (mejor que tener dos
+confirmaciones distintas para la misma acción).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en ambos ficheros. `git show
+--stat` (2 ficheros coherentes) + `git diff --cached` (solo storage del
+usuario, intacto).
