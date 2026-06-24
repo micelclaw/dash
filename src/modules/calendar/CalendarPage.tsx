@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useSettingsStore } from '@/stores/settings.store';
 import { api } from '@/services/api';
@@ -35,6 +36,9 @@ export function Component() {
   const defaultView = (calSettings?.default_view ?? 'week') as CalendarView;
 
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Borrado rápido de evento desde la rejilla: confirma (el EventModal ya
+  // tiene su propio confirm two-click; esto cubre el menú/X de la rejilla).
+  const [confirmDeleteEventId, setConfirmDeleteEventId] = useState<string | null>(null);
   const [view, setView] = useState<CalendarView>(isMobile ? 'agenda' : defaultView);
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
 
@@ -275,7 +279,7 @@ export function Component() {
           onEventClick={handleEventClick}
           onSlotClick={handleSlotClick}
           onEventUpdate={updateEvent}
-          onEventDelete={deleteEvent}
+          onEventDelete={(id) => setConfirmDeleteEventId(id)}
           calendarColorMap={calendarColorMap}
         />
       )}
@@ -331,6 +335,20 @@ export function Component() {
         onClose={() => setAddCalendarOpen(false)}
         onCreated={fetchCalendars}
         connectors={connectors}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteEventId !== null}
+        onClose={() => setConfirmDeleteEventId(null)}
+        onConfirm={() => { if (confirmDeleteEventId) void deleteEvent(confirmDeleteEventId); setConfirmDeleteEventId(null); }}
+        title="Delete event"
+        description={(() => {
+          const ev = regularEvents.find(e => e.id === confirmDeleteEventId);
+          return ev ? `Delete "${ev.title}"?` : 'Delete this event?';
+        })()}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
       />
     </>
   );
