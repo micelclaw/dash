@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { daysUntil, fmtMeter, fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryEvent, InventoryItem } from '@/modules/inventory/types';
 
@@ -154,6 +155,7 @@ function basisBtn(active: boolean, disabled = false): CSSProperties {
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEscapeToClose(onClose);
   return (
     <div
       onClick={onClose}
