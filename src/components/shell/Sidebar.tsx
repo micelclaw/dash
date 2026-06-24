@@ -5,7 +5,7 @@
 
 import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { PanelLeftClose, PanelLeftOpen, Pin, PinOff } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, Pin, PinOff, EyeOff } from 'lucide-react';
 import {
   DndContext,
   DragOverlay,
@@ -33,6 +33,7 @@ import { SortableSidebarItem } from './SortableSidebarItem';
 import { ConnectionStatus } from './ConnectionStatus';
 import { UserFooter } from './UserFooter';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 
 interface SidebarProps {
@@ -155,6 +156,8 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
 
   const moduleOrder = useSidebarStore((s) => s.moduleOrder);
   const setSectionOrder = useSidebarStore((s) => s.setSectionOrder);
+  const hiddenModules = useSidebarStore((s) => s.hiddenModules);
+  const unhideModule = useSidebarStore((s) => s.unhideModule);
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const appAllowed = useAppAccessStore((s) => s.allowed);
@@ -176,7 +179,7 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
     [dynamicModules],
   );
 
-  const { ungrouped, groups } = useMemo(() => {
+  const { ungrouped, groups, hiddenList } = useMemo(() => {
     // Gating de módulos (rediseño NAS): adminOnly → solo owner/admin (Fase 0);
     // default → siempre; opt_in → solo si concedida (Fase 1, /me/app-access).
     // Antes de cargar el app-access: fail-open en opt_in (evita parpadeo/bloqueo).
@@ -197,19 +200,25 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
       else merged.push(cfg);
     }
 
-    const byId = new Map(merged.map((m) => [m.id, m]));
+    // Ocultos por el usuario (clic derecho → Ocultar): se filtran del render;
+    // `hiddenList` (los gated-in pero ocultos) alimenta el pie para restaurar.
+    const hiddenSet = new Set(hiddenModules);
+    const hiddenList = merged.filter((m) => hiddenSet.has(m.id));
+    const shown = merged.filter((m) => !hiddenSet.has(m.id));
+
+    const byId = new Map(shown.map((m) => [m.id, m]));
     const orderSection = (mods: ModuleConfig[], section: string) =>
       applyOrder(mods.map((m) => m.id), moduleOrder[section]).map((id) => byId.get(id)!).filter(Boolean);
 
-    const ungrouped = orderSection(merged.filter((m) => !m.group), TOP_SECTION);
-    const grouped = merged.filter((m) => m.group);
+    const ungrouped = orderSection(shown.filter((m) => !m.group), TOP_SECTION);
+    const grouped = shown.filter((m) => m.group);
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups = groupNames.map((name) => ({
       name,
       modules: orderSection(grouped.filter((m) => m.group === name), name),
     }));
-    return { ungrouped, groups };
-  }, [moduleOrder, isAdmin, appLoaded, appAllowed, dynamicModules, dynConfigs]);
+    return { ungrouped, groups, hiddenList };
+  }, [moduleOrder, hiddenModules, isAdmin, appLoaded, appAllowed, dynamicModules, dynConfigs]);
 
   // ─── Drag & drop: reordenar módulos dentro de su sección ────────
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -450,9 +459,59 @@ export function Sidebar({ forceExpanded }: SidebarProps) {
           borderTop: '1px solid var(--border)',
         }}
       >
+        {hiddenList.length > 0 && (
+          <HiddenModulesMenu hidden={hiddenList} collapsed={collapsed} onRestore={unhideModule} />
+        )}
         <ConnectionStatus collapsed={collapsed} />
         <UserFooter collapsed={collapsed} />
       </div>
     </div>
+  );
+}
+
+// Pie del sidebar: aparece cuando hay módulos ocultos. Despliega la lista
+// para restaurarlos de un clic (Radix dropdown → foco/Escape/posición).
+function HiddenModulesMenu({ hidden, collapsed, onRestore }: {
+  hidden: ModuleConfig[];
+  collapsed: boolean;
+  onRestore: (id: string) => void;
+}) {
+  const n = hidden.length;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          aria-label={`${n} módulos ocultos`}
+          title={collapsed ? `${n} módulos ocultos` : undefined}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            padding: collapsed ? '6px 0' : '6px 8px', marginBottom: 4,
+            background: 'transparent', border: 'none', borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.75rem',
+            transition: 'background var(--transition-fast)',
+          }}
+        >
+          <EyeOff size={15} style={{ flexShrink: 0 }} />
+          {!collapsed && <span>{n} oculto{n === 1 ? '' : 's'}</span>}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top">
+        <div style={{ padding: '4px 8px', fontSize: '0.6875rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Restaurar módulo
+        </div>
+        {hidden.map((m) => {
+          const Icon = m.icon;
+          return (
+            <DropdownMenuItem key={m.id} onClick={() => onRestore(m.id)}>
+              <Icon size={14} style={{ color: m.color, marginRight: 8 }} />
+              {m.label}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
