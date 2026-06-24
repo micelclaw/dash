@@ -1014,3 +1014,35 @@ WIP staged (intocable). StockTab (it26) queda como patrón de referencia.
 
 **Verificación:** `tsc -b` → 0 errores nuevos en StockTab. `git show --stat`
 (1 fichero) + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 27 — 2026-06-24 — settings/DevicesSection (sweep window.confirm, 1/N)
+
+**Ficheros:** `components/settings/sections/DevicesSection.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(settings): confirmaciones de dispositivos con ConfirmDialog`** — commit `1dd6753`
+   `DevicesSection` usaba `window.confirm()` nativo en sus **3** acciones de
+   seguridad destructivas (quitar dispositivo, rotar token, revocar token):
+   diálogos del SO que rompen el estilo, bloquean el hilo, incoherentes con
+   el `ConfirmDialog` del resto. Se sustituyen por UN `ConfirmDialog` dirigido
+   por estado discriminado (`ConfirmAction` = remove|rotate|revoke) + mapa
+   `CONFIRM_COPY` por acción. Los botones NO cambian: `handleX` ahora abre el
+   diálogo, `performX` ejecuta tras confirmar. (3 confirms → 1 patrón.)
+
+**Decisión de alcance:** elegí UN módulo entero (devices, 3 confirms) en vez
+de parchear sitios sueltos al azar → coherente y completo. Es el inicio del
+sweep del hallazgo sistémico documentado en it26 (~30 `window.confirm`/
+`prompt`). Iteración de UN fix por ser sustancial (cirugía cuidada: estado
+discriminado, 48 líneas, sin tocar los botones).
+
+**Progreso del sweep window.confirm:** inventory/StockTab (it26) +
+settings/DevicesSection ×3 (it27) convertidos. Quedan ~25: settings/Account,
+PhotoPipeline, sketches, studio, notes (incl. `prompt` de URL → necesitan
+input-modal), mail ×3, crypto. NO toco `storage` (WIP staged del usuario).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en DevicesSection (verifiqué
+que los botones siguen llamando handleRemove/Rotate/Revoke). `git show
+--stat` (1 fichero) + `git diff --cached` (solo storage del usuario, intacto).
