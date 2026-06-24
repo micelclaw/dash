@@ -1328,3 +1328,33 @@ window.confirm (devices×3, account×2, crypto, calendar, contacts).
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
 por commit) + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 37 — 2026-06-24 — gateway/CronTab (window.confirm → ConfirmDialog)
+
+**Ficheros:** `modules/gateway/tabs/CronTab.tsx` (pathspec).
+
+**Escaneo (gateway/agents/oauth/micelhub/activity/terminal):**
+- **agents/AgentDetail**: borrar agente usa **type-to-confirm** (escribir el
+  nombre del agente) → confirmación ROBUSTA, no se toca (es mejor que un
+  diálogo simple para algo tan destructivo).
+- **micelhub/activity/agents-workspaces**: ya usan estado de confirmación
+  (`deleteDialog`/`setConfirmDelete`/`pendingDelete`).
+- **oauth/terminal**: sin borrados destructivos directos.
+- **gateway/CronTab**: borraba con `window.confirm` nativo → conversión.
+
+**Implementado:**
+
+1. **`ux(gateway): borrar cron job con ConfirmDialog (no window.confirm)`** — commit `0494763`
+   `CronTab.handleDelete` usaba `window.confirm()`. → `ConfirmDialog`
+   (danger) nombrando el job. `handleDelete` abre el diálogo; `performDelete`
+   ejecuta. Cierra otro `window.confirm` del hallazgo de it26.
+
+**Sweep window.confirm — acumulado:** devices×3, account×2, crypto, calendar
+(calendario), contacts, gateway-cron. Quedan los COMPLEJOS (sketches import
+closure + dirty-gate, mail ×3 en ficheros de 980L, notes `prompt` ×3 que
+necesitan input-modal) → para una pasada dedicada con calma, NO de noche.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
