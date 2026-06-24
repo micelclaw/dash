@@ -1297,3 +1297,34 @@ criterio importa tanto como el patrón.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 36 — 2026-06-24 — feeds: desuscripción + a11y del menú
+
+**Ficheros:** `modules/feeds/FeedsSidebar.tsx` (pathspec).
+
+**Escaneo de CRUD restantes (drive/music/feeds/messages/share):**
+- drive/dns/music ya confirman (music playlist usa estado `deleting`).
+- messages/share: sin borrados destructivos directos.
+- **feeds**: "Unsubscribe" SIN confirmar → gap real.
+
+**Implementado:**
+
+1. **`ux(feeds): confirmar antes de desuscribir de un feed`** — commit `519f54b`
+   El item "Unsubscribe" del menú de cada feed llamaba a `unsubscribe(feed.id)`
+   al instante → un clic accidental pierde la suscripción Y sus artículos.
+   `ConfirmDialog` (danger) nombrando el feed.
+
+2. **`ux(feeds): nombre accesible + estado en el botón de opciones`** — commit `bd2b4bb`
+   El botón de menú por feed (icono `MoreVertical`) era icon-only sin nombre
+   accesible. `aria-label` (con el título del feed) + `aria-haspopup="menu"`
+   + `aria-expanded` (refleja si el menú está abierto).
+
+**Veta de borrados destructivos — resumen de la sesión:** confirmaciones
+añadidas/unificadas en proxy(5), dns(2), inventory(2), contacts, bookmarks,
+calendar(2: calendario+evento), photos(grupo de caras), feeds. Más el sweep
+window.confirm (devices×3, account×2, crypto, calendar, contacts).
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
+por commit) + `git diff --cached` (solo storage del usuario, intacto).
