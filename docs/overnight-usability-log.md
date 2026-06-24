@@ -897,3 +897,37 @@ multimedia = revisado a fondo.
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
 por commit) + `git diff --cached` (solo storage del usuario, intacto). Sin
 Playwright (Firefox roto en WSL).
+
+---
+
+## Iteración 24 — 2026-06-24 — 2ª pasada: inventory tabs (Maintenance/Panel)
+
+**Ficheros:** `inventory/tabs/MaintenanceTab.tsx`, `inventory/tabs/PanelTab.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(inventory): ESC cierra los modales de mantenimiento`** — commit `82daee0`
+   El `Modal` compartido de MaintenanceTab (usado por "Complete" y
+   "Schedule maintenance") cerraba con backdrop/Close pero no con Escape.
+   `useEscapeToClose(onClose)` en el componente Modal → ambos heredan ESC.
+   Retrofit del hook de la it9.
+
+2. **`ux(inventory): filas del panel accesibles por teclado`** — commit `be40d98`
+   `HoverRow` (3 usos en el Overview para abrir un ítem) era `<div onClick>`:
+   no focusable ni activable por teclado. Cuando tiene `onClick`, ahora
+   expone `role="button"` + `tabIndex={0}` + `onKeyDown` (Enter/Espacio).
+   Propaga a las 3 filas. Mismo patrón que las tarjetas del calendario (it17).
+
+**Revisado y YA correcto (no tocado):**
+- `StockTab.ModalShell` ya tiene Escape inline (no necesita retrofit).
+- `LendingTab`: EmptyState + semáforo de vencidos + flujo de devolución
+  (no destructivo) → sólido.
+- `ReportsTab`/`LendingTab` sin borrados destructivos directos.
+
+**Descartado / pendiente:** el `<div onClick>` suelto de PanelTab:567
+(abre item desde "movimientos recientes") también podría hacerse
+keyboard-accesible; menor, anotado. TimelineView (989) y PhotosPeople
+teclado siguen pendientes.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
+por commit) + `git diff --cached` (solo storage del usuario, intacto).
