@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { TagInput } from '@/components/shared/TagInput';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
 import { useEmailLinks } from './hooks/use-email-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
@@ -85,6 +86,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   const { linkedRecords, loading: linksLoading } = useEmailLinks(emailId);
@@ -269,9 +271,8 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     handlePrint(); // Reuse the popup with email content
   };
 
-  const handleDelete = async () => {
+  const performDelete = async () => {
     if (!email) return;
-    if (!confirm('Delete this email? It can be restored from Trash.')) return;
     try {
       await api.delete(`/emails/${email.id}`);
       toast.success('Email deleted');
@@ -279,8 +280,10 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     } catch {
       toast.error('Failed to delete email');
     }
-    setMoreOpen(false);
   };
+
+  // Antes: confirm() nativo. Ahora cierra el menú y abre el ConfirmDialog.
+  const handleDelete = () => { setMoreOpen(false); setConfirmingDelete(true); };
 
   const isArchived = email?.folder === 'Archive';
 
@@ -926,6 +929,17 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           />
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => { setConfirmingDelete(false); void performDelete(); }}
+        title="Delete email"
+        description="Delete this email? It can be restored from Trash."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
