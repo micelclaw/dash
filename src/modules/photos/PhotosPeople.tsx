@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter, useDraggable, useDroppable } from '@dnd-kit/core';
 import { api } from '@/services/api';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { getPreviewUrl, getFaceCropUrl } from '@/lib/file-utils';
 import { usePhotoAiStore, type FaceCluster } from '@/stores/photo-ai.store';
@@ -591,6 +592,7 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
   const deleteFaceCluster = usePhotoAiStore((s) => s.deleteFaceCluster);
 
   const [linkDialogCluster, setLinkDialogCluster] = useState<FaceCluster | null>(null);
+  const [confirmDeleteCluster, setConfirmDeleteCluster] = useState<FaceCluster | null>(null);
   const selectedCluster = faceClusters?.find((c) => c.id === selectedClusterId) ?? null;
 
   // DnD for merging clusters
@@ -717,7 +719,7 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
               onClick={() => selectCluster(cluster.id)}
               onRename={(name) => handleRename(cluster.id, name)}
               onMerge={(targetId) => handleMerge(targetId, cluster.id)}
-              onDelete={() => handleDelete(cluster.id)}
+              onDelete={() => setConfirmDeleteCluster(cluster)}
               onLinkContact={() => setLinkDialogCluster(cluster)}
             />
           ))}
@@ -735,6 +737,17 @@ export function PhotosPeople({ onPhotoClick }: PhotosPeopleProps) {
         onLink={(contactId) => linkDialogCluster && handleLinkContact(linkDialogCluster.id, contactId)}
         onUnlink={() => linkDialogCluster && handleUnlinkContact(linkDialogCluster.id)}
         onCreateAndLink={(name) => linkDialogCluster && handleCreateAndLink(linkDialogCluster.id, name)}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteCluster !== null}
+        onClose={() => setConfirmDeleteCluster(null)}
+        onConfirm={() => { if (confirmDeleteCluster) void handleDelete(confirmDeleteCluster.id); setConfirmDeleteCluster(null); }}
+        title="Delete person group"
+        description={`Delete the face group${confirmDeleteCluster?.name ? ` "${confirmDeleteCluster.name}"` : ''}? The photos stay; only this grouping of faces is removed.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
       />
     </div>
   );
