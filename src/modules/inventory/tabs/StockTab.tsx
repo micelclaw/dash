@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type 
 import { ArrowRightLeft, Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { fmtMoney, type InventoryMove } from '@/modules/inventory/types';
@@ -458,6 +459,7 @@ export function StockTab() {
   const { items, moves, fetchMoves, fetchItems, fetchProposals, reverseMove } = useInventoryStore();
   const [itemFilter, setItemFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [reversingMove, setReversingMove] = useState<InventoryMove | null>(null);
   const [modal, setModal] = useState<MoveMode | 'receipt' | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkType, setBulkType] = useState('');
@@ -570,15 +572,18 @@ export function StockTab() {
     clearSelection();
   };
 
-  const handleUndo = async (move: InventoryMove) => {
-    if (!window.confirm('Reverse this move? A counter-entry will be recorded.')) return;
+  const handleUndo = (move: InventoryMove) => setReversingMove(move);
+
+  const confirmUndo = async () => {
+    if (!reversingMove) return;
     try {
-      await reverseMove(move.id);
+      await reverseMove(reversingMove.id);
       toast.success('Reversal recorded — the ledger never deletes');
       void load(itemFilter, typeFilter);
     } catch {
       toast.error('Failed to reverse move');
     }
+    setReversingMove(null);
   };
 
   return (
@@ -822,6 +827,17 @@ export function StockTab() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!reversingMove}
+        onClose={() => setReversingMove(null)}
+        onConfirm={confirmUndo}
+        title="Reverse stock move"
+        description="A counter-entry will be recorded. The ledger never deletes — this adds a reversing move that cancels it out."
+        confirmLabel="Reverse"
+        cancelLabel="Cancel"
+        variant="warning"
+      />
     </div>
   );
 }
