@@ -1755,8 +1755,6 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
     return new Blob([new Uint8Array(100)], { type: 'audio/ogg' });
   }
 
-  // ── Sensor Fusion ── RETIRADO 2026-06-05 (módulo eliminado).
-
   // ── Apps ──
 
   if (method === 'GET' && route === '/apps') {
@@ -1976,16 +1974,6 @@ const MOCK_BUILT_IN_TEMPLATES = [
     steps: [{ id: 's1', type: 'search.semantic', label: 'Get activity', config: { query: 'this week', limit: 20 } }],
     wizard: { steps: [] },
   },
-  {
-    id: 'focus-mode', name: 'Focus Mode', description: 'Activate focus lighting', icon: 'Zap', color: '#06b6d4', category: 'home',
-    trigger_type: 'sensor', trigger_config: { entity_id: 'binary_sensor.office', state: 'on' },
-    steps: [{ id: 's1', type: 'home.scene', label: 'Focus', config: { scene: 'focus' } }],
-    wizard: { steps: [
-      { id: 'ha', title: 'Home Assistant', fields: [
-        { id: 'presence', question: 'Presence sensor', type: 'text', default: 'binary_sensor.office', mapsTo: 'trigger_config.entity_id' },
-      ]},
-    ]},
-  },
 ];
 
 const MOCK_STEP_TYPES = [
@@ -1997,7 +1985,6 @@ const MOCK_STEP_TYPES = [
   { id: 'notify.dash', label: 'Dashboard notification', category: 'notification', icon: 'Bell', description: 'Send notification', output_type: '{ sent: true }', side_effect: 'notification', params: [{ id: 'title', label: 'Title', type: 'text', required: true }, { id: 'body', label: 'Message', type: 'text', required: true }] },
   { id: 'control.approval', label: 'Checkpoint', category: 'control', icon: 'ShieldCheck', description: 'Ask approval', output_type: '{ approved: boolean }', side_effect: 'control', params: [{ id: 'prompt', label: 'Question', type: 'text', required: true }] },
   { id: 'calendar.upcoming', label: 'Upcoming events', category: 'calendar', icon: 'Calendar', description: 'Get events', output_type: 'Event[]', side_effect: 'read', params: [{ id: 'hours', label: 'Hours', type: 'number', default: 24 }] },
-  { id: 'home.scene', label: 'Activate scene', category: 'home', icon: 'Palette', description: 'HA scene', output_type: '{ activated: true }', side_effect: 'write', params: [{ id: 'scene', label: 'Scene', type: 'text', required: true }] },
   { id: 'search.semantic', label: 'Semantic search', category: 'search', icon: 'Search', description: 'Search', output_type: 'SearchResult[]', side_effect: 'read', params: [{ id: 'query', label: 'Query', type: 'text', required: true }] },
 ];
 

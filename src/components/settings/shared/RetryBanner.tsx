@@ -15,7 +15,6 @@
 // Inline error/warning banner with a Retry button. Replaces the
 // hand-rolled banners that were duplicated across:
 //   - EnergySection (PowerStatus, UPS — error fetching status)
-//   - SensorFusionSection (HA status fetch failure)
 //   - RawConfigPage (schema-load error)
 //   - DuplicatesSection (scan failure)
 //   - NetworkSection (VPN / Proxy fetch failure)
@@ -42,7 +41,7 @@ export interface RetryBannerProps {
   /**
    * Layout. `inline` (default) is a full-width card suitable inside a
    * section. `compact` is a denser one-line variant for footers /
-   * inline status rows (used by SensorFusion next to the Status label).
+   * inline status rows (compact one-line variant).
    */
   layout?: 'inline' | 'compact';
 }
