@@ -1106,3 +1106,31 @@ conversión LIMPIA disponible. No fuerzo cirugía grande en ficheros gigantes.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 30 — 2026-06-24 — photos/PhotosPeople (borrado destructivo sin confirmar)
+
+**Ficheros:** `modules/photos/PhotosPeople.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(photos): confirmar antes de borrar un grupo de caras`** — commit `40fd93d`
+   El item "Delete" del menú contextual de una persona (cluster de caras)
+   borraba al instante con un clic, sin confirmación → un clic accidental
+   elimina la agrupación. `ConfirmDialog` (variant danger) nombrando la
+   persona y aclarando que las fotos se quedan (solo se borra la
+   agrupación). `handleDelete` sigue de worker.
+
+**Hallazgo de it16 (DnD por teclado en PhotosPeople) — CERRADO como "no aplica":**
+El drag de PhotosPeople sirve para FUSIONAR clusters de caras (arrastrar
+una persona sobre otra). NO hay alternativa no-drag a la fusión, pero
+añadir un `KeyboardSensor` a un drag LIBRE (no sortable) daría una
+experiencia de teclado clunky (mover 25px por flecha por toda la pantalla)
+→ **falsa accesibilidad**. La solución correcta sería una opción de menú
+"Merge into…" con selector de persona (FEATURE, fuera del alcance del loop),
+no un keyboard-drag forzado. Decisión: NO añadir keyboard-drag; documentar
+la recomendación (menú Merge) para una mejora futura.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
