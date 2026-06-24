@@ -1074,3 +1074,35 @@ que los botones siguen llamando handleRemove/Rotate/Revoke). `git show
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 29 — 2026-06-24 — crypto/ReceiveTab (sweep window.confirm, 3/N)
+
+**Ficheros:** `modules/crypto/monero/viewport/tabs/ReceiveTab.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(crypto): crear subdirección sin etiqueta confirma con ConfirmDialog`** — commit `7e41149`
+   ReceiveTab (Monero) usaba `window.confirm()` nativo al crear una
+   subdirección sin etiqueta. → `ConfirmDialog` (variant warning).
+   `createSubaddress` abre el diálogo si no hay etiqueta; `doCreateSubaddress`
+   ejecuta (directo si hay etiqueta).
+
+**Por qué este y no sketches/mail:** `DiagramToolbar` (1032L) tiene los
+confirms en flujos complejos (closure anidado del `<input type=file>`
+onchange + dirty-gate) → refactor arriesgado, NO forzado. `mail` confirms
+viven en ficheros de 980L. ReceiveTab (219L, confirm discreto) era la
+conversión LIMPIA disponible. No fuerzo cirugía grande en ficheros gigantes.
+
+**Progreso del sweep window.confirm:**
+- ✅ inventory/StockTab (it26) · settings/DevicesSection ×3 (it27) ·
+  settings/AccountSection ×2 (it28) · crypto/ReceiveTab (it29) = **7 diálogos
+  nativos convertidos en 4 módulos**.
+- Pendiente COMPLEJO (requiere refactor de flujo, para una pasada dedicada
+  con calma): sketches/DiagramToolbar ×2 (import closure + dirty-gate),
+  mail ×3 (ficheros 980L), notes `prompt` ×3 (necesitan input-modal),
+  PhotoPipelineProgress, studio (WIP). NO se toca `storage` (WIP staged).
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
