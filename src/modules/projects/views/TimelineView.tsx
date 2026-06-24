@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useMemo, useState, useRef, useCallback } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { tagColor } from '@/lib/tag-color';
@@ -181,6 +181,17 @@ export function TimelineView() {
   const leftRef = useRef<HTMLDivElement>(null);
   const syncingRef = useRef(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar el menú de orden al clicar fuera. El ref estaba declarado pero
+  // nunca se cableó → el dropdown solo se cerraba re-pulsando el botón.
+  useEffect(() => {
+    if (!showSortMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) setShowSortMenu(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [showSortMenu]);
 
   const handleScroll = useCallback((source: 'left' | 'right') => {
     if (syncingRef.current) return;
@@ -537,7 +548,7 @@ export function TimelineView() {
         <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
 
         {/* Sort selector */}
-        <div style={{ position: 'relative' }}>
+        <div ref={sortMenuRef} style={{ position: 'relative' }}>
           <button
             onClick={() => setShowSortMenu(v => !v)}
             style={{ ...navBtnStyle, gap: 4, display: 'flex', alignItems: 'center', fontSize: 11, padding: '4px 8px' }}
