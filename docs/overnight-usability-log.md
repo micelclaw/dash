@@ -931,3 +931,41 @@ teclado siguen pendientes.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
 por commit) + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 25 — 2026-06-24 — 2ª pasada: projects/TimelineView (a fondo)
+
+**Ficheros:** `projects/views/TimelineView.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(projects): el menú de orden de la timeline cierra al clicar fuera`** — commit `e228833`
+   El dropdown de orden (`showSortMenu`) solo se cerraba re-pulsando su
+   botón; clicar en otro sitio lo dejaba abierto. El `sortMenuRef` estaba
+   DECLARADO pero nunca cableado (handler de click-outside sin implementar
+   → TS6133). Se cablea el ref + un `useEffect` (mousedown fuera → cerrar).
+   **Bonus:** elimina el TS6133 de `sortMenuRef` (el fichero pasa de 3 a 2
+   errores pre-existentes).
+
+2. **`ux(projects): fila-label de la timeline accesible por teclado`** — commit `c92c005`
+   La fila de la columna izquierda (nombre de la tarjeta) era `<div onClick>`:
+   no focusable ni activable por teclado. `role="button"` + `tabIndex={0}` +
+   `aria-label` + `onKeyDown` (Enter/Espacio). La tarjeta sin fecha ya era
+   `<button>`. La barra draggable se deja (el label ya da acceso por teclado
+   a la misma tarjeta).
+
+**Revisado:** el selector de orden YA mostraba la dirección con flechas
+direccionales (ArrowUp/ArrowDown) — no como ListView; correcto.
+
+**Descartado / pendiente:**
+- **TS6133 restantes en TimelineView** (`ArrowUpDown` import sin usar línea
+  14, `idx` línea 665): deuda de lint, NO usabilidad → pasada de limpieza
+  aparte.
+- **Barra draggable de la timeline** sin teclado para mover (drag por
+  teclado es complejo); el label sí abre la tarjeta.
+- PhotosPeople teclado, PanelTab:567 div suelto, roving-tabindex en tabs.
+
+**Verificación:** `tsc -b` → 0 errores NUEVOS (sortMenuRef resuelto; quedan
+ArrowUpDown/idx pre-existentes). `git show --stat` (1 fichero por commit) +
+`git diff --cached` (solo storage del usuario, intacto).
