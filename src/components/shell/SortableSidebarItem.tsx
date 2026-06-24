@@ -18,7 +18,11 @@
 
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { EyeOff } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ModuleConfig } from '@/types/modules';
+import { ContextMenu } from '@/components/shared/ContextMenu';
+import { useSidebarStore } from '@/stores/sidebar.store';
 import { SidebarItem } from './SidebarItem';
 
 interface SortableSidebarItemProps {
@@ -49,7 +53,22 @@ export function SortableSidebarItem({ module, section, collapsed, disabled, onNa
       {...attributes}
       {...listeners}
     >
-      <SidebarItem module={module} collapsed={collapsed} onNavigate={onNavigate} />
+      <ContextMenu
+        trigger={<SidebarItem module={module} collapsed={collapsed} onNavigate={onNavigate} />}
+        items={[{
+          label: 'Ocultar',
+          icon: EyeOff,
+          onClick: () => {
+            useSidebarStore.getState().hideModule(module.id);
+            toast(`"${module.label}" ocultado`, {
+              action: {
+                label: 'Deshacer',
+                onClick: () => useSidebarStore.getState().unhideModule(module.id),
+              },
+            });
+          },
+        }]}
+      />
     </div>
   );
 }
