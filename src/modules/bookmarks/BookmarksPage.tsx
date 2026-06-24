@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookmarksStore } from '@/stores/bookmarks.store';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { Bookmark } from '@/stores/bookmarks.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
@@ -374,6 +375,7 @@ export function Component() {
   const isMobile = useIsMobile();
 
   const [addOpen, setAddOpen] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
@@ -404,7 +406,7 @@ export function Component() {
     setDebounceTimer(timer);
   };
 
-  const handleDelete = async (id: string) => {
+  const performDelete = async (id: string) => {
     try {
       await deleteBookmark(id);
       toast.success('Bookmark deleted');
@@ -412,6 +414,9 @@ export function Component() {
       toast.error('Failed to delete');
     }
   };
+
+  // Borrar marcador confirma (antes era directo, sin confirmacion).
+  const handleDelete = (id: string) => setConfirmDeleteId(id);
 
   const selectStyle: React.CSSProperties = {
     height: 32,
@@ -599,6 +604,20 @@ export function Component() {
 
       {/* Modals */}
       {addOpen && <AddBookmarkModal onClose={() => setAddOpen(false)} />}
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={() => { if (confirmDeleteId) void performDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+        title="Delete bookmark"
+        description={(() => {
+          const b = bookmarks.find(x => x.id === confirmDeleteId);
+          return b ? `Delete "${b.title || b.url}"?` : 'Delete this bookmark?';
+        })()}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
