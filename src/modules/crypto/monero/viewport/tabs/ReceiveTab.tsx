@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Copy, Check, Plus, Loader2 } from 'lucide-react';
 import { useMoneroRpc } from '../hooks/useMoneroRpc';
 import { QrCodeDisplay } from '../components/QrCodeDisplay';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 interface SubAddress {
   address: string;
@@ -30,6 +31,7 @@ export function ReceiveTab() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newLabel, setNewLabel] = useState('');
+  const [confirmNoLabel, setConfirmNoLabel] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [copied, setCopied] = useState<number | null>(null);
   const [requestAmount, setRequestAmount] = useState('');
@@ -45,8 +47,7 @@ export function ReceiveTab() {
 
   useEffect(() => { fetchAddresses(); }, [fetchAddresses]);
 
-  const createSubaddress = useCallback(async () => {
-    if (!newLabel.trim() && !confirm('Create subaddress without a label?')) return;
+  const doCreateSubaddress = useCallback(async () => {
     setCreating(true);
     await call('create_address', {
       account_index: 0,
@@ -57,6 +58,12 @@ export function ReceiveTab() {
     await fetchAddresses();
     setCreating(false);
   }, [call, newLabel, fetchAddresses]);
+
+  // Crear sin etiqueta confirma (antes window.confirm nativo); con etiqueta, directo.
+  const createSubaddress = useCallback(() => {
+    if (!newLabel.trim()) { setConfirmNoLabel(true); return; }
+    void doCreateSubaddress();
+  }, [newLabel, doCreateSubaddress]);
 
   const copyAddress = (addr: string, idx: number) => {
     navigator.clipboard.writeText(addr);
@@ -214,6 +221,17 @@ export function ReceiveTab() {
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
+
+      <ConfirmDialog
+        open={confirmNoLabel}
+        onClose={() => setConfirmNoLabel(false)}
+        onConfirm={() => { setConfirmNoLabel(false); void doCreateSubaddress(); }}
+        title="Create without a label?"
+        description="This subaddress will have no label, so it will be harder to tell apart later. Create it anyway?"
+        confirmLabel="Create"
+        cancelLabel="Cancel"
+        variant="warning"
+      />
     </div>
   );
 }
