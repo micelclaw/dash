@@ -1387,3 +1387,32 @@ dedicada, no de madrugada.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 39 — 2026-06-24 — notes: convertir a texto plano (window.confirm → ConfirmDialog)
+
+**Ficheros:** `modules/notes/NoteEditor.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(notes): convertir a texto plano confirma con ConfirmDialog`** — commit `d8df4ac`
+   `handleFormatChange` usaba `window.confirm()` antes de convertir a texto
+   plano (pérdida de formato). Se EXTRAE la conversión a `applyFormatChange`
+   y `handleFormatChange` queda de gate: si el destino es 'plain' abre el
+   `ConfirmDialog` (variant warning); el resto de conversiones (md↔html) se
+   aplican directo. Patrón "confirm-gatea-continuación" resuelto con
+   extracción de la lógica a `applyFormatChange` + estado `confirmPlain`.
+
+**Sweep window.confirm — lo que queda (todo necesita más que un confirm):**
+- `notes/NoteEditorToolbar` `window.prompt` ×3 (URL/imagen/YouTube) →
+  necesitan un INPUT-MODAL propio (capturar texto), no un confirm. Es una
+  mini-feature → pasada dedicada.
+- `sketches/DiagramToolbar` ×2 (closure anidado del `<input file>` +
+  dirty-gate al importar/cargar plantilla).
+- `mail/MailComposer` discard-on-dirty (gatea el cierre del compositor).
+Estos quedan como el residuo legítimo: refactor de flujo o input-modal, no
+parches de madrugada.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
