@@ -207,7 +207,7 @@ export function MediaDownloads() {
                         dl.status === 'downloading' ? '#3b82f6' : 'var(--text-dim)',
                     fontWeight: 600,
                   }}>
-                    {dl.status}
+                    {dl.status.charAt(0).toUpperCase() + dl.status.slice(1)}
                   </span>
                   {dl.progress != null && dl.status === 'downloading' && <span>{dl.progress}%</span>}
                   {dl.format && <span>{dl.format}</span>}
