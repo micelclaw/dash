@@ -870,3 +870,30 @@ involucrada.
 **Verificación:** `tsc -b` → 0 errores nuevos en ambos. `git show --stat`
 (1 fichero por commit) + `git diff --cached` (solo storage del usuario,
 intacto). Sin Playwright (Firefox roto en WSL).
+
+---
+
+## Iteración 23 — 2026-06-24 — 2ª pasada: multimedia/MediaDownloads (cierre total + microcopy)
+
+**Ficheros:** `multimedia/MediaDownloads.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(multimedia): barra de progreso visual en descargas en curso`** — commit `d922254`
+   El progreso solo se mostraba como texto (NN%). Se añade una barra fina
+   que se llena al % (`role="progressbar"` + `aria-valuenow`), visible solo
+   en estado `downloading`. Con el auto-poll de la it2 avanza en vivo.
+   **Cierra el ÚLTIMO hallazgo diferido de multimedia (it2).**
+
+2. **`ux(multimedia): capitalizar el estado de la descarga`** — commit `9a9e68f`
+   La etiqueta de estado mostraba el enum crudo en minúsculas
+   ('downloading'/'completed'/'failed'/'pending') directo al usuario. Se
+   capitaliza la inicial (Downloading, Completed…). Microcopy.
+
+**Hito:** los 3 hallazgos diferidos de multimedia (it2: timeout silencioso,
+botón borrar a11y, barra de progreso) están ya TODOS cerrados (it20+it23).
+multimedia = revisado a fondo.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero
+por commit) + `git diff --cached` (solo storage del usuario, intacto). Sin
+Playwright (Firefox roto en WSL).
