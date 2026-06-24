@@ -16,6 +16,7 @@ import { Search, X, Loader2 } from 'lucide-react';
 import { useSearchStore } from '@/stores/search.store';
 import { SEARCHABLE_DOMAINS } from '@/config/search-domains';
 import { SearchResultsList } from './SearchResultsList';
+import { SearchDiscover } from './SearchDiscover';
 import { RankingPanel } from './RankingPanel';
 
 export function Component() {
@@ -190,16 +191,7 @@ export function Component() {
             </div>
           )}
 
-          {!query.trim() && results.length === 0 && (
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', padding: '48px 16px',
-              color: 'var(--text-muted)', fontSize: '0.875rem',
-            }}>
-              <Search size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
-              Type a query to search across all modules
-            </div>
-          )}
+          {!query.trim() && results.length === 0 && !error && <SearchDiscover />}
 
           <SearchResultsList />
         </div>

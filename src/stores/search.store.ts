@@ -17,6 +17,13 @@ import { DEFAULT_SEARCH_WEIGHTS } from '@/types/search';
 
 type SortBy = 'relevance' | 'fulltext' | 'heat' | 'semantic' | 'graph' | 'recent';
 
+/** Empty-state del módulo Search (GET /search/discover): registros recientes
+ *  + los de más heat, cross-dominio. */
+export interface DiscoverData {
+  recent: SearchResult[];
+  hot: SearchResult[];
+}
+
 let _weightsDebounce: ReturnType<typeof setTimeout> | null = null;
 
 interface SearchState {
@@ -34,9 +41,17 @@ interface SearchState {
   sortBy: SortBy;
   selectedResult: SearchResult | null;
 
+  // Discover (empty-state)
+  discover: DiscoverData | null;
+  discoverLoading: boolean;
+  discoverError: string | null;
+
   // Actions
   setQuery: (q: string) => void;
   setDomains: (domains: string[]) => void;
+  /** Carga los registros recientes + más accedidos para el empty-state. Cache
+   *  de sesión: solo pide una vez (se refresca al recargar la app). */
+  fetchDiscover: () => Promise<void>;
   /** Quick search — RRF only, used by Ctrl+K */
   search: () => Promise<void>;
   /** Advanced search — weighted fusion, used by Search module */
@@ -63,8 +78,23 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
   sortBy: 'relevance',
   selectedResult: null,
 
+  discover: null,
+  discoverLoading: false,
+  discoverError: null,
+
   setQuery: (q) => set({ query: q }),
   setDomains: (domains) => set({ domains }),
+
+  fetchDiscover: async () => {
+    if (get().discover || get().discoverLoading) return; // cache de sesión, 1 fetch
+    set({ discoverLoading: true, discoverError: null });
+    try {
+      const res = await api.get<{ data: DiscoverData }>('/search/discover?limit=10');
+      set({ discover: res.data ?? { recent: [], hot: [] }, discoverLoading: false });
+    } catch {
+      set({ discoverError: 'No se pudo cargar', discoverLoading: false });
+    }
+  },
 
   search: async () => {
     const { query, domains } = get();
