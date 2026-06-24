@@ -696,7 +696,11 @@ export function TimelineView() {
             return (
               <div
                 key={card.id}
+                role="button"
+                tabIndex={0}
+                aria-label={card.title}
                 onClick={() => selectCard(card.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCard(card.id); } }}
                 onContextMenu={(e) => onCardContextMenu(e, card)}
                 style={{
                   height: ROW_HEIGHT,
