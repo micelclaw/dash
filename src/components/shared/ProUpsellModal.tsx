@@ -11,6 +11,7 @@
  */
 
 import { Lock, X } from 'lucide-react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 
 interface ProUpsellModalProps {
   feature: string;
@@ -19,6 +20,7 @@ interface ProUpsellModalProps {
 }
 
 export function ProUpsellModal({ feature, description, onClose }: ProUpsellModalProps) {
+  useEscapeToClose(onClose);
   return (
     <>
       <div

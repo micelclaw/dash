@@ -11,6 +11,7 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -32,6 +33,7 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number): Crop {
 export function AvatarCropModal({ open, imageSrc, onConfirm, onClose }: AvatarCropModalProps) {
   const [crop, setCrop] = useState<Crop>();
   const [saving, setSaving] = useState(false);
+  useEscapeToClose(onClose, { enabled: open });
   const imgRef = useRef<HTMLImageElement>(null);
 
   const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {

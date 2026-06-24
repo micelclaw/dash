@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -40,6 +41,7 @@ export function AssignAppsModal({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
+  useEscapeToClose(onClose, { enabled: open });
   const [loading, setLoading] = useState(false);
 
   // Load available skills when modal opens
