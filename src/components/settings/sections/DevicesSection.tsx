@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Check, X, Trash2, RotateCcw, Ban, Copy, Monitor, Smartphone, Terminal, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 const PLATFORM_ICONS: Record<string, typeof Monitor> = {
   linux: Terminal,
@@ -59,6 +60,17 @@ function ScopeBadges({ scopes }: { scopes: string[] }) {
   );
 }
 
+type ConfirmAction =
+  | { kind: 'remove'; deviceId: string }
+  | { kind: 'rotate'; deviceId: string; role: string }
+  | { kind: 'revoke'; deviceId: string; role: string };
+
+const CONFIRM_COPY: Record<ConfirmAction['kind'], { title: string; description: string; label: string; variant: 'danger' | 'warning' }> = {
+  remove: { title: 'Remove device', description: 'This device will need to re-pair to connect again.', label: 'Remove', variant: 'danger' },
+  rotate: { title: 'Rotate token', description: 'The current token is invalidated immediately. Copy the new token right away — it is shown only once.', label: 'Rotate', variant: 'warning' },
+  revoke: { title: 'Revoke token', description: 'The device will lose access for this role.', label: 'Revoke', variant: 'danger' },
+};
+
 export function DevicesSection() {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<gwService.PendingDevice[]>([]);
@@ -66,6 +78,7 @@ export function DevicesSection() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [rotatedToken, setRotatedToken] = useState<{ deviceId: string; role: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   const fetchDevices = useCallback(async () => {
     setLoading(true);
@@ -128,8 +141,9 @@ export function DevicesSection() {
     }
   };
 
-  const handleRemove = async (deviceId: string) => {
-    if (!confirm('Remove this device? It will need to re-pair to connect again.')) return;
+  // Acciones destructivas: el botón solo abre el ConfirmDialog (handleX);
+  // performX hace el trabajo tras confirmar. Antes usaban window.confirm nativo.
+  const performRemove = async (deviceId: string) => {
     setActionLoading(`remove-${deviceId}`);
     try {
       await gwService.removeDevice(deviceId);
@@ -142,8 +156,7 @@ export function DevicesSection() {
     }
   };
 
-  const handleRotate = async (deviceId: string, role: string) => {
-    if (!confirm('Rotate this token? The current token will be invalidated. You must copy the new token immediately.')) return;
+  const performRotate = async (deviceId: string, role: string) => {
     setActionLoading(`rotate-${deviceId}`);
     try {
       const result = await gwService.rotateDeviceToken(deviceId, role);
@@ -158,8 +171,7 @@ export function DevicesSection() {
     }
   };
 
-  const handleRevoke = async (deviceId: string, role: string) => {
-    if (!confirm('Revoke this token? The device will lose access for this role.')) return;
+  const performRevoke = async (deviceId: string, role: string) => {
     setActionLoading(`revoke-${deviceId}`);
     try {
       await gwService.revokeDeviceToken(deviceId, role);
@@ -170,6 +182,19 @@ export function DevicesSection() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleRemove = (deviceId: string) => setConfirmAction({ kind: 'remove', deviceId });
+  const handleRotate = (deviceId: string, role: string) => setConfirmAction({ kind: 'rotate', deviceId, role });
+  const handleRevoke = (deviceId: string, role: string) => setConfirmAction({ kind: 'revoke', deviceId, role });
+
+  const runConfirm = () => {
+    const a = confirmAction;
+    setConfirmAction(null);
+    if (!a) return;
+    if (a.kind === 'remove') void performRemove(a.deviceId);
+    else if (a.kind === 'rotate') void performRotate(a.deviceId, a.role);
+    else void performRevoke(a.deviceId, a.role);
   };
 
   const copyToken = () => {
@@ -372,6 +397,17 @@ export function DevicesSection() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={runConfirm}
+        title={confirmAction ? CONFIRM_COPY[confirmAction.kind].title : ''}
+        description={confirmAction ? CONFIRM_COPY[confirmAction.kind].description : ''}
+        confirmLabel={confirmAction ? CONFIRM_COPY[confirmAction.kind].label : 'Confirm'}
+        cancelLabel="Cancel"
+        variant={confirmAction ? CONFIRM_COPY[confirmAction.kind].variant : 'danger'}
+      />
     </div>
   );
 }
