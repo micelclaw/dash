@@ -1134,3 +1134,37 @@ la recomendación (menú Merge) para una mejora futura.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 31 — 2026-06-24 — a11y: iframes sin `title` (WCAG)
+
+**Ficheros:** `mail/MailThreadMessage.tsx`, `mail/MailReadingPane.tsx`,
+`feeds/ArticleReader.tsx`, `components/player/YouTubeOverlay.tsx` (pathspec).
+
+**Contexto:** auditoría transversal de iframes. La mayoría YA tenían
+`title`; estos 4 NO → fallo WCAG (todo `<iframe>` necesita nombre accesible;
+lo flaggea cualquier auditoría a11y / axe). NO se toca `finance` (WIP) ni
+`storage` (WIP staged).
+
+**Implementado:**
+
+1. **`ux(mail): title accesible en los iframes del cuerpo del email`** — commit `1e9ce66`
+   Los iframes que renderizan el HTML del email (`MailThreadMessage` +
+   `MailReadingPane`) sin `title`. → `title={email.subject || 'Email content'}`.
+
+2. **`ux(feeds): title accesible en los iframes de YouTube`** — commit `8bf2216`
+   Los embeds de YouTube (`ArticleReader` + player `YouTubeOverlay`) sin
+   `title`. → título del artículo / 'YouTube video'.
+
+**Estado del dash en iframes:** tras esto, todos los `<iframe>` (salvo
+finance WIP) tienen nombre accesible.
+
+**Nota de fase del loop:** tras 30 iteraciones el dash está muy pulido;
+los gaps que quedan son finos (a11y de detalle) o requieren refactor/
+feature (sweep window.confirm complejo, merge-por-teclado en photos). Las
+mejoras siguen siendo reales pero cada vez más buscadas.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (2 ficheros
+por commit, coherentes) + `git diff --cached` (solo storage del usuario,
+intacto).
