@@ -212,6 +212,17 @@ export function MediaDownloads() {
                   {dl.progress != null && dl.status === 'downloading' && <span>{dl.progress}%</span>}
                   {dl.format && <span>{dl.format}</span>}
                 </div>
+                {dl.status === 'downloading' && (
+                  <div
+                    role="progressbar"
+                    aria-valuenow={dl.progress ?? 0}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    style={{ marginTop: 4, height: 3, background: 'var(--surface-hover)', borderRadius: 2, overflow: 'hidden' }}
+                  >
+                    <div style={{ height: '100%', width: `${dl.progress ?? 0}%`, background: '#3b82f6', borderRadius: 2, transition: 'width 0.3s ease' }} />
+                  </div>
+                )}
               </div>
               <button
                 onClick={() => deleteDownload(dl.id)}
