@@ -1358,3 +1358,32 @@ necesitan input-modal) → para una pasada dedicada con calma, NO de noche.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 38 — 2026-06-24 — mail: borrar email con ConfirmDialog
+
+**Ficheros:** `modules/mail/MailReadingPane.tsx` (pathspec).
+
+**Implementado:**
+
+1. **`ux(mail): borrar email con ConfirmDialog (no confirm nativo)`** — commit `0ded004`
+   `handleDelete` usaba `confirm()` nativo. → `ConfirmDialog` estilado
+   (danger), manteniendo el mensaje ("can be restored from Trash").
+   `handleDelete` cierra el menú de acciones y abre el diálogo;
+   `performDelete` ejecuta. Era uno de los `window.confirm` en ficheros
+   GRANDES (980L) que había diferido; hecho ahora con cuidado (localizado el
+   cierre raíz del render para colocar el diálogo correctamente).
+
+**Sweep window.confirm — quedan SOLO los más enredados:**
+- `mail/MailComposer` (discard-on-dirty: gatea el cierre del compositor),
+  `mail/MailThreadMessage` (si tuviera confirm),
+- `sketches/DiagramToolbar` ×2 (closure anidado del `<input file>` + dirty-gate),
+- `notes` `window.prompt` ×3 (URL/imagen/YouTube → necesitan un input-modal
+  propio, no un confirm),
+- `notes/NoteEditor` confirm "a texto plano".
+Todos requieren refactor de flujo o una feature (input-modal) → pasada
+dedicada, no de madrugada.
+
+**Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
++ `git diff --cached` (solo storage del usuario, intacto).
