@@ -118,8 +118,9 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>URL *</label>
+          <label htmlFor="bm-url" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>URL *</label>
           <input
+            id="bm-url"
             style={inputStyle}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -130,20 +131,20 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
+          <label htmlFor="bm-title" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
             Title {fetching && <span style={{ color: 'var(--amber)' }}>fetching...</span>}
           </label>
-          <input style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Page title" />
+          <input id="bm-title" style={inputStyle} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Page title" />
         </div>
 
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Description</label>
-          <input style={inputStyle} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
+          <label htmlFor="bm-description" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Description</label>
+          <input id="bm-description" style={inputStyle} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
         </div>
 
         <div>
-          <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Tags (comma-separated)</label>
-          <input style={inputStyle} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="dev, reading, ai" />
+          <label htmlFor="bm-tags" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>Tags (comma-separated)</label>
+          <input id="bm-tags" style={inputStyle} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="dev, reading, ai" />
         </div>
 
         <button
