@@ -21,6 +21,7 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
 import { CronJobEditor } from '../components/CronJobEditor';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import type { CronJob } from '../types';
 
 function timeAgo(dateStr: string | null): string {
@@ -39,6 +40,7 @@ export function CronTab() {
   const { cronJobs, cronLoading, cronError, fetchCronJobs } = useGatewayStore();
   const [showEditor, setShowEditor] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState<CronJob | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const [refreshHover, setRefreshHover] = useState(false);
 
@@ -74,8 +76,7 @@ export function CronTab() {
     }
   };
 
-  const handleDelete = async (job: CronJob) => {
-    if (!confirm(`Delete cron job "${job.name}"?`)) return;
+  const performDelete = async (job: CronJob) => {
     setActionLoading(`delete-${job.id}`);
     try {
       await gwService.deleteCronJob(job.id);
@@ -87,6 +88,9 @@ export function CronTab() {
       setActionLoading(null);
     }
   };
+
+  // Antes: window.confirm nativo. Ahora abre el ConfirmDialog estilado.
+  const handleDelete = (job: CronJob) => setConfirmDeleteJob(job);
 
   if (cronLoading && cronJobs.length === 0) {
     return (
@@ -288,6 +292,17 @@ export function CronTab() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteJob !== null}
+        onClose={() => setConfirmDeleteJob(null)}
+        onConfirm={() => { if (confirmDeleteJob) void performDelete(confirmDeleteJob); setConfirmDeleteJob(null); }}
+        title="Delete cron job"
+        description={confirmDeleteJob ? `Delete cron job "${confirmDeleteJob.name}"? This stops it from running.` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </ScrollArea>
   );
 }
