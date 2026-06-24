@@ -39,7 +39,7 @@ export function DemoModeBanner({ onExit }: { onExit: () => void | Promise<void> 
         <strong style={{ color: 'var(--text)' }}>Modo vista previa (demo)</strong> — los discos, el NAS ZFS, los
         pools RAID, los volúmenes y las carpetas compartidas de abajo están{' '}
         <strong style={{ color: 'var(--text)' }}>simulados</strong>, no es hardware real.
-        Así se ve el módulo de Almacenamiento con la capa NAS (ZFS y OpenMediaVault) sobre bare-metal.
+        Así se ve el módulo de Almacenamiento con la capa NAS ZFS sobre bare-metal.
       </div>
       <button
         onClick={handleExit}

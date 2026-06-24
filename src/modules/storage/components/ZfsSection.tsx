@@ -23,7 +23,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { HardDrive, Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload, Database } from 'lucide-react';
+import { Boxes, Camera, ShieldAlert, ShieldCheck, Trash2, Upload, Database } from 'lucide-react';
 import { useStorageStore } from '@/stores/storage.store';
 import { ZfsManageBar, CreateSnapshotForm, ImportPoolModal } from './ZfsModals';
 import { ZfsPoolCard } from './ZfsPoolCard';
@@ -136,34 +136,19 @@ export function ZfsSection() {
   const hardened = caps?.level === 'zfs-hardened';
 
   if (!caps) {
-    // Backend ZFS no aplica a este entorno y demo apagado.
+    // Backend ZFS no aplica a este entorno y demo apagado. La cabecera de la
+    // zona (SectionHeader "Almacenamiento ZFS") ya da el título; aquí solo el motivo.
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <HardDrive size={16} style={{ color: 'var(--mod-storage)' }} />
-        <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>NAS (ZFS)</h2>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>no disponible en este entorno (actívalo con el Preview de arriba)</span>
+      <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+        ZFS no disponible en este entorno. Actívalo con el botón «Vista previa (demo)» de arriba.
       </div>
     );
   }
 
   return (
+    // El título "Almacenamiento ZFS" + la píldora de nivel los pinta el
+    // SectionHeader de la zona en StoragePage; aquí va solo el contenido.
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Cabecera */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <HardDrive size={18} style={{ color: 'var(--mod-storage)' }} />
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>NAS (ZFS)</h2>
-        <span style={{
-          padding: '3px 10px', borderRadius: 'var(--radius-sm)', fontSize: '0.6875rem', fontWeight: 600,
-          background: hardened ? 'var(--success-bg, #22c55e22)' : 'var(--surface)',
-          color: hardened ? 'var(--success, #22c55e)' : 'var(--text-dim)',
-          border: '1px solid var(--border)',
-        }}>
-          {caps.level}
-        </span>
-        <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{caps.platform}</span>
-        {demo && <span style={{ fontSize: '0.6875rem', color: 'var(--mod-storage, var(--accent))', fontWeight: 600 }}>· DEMO</span>}
-      </div>
-
       {/* Intro didáctica de la sección */}
       <SectionIntro>{ZFS_COPY.pool}</SectionIntro>
 

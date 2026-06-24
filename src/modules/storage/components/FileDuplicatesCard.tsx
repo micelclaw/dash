@@ -10,6 +10,9 @@
  * https://micelclaw.com
  */
 
+// Inline-styles var(--*) para combinar con el resto del módulo Storage
+// (que no usa Tailwind). Misma lógica que antes; solo cambia el estilado.
+
 import { useState, useEffect, useCallback } from 'react';
 import { Copy, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -38,6 +41,11 @@ interface DuplicateGroup {
   files: DuplicateFile[];
 }
 
+const card: React.CSSProperties = {
+  background: 'var(--surface)', border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)', padding: 16,
+};
+
 export function FileDuplicatesCard() {
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,13 +68,13 @@ export function FileDuplicatesCard() {
     setDeleting(fileId);
     try {
       await api.delete(`/files/${fileId}`);
-      toast.success('File deleted');
+      toast.success('Archivo eliminado');
       setGroups(prev => prev.map(g => ({
         ...g,
         files: (Array.isArray(g.files) ? g.files : []).filter(f => f.id !== fileId),
       })).filter(g => (Array.isArray(g.files) ? g.files.length : 0) > 1));
     } catch {
-      toast.error('Failed to delete file');
+      toast.error('No se pudo eliminar el archivo');
     }
     setDeleting(null);
   };
@@ -81,48 +89,74 @@ export function FileDuplicatesCard() {
   }, 0);
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h3 style={{
+          display: 'flex', alignItems: 'center', gap: 8, margin: 0,
+          fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)',
+        }}>
           <Copy size={14} />
-          Duplicate Files
-          <span className="text-xs font-normal text-amber-400">
-            {safeSize(totalWaste)} recoverable
+          Archivos duplicados
+          <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--warning, #f59e0b)' }}>
+            {safeSize(totalWaste)} recuperables
           </span>
         </h3>
-        <button onClick={load} className="p-1.5 rounded hover:bg-[var(--surface-hover)] text-[var(--text-muted)]">
+        <button
+          onClick={load}
+          title="Recargar"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 6,
+            background: 'transparent', border: 'none', borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-muted)', cursor: 'pointer',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover, var(--card))'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
           <RefreshCw size={14} />
         </button>
       </div>
 
-      <div className="space-y-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {groups.map(group => {
           const files = Array.isArray(group.files) ? group.files : [];
           return (
-          <div key={group.checksum} className="rounded border border-[var(--border)] bg-[var(--bg)] p-3">
-            <div className="text-[10px] text-[var(--text-muted)] mb-2">
-              {files.length} copies · {safeSize(group.size_bytes)} each
+            <div key={group.checksum} style={{
+              borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+              background: 'var(--bg, var(--card))', padding: 12,
+            }}>
+              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginBottom: 8 }}>
+                {files.length} copias · {safeSize(group.size_bytes)} cada una
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {files.map((file, i) => (
+                  <div key={file.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem' }}>
+                    <span style={{
+                      flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: 'var(--text)', fontFamily: 'var(--font-sans)',
+                    }} title={file.filepath}>
+                      {file.filepath}
+                    </span>
+                    {i > 0 && (
+                      <button
+                        onClick={() => handleDelete(file.id)}
+                        disabled={deleting === file.id}
+                        title="Eliminar esta copia"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 4,
+                          background: 'transparent', border: 'none', borderRadius: 'var(--radius-sm)',
+                          color: 'var(--text-muted)', cursor: deleting === file.id ? 'default' : 'pointer',
+                          flexShrink: 0, opacity: deleting === file.id ? 0.5 : 1,
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'color-mix(in srgb, var(--error, #ef4444) 12%, transparent)'; e.currentTarget.style.color = 'var(--error, #ef4444)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1">
-              {files.map((file, i) => (
-                <div key={file.id} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 truncate text-[var(--text)]" title={file.filepath}>
-                    {file.filepath}
-                  </span>
-                  {i > 0 && (
-                    <button
-                      onClick={() => handleDelete(file.id)}
-                      disabled={deleting === file.id}
-                      className="p-1 rounded hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 flex-shrink-0"
-                      title="Delete this copy"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
           );
         })}
       </div>

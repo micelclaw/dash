@@ -10,8 +10,11 @@
  * https://micelclaw.com
  */
 
+// Inline-styles var(--*) para combinar con el resto del módulo Storage
+// (que no usa Tailwind). Misma lógica que antes; solo cambia el estilado.
+
 import { useState, useEffect } from 'react';
-import { Files, HardDrive, Camera } from 'lucide-react';
+import { Files, Camera } from 'lucide-react';
 import { api } from '@/services/api';
 import { formatFileSize } from '@/lib/file-utils';
 
@@ -48,6 +51,15 @@ interface SnapshotStats {
   total_snapshot_size: number;
 }
 
+const card: React.CSSProperties = {
+  background: 'var(--surface)', border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)', padding: 16,
+};
+const heading: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px',
+  fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-sans)',
+};
+
 export function FileStatsCard() {
   const [stats, setStats] = useState<FileStats | null>(null);
   const [snapStats, setSnapStats] = useState<SnapshotStats | null>(null);
@@ -76,45 +88,57 @@ export function FileStatsCard() {
     .slice(0, 5);
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4">
-      <h3 className="text-sm font-semibold text-[var(--text)] mb-3 flex items-center gap-2">
+    <div style={card}>
+      <h3 style={heading}>
         <Files size={14} />
-        File Statistics
+        Estadísticas de archivos
       </h3>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <StatItem label="Files" value={safeCount(stats.total_files)} />
-        <StatItem label="Directories" value={safeCount(stats.total_directories)} />
-        <StatItem label="Total Size" value={safeSize(stats.total_size_bytes)} />
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+        gap: 12, marginBottom: 16,
+      }}>
+        <StatItem label="Archivos" value={safeCount(stats.total_files)} />
+        <StatItem label="Carpetas" value={safeCount(stats.total_directories)} />
+        <StatItem label="Tamaño total" value={safeSize(stats.total_size_bytes)} />
         {stats.duplicates && Number(stats.duplicates.files) > 0 && (
-          <StatItem label="Duplicates" value={safeCount(stats.duplicates.files)} warn />
+          <StatItem label="Duplicados" value={safeCount(stats.duplicates.files)} warn />
         )}
       </div>
 
       {snapStats && Number(snapStats.count) > 0 && (
-        <div className="flex items-center gap-4 mb-3 text-xs text-[var(--text-muted)]">
-          <span className="flex items-center gap-1.5">
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12,
+          fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', flexWrap: 'wrap',
+        }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Camera size={12} />
-            <span className="font-medium text-[var(--text)]">{safeCount(snapStats.count)}</span> snapshots
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.count)}</span> instantáneas
           </span>
           <span>
-            <span className="font-medium text-[var(--text)]">{safeCount(snapStats.files_with_snapshots)}</span> files versioned
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeCount(snapStats.files_with_snapshots)}</span> archivos versionados
           </span>
           <span>
-            <span className="font-medium text-[var(--text)]">{safeSize(snapStats.total_snapshot_size)}</span> used
+            <span style={{ fontWeight: 500, color: 'var(--text)' }}>{safeSize(snapStats.total_snapshot_size)}</span> usados
           </span>
         </div>
       )}
 
       {topMimes.length > 0 && (
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
-            Top file types
+          <div style={{
+            fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+            color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginBottom: 8,
+          }}>
+            Tipos más frecuentes
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {topMimes.map((m, i) => (
-              <span key={m.mime_type ?? i} className="px-2 py-0.5 text-[10px] rounded bg-[var(--surface-hover)] text-[var(--text-dim)]">
-                {(m.mime_type ?? 'unknown').split('/').pop()} <span className="text-[var(--text-muted)]">({safeCount(m.count)})</span>
+              <span key={m.mime_type ?? i} style={{
+                padding: '2px 8px', fontSize: '0.625rem', borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-hover, var(--card))', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)',
+              }}>
+                {(m.mime_type ?? 'unknown').split('/').pop()} <span style={{ color: 'var(--text-muted)' }}>({safeCount(m.count)})</span>
               </span>
             ))}
           </div>
@@ -127,8 +151,18 @@ export function FileStatsCard() {
 function StatItem({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
     <div>
-      <div className={`text-base font-semibold ${warn ? 'text-amber-400' : 'text-[var(--text)]'}`}>{value}</div>
-      <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div style={{
+        fontSize: '1rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+        color: warn ? 'var(--warning, #f59e0b)' : 'var(--text)',
+      }}>
+        {value}
+      </div>
+      <div style={{
+        fontSize: '0.625rem', color: 'var(--text-muted)', textTransform: 'uppercase',
+        letterSpacing: '0.04em', fontFamily: 'var(--font-sans)',
+      }}>
+        {label}
+      </div>
     </div>
   );
 }

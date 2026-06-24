@@ -418,24 +418,12 @@ export function DiskList() {
   const showSmart = Object.keys(smart_cache).length > 0;
 
   return (
+    // El título "Discos físicos" + el contador los pinta el SectionHeader de la
+    // zona en StoragePage; esta tarjeta es solo la tabla de discos.
     <div style={{
       background: 'var(--surface)', borderRadius: 'var(--radius-md)',
       border: '1px solid var(--border)', overflow: 'hidden',
     }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '10px 14px', borderBottom: '1px solid var(--border)',
-      }}>
-        <span style={{
-          fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)',
-          fontFamily: 'var(--font-sans)', textTransform: 'uppercase', letterSpacing: '0.04em',
-        }}>
-          Discos físicos
-        </span>
-        <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-          {disks.length} {disks.length === 1 ? 'disco' : 'discos'}
-        </span>
-      </div>
       {disks.length === 0 ? (
         <div style={{ padding: '20px 14px', fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
           No se han detectado discos

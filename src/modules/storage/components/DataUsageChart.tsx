@@ -306,14 +306,9 @@ export function DataUsageChart() {
       padding: '16px', background: 'var(--surface)',
       borderRadius: 'var(--radius-md)', border: '1px solid var(--border)',
     }}>
-      {/* Cabecera: título + edad de la caché + popover de acciones */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{
-          fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)',
-          fontFamily: 'var(--font-sans)', textTransform: 'uppercase', letterSpacing: '0.04em',
-        }}>
-          Uso de datos
-        </div>
+      {/* Barra de controles del cuadro: edad de la caché + popover de acciones.
+          El título de la zona lo provee el SectionHeader en StoragePage. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
             Actualizado {formatCacheAge(data_usage.cache_age_seconds)}

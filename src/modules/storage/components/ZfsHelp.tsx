@@ -32,8 +32,11 @@ export function InfoTip({ text }: { text: string }) {
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button
-        type="button"
+      {/* span (no <button>) — InfoTip se usa DENTRO de botones de acción; un
+          <button> anidado en <button> es HTML inválido (warning de hidratación). */}
+      <span
+        role="button"
+        tabIndex={0}
         aria-label={text}
         title={text}
         onClick={() => setOpen((v) => !v)}
@@ -45,7 +48,7 @@ export function InfoTip({ text }: { text: string }) {
         }}
       >
         <Info size={13} />
-      </button>
+      </span>
       {open && (
         <span
           role="tooltip"
