@@ -1416,3 +1416,37 @@ parches de madrugada.
 
 **Verificación:** `tsc -b` → 0 errores nuevos. `git show --stat` (1 fichero)
 + `git diff --cached` (solo storage del usuario, intacto).
+
+---
+
+## Iteración 40 — 2026-06-24 — ESC en TODOS los modales compartidos custom
+
+**Ficheros:** `components/shared/{RelateModal,ShareModal,EntityShareModal,AssignAppsModal,AvatarCropModal,ProUpsellModal}.tsx` (pathspec, 2 commits).
+
+**Contexto:** auditoría de los modales en `components/shared/`. Los basados
+en Radix (Dialog) ya cierran con ESC; `RenameDialog` ya tenía ESC. Estos 6
+eran overlays CUSTOM (fixed) sin Escape → se aplica el hook compartido
+`useEscapeToClose` (it9), con `{ enabled: open }` en los que tienen prop
+`open` (llamado antes del early-return `if (!open) return null`).
+
+**Implementado:**
+
+1. **`ux(shared): ESC cierra RelateModal, ShareModal y EntityShareModal`** — commit `5773476`
+   Modales de relacionar entidad / compartir archivo / compartir entidad.
+
+2. **`ux(shared): ESC cierra AssignAppsModal, AvatarCropModal y ProUpsellModal`** — commit `7d1bf4e`
+   Asignar apps-skills / recortar avatar / upsell Pro. (ProUpsellModal es
+   presentacional, sin `open` → hook directo.)
+
+**Resultado:** TODOS los modales compartidos custom del dash cierran ahora
+con Escape. Alto apalancamiento: son componentes usados por muchos módulos.
+
+**No hay PromptDialog reutilizable** → los `window.prompt` de notes
+(URL/imagen/YouTube) necesitarían construir uno (mini-feature con decisión
+de diseño) → NO lo hago de madrugada; recomendado como pasada dedicada (es
+el residuo principal del sweep window.confirm/prompt junto a sketches y mail
+composer).
+
+**Verificación:** `tsc -b` → 0 errores nuevos en los 6. `git show --stat`
+(3 ficheros por commit) + `git diff --cached` (solo storage del usuario,
+intacto).
