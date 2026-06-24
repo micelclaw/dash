@@ -32,6 +32,7 @@ import { Smartphone, Monitor, Trash2, LogOut, ShieldCheck, Shield, Copy, Downloa
 import { useAuthStore } from '@/stores/auth.store';
 import * as authSvc from '@/services/auth.service';
 import type { ActiveSession, TwoFactorStatus, TwoFactorSetupResult } from '@/services/auth.service';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { SettingSection } from '../SettingSection';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { InlineLoading } from '../shared/InlineLoading';
@@ -474,6 +475,8 @@ function formatRelative(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+type RevokeConfirm = { kind: 'self'; session: ActiveSession } | { kind: 'others' };
+
 function ActiveSessionsBlock() {
   const tokens = useAuthStore((s) => s.tokens);
   const logout = useAuthStore((s) => s.logout);
@@ -482,6 +485,7 @@ function ActiveSessionsBlock() {
   const [loading, setLoading] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [revokingOthers, setRevokingOthers] = useState(false);
+  const [revokeConfirm, setRevokeConfirm] = useState<RevokeConfirm | null>(null);
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
@@ -498,13 +502,7 @@ function ActiveSessionsBlock() {
     if (expanded) fetchSessions();
   }, [expanded, fetchSessions]);
 
-  const handleRevoke = async (s: ActiveSession) => {
-    if (s.is_current) {
-      const ok = window.confirm(
-        'This is your current session. Revoking it will log you out. Continue?',
-      );
-      if (!ok) return;
-    }
+  const performRevoke = async (s: ActiveSession) => {
     setRevokingId(s.id);
     try {
       await authSvc.revokeSession(s.id);
@@ -521,12 +519,14 @@ function ActiveSessionsBlock() {
     setRevokingId(null);
   };
 
-  const handleRevokeOthers = async () => {
+  // La sesión actual confirma (revocarla = logout); las demás se revocan directo.
+  const handleRevoke = (s: ActiveSession) => {
+    if (s.is_current) { setRevokeConfirm({ kind: 'self', session: s }); return; }
+    void performRevoke(s);
+  };
+
+  const performRevokeOthers = async () => {
     const knowsCurrent = !!tokens?.refreshTokenId;
-    const msg = knowsCurrent
-      ? 'Revoke all other sessions? You will stay logged in here.'
-      : 'Revoke ALL sessions? You will be logged out (your current session id is unknown).';
-    if (!window.confirm(msg)) return;
     setRevokingOthers(true);
     try {
       const { revoked } = await authSvc.revokeOtherSessions(tokens?.refreshTokenId ?? null);
@@ -540,6 +540,16 @@ function ActiveSessionsBlock() {
       toast.error((err as Error)?.message || 'Failed to revoke sessions');
     }
     setRevokingOthers(false);
+  };
+
+  const handleRevokeOthers = () => setRevokeConfirm({ kind: 'others' });
+
+  const runRevokeConfirm = () => {
+    const c = revokeConfirm;
+    setRevokeConfirm(null);
+    if (!c) return;
+    if (c.kind === 'self') void performRevoke(c.session);
+    else void performRevokeOthers();
   };
 
   const otherCount = sessions.filter((s) => !s.is_current).length;
@@ -581,6 +591,22 @@ function ActiveSessionsBlock() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={!!revokeConfirm}
+        onClose={() => setRevokeConfirm(null)}
+        onConfirm={runRevokeConfirm}
+        title={revokeConfirm?.kind === 'others' ? 'Sign out other sessions' : 'Revoke current session'}
+        description={
+          revokeConfirm?.kind === 'self'
+            ? 'This is your current session. Revoking it will log you out.'
+            : tokens?.refreshTokenId
+              ? 'All other sessions will be signed out. You stay logged in here.'
+              : 'All sessions will be revoked and you will be logged out (your current session id is unknown).'
+        }
+        confirmLabel={revokeConfirm?.kind === 'others' ? 'Sign out others' : 'Log out'}
+        cancelLabel="Cancel"
+        variant="danger"
+      />
     </SettingsBlock>
   );
 }
