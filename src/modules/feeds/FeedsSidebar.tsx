@@ -233,6 +233,9 @@ function FeedItem({ feed, active, unread, onClick }: {
       {/* Context menu trigger */}
       <button
         className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--surface-hover)] text-[var(--text-dim)]"
+        aria-label={`Options for ${feed.title}`}
+        aria-haspopup="menu"
+        aria-expanded={showMenu}
         onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
       >
         <MoreVertical size={12} />
