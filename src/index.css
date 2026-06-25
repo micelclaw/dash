@@ -1,21 +1,22 @@
 @import "tailwindcss";
 
 :root {
-  /* Backgrounds */
-  --bg: #06060a;
-  --surface: #0c0c12;
-  --card: #111118;
-  --surface-hover: #16161f;
+  /* Backgrounds — alineados con el objeto `dark` de use-theme.ts (evita el
+     flash en el primer pintado antes de que corra applyTheme). */
+  --bg: #050509;
+  --surface: #111119;
+  --card: #1a1a24;
+  --surface-hover: #222230;
 
   /* Borders */
-  --border: #3a3a50;
-  --border-hover: #4a4a62;
+  --border: #313146;
+  --border-hover: #424258;
 
   /* Text */
-  --text: #e0e0e8;
+  --text: #ededf4;
   /* Subidos para legibilidad (antes #7a7a8a/#6a6a7a daban contraste insuficiente
      sobre el fondo oscuro; labels/emails/descripciones eran casi ilegibles). */
-  --text-dim: #a3a3b8;
+  --text-dim: #a6a6bc;
   --text-muted: #8a8a9e;
 
   /* Accent */
@@ -76,6 +77,28 @@
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 
+  /* Font weights — dark-on-light se percibe más fino que light-on-dark al mismo
+     peso. Default (temas oscuros) aquí; los claros los suben un escalón abajo. */
+  --weight-normal: 400;
+  --weight-medium: 500;
+
+  /* Iconos de color: opacidad en reposo + filtro de profundización
+     (override en temas claros para que no se laven sobre fondo claro). */
+  --icon-idle-opacity: 0.7;
+  --icon-filter: none;
+
+  /* Glass overlays (dropdowns, menús, popovers, paneles flotantes): tinte por
+     alfa. En claro pasan a un frost blanco muy tenue (solo blur). Los modales
+     usan --glass-modal → superficie clara legible (no transparente). En oscuro
+     estas variables valen exactamente las rgba originales (sin cambio visual). */
+  --glass-40: rgba(17, 17, 24, 0.4);
+  --glass-50: rgba(17, 17, 24, 0.5);
+  --glass-75: rgba(17, 17, 24, 0.75);
+  --glass-82: rgba(17, 17, 24, 0.82);
+  --glass-92: rgba(17, 17, 24, 0.92);
+  --glass-95: rgba(17, 17, 24, 0.95);
+  --glass-modal: rgba(17, 17, 24, 0.85);
+
   /* Border radius */
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -106,7 +129,7 @@
   /* Shadcn/ui mapping (oklch values for Tailwind v4 compatibility) */
   --background: var(--bg);
   --foreground: var(--text);
-  --card: #111118;
+  --card: #1a1a24;
   --card-foreground: var(--text);
   --popover: var(--card);
   --popover-foreground: var(--text);
@@ -123,6 +146,26 @@
   --input: var(--border);
   --ring: var(--amber);
   --radius: var(--radius-md);
+}
+
+/* Temas claros (light, blush): subir un escalón el peso de fuente para igualar
+   el "cuerpo" visual que el texto claro tiene sobre fondo oscuro. */
+:root[data-theme='light'] {
+  --weight-normal: 500;
+  --weight-medium: 600;
+  /* Iconos de color casi opacos + algo más oscuros/saturados para que no se laven
+     sobre fondo claro. */
+  --icon-idle-opacity: 0.95;
+  --icon-filter: saturate(1.2) brightness(0.85);
+  /* Overlays glass → frost blanco muy tenue (solo blur). Modales → superficie
+     clara y legible (no transparente). */
+  --glass-40: rgba(255, 255, 255, 0.12);
+  --glass-50: rgba(255, 255, 255, 0.14);
+  --glass-75: rgba(255, 255, 255, 0.18);
+  --glass-82: rgba(255, 255, 255, 0.20);
+  --glass-92: rgba(255, 255, 255, 0.24);
+  --glass-95: rgba(255, 255, 255, 0.26);
+  --glass-modal: rgba(247, 245, 241, 0.92);
 }
 
 html {

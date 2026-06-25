@@ -23,9 +23,23 @@ export interface TagColor {
 /**
  * Devuelve los 3 colores de un tag. S/L fijos por rol → todos los tags tienen la misma
  * luminancia y saturación; solo cambia el tono. Ajustar aquí afecta a TODOS los dominios.
+ *
+ * Theme-aware: en temas claros (`data-theme="light"`, incl. Blush) el texto va OSCURO y
+ * saturado (L~32%) para tener contraste sobre superficies claras; en oscuros, texto claro
+ * tintado (L~72%) como siempre. El fondo/borde son translúcidos → se adaptan a la superficie.
  */
 export function tagColor(tag: string): TagColor {
   const hue = hueFromString(tag);
+  const light =
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'light';
+  if (light) {
+    return {
+      bg: `hsl(${hue} 60% 45% / 0.14)`,
+      border: `hsl(${hue} 55% 40% / 0.45)`,
+      text: `hsl(${hue} 65% 32%)`,
+    };
+  }
   return {
     bg: `hsl(${hue} 45% 50% / 0.16)`,
     border: `hsl(${hue} 45% 55% / 0.40)`,
