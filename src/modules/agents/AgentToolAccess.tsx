@@ -3,8 +3,8 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Save, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Save, RotateCcw, Search, X, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
@@ -139,6 +139,10 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // B): filtro por nombre, grupos colapsados y confirmación visual de guardado.
+  const [filter, setFilter] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [justSaved, setJustSaved] = useState(false);
 
   const [globalProfile, setGlobalProfile] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState<ToolProfile>('inherit');
@@ -248,14 +252,40 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
       }
       toast.success('Tool access updated');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update tool access');
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2200);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update tool access');
     } finally {
       setSaving(false);
     }
   };
 
+  const toggleGroup = (label: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      return next;
+    });
+  };
+
   const enabledCount = ALL_TOOLS.filter(t => isToolEnabled(t)).length;
+
+  // Filtro por nombre/descripcion (case-insensitive). Con filtro activo, los
+  // grupos sin coincidencias se ocultan y los demas se expanden.
+  const q = filter.trim().toLowerCase();
+  const filteredGroups = useMemo(() => {
+    if (!q) return TOOL_GROUPS;
+    return TOOL_GROUPS
+      .map(g => ({ ...g, tools: g.tools.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)) }))
+      .filter(g => g.tools.length > 0);
+  }, [q]);
+
+  // El bloque bundle-mcp (claw_*) también respeta el filtro: chips por nombre,
+  // y el bloque entero se oculta si nada coincide.
+  const labelMatchesMcp = !q || 'bundle-mcp micelclaw os claw'.includes(q);
+  const shownMcpTools = q ? mcpTools.filter(t => t.name.toLowerCase().includes(q)) : mcpTools;
+  const showMcpBlock = mcpTools.length > 0 && (!q || labelMatchesMcp || shownMcpTools.length > 0);
 
   if (loading) {
     return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Loading tool access...</div>;
@@ -295,16 +325,17 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600,
-              background: dirty ? 'var(--error)' : 'var(--surface)',
+              background: justSaved ? 'var(--success)' : dirty ? 'var(--error)' : 'var(--surface)',
               border: '1px solid transparent',
               borderRadius: 'var(--radius-sm)',
-              color: dirty ? '#fff' : 'var(--text-muted)',
+              color: justSaved || dirty ? '#fff' : 'var(--text-muted)',
               cursor: dirty ? 'pointer' : 'default',
               opacity: saving ? 0.7 : 1,
               fontFamily: 'var(--font-sans)',
+              transition: 'background 0.2s',
             }}
           >
-            <Save size={12} /> Save
+            {justSaved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> Save</>}
           </button>
         </div>
       </div>
@@ -342,15 +373,76 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
         </div>
       )}
 
+      {/* Búsqueda/filtro por nombre de herramienta */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <Search size={13} style={{ position: 'absolute', left: 10, color: 'var(--text-muted)', pointerEvents: 'none' }} />
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="Filtrar herramientas por nombre…"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: '7px 30px', fontSize: '0.75rem',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+            fontFamily: 'var(--font-sans)', outline: 'none',
+          }}
+        />
+        {filter && (
+          <button
+            onClick={() => setFilter('')}
+            title="Limpiar"
+            style={{
+              position: 'absolute', right: 6, display: 'flex', alignItems: 'center',
+              background: 'transparent', border: 'none', color: 'var(--text-muted)',
+              cursor: 'pointer', padding: 4,
+            }}
+          >
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
       {/* Tool groups — only show toggles for custom or when viewing a preset */}
-      {TOOL_GROUPS.map(group => (
+      {filteredGroups.length === 0 && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 2px' }}>
+          Ninguna herramienta coincide con «{filter}».
+        </div>
+      )}
+      {filteredGroups.map(group => {
+        const groupTotal = group.tools.length;
+        const groupEnabled = group.tools.filter(t => isToolEnabled(t.name)).length;
+        // Con filtro activo siempre expandido; si no, respeta el colapso manual.
+        const isCollapsed = !q && collapsed.has(group.label);
+        return (
         <div key={group.label}>
-          <h4 style={{
-            fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
-            margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em',
-          }}>
-            {group.label}
-          </h4>
+          <button
+            onClick={() => !q && toggleGroup(group.label)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+              margin: '0 0 8px', padding: 0, background: 'transparent', border: 'none',
+              cursor: q ? 'default' : 'pointer', textAlign: 'left',
+            }}
+          >
+            {!q && (isCollapsed
+              ? <ChevronRight size={13} style={{ color: 'var(--text-muted)' }} />
+              : <ChevronDown size={13} style={{ color: 'var(--text-muted)' }} />)}
+            <h4 style={{
+              fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
+              margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              {group.label}
+            </h4>
+            <span style={{
+              fontSize: '0.625rem', fontWeight: 600, fontFamily: 'var(--font-mono)',
+              color: groupEnabled > 0 ? 'var(--success)' : 'var(--text-muted)',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-full)', padding: '1px 7px',
+            }}>
+              {groupEnabled}/{groupTotal}
+            </span>
+          </button>
+          {!isCollapsed && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
@@ -398,12 +490,14 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
               );
             })}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
 
       {/* Fase 3.6-B: tools de Micelclaw OS (claw_*) descubiertas del registro.
           Se controlan en bloque vía bundle-mcp; la lista es informativa. */}
-      {mcpTools.length > 0 && (
+      {showMcpBlock && (
         <div>
           <h4 style={{
             fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
@@ -438,7 +532,7 @@ export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
             </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.45 }}>
-            {mcpTools.map((t) => (
+            {shownMcpTools.map((t) => (
               <span
                 key={t.name}
                 title={t.actions.join(', ')}
