@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { ChevronLeft, Save, Play, Plus, Workflow, Undo2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -33,6 +33,8 @@ export function Component() {
   const { flowId } = useParams<{ flowId: string }>();
   const navigate = useNavigate();
   const flows = useFlowsStore((s) => s.flows);
+  const stepTypes = useFlowsStore((s) => s.stepTypes);
+  const runEventTick = useFlowsStore((s) => s.runEventTick);
   const fetchFlows = useFlowsStore((s) => s.fetchFlows);
   const fetchStepTypes = useFlowsStore((s) => s.fetchStepTypes);
   const fetchRuns = useFlowsStore((s) => s.fetchRuns);
@@ -54,22 +56,41 @@ export function Component() {
   const [showPalette, setShowPalette] = useState(false);
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [recentRun, setRecentRun] = useState<FlowRun | null>(null);
+  // Bumped after run/approve/reject to (re)start the run poller.
+  const [pollNonce, setPollNonce] = useState(0);
+  // Tracks which flow id is currently loaded into editor state.
+  const loadedIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     fetchFlows();
     fetchStepTypes();
   }, [fetchFlows, fetchStepTypes]);
 
+  // Load editor state from the flow ONLY when the flow IDENTITY changes
+  // (first load / navigation), not on every new array reference. A WS event
+  // (workflow.started/completed) refetches `flows` and produces a fresh
+  // `flow` object — resyncing on that would silently wipe unsaved edits.
   useEffect(() => {
-    if (flow) {
+    if (flow && flow.id !== loadedIdRef.current) {
+      loadedIdRef.current = flow.id;
       setName(flow.name);
       setTriggerType(flow.trigger_type);
       setTriggerConfig(flow.trigger_config);
       setSteps(flow.steps);
       setDirty(false);
+    } else if (isNew && loadedIdRef.current !== null) {
+      // Navigated from an existing flow to "/flows/new" without a remount —
+      // clear the editor so it doesn't carry the previous flow's data.
+      loadedIdRef.current = null;
+      setName('');
+      setTriggerType('manual');
+      setTriggerConfig({});
+      setSteps([]);
+      setDirty(false);
     }
-  }, [flow]);
+  }, [flow, isNew]);
 
   // Browser-level guard against closing the tab / reloading with
   // unsaved edits. Does NOT cover in-app navigation — that's
@@ -91,9 +112,30 @@ export function Component() {
   }, [dirty, navigate]);
 
   const handleSave = useCallback(async () => {
+    // Guard against double-submit: an in-flight save (esp. create) could
+    // otherwise be re-entered before navigation propagated → duplicate flow.
+    if (saving) return;
+    if (!name.trim()) { toast.error('Flow name is required'); return; }
+    // Client-side pre-flight: surface the obvious problems (empty required
+    // params, missing cron expression) immediately instead of letting the
+    // backend validator reject the whole save with a less specific message.
+    if (steps.length === 0) { toast.error('Add at least one step'); return; }
+    for (const step of steps) {
+      const def = stepTypes.find((t) => t.id === step.type);
+      if (!def) continue;
+      for (const p of def.params) {
+        if (!p.required) continue;
+        const v = step.config[p.id];
+        const empty = v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
+        if (empty) { toast.error(`Step "${step.label || def.label}": "${p.label}" is required`); return; }
+      }
+    }
+    if (triggerType === 'cron' && !(triggerConfig as Record<string, unknown>)?.expression) {
+      toast.error('Scheduled trigger needs a cron expression'); return;
+    }
+    setSaving(true);
     try {
       if (isNew) {
-        if (!name.trim()) { toast.error('Flow name is required'); return; }
         const created = await createFlow({
           name: name.trim(),
           trigger_type: triggerType,
@@ -101,6 +143,7 @@ export function Component() {
           steps,
         });
         toast.success('Flow created');
+        setDirty(false);
         navigate(`/flows/${created.id}`, { replace: true });
       } else if (flowId) {
         await updateFlow(flowId, {
@@ -114,44 +157,59 @@ export function Component() {
       }
     } catch (err) {
       toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
     }
-  }, [isNew, flowId, name, triggerType, triggerConfig, steps, createFlow, updateFlow, navigate]);
+  }, [saving, isNew, flowId, name, triggerType, triggerConfig, steps, stepTypes, createFlow, updateFlow, navigate]);
 
   const handleRun = useCallback(async () => {
     if (!flowId || isNew) return;
     try {
       await runFlow(flowId);
       toast.success('Flow started');
-      // Fetch the run we just kicked off so RunProgress can render it.
+      // Fetch the run we just kicked off so RunProgress can render it,
+      // then (re)start the poller via the nonce.
       const runs = await fetchRuns(flowId, 1);
       if (runs[0]) setRecentRun(runs[0]);
+      setPollNonce((n) => n + 1);
     } catch (err) {
       toast.error((err as Error).message);
     }
   }, [flowId, isNew, runFlow, fetchRuns]);
 
-  // Poll the most recent run while it's active. Cheap (single GET,
-  // 2s cadence) and stops as soon as the run reaches a terminal state.
+  // Poll the most recent run while it's active. Self-reschedules with
+  // setTimeout based on the FRESH status from each fetch (not a snapshot
+  // captured in deps) — so it never double-fires per tick nor stops early
+  // on an intermediate state. Backs off + caps retries on network errors.
+  // Restarts whenever a run/approve/reject bumps `pollNonce`.
   useEffect(() => {
     if (!flowId || isNew) return;
+    const ACTIVE = new Set(['running', 'queued', 'waiting_approval']);
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let misses = 0;
     const tick = async () => {
+      if (cancelled) return;
       try {
         const runs = await fetchRuns(flowId, 1);
-        if (!cancelled && runs[0]) setRecentRun(runs[0]);
-      } catch { /* silent */ }
+        if (cancelled) return;
+        const latest = runs[0];
+        if (latest) setRecentRun(latest);
+        misses = 0;
+        // Keep polling only while the freshly-fetched run is non-terminal.
+        if (latest && ACTIVE.has(latest.status)) {
+          timer = setTimeout(tick, 2000);
+        }
+      } catch {
+        if (cancelled) return;
+        if (++misses <= 5) timer = setTimeout(tick, 3000);
+      }
     };
-    void tick(); // initial fetch on mount
-    const isActive = recentRun && (
-      recentRun.status === 'running' ||
-      recentRun.status === 'queued' ||
-      recentRun.status === 'waiting_approval'
-    );
-    if (!isActive) return () => { cancelled = true; };
-    const handle = setInterval(tick, 2000);
-    return () => { cancelled = true; clearInterval(handle); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flowId, isNew, recentRun?.status, recentRun?.id]);
+    void tick();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
+    // runEventTick: a workflow.* WS event re-triggers an immediate poll so the
+    // editor's run view updates promptly instead of waiting for the next tick.
+  }, [flowId, isNew, fetchRuns, pollNonce, runEventTick]);
 
   const handleApproveRun = useCallback(async () => {
     if (!flowId || !recentRun) return;
@@ -160,6 +218,7 @@ export function Component() {
       toast.success('Approved');
       const runs = await fetchRuns(flowId, 1);
       if (runs[0]) setRecentRun(runs[0]);
+      setPollNonce((n) => n + 1);
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -172,6 +231,7 @@ export function Component() {
       toast.success('Rejected');
       const runs = await fetchRuns(flowId, 1);
       if (runs[0]) setRecentRun(runs[0]);
+      setPollNonce((n) => n + 1);
     } catch (err) {
       toast.error((err as Error).message);
     }
@@ -218,17 +278,24 @@ export function Component() {
   const removeStep = useCallback((index: number) => {
     let removedStep: FlowStep | undefined;
     let snapshot: FlowStep[] = [];
+    let postDeleteSig = '';
+    // Full signature (not just ids): a config/inputRef/condition/label edit to
+    // a surviving step within the 5s window must also block the undo, or the
+    // snapshot restore would silently revert that edit.
+    const sig = (arr: FlowStep[]) =>
+      JSON.stringify(arr.map((s) => ({ i: s.id, t: s.type, l: s.label, c: s.config, r: s.inputRef, d: s.condition })));
     setSteps((prev) => {
       removedStep = prev[index];
       snapshot = prev;
-      const next = prev.filter((_, i) => i !== index);
+      const filtered = prev.filter((_, i) => i !== index);
       // C2: prune any inputRef / condition that referenced the removed
       // step. The backend validator would reject the flow on save, but
       // it's cleaner UX to silently drop the dangling refs here so the
       // user can save without hunting them down.
+      let next = filtered;
       if (removedStep) {
         const danglingRef = `$${removedStep.id}`;
-        return next.map((s) => {
+        next = filtered.map((s) => {
           let cleaned = s;
           if (s.inputRef === danglingRef) {
             cleaned = { ...cleaned, inputRef: undefined };
@@ -239,6 +306,7 @@ export function Component() {
           return cleaned;
         });
       }
+      postDeleteSig = sig(next);
       return next;
     });
     setDirty(true);
@@ -249,7 +317,17 @@ export function Component() {
         action: {
           label: 'Undo',
           onClick: () => {
-            setSteps(snapshot);
+            // Only restore if nothing changed since the delete — otherwise the
+            // snapshot would silently clobber edits made in the 5s window (and
+            // could reintroduce a step id that now collides with a new one).
+            setSteps((cur) => {
+              if (sig(cur) !== postDeleteSig) {
+                toast.error('Steps changed since delete — not undone');
+                return cur;
+              }
+              return snapshot;
+            });
+            setDirty(true);
           },
         },
         duration: 5000,
@@ -316,8 +394,12 @@ export function Component() {
               <Play size={12} /> Run
             </button>
           )}
-          <button onClick={handleSave} style={{ ...actionBtnStyle, background: dirty ? 'var(--mod-flows)' : 'var(--surface)', color: dirty ? '#fff' : 'var(--text-dim)' }}>
-            <Save size={12} /> {isNew ? 'Create' : 'Save'}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{ ...actionBtnStyle, background: dirty ? 'var(--mod-flows)' : 'var(--surface)', color: dirty ? '#fff' : 'var(--text-dim)', opacity: saving ? 0.6 : 1, cursor: saving ? 'wait' : 'pointer' }}
+          >
+            <Save size={12} /> {saving ? 'Saving…' : isNew ? 'Create' : 'Save'}
           </button>
         </div>
       </div>
