@@ -21,6 +21,18 @@ export const AGENT_PALETTE = [
   '#64748b', // slate
 ];
 
+/** Nombre legible de cada color de la paleta (para el color picker del agente). */
+export const AGENT_COLOR_NAMES: Record<string, string> = {
+  '#d4a017': 'Ámbar',
+  '#3b82f6': 'Azul',
+  '#22c55e': 'Verde',
+  '#a855f7': 'Morado',
+  '#f97316': 'Naranja',
+  '#ec4899': 'Rosa',
+  '#14b8a6': 'Turquesa',
+  '#64748b': 'Pizarra',
+};
+
 function hashString(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {

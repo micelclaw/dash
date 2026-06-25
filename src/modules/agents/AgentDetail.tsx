@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowRight, ChevronRight, ChevronDown, Loader2, Trash2, Package } from 'lucide-react';
+import { ArrowRight, ChevronRight, ChevronDown, Loader2, Trash2, Package, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { downloadAgentarExport } from '@/services/agentar.service';
@@ -25,7 +25,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
 import { AgentSandboxConfig } from './AgentSandboxConfig';
 import { AgentBootstrapConfig } from './AgentBootstrapConfig';
-import { getAgentColor, AGENT_PALETTE } from './agent-colors';
+import { getAgentColor, AGENT_PALETTE, AGENT_COLOR_NAMES } from './agent-colors';
 import type { ManagedAgent } from './types';
 
 type AgentDetailTab = 'overview' | 'tools' | 'advanced';
@@ -137,6 +137,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const [modelLoading, setModelLoading] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
   const [hoveredModel, setHoveredModel] = useState<string | null>(null);
+  const [modelFilter, setModelFilter] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch available models when dropdown opens
@@ -255,31 +256,44 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-lg)',
-                    padding: 8,
+                    padding: 6,
                     zIndex: 50,
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: 6,
-                    minWidth: 120,
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: 3,
+                    minWidth: 200,
                   }}>
-                    {AGENT_PALETTE.map(c => (
-                      <span
-                        key={c}
-                        onClick={() => {
-                          handleInlineEdit('color', c);
-                          setColorPickerOpen(false);
-                        }}
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: '50%',
-                          background: c,
-                          cursor: 'pointer',
-                          border: c === agent.color ? '2px solid var(--text)' : '1px solid rgba(255,255,255,0.1)',
-                          transition: 'var(--transition-fast)',
-                        }}
-                      />
-                    ))}
+                    {AGENT_PALETTE.map(c => {
+                      const selected = c === agent.color;
+                      return (
+                        <button
+                          key={c}
+                          onClick={() => {
+                            handleInlineEdit('color', c);
+                            setColorPickerOpen(false);
+                          }}
+                          title={AGENT_COLOR_NAMES[c] ?? c}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '5px 8px', borderRadius: 'var(--radius-sm)',
+                            background: selected ? 'var(--surface-hover)' : 'transparent',
+                            border: selected ? '1px solid var(--amber)' : '1px solid transparent',
+                            cursor: 'pointer', textAlign: 'left',
+                            fontFamily: 'var(--font-sans)', transition: 'var(--transition-fast)',
+                          }}
+                          onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                          onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <span style={{
+                            width: 18, height: 18, borderRadius: '50%', background: c, flexShrink: 0,
+                            border: '1px solid rgba(255,255,255,0.15)',
+                          }} />
+                          <span style={{ fontSize: '0.6875rem', color: selected ? 'var(--amber)' : 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                            {AGENT_COLOR_NAMES[c] ?? c}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -362,7 +376,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
             )}
             <div ref={dropdownRef} style={{ position: 'relative', marginTop: 4 }}>
               <button
-                onClick={() => setModelOpen(!modelOpen)}
+                onClick={() => { setModelFilter(''); setModelOpen(!modelOpen); }}
                 disabled={modelSaving}
                 style={{
                   display: 'inline-flex',
@@ -400,15 +414,41 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-lg)',
                   zIndex: 50,
-                  minWidth: 220,
+                  minWidth: 280,
                   overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  maxHeight: 360,
                 }}>
+                  {/* Buscador de modelos: filtra la lista (útil con muchos modelos). */}
+                  <div style={{ position: 'relative', padding: 6, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                    <Search size={12} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                    <input
+                      autoFocus
+                      value={modelFilter}
+                      onChange={e => setModelFilter(e.target.value)}
+                      placeholder="Buscar modelo…"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        padding: '5px 8px 5px 26px', fontSize: '0.75rem',
+                        background: 'var(--surface)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+                        fontFamily: 'var(--font-sans)', outline: 'none',
+                      }}
+                    />
+                  </div>
+                  <div style={{ overflowY: 'auto', flex: 1 }}>
                   {modelLoading ? (
                     <div style={{ padding: '10px 14px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                      Loading models...
+                      Cargando modelos...
                     </div>
-                  ) : (
-                    models.map(m => (
+                  ) : (() => {
+                    const fq = modelFilter.trim().toLowerCase();
+                    const shown = fq ? models.filter(m => m.toLowerCase().includes(fq)) : models;
+                    if (shown.length === 0) {
+                      return <div style={{ padding: '10px 14px', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin coincidencias</div>;
+                    }
+                    return shown.map(m => (
                       <button
                         key={m}
                         onClick={() => handleModelSelect(m)}
@@ -435,10 +475,11 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
                       >
                         {/* Full path so the user can see the provider/org/model unambiguously. */}
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m}</span>
-                        {m === agent.model && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8, flexShrink: 0 }}>current</span>}
+                        {m === agent.model && <span style={{ fontSize: '0.625rem', color: 'var(--amber)', opacity: 0.8, flexShrink: 0 }}>actual</span>}
                       </button>
-                    ))
-                  )}
+                    ));
+                  })()}
+                  </div>
                 </div>
               )}
             </div>
