@@ -12,15 +12,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { AlertTriangle, Boxes, Check, Coins, HandHeart, Inbox, Pencil, X } from 'lucide-react';
+import { AlertTriangle, Boxes, Check, CheckCircle2, Coins, HandHeart, Inbox, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { MetricCard } from '@/modules/gateway/components/MetricCard';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { daysSince, daysUntil, fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryProposal } from '@/modules/inventory/types';
+import { PanelCharts } from '@/modules/inventory/components/PanelCharts';
 
-const GREEN = '#34d399';
-const RED = '#f87171';
+// Estado por color → tokens del sistema (coherente con pills/botones del dash).
+const GREEN = 'var(--success)';
+const RED = 'var(--error)';
 
 const primaryBtn: CSSProperties = {
   background: 'var(--amber)',
@@ -134,6 +136,34 @@ function SourceChip({ source }: { source: InventoryProposal['source'] }) {
     >
       {source}
     </span>
+  );
+}
+
+const WIDGET_LIMIT = 6;
+
+// Pie "ver N más" para widgets acotados — navega a la tab correspondiente.
+function MoreRow({ count, onClick }: { count: number; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        marginTop: 2,
+        background: hovered ? 'var(--surface-hover)' : 'transparent',
+        border: 'none',
+        color: 'var(--text-dim)',
+        fontSize: '0.75rem',
+        cursor: 'pointer',
+        textAlign: 'left',
+        padding: '6px 8px',
+        borderRadius: 'var(--radius-sm)',
+        width: '100%',
+      }}
+    >
+      +{count} more →
+    </button>
   );
 }
 
@@ -346,6 +376,96 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
   );
 }
 
+// Caja shimmer reutilizable para el skeleton de carga.
+function SkeletonBox({ height, radius = 'var(--radius-md)' }: { height: number; radius?: string }) {
+  return (
+    <div
+      style={{
+        height,
+        borderRadius: radius,
+        background: 'linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 37%, var(--surface) 63%)',
+        backgroundSize: '400% 100%',
+        animation: 'inv-shimmer 1.4s ease-in-out infinite',
+      }}
+    />
+  );
+}
+
+// Esqueleto del panel mientras cargan los primeros datos: 4 metric cards + 2
+// bloques de gráfica + 2 widgets. Evita el flash de "panel vacío/roto".
+function PanelSkeleton() {
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <style>{'@keyframes inv-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}'}</style>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        {Array.from({ length: 4 }).map((_, i) => <SkeletonBox key={i} height={84} />)}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+        <SkeletonBox height={220} />
+        <SkeletonBox height={220} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
+        <SkeletonBox height={160} />
+        <SkeletonBox height={160} />
+      </div>
+    </div>
+  );
+}
+
+// Onboarding cuando el inventario está realmente vacío (0 items, 0 propuestas).
+function EmptyOnboarding({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 20 }}>
+      <div
+        style={{
+          background: 'var(--card)',
+          border: '1px dashed var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '48px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'color-mix(in srgb, var(--mod-inventory) 14%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Boxes size={24} style={{ color: 'var(--mod-inventory)' }} />
+        </div>
+        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>Tu inventario está vacío</div>
+        <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', maxWidth: 420 }}>
+          Añade tu primer artículo para empezar a llevar el control de tus cosas: valor, garantías, préstamos y mantenimiento.
+        </div>
+        <button style={{ ...primaryBtn, padding: '8px 16px', marginTop: 4 }} onClick={onAdd}>
+          <Plus size={15} /> Añadir primer artículo
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Nota "todo en orden" cuando hay artículos pero nada pendiente ni alertas.
+function AllClearNote() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '14px 16px',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-md)',
+        color: 'var(--text-dim)',
+        fontSize: '0.8125rem',
+      }}
+    >
+      <CheckCircle2 size={16} style={{ color: 'var(--success)', flexShrink: 0 }} />
+      Todo en orden — sin propuestas ni alertas pendientes.
+    </div>
+  );
+}
+
 export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) {
   const {
     items,
@@ -353,17 +473,25 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
     alerts,
     proposals,
     moves,
+    locations,
+    valuation,
+    loading,
     fetchMoves,
+    fetchValuation,
     selectItem,
     completeMaintenance,
   } = useInventoryStore();
 
   useEffect(() => {
     fetchMoves({ limit: 6 });
+    fetchValuation({ group_by: 'category' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const totalValue = useMemo(
+  // Cálculo de respaldo en cliente (sobre los items cargados, tope 100). La
+  // cifra autoritativa es valuation.total (servidor); este fallback solo cubre
+  // el instante previo a que la valuación cargue.
+  const localTotalValue = useMemo(
     () =>
       items.reduce((sum, item) => {
         const price = parseFloat(item.purchase_price ?? '');
@@ -373,6 +501,7 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
       }, 0),
     [items],
   );
+  const totalValue = valuation?.total ?? localTotalValue;
 
   const activeLoans = alerts?.active_loans ?? [];
   const expiring = alerts?.warranties_expiring ?? [];
@@ -410,6 +539,30 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
     return GREEN;
   };
 
+  // Descripción no-cromática del estado del préstamo (a11y: el color no es el
+  // único canal de información).
+  const loanDotLabel = (lentAt: string | null, lentUntil: string | null): string => {
+    const until = daysUntil(lentUntil);
+    if (until !== null && until < 0) return `Overdue by ${Math.abs(until)}d`;
+    const days = daysSince(lentAt) ?? 0;
+    if (days > 90) return `Out for ${days}d (review)`;
+    if (days >= 30) return `Out for ${days}d`;
+    return `Recently lent (${days}d)`;
+  };
+
+  const hasValue = (valuation?.total ?? 0) > 0;
+  const hasWidgets = expiring.length > 0 || activeLoans.length > 0 || maintenance.length > 0 || recentMoves.length > 0;
+
+  // Skeleton durante la primera carga (antes de que resuelvan los fetches).
+  if (loading && !alerts) {
+    return <PanelSkeleton />;
+  }
+
+  // Onboarding real: inventario vacío sin nada que revisar.
+  if (!loading && items.length === 0 && proposals.length === 0) {
+    return <EmptyOnboarding onAdd={() => onNavigate('catalog')} />;
+  }
+
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Metric cards */}
@@ -417,8 +570,8 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
         <MetricCard
           icon={Boxes}
           label="Items"
-          value={items.length}
-          subtitle={`${itemsTotal} total`}
+          value={itemsTotal}
+          subtitle={itemsTotal !== items.length ? `${items.length} shown` : undefined}
           accentColor="var(--mod-inventory)"
         />
         <MetricCard
@@ -445,20 +598,36 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
         )}
       </div>
 
-      {/* Review queue */}
+      {/* Gráficas: valor por categoría (donut) + por ubicación (barras) */}
+      {hasValue && <PanelCharts categoryValuation={valuation} locations={locations} />}
+
+      {/* Review queue — elevado: es lo más accionable del panel */}
       {proposals.length > 0 && (
         <div
           style={{
             background: 'var(--card)',
             border: '1px solid var(--border)',
+            borderLeft: '3px solid var(--mod-inventory)',
             borderRadius: 'var(--radius-md)',
             padding: '14px 16px',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
             <Inbox size={15} style={{ color: 'var(--mod-inventory)' }} />
-            <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-              Review queue · {proposals.length} proposal{proposals.length === 1 ? '' : 's'} from your agent
+            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>
+              Review queue
+            </span>
+            <span
+              style={{
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                color: 'var(--mod-inventory)',
+                background: 'color-mix(in srgb, var(--mod-inventory) 14%, transparent)',
+                borderRadius: 999,
+                padding: '1px 8px',
+              }}
+            >
+              {proposals.length} from your agent
             </span>
           </div>
           {proposals.map(proposal => (
@@ -468,11 +637,18 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
       )}
 
       {/* Widgets */}
-      {(expiring.length > 0 || activeLoans.length > 0 || maintenance.length > 0 || recentMoves.length > 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(320px, 1fr))', gap: 12 }}>
+      {hasWidgets && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
           {expiring.length > 0 && (
-            <WidgetCard title="Expiring < 90 days">
-              {expiring.map(item => {
+            <WidgetCard
+              title="Expiring < 90 days"
+              action={
+                <button style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => onNavigate('catalog')}>
+                  View all
+                </button>
+              }
+            >
+              {expiring.slice(0, WIDGET_LIMIT).map(item => {
                 const d = daysUntil(item.warranty_until);
                 return (
                   <HoverRow key={item.id} onClick={() => selectItem(item.id)}>
@@ -500,6 +676,9 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                   </HoverRow>
                 );
               })}
+              {expiring.length > WIDGET_LIMIT && (
+                <MoreRow count={expiring.length - WIDGET_LIMIT} onClick={() => onNavigate('catalog')} />
+              )}
             </WidgetCard>
           )}
 
@@ -512,9 +691,12 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                 </button>
               }
             >
-              {activeLoans.map(item => (
+              {activeLoans.slice(0, WIDGET_LIMIT).map(item => (
                 <HoverRow key={item.id} onClick={() => selectItem(item.id)}>
                   <span
+                    role="img"
+                    aria-label={loanDotLabel(item.lent_at, item.lent_until)}
+                    title={loanDotLabel(item.lent_at, item.lent_until)}
                     style={{
                       width: 8,
                       height: 8,
@@ -531,12 +713,22 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                   </span>
                 </HoverRow>
               ))}
+              {activeLoans.length > WIDGET_LIMIT && (
+                <MoreRow count={activeLoans.length - WIDGET_LIMIT} onClick={() => onNavigate('lending')} />
+              )}
             </WidgetCard>
           )}
 
           {maintenance.length > 0 && (
-            <WidgetCard title="Upcoming maintenance">
-              {maintenance.map(event => (
+            <WidgetCard
+              title="Upcoming maintenance"
+              action={
+                <button style={{ ...secondaryBtn, padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => onNavigate('maintenance')}>
+                  View all
+                </button>
+              }
+            >
+              {maintenance.slice(0, WIDGET_LIMIT).map(event => (
                 <HoverRow key={event.id} onClick={() => selectItem(event.item_id)}>
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
                     {event.type}
@@ -555,6 +747,9 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
                   </button>
                 </HoverRow>
               ))}
+              {maintenance.length > WIDGET_LIMIT && (
+                <MoreRow count={maintenance.length - WIDGET_LIMIT} onClick={() => onNavigate('maintenance')} />
+              )}
             </WidgetCard>
           )}
 
@@ -627,6 +822,9 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
           )}
         </div>
       )}
+
+      {/* Nada pendiente pero el inventario tiene artículos: confirma el estado */}
+      {!hasWidgets && proposals.length === 0 && items.length > 0 && <AllClearNote />}
     </div>
   );
 }
