@@ -11,7 +11,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { X, Pencil, Eye, Save, Loader2 } from 'lucide-react';
+import { X, Pencil, Eye, Save, Loader2, Fingerprint, Heart, User, Wrench, Network, HeartPulse, FileText, type LucideIcon } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAgentFile } from './hooks/use-agent-detail';
@@ -25,25 +25,31 @@ interface FileRowProps {
   agentId: string;
 }
 
-function FileRow({ filename, agentId }: FileRowProps) {
+// Icono + color por tipo de fichero de identidad (SOUL/MEMORY/USER especiales
+// frente a los genéricos). Da identidad visual y agrupa de un vistazo.
+const FILE_META: Record<string, { icon: LucideIcon; color: string; label: string }> = {
+  'IDENTITY.md': { icon: Fingerprint, color: '#a855f7', label: 'Identidad' },
+  'SOUL.md': { icon: Heart, color: '#ec4899', label: 'Personalidad' },
+  'USER.md': { icon: User, color: '#3b82f6', label: 'Perfil del usuario' },
+  'TOOLS.md': { icon: Wrench, color: '#14b8a6', label: 'Herramientas' },
+  'AGENTS.md': { icon: Network, color: '#f97316', label: 'Jerarquía' },
+  'HEARTBEAT.md': { icon: HeartPulse, color: '#22c55e', label: 'Latido' },
+};
+
+function FileCard({ filename, agentId }: FileRowProps) {
   const { content, loading, save } = useAgentFile(agentId, filename);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [viewHover, setViewHover] = useState(false);
-  const [editHover, setEditHover] = useState(false);
+  const [hover, setHover] = useState(false);
 
-  const handleView = useCallback(() => {
-    if (!content) return;
-    setIsEditing(false);
-    setShowModal(true);
-  }, [content]);
+  const meta = FILE_META[filename] ?? { icon: FileText, color: 'var(--text-muted)', label: filename };
+  const Icon = meta.icon;
 
-  const handleEdit = useCallback(() => {
+  const handleOpen = useCallback((edit: boolean) => {
     if (content === null) return;
-    setEditContent(content);
-    setIsEditing(true);
+    if (edit) { setEditContent(content); setIsEditing(true); } else { setIsEditing(false); }
     setShowModal(true);
   }, [content]);
 
@@ -58,68 +64,48 @@ function FileRow({ filename, agentId }: FileRowProps) {
 
   return (
     <>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '8px 0',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          fontSize: '0.8125rem',
-          color: 'var(--text)',
+      <div
+        onClick={() => handleOpen(false)}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title={loading ? 'Cargando…' : content === null ? 'No disponible' : `Ver ${filename}`}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 10px', minWidth: 0,
+          background: hover ? 'var(--surface-hover)' : 'var(--surface)',
+          border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+          cursor: loading || content === null ? 'default' : 'pointer',
+          opacity: loading ? 0.6 : 1, transition: 'var(--transition-fast)',
+        }}
+      >
+        <span style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 24, height: 24, flexShrink: 0, borderRadius: 'var(--radius-sm)',
+          background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color,
         }}>
-          <span style={{ opacity: 0.6 }}>{'\u{1F4C4}'}</span>
-          <span>{filename}</span>
+          {loading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Icon size={13} />}
+        </span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {filename.replace(/\.md$/, '')}
+          </div>
+          <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {meta.label}
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={handleView}
-            onMouseEnter={() => setViewHover(true)}
-            onMouseLeave={() => setViewHover(false)}
-            disabled={loading || !content}
-            style={{
-              background: viewHover && !loading && content
-                ? 'var(--surface-hover)'
-                : 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text)',
-              fontSize: '0.75rem',
-              padding: '3px 10px',
-              cursor: loading || !content ? 'default' : 'pointer',
-              opacity: loading || !content ? 0.5 : 1,
-              transition: 'var(--transition-fast)',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
-            View
-          </button>
-          <button
-            onClick={handleEdit}
-            onMouseEnter={() => setEditHover(true)}
-            onMouseLeave={() => setEditHover(false)}
-            disabled={loading || content === null}
-            style={{
-              background: editHover && !loading && content !== null
-                ? 'var(--surface-hover)'
-                : 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text)',
-              fontSize: '0.75rem',
-              padding: '3px 10px',
-              cursor: loading || content === null ? 'default' : 'pointer',
-              opacity: loading || content === null ? 0.5 : 1,
-              transition: 'var(--transition-fast)',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
-            Edit
-          </button>
-        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); handleOpen(true); }}
+          disabled={loading || content === null}
+          title="Editar"
+          style={{
+            display: 'flex', alignItems: 'center', flexShrink: 0,
+            background: 'transparent', border: 'none', color: 'var(--text-muted)',
+            cursor: loading || content === null ? 'default' : 'pointer', padding: 3,
+            opacity: hover ? 1 : 0.5, transition: 'var(--transition-fast)',
+          }}
+        >
+          <Pencil size={12} />
+        </button>
       </div>
 
       {showModal && (
@@ -239,13 +225,19 @@ const IDENTITY_FILES = ['IDENTITY.md', 'SOUL.md', 'TOOLS.md', 'USER.md', 'AGENTS
 
 export function AgentIdentity({ agentId }: AgentIdentityProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0, marginBottom: 4 }}>
-        Identity
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h4 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', margin: 0 }}>
+        Identidad
       </h4>
-      {IDENTITY_FILES.map(f => (
-        <FileRow key={f} filename={f} agentId={agentId} />
-      ))}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 6,
+      }}>
+        {IDENTITY_FILES.map(f => (
+          <FileCard key={f} filename={f} agentId={agentId} />
+        ))}
+      </div>
     </div>
   );
 }
