@@ -123,6 +123,24 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   const HEAT_SPLAT_RADIUS = 120;
   const HEAT_BASE_OPACITY = 0.35;
 
+  // Theming: en temas claros (data-theme="light") el grafo necesita fondos de nodo
+  // claros, edges más visibles y heat más opaco (sobre fondo claro todo se lava).
+  function isLightTheme(): boolean {
+    return typeof document !== 'undefined'
+      && document.documentElement.getAttribute('data-theme') === 'light';
+  }
+  // Fondo opaco que tapa los edges que pasan tras el nodo: en oscuro casi-negro; en
+  // claro, el fondo de página real (--bg) para que el nodo no se vea como disco oscuro.
+  function occluderColor(): string {
+    if (!isLightTheme()) return '#0c0c10';
+    return getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#f1efeb';
+  }
+  // Texto de labels: blanco en oscuro, casi-negro en claro (var() no resuelve en
+  // atributos SVG presentacionales, así que se calcula el rgba aquí).
+  function labelColor(alpha: number): string {
+    return isLightTheme() ? `rgba(42,40,36,${alpha})` : `rgba(255,255,255,${alpha})`;
+  }
+
   // ─── Init SVG structure ─────────────────────────────────────────
 
   svg.selectAll('*').remove();
@@ -301,12 +319,15 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     heatCtx.save();
     heatCtx.setTransform(k, 0, 0, k, tx, ty);
 
+    // En claro el glow se lava sobre fondo claro → más opacidad base.
+    const heatBase = isLightTheme() ? 0.75 : HEAT_BASE_OPACITY;
+
     for (const node of simNodes) {
       const score = Math.max(node.heat_score, 0.05); // minimum glow for cold nodes
 
       const splatRadius = HEAT_SPLAT_RADIUS + node._r * 2;
       const rgb = heatColorRGB(score);
-      const alpha = HEAT_BASE_OPACITY * Math.max(0.15, score);
+      const alpha = heatBase * Math.max(0.15, score);
 
       const gradient = heatCtx.createRadialGradient(
         node.x, node.y, 0,
@@ -483,7 +504,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       })
       .attr('stroke-opacity', d => {
         if (currentHighlightEdgeIds.size > 0) return currentHighlightEdgeIds.has(d._edge.id) ? 0.8 : 0.05;
-        return 0.15;
+        return isLightTheme() ? 0.5 : 0.15;
       });
 
     // ── Nodes ──
@@ -524,7 +545,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       if (currentHeatMode) {
         const rgb = heatColorRGB(d.heat_score);
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
-        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
+        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},${isLightTheme() ? 0.72 : 0.5})`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
       } else {
         color = nonHeatNodeColor(d);
@@ -536,9 +557,9 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       if (!currentHeatMode) {
         const bgPath = svgShapePath(shape, r);
         if (bgPath) {
-          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
+          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', occluderColor());
         } else {
-          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', occluderColor());
         }
       }
 
@@ -577,7 +598,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       if (currentHeatMode) {
         const rgb = heatColorRGB(d.heat_score);
         color = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
-        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.5)`;
+        fill = `rgba(${rgb.r},${rgb.g},${rgb.b},${isLightTheme() ? 0.72 : 0.5})`;
         haloFill = `rgba(${rgb.r},${rgb.g},${rgb.b},0.03)`;
       } else {
         color = nonHeatNodeColor(d);
@@ -592,9 +613,9 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       if (!currentHeatMode) {
         const bgPath = svgShapePath(shape, r);
         if (bgPath) {
-          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', '#0c0c10');
+          g.append('path').attr('class', 'node-bg').attr('d', bgPath).attr('fill', occluderColor());
         } else {
-          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', '#0c0c10');
+          g.append('circle').attr('class', 'node-bg').attr('r', r).attr('fill', occluderColor());
         }
       }
 
@@ -668,8 +689,8 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
         });
       })
       .attr('fill', d => {
-        if (currentSearchMatches !== null && !currentSearchMatches.has(d.id)) return 'rgba(255,255,255,0.15)';
-        return 'rgba(255,255,255,0.7)';
+        if (currentSearchMatches !== null && !currentSearchMatches.has(d.id)) return labelColor(0.15);
+        return labelColor(0.7);
       })
       .attr('opacity', d => {
         if (!showLabels) return 0;
@@ -691,20 +712,20 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     }
 
     nodeGroup.selectAll<SVGGElement, SimNode>('.graph-node')
-      .attr('opacity', d => d.id === nodeId ? 1 : connectedIds.has(d.id) ? 0.7 : 0.15)
+      .attr('opacity', d => d.id === nodeId ? 1 : connectedIds.has(d.id) ? 0.85 : 0.4)
       .attr('filter', d => d.id === nodeId ? 'url(#glow)' : 'none');
 
     linkGroup.selectAll<SVGLineElement, SimLink>('.graph-link')
       .attr('stroke-opacity', d => {
         const sId = typeof d.source === 'object' ? (d.source as SimNode).id : d.source;
         const tId = typeof d.target === 'object' ? (d.target as SimNode).id : d.target;
-        return (sId === nodeId || tId === nodeId) ? 0.7 : 0.05;
+        return (sId === nodeId || tId === nodeId) ? 0.7 : 0.2;
       });
 
     labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')
       .attr('opacity', d => {
         if (currentHideLabels || simNodes.length > LABEL_HIDE_THRESHOLD) return 0;
-        return connectedIds.has(d.id) ? 0.9 : 0.1;
+        return connectedIds.has(d.id) ? 0.9 : 0.4;
       });
 
     // Show temp labels for hovered node + connections when labels are hidden
@@ -724,7 +745,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
               .attr('text-anchor', 'middle')
               .attr('font-size', '10px')
               .attr('font-family', 'var(--font-sans)')
-              .attr('fill', 'rgba(255,255,255,0.5)')
+              .attr('fill', labelColor(0.5))
               .attr('pointer-events', 'none');
           }
         }
@@ -747,7 +768,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     linkGroup.selectAll<SVGLineElement, SimLink>('.graph-link')
       .attr('stroke-opacity', d => {
         if (currentHighlightEdgeIds.size > 0) return currentHighlightEdgeIds.has(d._edge.id) ? 0.8 : 0.05;
-        return 0.15;
+        return isLightTheme() ? 0.5 : 0.15;
       });
 
     labelGroup.selectAll<SVGTextElement, SimNode>('.node-label')

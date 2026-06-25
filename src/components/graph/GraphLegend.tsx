@@ -86,7 +86,7 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
       position: 'absolute',
       bottom: 16,
       left: 16,
-      background: 'rgba(12, 12, 16, 0.8)',
+      background: 'color-mix(in srgb, var(--surface) 88%, transparent)',
       backdropFilter: 'blur(8px)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-md)',
@@ -144,7 +144,7 @@ export function GraphLegend({ colorMode, communities, mode = 'entities' }: Graph
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             {typeList.map(type => (
               <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ShapeSwatch entityType={type} color="rgba(255,255,255,0.55)" />
+                <ShapeSwatch entityType={type} color="var(--text-dim)" />
                 <span style={{ textTransform: 'capitalize' }}>{type}</span>
               </div>
             ))}

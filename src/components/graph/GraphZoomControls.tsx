@@ -47,7 +47,7 @@ export function GraphZoomControls({
       display: 'flex',
       flexDirection: 'column',
       gap: 2,
-      background: 'rgba(12, 12, 16, 0.8)',
+      background: 'color-mix(in srgb, var(--surface) 88%, transparent)',
       backdropFilter: 'blur(8px)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-md)',
