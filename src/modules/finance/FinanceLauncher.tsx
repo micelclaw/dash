@@ -11,98 +11,94 @@
  */
 
 // ─── Finance Launcher ────────────────────────────────────────────────
-// Vista de entrada del módulo Finance (/finance): rejilla con las apps de la
-// suite (Firefly III + SolidInvoice) y su estado. Clicar una tarjeta abre su
-// embed (/finance/firefly | /finance/solidinvoice). Patrón hermano del
-// OfficeLauncher / CryptoPage.
+// Módulo Finance con dos LENTES nativas: "Personal" (F1: cuentas,
+// movimientos, resumen) y "Facturación" (clientes, facturas, pagos). El
+// selector de lente es un control segmentado prominente (pills); cada lente
+// renderiza sus propias sub-pestañas (underline) debajo. Las apps embebidas
+// (Firefly III / SolidInvoice / Crypto) viven en el sidebar, no aquí.
 
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { Wallet, Receipt, Bitcoin, Loader2 } from 'lucide-react';
-import { useFinanceStore, type FinanceAppName } from '@/stores/finance.store';
+import { useSearchParams } from 'react-router';
+import { Wallet, Loader2, User, Receipt } from 'lucide-react';
+import { useFinanceStore } from '@/stores/finance.store';
+import { PersonalLens } from './personal/PersonalLens';
+import { FacturacionLens } from './facturacion/FacturacionLens';
 
-interface AppCard {
-  name: FinanceAppName | 'crypto';
-  label: string;
-  description: string;
-  icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
-  color: string;
-  path: string;
-}
+type LensId = 'personal' | 'facturacion';
 
-const CARDS: AppCard[] = [
-  { name: 'firefly', label: 'Firefly III', description: 'Finanzas personales — presupuestos, gastos y cuentas.', icon: Wallet, color: '#22c55e', path: '/finance/firefly' },
-  { name: 'solidinvoice', label: 'SolidInvoice', description: 'Facturación — clientes, presupuestos y pagos.', icon: Receipt, color: '#7c3aed', path: '/finance/solidinvoice' },
-  { name: 'crypto', label: 'Crypto Stack', description: 'Bitcoin, Lightning, Monero y más.', icon: Bitcoin, color: '#f7931a', path: '/crypto' },
+const LENSES: { id: LensId; label: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
+  { id: 'personal', label: 'Personal', icon: User },
+  { id: 'facturacion', label: 'Facturación', icon: Receipt },
 ];
 
 export function Component() {
-  const navigate = useNavigate();
-  const { status, loading, fetchStatus } = useFinanceStore();
-
-  useEffect(() => { void fetchStatus(); }, [fetchStatus]);
-
-  const appState = (name: FinanceAppName | 'crypto') => {
-    if (name === 'crypto') return null;
-    return status?.apps.find((a) => a.name === name) ?? null;
-  };
+  const [params, setParams] = useSearchParams();
+  const { loading } = useFinanceStore();
+  const rawTab = params.get('tab');
+  const lens: LensId = rawTab === 'facturacion' ? 'facturacion' : 'personal';
+  const setLens = (id: LensId) => setParams((p) => { p.set('tab', id); return p; }, { replace: true });
 
   return (
-    <div style={{ position: 'absolute', inset: 0, overflow: 'auto', padding: 24, background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-        <Wallet size={20} style={{ color: 'var(--mod-finance)' }} />
-        <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Finance</h1>
-        {loading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />}
-      </div>
-      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, marginBottom: 24 }}>
-        Suite financiera self-hosted. Cada app corre como servicio gestionado y se embebe en el dash.
-      </p>
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Wallet size={20} style={{ color: 'var(--mod-finance)' }} />
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Finance</h1>
+          {loading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />}
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-        {CARDS.map((card) => {
-          const st = appState(card.name);
-          const running = st?.running ?? false;
-          const installed = st?.installed ?? false;
-          const Icon = card.icon;
-          const statusLabel = card.name === 'crypto'
-            ? 'Stack'
-            : running ? 'En marcha' : installed ? 'Detenida' : 'Sin instalar';
-          const statusColor = card.name === 'crypto'
-            ? 'var(--text-muted)'
-            : running ? 'var(--green, #22c55e)' : installed ? 'var(--amber)' : 'var(--text-muted)';
-          return (
-            <button
-              key={card.name}
-              onClick={() => navigate(card.path)}
-              aria-label={`Abrir ${card.label}`}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = card.color; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-              style={{
-                textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-lg, 12px)', padding: 18, cursor: 'pointer',
-                display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 0.15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', background: `${card.color}1a`,
-                }}>
-                  <Icon size={20} style={{ color: card.color }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{card.label}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: statusColor }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor }} />
-                    {statusLabel}
-                    {st?.ram_mb != null && <span style={{ color: 'var(--text-muted)' }}>· {st.ram_mb} MB</span>}
-                  </div>
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0, lineHeight: 1.5 }}>{card.description}</p>
-            </button>
-          );
-        })}
+        {/* Selector de LENTE — control segmentado prominente (pills) */}
+        <div
+          role="tablist"
+          aria-label="Lente financiera"
+          style={{
+            display: 'inline-flex',
+            gap: 4,
+            marginLeft: 6,
+            padding: 4,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg, 12px)',
+          }}
+        >
+          {LENSES.map((l) => {
+            const isActive = l.id === lens;
+            const Icon = l.icon;
+            return (
+              <button
+                key={l.id}
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setLens(l.id)}
+                onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--surface-hover)'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '7px 16px',
+                  border: 'none',
+                  borderRadius: 'var(--radius-md, 8px)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  background: isActive ? 'var(--mod-finance)' : 'transparent',
+                  color: isActive ? '#fff' : 'var(--text-muted)',
+                  boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.18)' : 'none',
+                  transition: 'background 0.15s ease, color 0.15s ease',
+                }}
+              >
+                <Icon size={16} />
+                {l.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {lens === 'personal' && <PersonalLens />}
+        {lens === 'facturacion' && <FacturacionLens />}
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
