@@ -28,6 +28,7 @@ import {
   PackageX,
   Gauge,
   Check,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -64,14 +65,15 @@ type TimelineEntry =
   | { kind: 'warranty'; id: string; date: string };
 
 const EVENT_DOT_COLORS: Record<string, string> = {
-  acquired: '#10b981',
-  returned: '#10b981',
-  lent: '#f97316',
-  maintenance: '#3b82f6',
+  acquired: 'var(--success)',
+  returned: 'var(--success)',
+  lent: 'var(--warning)',
+  maintenance: '#3b82f6', // sin token azul en el sistema de diseño
   repair: '#3b82f6',
-  moved: '#6b7280',
-  disposed: '#f43f5e',
+  moved: 'var(--text-muted)',
+  disposed: 'var(--error)',
 };
+const DOT_FALLBACK = 'var(--text-muted)';
 
 const btnSecondary: CSSProperties = {
   background: 'transparent',
@@ -134,6 +136,44 @@ function fmtDate(date: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return date;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+interface EditCoreForm {
+  name: string;
+  category: string;
+  brand: string;
+  model: string;
+  serial_number: string;
+  purchase_date: string;
+  purchase_price: string;
+  warranty_until: string;
+}
+
+const EMPTY_EDIT_FORM: EditCoreForm = {
+  name: '', category: '', brand: '', model: '', serial_number: '', purchase_date: '', purchase_price: '', warranty_until: '',
+};
+
+/** Una fecha ISO del backend → valor para <input type="date"> (YYYY-MM-DD). */
+function toDateInput(v: string | null | undefined): string {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return typeof v === 'string' ? v.slice(0, 10) : '';
+  return d.toISOString().slice(0, 10);
+}
+
+function buildEditForm(item: InventoryItem): EditCoreForm {
+  return {
+    name: item.name ?? '',
+    category: item.category ?? '',
+    brand: item.brand ?? '',
+    model: item.model ?? '',
+    serial_number: item.serial_number ?? '',
+    purchase_date: toDateInput(item.purchase_date),
+    purchase_price: item.purchase_price != null ? String(parseFloat(item.purchase_price)) : '',
+    warranty_until: toDateInput(item.warranty_until),
+  };
+}
+
+const editLabelStyle: CSSProperties = { fontSize: '0.6875rem', color: 'var(--text-dim)', marginBottom: 3, display: 'block' };
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
@@ -201,6 +241,13 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
   // Local UI state
   const [panel, setPanel] = useState<ActionPanel>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // Edición de campos core (nombre/categoría/marca/modelo/serial/compra/garantía).
+  // Antes no había forma de editarlos tras crear el item; updateItem ya soporta
+  // cualquier campo, así que el drawer es el lugar natural.
+  const [editMode, setEditMode] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState<EditCoreForm>(EMPTY_EDIT_FORM);
   const [qtyDraft, setQtyDraft] = useState('');
   const [fieldsDraft, setFieldsDraft] = useState<Record<string, unknown>>({});
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -329,6 +376,46 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
   const handleUpdate = async (body: Record<string, unknown>) => {
     const updated = await updateItem(itemId, body);
     if (!storeItem) setFetched(updated);
+  };
+
+  const openEdit = () => {
+    if (!item) return;
+    setEditForm(buildEditForm(item));
+    setEditMode(true);
+  };
+
+  const saveEdit = async () => {
+    if (!item) return;
+    const name = editForm.name.trim();
+    if (!name) {
+      toast.error('Name is required');
+      return;
+    }
+    const body: Record<string, unknown> = {
+      name,
+      category: editForm.category.trim() || null,
+      brand: editForm.brand.trim() || null,
+      model: editForm.model.trim() || null,
+      serial_number: editForm.serial_number.trim() || null,
+      purchase_date: editForm.purchase_date || null,
+      warranty_until: editForm.warranty_until || null,
+    };
+    if (editForm.purchase_price.trim() === '') {
+      body.purchase_price = null;
+    } else {
+      const p = parseFloat(editForm.purchase_price);
+      if (Number.isFinite(p)) body.purchase_price = p;
+    }
+    setEditSaving(true);
+    try {
+      await handleUpdate(body);
+      toast.success('Item updated');
+      setEditMode(false);
+    } catch {
+      toast.error('Failed to update item');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleTagsChange = (next: string[]) => {
@@ -531,6 +618,8 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
 
   return (
     <div
+      role="dialog"
+      aria-label={item ? `Item: ${item.name}` : 'Item details'}
       style={{
         width: 400,
         maxWidth: '40%',
@@ -665,6 +754,19 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                 status={STATUS_PILL_MAP[item.status] ?? 'stopped'}
                 label={SYSTEM_STATUS_LABELS[item.status] ?? item.status}
               />
+              {!readOnly && !editMode && (
+                <button
+                  onClick={openEdit}
+                  title="Edit item"
+                  aria-label="Edit item"
+                  style={{
+                    marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--text-dim)',
+                    cursor: 'pointer', padding: 4, display: 'inline-flex', alignItems: 'center', borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
               {[
@@ -676,6 +778,61 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                 .join(' · ') || '—'}
             </div>
           </div>
+
+          {/* 2b. Edit core fields */}
+          {!readOnly && editMode && (
+            <div style={{ ...cardStyle, gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={sectionLabel}>Edit item</span>
+              </div>
+              <div>
+                <label style={editLabelStyle}>Name *</label>
+                <input
+                  style={inputStyle}
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  aria-label="Item name"
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={editLabelStyle}>Category</label>
+                  <input style={inputStyle} value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Serial number</label>
+                  <input style={inputStyle} value={editForm.serial_number} onChange={e => setEditForm(f => ({ ...f, serial_number: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Brand</label>
+                  <input style={inputStyle} value={editForm.brand} onChange={e => setEditForm(f => ({ ...f, brand: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Model</label>
+                  <input style={inputStyle} value={editForm.model} onChange={e => setEditForm(f => ({ ...f, model: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Purchase date</label>
+                  <input style={inputStyle} type="date" value={editForm.purchase_date} onChange={e => setEditForm(f => ({ ...f, purchase_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Purchase price</label>
+                  <input style={inputStyle} type="number" min="0" step="0.01" value={editForm.purchase_price} onChange={e => setEditForm(f => ({ ...f, purchase_price: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Warranty until</label>
+                  <input style={inputStyle} type="date" value={editForm.warranty_until} onChange={e => setEditForm(f => ({ ...f, warranty_until: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button style={btnSecondary} disabled={editSaving} onClick={() => setEditMode(false)}>Cancel</button>
+                <button style={{ ...btnPrimary, opacity: editSaving ? 0.6 : 1 }} disabled={editSaving} onClick={() => void saveEdit()}>
+                  {editSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 3. Purchase / warranty */}
           <div style={cardStyle}>
@@ -693,8 +850,8 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                       padding: '2px 8px',
                       borderRadius: 'var(--radius-sm)',
                       background:
-                        warrantyDays < 0 ? '#f43f5e20' : warrantyDays < 90 ? '#f59e0b20' : 'var(--surface)',
-                      color: warrantyDays < 0 ? '#f43f5e' : warrantyDays < 90 ? 'var(--amber)' : 'var(--text-dim)',
+                        warrantyDays < 0 ? 'color-mix(in srgb, var(--error) 13%, transparent)' : warrantyDays < 90 ? 'color-mix(in srgb, var(--amber) 16%, transparent)' : 'var(--surface)',
+                      color: warrantyDays < 0 ? 'var(--error)' : warrantyDays < 90 ? 'var(--amber)' : 'var(--text-dim)',
                     }}
                   >
                     {warrantyDays < 0 ? `expired ${Math.abs(warrantyDays)}d ago` : `${warrantyDays}d left`}
@@ -859,11 +1016,11 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
             <div
               style={{
                 ...cardStyle,
-                background: 'rgba(249, 115, 22, 0.08)',
-                border: '1px solid rgba(249, 115, 22, 0.35)',
+                background: 'color-mix(in srgb, var(--warning) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)',
               }}
             >
-              <div style={{ fontSize: '0.8125rem', color: '#f97316', fontWeight: 600 }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--warning)', fontWeight: 600 }}>
                 Lent{lentDays !== null ? ` · ${lentDays} days` : ''}
               </div>
               {item.lent_until && (
@@ -931,9 +1088,9 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
               <button
                 style={{
                   ...btnSecondary,
-                  border: '1px solid #f43f5e',
-                  color: '#f43f5e',
-                  ...(deleteArmed ? { background: '#f43f5e20' } : {}),
+                  border: '1px solid var(--error)',
+                  color: 'var(--error)',
+                  ...(deleteArmed ? { background: 'color-mix(in srgb, var(--error) 13%, transparent)' } : {}),
                 }}
                 onClick={() => void handleDelete()}
               >
@@ -1221,7 +1378,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                             borderRadius: '50%',
                             marginTop: 5,
                             flexShrink: 0,
-                            background: '#10b981',
+                            background: 'var(--success)',
                           }}
                         />
                         <span style={{ fontSize: '0.75rem', color: 'var(--text)' }}>
@@ -1270,8 +1427,8 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                                 fontWeight: 600,
                                 padding: '1px 6px',
                                 borderRadius: 'var(--radius-sm)',
-                                background: upcoming ? '#f59e0b20' : '#f43f5e20',
-                                color: upcoming ? 'var(--amber)' : '#f43f5e',
+                                background: upcoming ? 'color-mix(in srgb, var(--amber) 16%, transparent)' : 'color-mix(in srgb, var(--error) 13%, transparent)',
+                                color: upcoming ? 'var(--amber)' : 'var(--error)',
                               }}
                             >
                               {upcoming ? `${warrantyDays}d left` : 'expired'}
@@ -1301,7 +1458,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                             marginTop: 6,
                             marginLeft: 1,
                             flexShrink: 0,
-                            background: '#6b7280',
+                            background: 'var(--text-muted)',
                           }}
                         />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -1326,7 +1483,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                           borderRadius: '50%',
                           marginTop: 5,
                           flexShrink: 0,
-                          background: EVENT_DOT_COLORS[ev.type] ?? '#6b7280',
+                          background: EVENT_DOT_COLORS[ev.type] ?? DOT_FALLBACK,
                         }}
                       />
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
