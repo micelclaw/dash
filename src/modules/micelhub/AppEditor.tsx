@@ -148,7 +148,7 @@ export function AppEditor({ app, onBack }: AppEditorProps) {
     setTabs(prev => {
       const next = prev.filter(t => t.filepath !== filepath);
       if (activeTab === filepath) {
-        setActiveTab(next.length > 0 ? next[next.length - 1].filepath : null);
+        setActiveTab(next.length > 0 ? (next[next.length - 1]?.filepath ?? null) : null);
       }
       return next;
     });
