@@ -48,7 +48,8 @@ function scheduleLabel(flow: Flow): string {
     return 'Scheduled';
   }
   if (flow.trigger_type === 'event') return 'On event';
-  if (flow.trigger_type === 'sensor') return 'Sensor';
+  if (flow.trigger_type === 'webhook') return 'Webhook';
+  if (flow.trigger_type === 'context') return 'On context';
   return flow.trigger_type;
 }
 
