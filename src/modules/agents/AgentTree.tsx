@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState, useCallback, useRef } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer2 } from 'lucide-react';
 import { AgentTreeNode } from './AgentTreeNode';
 import { AgentDetail } from './AgentDetail';
 import type { ManagedAgent } from './types';
@@ -308,6 +308,42 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
     };
   }, [agents, collapsed]);
 
+  // Zoom centrado en el viewport (para los botones +/−): mantiene el punto
+  // central a la vista al cambiar la escala.
+  const setZoomCentered = useCallback((updater: (z: number) => number) => {
+    const container = containerRef.current;
+    setZoom(prev => {
+      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, updater(prev)));
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const cx = (container.scrollLeft + rect.width / 2) / prev;
+        const cy = (container.scrollTop + rect.height / 2) / prev;
+        requestAnimationFrame(() => {
+          container.scrollLeft = cx * newZoom - rect.width / 2;
+          container.scrollTop = cy * newZoom - rect.height / 2;
+        });
+      }
+      return newZoom;
+    });
+  }, []);
+
+  // Ajustar todo el árbol al viewport ("fit to view") y centrarlo.
+  const fitToView = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const padding = 64;
+    const z = Math.min(
+      MAX_ZOOM,
+      Math.max(MIN_ZOOM, Math.min((rect.width - padding) / svgWidth, (rect.height - padding) / svgHeight)),
+    );
+    setZoom(z);
+    requestAnimationFrame(() => {
+      container.scrollLeft = Math.max(0, (svgWidth * z - rect.width) / 2);
+      container.scrollTop = 0;
+    });
+  }, [svgWidth, svgHeight]);
+
   const showDetail = selectedId && selectedId !== 'owner';
 
   // Mobile: fullscreen detail view with back button
@@ -370,7 +406,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
           position: 'relative',
         }}
       >
-        {/* Zoom indicator */}
+        {/* Controles de zoom + hint de interacción */}
         <div style={{
           position: 'sticky',
           top: 0,
@@ -378,21 +414,57 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
           zIndex: 10,
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 10,
           marginBottom: 16,
           pointerEvents: 'none',
         }}>
-          <span style={{
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
             background: 'var(--surface)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '3px 8px',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-lg)',
+            padding: 3,
             pointerEvents: 'auto',
             userSelect: 'none',
           }}>
-            {Math.round(zoom * 100)}%
+            <ZoomBtn title="Alejar" onClick={() => setZoomCentered(z => z - ZOOM_STEP * 2)} disabled={zoom <= MIN_ZOOM + 0.001}>
+              <ZoomOut size={14} />
+            </ZoomBtn>
+            <button
+              onClick={() => setZoomCentered(() => 1)}
+              title="Restablecer al 100%"
+              style={{
+                minWidth: 46, textAlign: 'center',
+                background: 'transparent', border: 'none', color: 'var(--text)',
+                fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)',
+                cursor: 'pointer', padding: '4px 2px',
+              }}
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <ZoomBtn title="Acercar" onClick={() => setZoomCentered(z => z + ZOOM_STEP * 2)} disabled={zoom >= MAX_ZOOM - 0.001}>
+              <ZoomIn size={14} />
+            </ZoomBtn>
+            <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
+            <ZoomBtn title="Ajustar a la vista" onClick={fitToView}>
+              <Maximize2 size={13} />
+            </ZoomBtn>
+            <ZoomBtn title="Restablecer al 100%" onClick={() => setZoomCentered(() => 1)}>
+              <RotateCcw size={13} />
+            </ZoomBtn>
+          </div>
+          <span style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontSize: '0.6875rem', color: 'var(--text-muted)',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)', padding: '4px 9px',
+            pointerEvents: 'auto', userSelect: 'none',
+          }}>
+            <MousePointer2 size={11} />
+            Rueda para zoom · arrastra las barras para moverte
           </span>
         </div>
 
@@ -477,5 +549,30 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Botón de la barra de zoom ────────────────────────────────────
+
+function ZoomBtn({ onClick, title, disabled, children }: {
+  onClick: () => void; title: string; disabled?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 28, height: 26, background: 'transparent', border: 'none',
+        borderRadius: 'var(--radius-sm)', color: disabled ? 'var(--text-muted)' : 'var(--text-dim)',
+        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+        transition: 'var(--transition-fast)',
+      }}
+      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = 'var(--surface-hover)'; e.currentTarget.style.color = 'var(--text)'; } }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = disabled ? 'var(--text-muted)' : 'var(--text-dim)'; }}
+    >
+      {children}
+    </button>
   );
 }
