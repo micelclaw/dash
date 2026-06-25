@@ -19,6 +19,8 @@ import { TagInput } from '@/components/shared/TagInput';
 import { AutomationEditor } from './AutomationEditor';
 import { BOARD_COLOR_PRESETS, BOARD_VIEW_OPTIONS } from '../utils/board-options';
 import { BACKGROUND_TEXTURES } from '@/config/backgrounds';
+import { isLightThemeId } from '@/hooks/use-theme';
+import { useSettingsStore } from '@/stores/settings.store';
 import type { BoardSettings as BoardSettingsType } from '../types';
 
 interface BoardSettingsProps {
@@ -37,6 +39,8 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
   const boards = useProjectsStore((s) => s.boards);
   const activeBoard = boards.find(b => b.id === boardId);
   const boardSettings = activeBoard?.settings ?? {} as BoardSettingsType;
+  // Las texturas se filtran por el tema del dash (los boards heredan el tema).
+  const dashTheme = useSettingsStore((s) => s.settings?.dash?.theme ?? 'dark');
 
   const [tab, setTab] = useState<'general' | 'display' | 'automations' | 'danger'>('general');
   const [title, setTitle] = useState(activeBoardTitle || '');
@@ -261,7 +265,9 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
                 </div>
                 {/* Bundled textures (same gallery as Settings → Dash → Background) */}
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                  {BACKGROUND_TEXTURES.map((t) => {
+                  {BACKGROUND_TEXTURES
+                    .filter((t) => t.theme === (isLightThemeId(dashTheme) ? 'light' : 'dark'))
+                    .map((t) => {
                     const isActive = boardSettings.background?.type === 'image' && boardSettings.background.value === t.file;
                     return (
                       <button
