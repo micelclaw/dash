@@ -54,7 +54,15 @@ export function RunProgress({ run, flowSteps, onApprove, onReject }: RunProgress
       {/* Steps */}
       {flowSteps.map((step, i) => {
         const result = stepResults.find((sr) => sr.step_id === step.id);
-        const status = result?.status ?? (i < run.steps_completed ? 'completed' : run.current_step_id === step.id ? 'running' : 'pending');
+        // Prefer the real per-step result. Only fall back to the index
+        // heuristic when there are NO per-step results yet (run just
+        // started) — otherwise a step absent from a populated step_results
+        // list was skipped (false condition) and must NOT be painted
+        // "completed" just because its index is below steps_completed.
+        const status = result?.status
+          ?? (run.current_step_id === step.id ? 'running'
+            : stepResults.length === 0 && i < run.steps_completed ? 'completed'
+            : 'pending');
         const config = STEP_ICONS[status] ?? STEP_ICONS.pending;
         const Icon = config.icon;
 

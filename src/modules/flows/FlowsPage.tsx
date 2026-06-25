@@ -11,13 +11,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Plus, Workflow, CheckCircle2, Clock } from 'lucide-react';
 import { useFlowsStore } from '@/stores/flows.store';
 import { FlowCardGrid, FlowCardList, FlowCardBanner } from './components/FlowCard';
 import { ViewModeToggle } from './components/ViewModeToggle';
 import { TemplateGallery } from './components/TemplateGallery';
-import { TemplateWizard } from './components/TemplateWizard';
+import { TemplateWizard, type TemplateData } from './components/TemplateWizard';
 import { RunHistory } from './components/RunHistory';
 import { GlobalStats } from './components/GlobalStats';
 import { toast } from 'sonner';
@@ -26,20 +26,31 @@ export function Component() {
   const navigate = useNavigate();
   const flows = useFlowsStore((s) => s.flows);
   const pendingRuns = useFlowsStore((s) => s.pendingRuns);
+  const recentRunsByFlow = useFlowsStore((s) => s.recentRunsByFlow);
   const loading = useFlowsStore((s) => s.loading);
   const viewMode = useFlowsStore((s) => s.viewMode);
   const fetchFlows = useFlowsStore((s) => s.fetchFlows);
   const fetchPendingRuns = useFlowsStore((s) => s.fetchPendingRuns);
+  const fetchRecentRuns = useFlowsStore((s) => s.fetchRecentRuns);
   const approveRun = useFlowsStore((s) => s.approveRun);
   const rejectRun = useFlowsStore((s) => s.rejectRun);
 
-  const [tab, setTab] = useState<'flows' | 'templates' | 'history'>('flows');
-  const [wizardTemplate, setWizardTemplate] = useState<any>(null);
+  const [searchParams] = useSearchParams();
+  const runParam = searchParams.get('run');
+  const [tab, setTab] = useState<'flows' | 'templates' | 'history'>(runParam ? 'history' : 'flows');
+  const [wizardTemplate, setWizardTemplate] = useState<TemplateData | null>(null);
 
   useEffect(() => {
     fetchFlows();
     fetchPendingRuns();
-  }, [fetchFlows, fetchPendingRuns]);
+    fetchRecentRuns();
+  }, [fetchFlows, fetchPendingRuns, fetchRecentRuns]);
+
+  // A run chip (chat) deep-links to /flows?run=<id> → open History and let
+  // RunHistory expand that run.
+  useEffect(() => {
+    if (runParam) setTab('history');
+  }, [runParam]);
 
   // Cross-tab sync for the viewMode preference. Without this, changing
   // grid/list/banner in one tab doesn't propagate to others (the value
@@ -195,17 +206,17 @@ export function Component() {
                 </div>
                 {viewMode === 'grid' && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 12 }}>
-                    {activeFlows.map((f) => <FlowCardGrid key={f.id} flow={f} recentRuns={[]} />)}
+                    {activeFlows.map((f) => <FlowCardGrid key={f.id} flow={f} recentRuns={recentRunsByFlow[f.id] ?? []} />)}
                   </div>
                 )}
                 {viewMode === 'list' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {activeFlows.map((f) => <FlowCardList key={f.id} flow={f} recentRuns={[]} />)}
+                    {activeFlows.map((f) => <FlowCardList key={f.id} flow={f} recentRuns={recentRunsByFlow[f.id] ?? []} />)}
                   </div>
                 )}
                 {viewMode === 'banner' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {activeFlows.map((f) => <FlowCardBanner key={f.id} flow={f} recentRuns={[]} />)}
+                    {activeFlows.map((f) => <FlowCardBanner key={f.id} flow={f} recentRuns={recentRunsByFlow[f.id] ?? []} />)}
                   </div>
                 )}
               </div>
@@ -218,7 +229,7 @@ export function Component() {
                   Disabled ({disabledFlows.length})
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {disabledFlows.map((f) => <FlowCardList key={f.id} flow={f} recentRuns={[]} />)}
+                  {disabledFlows.map((f) => <FlowCardList key={f.id} flow={f} recentRuns={recentRunsByFlow[f.id] ?? []} />)}
                 </div>
               </div>
             )}
@@ -226,7 +237,10 @@ export function Component() {
         )}
 
         {tab === 'templates' && (
-          <TemplateGallery onSelect={(t) => setWizardTemplate(t)} />
+          // TemplateGallery's local type is narrower than the runtime payload
+          // (which DOES carry trigger_type/trigger_config/steps from
+          // /flows/templates/built-in); cast at the boundary.
+          <TemplateGallery onSelect={(t) => setWizardTemplate(t as unknown as TemplateData)} />
         )}
 
         {/* Template wizard modal */}
@@ -238,7 +252,7 @@ export function Component() {
         )}
 
         {tab === 'history' && (
-          <RunHistory />
+          <RunHistory highlightRunId={runParam ?? undefined} />
         )}
       </div>
     </div>

@@ -117,11 +117,17 @@ interface FlowsState {
   templates: Flow[];
   stepTypes: StepTypeDefinition[];
   pendingRuns: FlowRun[];
+  /** Recent run statuses per flow id (chronological), for the list sparkline. */
+  recentRunsByFlow: Record<string, Array<{ status: string }>>;
+  /** Bumped on every workflow.* WS event so open views (the editor) can
+   *  re-poll the active run immediately instead of waiting for the next tick. */
+  runEventTick: number;
   loading: boolean;
   viewMode: ViewMode;
 
   // Actions
   fetchFlows: () => Promise<void>;
+  fetchRecentRuns: () => Promise<void>;
   fetchTemplates: () => Promise<void>;
   fetchStepTypes: () => Promise<void>;
   fetchPendingRuns: () => Promise<void>;
@@ -153,6 +159,8 @@ export const useFlowsStore = create<FlowsState>()((set, get) => ({
   templates: [],
   stepTypes: [],
   pendingRuns: [],
+  recentRunsByFlow: {},
+  runEventTick: 0,
   loading: false,
   viewMode: (localStorage.getItem('flows-view-mode') as ViewMode) || 'grid',
 
@@ -164,6 +172,19 @@ export const useFlowsStore = create<FlowsState>()((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  // Global run history → per-flow recent statuses for the card sparkline.
+  // Without this the cards rendered an empty `recentRuns={[]}` (dead feature).
+  fetchRecentRuns: async () => {
+    const res = await api.get<ApiList<FlowRun>>('/flows/runs?limit=200');
+    const byFlow: Record<string, Array<{ status: string }>> = {};
+    // Endpoint returns newest-first; build per-flow lists oldest-first so the
+    // Sparkline's `slice(-10)` shows the most recent runs.
+    for (const run of (res?.data ?? []).slice().reverse()) {
+      (byFlow[run.flow_id] ??= []).push({ status: run.status });
+    }
+    set({ recentRunsByFlow: byFlow });
   },
 
   fetchTemplates: async () => {
@@ -245,18 +266,24 @@ export const useFlowsStore = create<FlowsState>()((set, get) => ({
   // WS event handlers
   onWorkflowStarted: (_data) => {
     get().fetchFlows();
+    set((s) => ({ runEventTick: s.runEventTick + 1 }));
   },
 
   onWorkflowCompleted: (_data) => {
     get().fetchFlows();
     get().fetchPendingRuns();
+    get().fetchRecentRuns();
+    set((s) => ({ runEventTick: s.runEventTick + 1 }));
   },
 
   onWorkflowFailed: (_data) => {
     get().fetchFlows();
+    get().fetchRecentRuns();
+    set((s) => ({ runEventTick: s.runEventTick + 1 }));
   },
 
   onWorkflowNeedsApproval: (_data) => {
     get().fetchPendingRuns();
+    set((s) => ({ runEventTick: s.runEventTick + 1 }));
   },
 }));

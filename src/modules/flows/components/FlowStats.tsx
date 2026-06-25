@@ -19,10 +19,13 @@ export function FlowStats({ flowId, flowName, flowColor }: FlowStatsProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     fetchStats(flowId)
-      .then(setStats)
-      .catch((err) => { console.warn('flows: failed to load flow stats', err); })
-      .finally(() => setLoading(false));
+      .then((s) => { if (!cancelled) setStats(s); })
+      .catch((err) => { if (!cancelled) console.warn('flows: failed to load flow stats', err); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [flowId, fetchStats]);
 
   if (loading) return <div style={{ color: 'var(--text-dim)', fontSize: 13, padding: 20 }}>Loading stats...</div>;

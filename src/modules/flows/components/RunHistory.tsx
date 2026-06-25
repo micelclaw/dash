@@ -4,8 +4,8 @@
  */
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, XCircle, Clock, Loader2, Ban } from 'lucide-react';
-import { useFlowsStore, type FlowRun, type Flow } from '@/stores/flows.store';
+import { CheckCircle2, XCircle, Clock, Loader2, Ban, Circle } from 'lucide-react';
+import { useFlowsStore, type FlowRun } from '@/stores/flows.store';
 import { api } from '@/services/api';
 
 const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; label: string }> = {
@@ -17,18 +17,28 @@ const STATUS_CONFIG: Record<string, { icon: typeof CheckCircle2; color: string; 
   waiting_approval: { icon: Clock, color: 'var(--amber)', label: 'Waiting' },
   cancelled: { icon: Ban, color: 'var(--text-muted)', label: 'Cancelled' },
   queued: { icon: Clock, color: 'var(--text-muted)', label: 'Queued' },
+  interrupted: { icon: Ban, color: 'var(--text-muted)', label: 'Interrupted' },
+  // Neutral fallback — never mislabel an unknown status as "Cancelled".
+  unknown: { icon: Circle, color: 'var(--text-muted)', label: 'Unknown' },
 };
 
 interface RunHistoryProps {
   flowId?: string; // if provided, show runs for this flow only
+  /** Run id to auto-expand (deep-link from a chat `flow_run` chip → /flows?run=). */
+  highlightRunId?: string;
 }
 
-export function RunHistory({ flowId }: RunHistoryProps) {
+export function RunHistory({ flowId, highlightRunId }: RunHistoryProps) {
   const flows = useFlowsStore((s) => s.flows);
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [expandedRun, setExpandedRun] = useState<string | null>(highlightRunId ?? null);
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
+
+  // Deep-link: expand the highlighted run when the param arrives/changes.
+  useEffect(() => {
+    if (highlightRunId) setExpandedRun(highlightRunId);
+  }, [highlightRunId]);
 
   useEffect(() => {
     setLoading(true);
@@ -36,16 +46,25 @@ export function RunHistory({ flowId }: RunHistoryProps) {
     // (Earlier this fell back to /flows/pending which returns only
     // waiting_approval runs — that hid the real history from users.)
     const path = flowId ? `/flows/${flowId}/runs?limit=30` : '/flows/runs?limit=100';
+    let cancelled = false;
     api.get<{ data: FlowRun[] }>(path)
-      .then((res) => setRuns(res.data ?? []))
+      .then((res) => { if (!cancelled) setRuns(res.data ?? []); })
       .catch((err) => {
-        console.error('Failed to load run history', err);
+        if (!cancelled) console.error('Failed to load run history', err);
       })
-      .finally(() => setLoading(false));
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [flowId]);
 
   const getFlowName = (fid: string): string => {
     return flows.find((f) => f.id === fid)?.name ?? 'Flow';
+  };
+
+  // Resolve a step id (e.g. "s2") to its human label via the owning flow's
+  // step list — shows "Send email" instead of the opaque internal id.
+  const getStepLabel = (fid: string, stepId: string): string => {
+    const step = flows.find((f) => f.id === fid)?.steps?.find((s) => s.id === stepId);
+    return step?.label || step?.type || stepId;
   };
 
   if (loading) {
@@ -59,7 +78,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {runs.map((run) => {
-        const config = STATUS_CONFIG[run.status] ?? STATUS_CONFIG.cancelled;
+        const config = STATUS_CONFIG[run.status] ?? STATUS_CONFIG.unknown;
         const Icon = config.icon;
         const isExpanded = expandedRun === run.id;
 
@@ -108,7 +127,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
                 {Array.isArray(run.step_results) && (run.step_results as Array<Record<string, unknown>>).length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {(run.step_results as Array<{ step_id: string; status: string; output_summary?: string; duration_ms?: number; error?: string; output?: unknown; tokens_used?: number }>).map((sr, i) => {
-                      const stepConfig = STATUS_CONFIG[sr.status] ?? STATUS_CONFIG.cancelled;
+                      const stepConfig = STATUS_CONFIG[sr.status] ?? STATUS_CONFIG.unknown;
                       const StepIcon = stepConfig.icon;
                       const stepKey = `${run.id}:${sr.step_id}`;
                       const stepOpen = expandedStep === stepKey;
@@ -120,7 +139,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
                             style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: hasDetail ? 'pointer' : 'default' }}
                           >
                             <StepIcon size={11} style={{ color: stepConfig.color }} />
-                            <span style={{ color: 'var(--text)' }}>Step {sr.step_id}</span>
+                            <span style={{ color: 'var(--text)' }}>{getStepLabel(run.flow_id, sr.step_id)}</span>
                             {sr.output_summary && <span style={{ color: 'var(--text-dim)' }}>— {sr.output_summary}</span>}
                             {sr.duration_ms != null && <span style={{ color: 'var(--text-muted)', marginLeft: 'auto' }}>{sr.duration_ms}ms</span>}
                             {sr.error && <span style={{ color: 'var(--error)' }}>— {sr.error}</span>}
