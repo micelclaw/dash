@@ -14,13 +14,34 @@ import { api } from './api';
 
 export interface UserAppAccessState {
   is_admin: boolean;
-  apps: { key: string; allowed: boolean; group_allowed?: boolean }[];
+  // `label` viene para las apps dinámicas (instaladas vía MicelHub), que no están
+  // en el catálogo estático del dash. Para las estáticas el dash usa su catálogo.
+  apps: { key: string; label?: string; allowed: boolean; group_allowed?: boolean }[];
+}
+
+/** Módulo dinámico de una app L3 instalada (servido por Core como iframe). */
+export interface UiModule {
+  id: string;          // = app_key (gobierna el gating del sidebar)
+  app_name: string;
+  label: string;
+  icon: string;        // nombre Lucide → lucideLookup() lo resuelve a componente
+  color: string | null;
+  path: string;
+  group: string | null;
+  order_after: string | null;
+  iframe_url: string;
 }
 
 /** Apps que el usuario actual puede ver (para el gating del dash). */
 export async function getMyAppAccess(): Promise<string[]> {
   const res = await api.get<{ data: { allowed: string[] } }>('/me/app-access');
   return res.data.allowed;
+}
+
+/** Módulos dinámicos (apps L3 instaladas+activas+concedidas) visibles para el usuario. */
+export async function getMyUiModules(): Promise<UiModule[]> {
+  const res = await api.get<{ data: UiModule[] }>('/me/ui-modules');
+  return res.data;
 }
 
 /** Estado por app opt_in de un usuario (admin) — para la matriz de permisos. */
