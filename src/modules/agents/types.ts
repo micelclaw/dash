@@ -31,6 +31,36 @@ export interface ManagedAgent {
   created_at: string;
 }
 
+/**
+ * Datos en vivo agregados de `GET /managed-agents/:id/live-info`.
+ * Alimentan la tarjeta "Actividad en vivo" del Overview. Solo lectura.
+ */
+export interface AgentLiveInfo {
+  agent_id: string;
+  last_activity: {
+    type: string;
+    from_agent: string;
+    to_agent: string | null;
+    preview: string;
+    created_at: string;
+  } | null;
+  today: { messages: number; tokens: number; cost_usd: number };
+  tools_today: { tool: string; count: number }[];
+  recent_delegations: {
+    from_agent: string;
+    to_agent: string | null;
+    direction: 'incoming' | 'outgoing';
+    preview: string;
+    briefing: boolean;
+    created_at: string;
+  }[];
+  /** Tokens de sesión vigentes (≈ 1 por conversación no borrada), no liveness. */
+  session_tokens: number;
+  active_scopes: string[];
+  stuck_yields: { session_key: string; detected_at: string; aborted_children: unknown }[];
+  critical_events: { type: string; severity: string; created_at: string }[];
+}
+
 export interface AgentSkill {
   id: string;
   skill_id?: string;
