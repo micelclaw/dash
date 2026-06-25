@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Search, Link, Check, FileText, Calendar, Mail, User, Bookmark, File } from 'lucide-react';
+import { X, Search, Link, Check, FileText, Calendar, Mail, User, Bookmark, File, Package, Receipt, ArrowLeftRight } from 'lucide-react';
 import { api } from '@/services/api';
 import type { SearchResult } from '@/types/search';
 
@@ -32,6 +32,9 @@ const DOMAIN_TABS = [
   { id: 'email', label: 'Emails', icon: Mail },
   { id: 'contact', label: 'Contacts', icon: User },
   { id: 'file', label: 'Files', icon: File },
+  { id: 'inventory', label: 'Inventory', icon: Package },
+  { id: 'finance_document', label: 'Facturas', icon: Receipt },
+  { id: 'finance_journal_entry', label: 'Movimientos', icon: ArrowLeftRight },
 ];
 
 const DOMAIN_ICONS: Record<string, typeof FileText> = {
@@ -41,6 +44,10 @@ const DOMAIN_ICONS: Record<string, typeof FileText> = {
   contact: User,
   file: File,
   bookmark: Bookmark,
+  inventory: Package,
+  finance_document: Receipt,
+  finance_journal_entry: ArrowLeftRight,
+  finance_party: User,
 };
 
 function getResultTitle(result: SearchResult): string {
@@ -53,6 +60,10 @@ function getResultTitle(result: SearchResult): string {
     case 'email': return String(r.subject || '(no subject)');
     case 'file': return String(r.filename || 'Untitled');
     case 'diary': return String(r.entry_date || 'Diary entry');
+    case 'inventory': return String(r.name || 'Artículo');
+    case 'finance_document': return String(r.number || r.bill_to_name || 'Factura');
+    case 'finance_journal_entry': return String(r.description || 'Movimiento');
+    case 'finance_party': return String(r.name || 'Cliente');
     default: return String(r.title || r.name || 'Unknown');
   }
 }

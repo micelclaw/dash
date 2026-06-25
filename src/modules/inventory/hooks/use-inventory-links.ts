@@ -30,6 +30,9 @@ const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
   diary_entries: { endpoint: '/diary', titleField: 'entry_date' },
   kanban_card: { endpoint: '/projects/cards', titleField: 'title' },
   inventory_item: { endpoint: '/inventory/items', titleField: 'name' },
+  // Cruce con Facturación: una factura (recibida/emitida) que movió este artículo.
+  finance_document: { endpoint: '/finance/documents', titleField: 'number' },
+  finance_party: { endpoint: '/finance/parties', titleField: 'name' },
 };
 
 const ROUTE_MAP: Record<string, string> = {
@@ -42,9 +45,20 @@ const ROUTE_MAP: Record<string, string> = {
   kanban_card: '/projects',
 };
 
+// Etiqueta legible de la relación cross-dominio (la chip muestra esto de subtítulo).
+const RELATIONSHIP_LABEL: Record<string, string> = {
+  purchased_item: 'Comprado en esta factura',
+  sold_item: 'Vendido en esta factura',
+  billed_to: 'Facturado a',
+  billed_by: 'Facturado por',
+};
+
 function routeFor(domain: string, recordId: string): string {
   // The inventory drawer opens via store, not URL — route to the module only.
   if (domain === 'inventory_item') return '/inventory?tab=catalog';
+  // Facturación: deep-link a la factura / ficha del party en la lente.
+  if (domain === 'finance_document') return `/finance?tab=facturacion&doc=${recordId}`;
+  if (domain === 'finance_party') return `/finance?tab=facturacion&party=${recordId}`;
   return `${ROUTE_MAP[domain] || '/'}?id=${recordId}`;
 }
 
@@ -59,7 +73,7 @@ function resolveLink(link: EntityLink, currentId: string): LinkedRecord {
     record: {
       id: recordId,
       title: `${domain} record`,
-      subtitle: link.link_type,
+      subtitle: RELATIONSHIP_LABEL[link.relationship ?? ''] ?? (link.relationship || link.link_type),
       route: routeFor(domain, recordId),
     },
   };
@@ -122,7 +136,7 @@ async function enrichLinkedRecords(records: LinkedRecord[]): Promise<void> {
       const res = await api.get<{ data: Record<string, unknown> }>(`${config.endpoint}/${rec.record.id}`);
       const data = res.data;
       rec.record.title = String(data[config.titleField] || 'Unknown');
-      rec.record.subtitle = String(rec.link.relationship || rec.link.link_type || '');
+      rec.record.subtitle = RELATIONSHIP_LABEL[rec.link.relationship ?? ''] ?? String(rec.link.relationship || rec.link.link_type || '');
     } catch {
       // Record may have been deleted — keep the fallback
     }

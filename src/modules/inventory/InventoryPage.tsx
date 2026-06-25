@@ -31,7 +31,7 @@ export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = (searchParams.get('tab') as InventoryTab) || 'panel';
 
-  const { items, moves, alerts, fetchItems, fetchLocations, fetchAlerts, fetchMeta, fetchProposals, selectedItemId } = useInventoryStore();
+  const { items, moves, alerts, fetchItems, fetchLocations, fetchAlerts, fetchMeta, fetchProposals, selectedItemId, selectItem } = useInventoryStore();
 
   useEffect(() => {
     fetchMeta();
@@ -41,6 +41,21 @@ export function Component() {
     fetchProposals();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Deep-link ?id=<item> → abre la ficha del artículo (lo usan los chips del chat
+  // y los enlaces "Repuso en inventario" desde Facturación). El drawer carga el
+  // item por id aunque aún no esté en el store. Limpia el param al cerrar.
+  const idParam = searchParams.get('id');
+  useEffect(() => {
+    if (idParam && idParam !== selectedItemId) selectItem(idParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idParam]);
+  useEffect(() => {
+    if (!selectedItemId && idParam) {
+      setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete('id'); return n; }, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItemId]);
 
   // Sync bidireccional en vivo: si el estado de un item cambia desde el board
   // kanban (inventory.item.updated, emitido por kanban-sync) o lo muta un

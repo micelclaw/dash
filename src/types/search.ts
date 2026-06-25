@@ -14,7 +14,8 @@ export type SearchDomain =
   | 'note' | 'event' | 'contact' | 'email' | 'file' | 'photo' | 'diary'
   | 'conversation' | 'message' | 'bookmark' | 'inventory'
   | 'kanban_board' | 'kanban_card' | 'feed' | 'article'
-  | 'music' | 'video' | 'book';
+  | 'music' | 'video' | 'book'
+  | 'finance_document' | 'finance_journal_entry' | 'finance_party';
 
 export interface SearchResult {
   domain: SearchDomain;

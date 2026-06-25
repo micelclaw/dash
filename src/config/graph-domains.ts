@@ -43,7 +43,10 @@ export const GRAPH_RECORD_DOMAINS: GraphRecordDomain[] = [
   { type: 'file',        domain: 'files',         shape: 'triangle', color: '#84cc16' },
   { type: 'diary',       domain: 'diary_entries', shape: 'octagon',  color: '#f43f5e' },
   { type: 'kanban_card', domain: 'kanban_cards',  shape: 'hexagon',  color: '#f97316' },
-  { type: 'inventory',   domain: 'inventory',     shape: 'square',   color: '#d97706' }, // var(--mod-inventory)
+  { type: 'inventory',   domain: 'inventory_item', shape: 'square',   color: '#d97706' }, // var(--mod-inventory); slug entity_links = inventory_item
+  { type: 'finance_document',      domain: 'finance_document',      shape: 'diamond', color: '#16a34a' }, // Factura
+  { type: 'finance_journal_entry', domain: 'finance_journal_entry', shape: 'circle',  color: '#2563eb' }, // Movimiento personal
+  { type: 'finance_party',         domain: 'finance_party',         shape: 'hexagon', color: '#14b8a6' }, // Cliente / proveedor
 ];
 
 const BY_TYPE = new Map(GRAPH_RECORD_DOMAINS.map(d => [d.type, d]));
