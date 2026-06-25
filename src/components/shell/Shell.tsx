@@ -51,6 +51,7 @@ import { useGatewayStore } from '@/stores/gateway.store';
 import { useExtractionStore } from '@/stores/extraction.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import { useAppAccessStore } from '@/stores/app-access.store';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { AppAccessGate } from '@/components/shell/AppAccessGate';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
@@ -87,6 +88,7 @@ export function Shell() {
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
   const loadConfigSchema = useOpenclawSchemaStore((s) => s.loadConfigSchema);
   const refreshAppAccess = useAppAccessStore((s) => s.refresh);
+  const refreshUiModules = useUiModulesStore((s) => s.refresh);
 
   useEffect(() => {
     fetchSnapshot();
@@ -94,6 +96,9 @@ export function Shell() {
     // Rediseño NAS, Fase 1: cargar qué apps/módulos ve este usuario (gating del
     // Sidebar + router). Failures silenciosos → fail-open (ver app-access.store).
     void refreshAppAccess();
+    // Módulos dinámicos (apps L3 instaladas servidas por Core como iframe): el
+    // backend (/me/ui-modules) ya los filtra por instalada+activa+cargada+concedida.
+    void refreshUiModules();
     // Resolver de URLs de servicios por dominio (stirling.victor.claw en vez de
     // localhost:8081). Carga el catálogo una vez; failures silenciosos → respaldo.
     void useServiceUrlsStore.getState().load();
@@ -106,7 +111,7 @@ export function Shell() {
     // silently swallows errors (last-known value retained).
     const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
     return () => clearInterval(healthPoll);
-  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess]);
+  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess, refreshUiModules]);
 
   // G5: auto-resubscribe push idempotently. If permission is granted and
   // the browser still holds a sub but the backend has lost it (DB wipe,
@@ -760,8 +765,6 @@ export function Shell() {
       action: d.action,
     });
   }, [notificationEvent, addNotification]);
-
-  // Sensor fusion events RETIRADOS 2026-06-05 (módulo sensor-fusion eliminado).
 
   // ── Workflow events ──
   useEffect(() => {
