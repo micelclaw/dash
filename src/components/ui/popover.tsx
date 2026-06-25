@@ -32,7 +32,7 @@ const PopoverContent = React.forwardRef<
         zIndex: 'var(--z-dropdown)',
         width: '20rem',
         padding: '12px',
-        background: 'rgba(17, 17, 24, 0.92)',
+        background: 'var(--glass-92)',
         color: 'var(--text)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',

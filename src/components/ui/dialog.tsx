@@ -50,10 +50,12 @@ const DialogContent = React.forwardRef<
       )}
       style={{
         zIndex: 400,
-        background: '#1a1a24',
+        // Temada: en oscuro var(--card) === #1a1a24 (sin cambio), en claro/blush
+        // pasa a la superficie clara → el modal sigue el tema.
+        background: 'var(--card)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
-        boxShadow: '0 0 0 1px rgba(255,255,255,0.05), 0 25px 50px -12px rgba(0,0,0,0.7)',
+        boxShadow: '0 0 0 1px rgba(255,255,255,0.05), 0 25px 50px -12px rgba(0,0,0,0.4)',
         opacity: 1,
       }}
       {...props}

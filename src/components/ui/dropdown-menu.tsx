@@ -33,7 +33,7 @@ const DropdownMenuContent = React.forwardRef<
       )}
       style={{
         zIndex: 'var(--z-dropdown)',
-        background: 'rgba(17, 17, 24, 0.82)',
+        background: 'var(--glass-82)',
         color: 'var(--text)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',
@@ -114,7 +114,7 @@ const DropdownMenuSubContent = React.forwardRef<
       )}
       style={{
         zIndex: 'var(--z-dropdown)',
-        background: 'rgba(17, 17, 24, 0.82)',
+        background: 'var(--glass-82)',
         color: 'var(--text)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-lg)',

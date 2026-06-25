@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useSettingsStore } from '@/stores/settings.store';
-import { applyTheme, applyAccentColor, applyBackground } from '@/hooks/use-theme';
+import { applyTheme, applyAccentColor, applyBackground, isLightThemeId } from '@/hooks/use-theme';
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
@@ -114,6 +114,7 @@ export function DashSection() {
               { id: 'ember', label: 'Ember', dot: '#1a1410' },
               { id: 'moss', label: 'Moss', dot: '#0e1410' },
               { id: 'lucid', label: 'Lucid', dot: '#12101a' },
+              { id: 'blush', label: 'Blush', dot: '#e7c5cf' },
             ] as const).map(({ id, label, dot }) => {
               const isActive = d.theme === id;
               return (
@@ -231,12 +232,14 @@ export function DashSection() {
 
           {/* Texture gallery */}
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            {BACKGROUND_TEXTURES.map((t) => {
+            {BACKGROUND_TEXTURES
+              .filter((t) => t.theme === (isLightThemeId(d.theme) ? 'light' : 'dark'))
+              .map((t) => {
               const isActive = d.background?.type === 'texture' && d.background.value === t.file;
               return (
                 <button
                   key={t.id}
-                  onClick={() => setLocalValue('dash.background', { type: 'texture', value: t.file })}
+                  onClick={() => setLocalValue('dash.background', { type: 'texture', value: t.file, overlay: d.background?.overlay })}
                   title={t.label}
                   style={{
                     width: 76, height: 48, padding: 0, overflow: 'hidden',
@@ -262,6 +265,21 @@ export function DashSection() {
               );
             })}
           </div>
+          {d.background?.type === 'texture' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', minWidth: 110 }}>Texture overlay</span>
+              <input
+                type="range" min={0} max={0.95} step={0.05}
+                value={d.background.overlay ?? 0.6}
+                onChange={(e) => setLocalValue('dash.background', { ...d.background, overlay: parseFloat(e.target.value) })}
+                style={{ flex: 1, accentColor: 'var(--amber)', cursor: 'pointer' }}
+                title="Opacidad del velo del tema sobre la textura (preview en vivo)"
+              />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: 38, textAlign: 'right', fontFamily: 'var(--font-mono)' }}>
+                {Math.round((d.background.overlay ?? 0.6) * 100)}%
+              </span>
+            </div>
+          )}
         </div>
 
         <SettingToggle
