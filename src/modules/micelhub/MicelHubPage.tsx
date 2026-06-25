@@ -4,13 +4,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Search, AlertTriangle, X, Puzzle, Plus } from 'lucide-react';
+import { Search, AlertTriangle, X, Puzzle, Plus, LayoutGrid, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppsStore } from '@/stores/apps.store';
 import { AppCard } from './AppCard';
+import { AppListRow, AppListHeader } from './AppListRow';
 import { AppDetail } from './AppDetail';
 import { AppEditor } from './AppEditor';
-import { Badge } from '@/components/ui/badge';
 import { AssignAppsModal as SharedAssignAppsModal } from '@/components/shared/AssignAppsModal';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -80,7 +80,7 @@ function TagButton({ label, active, colors, onClick }: {
 
 export function Component() {
   const {
-    installedApps, meta, loading, error,
+    installedApps, loading, error,
     fetchInstalledApps, restartRequired, clearRestart,
   } = useAppsStore();
 
@@ -91,14 +91,27 @@ export function Component() {
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   // Clickable tag filters
-  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(['Micelclaw', 'OpenClaw', 'Verified', 'Community']));
+  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(['Micelclaw', 'OpenClaw', 'Registry', 'Verified', 'Community']));
   const [levelFilters, setLevelFilters] = useState<Set<string>>(new Set(['L1', 'L2', 'L3']));
   const [tierFilters, setTierFilters] = useState<Set<string>>(new Set(['Free', 'Plus', 'Pro']));
   const [adaptedCount, setAdaptedCount] = useState(0);
+  // Modo de visualización del grid de apps (Installed/Adapted): cuadrícula de tarjetas o lista
+  // por columnas. Persistido en localStorage (patrón de Flows view-mode).
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    try { return localStorage.getItem('micelhub-view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
+  });
+  const changeViewMode = (m: 'grid' | 'list') => {
+    setViewMode(m);
+    try { localStorage.setItem('micelhub-view', m); } catch { /* ignore */ }
+  };
 
   // Available tab: merged MicelclawOS skills + OpenClaw bundled skills
   const [availableApps, setAvailableApps] = useState<InstalledApp[]>([]);
   const [availableLoading, setAvailableLoading] = useState(false);
+  // Apps del registry que están INSTALADAS (p.ej. n8n) → se muestran como tarjetas normales
+  // en la pestaña "Installed". La asignación a agentes la maneja AssignAppsModal vía
+  // GET /managed-agents/available-skills (que ya las incluye desde F2), no esta página.
+  const [registryApps, setRegistryApps] = useState<InstalledApp[]>([]);
 
   // Installed tab: agents with their skills
   const [agentsWithSkills, setAgentsWithSkills] = useState<Array<{
@@ -119,6 +132,12 @@ export function Component() {
     setAvailableLoading(true);
     try {
       const skills = await gwService.getSkillsStatus().catch(() => []);
+      // Apps L1 deshabilitadas (store Core, GET /apps/skill-state): skills.status no conoce ese
+      // estado (las L1 no están en installed_apps) → lo mergeamos para que la tarjeta muestre el
+      // toggle Enable/Disable correcto.
+      const disabledApps = await api.get<{ data: { disabled: string[] } }>('/apps/skill-state')
+        .then((r) => new Set(r.data?.disabled ?? []))
+        .catch(() => new Set<string>());
 
       // Convert skills.status data to InstalledApp shape for unified rendering
       const allApps: InstalledApp[] = skills.map((s) => {
@@ -131,7 +150,7 @@ export function Component() {
         // Determine app state for UI
         const hasOsIssue = (s.missing?.os?.length ?? 0) > 0;
         const needsEnvOrConfig = !s.eligible && (s.missing?.env?.length ?? 0) + (s.missing?.config?.length ?? 0) > 0 && (s.install?.length ?? 0) === 0;
-        const status: 'active' | 'disabled' = s.eligible ? 'active' : 'disabled';
+        const status: 'active' | 'disabled' = (disabledApps.has(s.name) || !s.eligible) ? 'disabled' : 'active';
 
         // Determine level: L1 = no external deps, L2 = has deps/install/external env/config
         const hasBins = (s.requirements?.bins?.length ?? 0) > 0 || (s.requirements?.any_bins?.length ?? 0) > 0;
@@ -182,6 +201,39 @@ export function Component() {
     finally { setAvailableLoading(false); }
   }, []);
 
+  // Fetch apps del registry que están INSTALADAS → tarjetas en "Installed", tratadas como
+  // CUALQUIER otra app instalada. Fuente = installed_apps (GET /apps?source=registry) para que
+  // el `status` sea el REAL (active/disabled) → el toggle Enable/Disable de la tarjeta queda
+  // sincronizado (antes se hardcodeaba 'active' desde /apps/registry y se desincronizaba).
+  const fetchRegistryApps = useCallback(async () => {
+    try {
+      const res = await getInstalledApps({ source: 'registry' });
+      // Excluir apps archivadas (GET /apps no filtra status → si no, una app desinstalada-por-
+      // archive reaparecería como tarjeta zombi). Tras el fix de purge en S9 no debería haber, pero
+      // blindamos por si quedan filas legacy.
+      setRegistryApps((res.data ?? []).filter((a) => a.status !== 'archived').map((a) => {
+        // El manifest del .claw lleva el icono en ui.module.icon como NOMBRE Lucide
+        // (p.ej. "Waypoints"). AppCard/AppDetail esperan emoji → emoji de conector y
+        // SOBREESCRIBIMOS ui.module.icon para que no se pinte el nombre Lucide en crudo.
+        const m = (a.manifest ?? {}) as unknown as Record<string, unknown>;
+        const icon = (typeof m.icon === 'string' && m.icon) ? m.icon : '🔌';
+        const mUi = m.ui as Record<string, unknown> | undefined;
+        const mMod = mUi?.module as Record<string, unknown> | undefined;
+        return {
+          ...a,
+          manifest: {
+            ...m,
+            name: a.app_name,
+            icon,
+            tier_required: (m.tier_required as string) ?? 'free',
+            tags: Array.from(new Set([...(((m.tags as string[]) ?? [])), 'verified', 'free'])),
+            ...(mMod ? { ui: { ...mUi, module: { ...mMod, icon } } } : {}),
+          },
+        } as unknown as InstalledApp;
+      }));
+    } catch { /* silent */ }
+  }, []);
+
   // Fetch agents with skills for Installed tab
   const fetchInstalled = useCallback(async () => {
     setInstalledLoading(true);
@@ -196,6 +248,7 @@ export function Component() {
   useEffect(() => {
     fetchAvailable();
     fetchInstalled();
+    fetchRegistryApps();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch adapted count on mount (for tab badge)
@@ -205,40 +258,17 @@ export function Component() {
 
   // Reload data when tab changes
   useEffect(() => {
-    if (tab === 'available') fetchAvailable();
+    if (tab === 'available') { fetchAvailable(); fetchRegistryApps(); }
     else if (tab === 'installed') fetchInstalled();
     else if (tab === 'adapted') {
       fetchInstalledApps({ source: 'adapted' });
       getInstalledApps({ source: 'adapted' }).then(res => setAdaptedCount(res.meta.total)).catch(() => {});
     }
-  }, [tab, fetchAvailable, fetchInstalled, fetchInstalledApps]);
+  }, [tab, fetchAvailable, fetchInstalled, fetchRegistryApps, fetchInstalledApps]);
 
-  // Assign/unassign skills to agents (Installed tab)
+  // Assign/unassign skills to agents (Installed tab). La asignación la maneja
+  // SharedAssignAppsModal; aquí solo el desasignar inline (handleUnassignSkill).
   const [assigningAgent, setAssigningAgent] = useState<string | null>(null);
-
-  const handleAssignSkill = async (agentId: string, skillId: string) => {
-    const agent = agentsWithSkills.find(a => a.id === agentId);
-    if (!agent) return;
-    // Use skill_id (original skill ID like "claw-notes"), not id (like "sk-1")
-    const currentSkills = agent.skills.map((s: Record<string, unknown>) => (s.skill_id ?? s.id) as string);
-    if (currentSkills.includes(skillId)) return;
-    try {
-      await api.patch(`/managed-agents/${agentId}/skills`, { skills: [...currentSkills, skillId] });
-      // Check if the app has missing deps — the backend auto-installs in background
-      const appInfo = availableApps.find(a => a.app_name === skillId);
-      const hasInstallableDeps = appInfo?.manifest?.tags?.includes('installable');
-      if (hasInstallableDeps) {
-        toast('App assigned — installing dependencies in background...', { duration: 10000 });
-      } else {
-        toast.success('App assigned');
-      }
-      fetchInstalled();
-      // Refresh available after a delay (deps may have been installed)
-      if (hasInstallableDeps) {
-        setTimeout(() => fetchAvailable(), 15000);
-      }
-    } catch { toast.error('Failed to assign app'); }
-  };
 
   const handleUnassignSkill = async (agentId: string, skillId: string) => {
     const agent = agentsWithSkills.find(a => a.id === agentId);
@@ -254,14 +284,11 @@ export function Component() {
     } catch { toast.error('Failed to remove app'); }
   };
 
-  // Available skills for the assign dropdown
-  const allAvailableSkillIds = availableApps.map(a => a.app_name);
-
   const handleRefresh = useCallback(() => {
-    if (tab === 'available') fetchAvailable();
+    if (tab === 'available') { fetchAvailable(); fetchRegistryApps(); }
     else if (tab === 'installed') fetchInstalled();
     else if (tab === 'adapted') fetchInstalledApps({ source: 'adapted' });
-  }, [tab, fetchAvailable, fetchInstalled, fetchInstalledApps]);
+  }, [tab, fetchAvailable, fetchInstalled, fetchRegistryApps, fetchInstalledApps]);
 
   // Get origin label for an app
   const getOrigin = (app: InstalledApp): string => {
@@ -306,12 +333,21 @@ export function Component() {
   };
 
   const currentApps = tab === 'available' ? availableApps : tab === 'adapted' ? installedApps : [];
-  const filtered = filterApps(currentApps);
+  // En la pestaña "Installed" (antes Available) las apps del registry instaladas (p.ej. n8n)
+  // se mezclan con el resto y pasan por los MISMOS filtros (búsqueda + tags) que cualquier app
+  // — NO son un caso especial. Dedup por nombre: la app del registry (con ciclo de vida) gana
+  // sobre una skill homónima.
+  const registryForTab = tab === 'available' ? registryApps : [];
+  const registryNames = new Set(registryForTab.map((a) => a.app_name));
+  const filtered = filterApps([...registryForTab, ...currentApps.filter((a) => !registryNames.has(a.app_name))]);
+  // Contador del badge "Installed (N)" deduplicado por nombre (igual que el grid: una app del
+  // registry y su skill homónima cuentan UNA vez).
+  const installedCount = new Set([...registryApps.map((a) => a.app_name), ...availableApps.map((a) => a.app_name)]).size;
   const isLoading = tab === 'available' ? availableLoading : tab === 'installed' ? installedLoading : loading;
 
-  // Mobile: push to detail
-  if (isMobile && selectedApp) {
-    return <AppDetail app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />;
+  // Mobile: push to detail (salvo si hay editor abierto — el editor de :361 gana).
+  if (isMobile && selectedApp && !editingApp) {
+    return <AppDetail key={selectedApp.id} app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />;
   }
 
   const needsRestart = restartRequired.openclaw || restartRequired.core;
@@ -365,10 +401,10 @@ export function Component() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 2 }}>
+          {/* Tabs + toggle de vista (cuadrícula/lista) */}
+          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
             {(['available', 'installed', 'adapted', 'registry'] as Tab[]).map((t) => (
-              <button key={t} onClick={() => setTab(t)} style={{
+              <button key={t} onClick={() => { setTab(t); setSelectedApp(null); }} style={{
                 padding: '6px 12px',
                 background: tab === t ? 'var(--surface-hover)' : 'transparent',
                 border: tab === t ? '1px solid var(--border)' : '1px solid transparent',
@@ -377,12 +413,32 @@ export function Component() {
                 fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                 fontWeight: tab === t ? 500 : 400,
               }}>
-                {t === 'available' && `Available${availableApps.length > 0 ? ` (${availableApps.length})` : ''}`}
-                {t === 'installed' && `Installed${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
+                {/* Renombre (petición del usuario): la antigua "Available" pasa a
+                    "Installed" (catálogo de skills/apps disponibles+instaladas) y la
+                    antigua "Installed" pasa a "Assigned" (qué se asigna a cada agente).
+                    Las claves internas (available/installed) se conservan. */}
+                {t === 'available' && `Installed${installedCount > 0 ? ` (${installedCount})` : ''}`}
+                {t === 'installed' && `Assigned${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
                 {t === 'adapted' && `Adapted${adaptedCount > 0 ? ` (${adaptedCount})` : ''}`}
                 {t === 'registry' && 'Registry'}
               </button>
             ))}
+            {/* Toggle cuadrícula/lista — solo donde hay grid de tarjetas (Installed/Adapted) */}
+            {(tab === 'available' || tab === 'adapted') && (
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+                {([['grid', LayoutGrid, 'Cuadrícula'], ['list', List, 'Lista']] as const).map(([mode, Icon, title]) => (
+                  <button key={mode} onClick={() => changeViewMode(mode)} title={title} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28,
+                    background: viewMode === mode ? 'var(--surface-hover)' : 'transparent',
+                    border: `1px solid ${viewMode === mode ? 'var(--border)' : 'transparent'}`,
+                    borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                    color: viewMode === mode ? 'var(--text)' : 'var(--text-dim)',
+                  }}>
+                    <Icon size={15} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Clickable tag filters */}
@@ -391,7 +447,7 @@ export function Component() {
               {/* Origin tags */}
               {['Micelclaw', 'OpenClaw', 'Community', 'Registry'].map(origin => (
                 <TagButton key={origin} label={origin} active={originFilters.has(origin)}
-                  colors={ORIGIN_COLORS[origin] ?? ORIGIN_COLORS.Community}
+                  colors={(ORIGIN_COLORS[origin] ?? ORIGIN_COLORS.Community)!}
                   onClick={() => toggleFilter(originFilters, origin, setOriginFilters)} />
               ))}
               <span style={{ color: 'var(--border)', margin: '0 2px' }}>|</span>
@@ -422,7 +478,11 @@ export function Component() {
         {/* Content */}
         <ScrollArea className="flex-1">
           {tab === 'registry' ? (
-            <RegistryBrowser />
+            <RegistryBrowser
+              onSelect={setSelectedApp}
+              selectedName={selectedApp?.app_name ?? null}
+              onChanged={fetchRegistryApps}
+            />
           ) : tab === 'installed' ? (
             /* Installed: view by agent */
             installedLoading ? (
@@ -451,7 +511,7 @@ export function Component() {
                           borderRadius: 'var(--radius-sm)', color: '#06b6d4',
                         }}>
                           {s.icon ?? '📦'} {s.name}
-                          <button onClick={(e) => { e.stopPropagation(); handleUnassignSkill(agent.id, (s as Record<string, unknown>).skill_id as string ?? (s as Record<string, unknown>).skillId as string ?? s.id); }}
+                          <button onClick={(e) => { e.stopPropagation(); handleUnassignSkill(agent.id, ((s as Record<string, unknown>).skill_id as string) ?? s.id); }}
                             title={`Remove ${s.name}`}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex', marginLeft: 2 }}>
                             <X size={10} />
@@ -494,6 +554,16 @@ export function Component() {
                 {search ? 'No apps match your search.' : 'No apps found with current filters.'}
               </p>
             </div>
+          ) : viewMode === 'list' ? (
+            <div>
+              <AppListHeader />
+              {filtered.map((app) => (
+                <AppListRow key={app.id} app={app} origin={getOrigin(app)}
+                  selected={selectedApp?.id === app.id}
+                  onClick={() => setSelectedApp(app)}
+                  onRefresh={handleRefresh} />
+              ))}
+            </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, padding: 16 }}>
               {filtered.map((app) => (
@@ -510,7 +580,7 @@ export function Component() {
       {/* Detail panel (desktop) */}
       {!isMobile && selectedApp && (
         <div style={{ width: 400, minWidth: 400, borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
-          <AppDetail app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />
+          <AppDetail key={selectedApp.id} app={selectedApp} onBack={() => setSelectedApp(null)} onRefresh={handleRefresh} onEditFiles={selectedApp.source === 'adapted' ? () => setEditingApp(selectedApp) : undefined} />
         </div>
       )}
 
