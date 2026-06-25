@@ -57,8 +57,12 @@ export async function getAppStatuses(): Promise<AppRuntimeStatus[]> {
 
 export async function installApp(
   payload: InstallPayload,
+  opts?: { timeout?: number },
 ): Promise<InstallResult> {
-  const res = await api.post<{ data: InstallResult }>('/apps/install', payload);
+  // Instalar desempaqueta el .claw + corre el safety scanner + copia ficheros (+
+  // migraciones en L2/L3): puede superar el timeout por defecto (15s). El caller
+  // (registry Enable) pasa un timeout amplio para no abortar una instalación en curso.
+  const res = await api.post<{ data: InstallResult }>('/apps/install', payload, opts);
   return res.data;
 }
 

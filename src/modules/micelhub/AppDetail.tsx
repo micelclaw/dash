@@ -10,8 +10,8 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { ArrowLeft, Shield, ShieldAlert, Download, Power, Trash2, Save, Plus, Users, Copy, Code } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Shield, Download, Power, Trash2, Save, Copy, Code } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -25,6 +25,7 @@ import {
 import { api } from '@/services/api';
 import * as gwService from '@/services/gateway.service';
 import { useAppsStore } from '@/stores/apps.store';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
 import type { InstalledApp, ScanResult, AppManifest, AppRuntimeStatus } from '@/types/apps';
 
 // Markdown components for README and SKILL.md tabs — handles overflow properly
@@ -109,6 +110,12 @@ const mdComponents: Record<string, React.ComponentType<Record<string, unknown>>>
   ),
 } as Record<string, React.ComponentType<Record<string, unknown>>>;
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 interface AppDetailProps {
   app: InstalledApp;
   onBack: () => void;
@@ -133,11 +140,18 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
   const [manifest, setManifest] = useState<AppManifest>(app.manifest);
   const [runtime, setRuntime] = useState<AppRuntimeStatus | null>(null);
   const [deleteDialog, setDeleteDialog] = useState(false);
-  const [purgeDialog, setPurgeDialog] = useState(false);
 
   // SKILL.md and README.md content (loaded from backend)
   const [skillContent, setSkillContent] = useState<string | null>(null);
   const [readmeContent, setReadmeContent] = useState<string | null>(null);
+
+  // Registry packages (source='registry'): README + lista de ficheros del .claw, traídos de
+  // GET /apps/registry/:name. Es la info que antes vivía en el panel propio de RegistryBrowser
+  // (ahora hay UN solo panel: este). `registryAvailable` = paquete del store NO instalado.
+  const isRegistry = app.source === 'registry';
+  const registryAvailable = isRegistry && (app.manifest?.tags ?? []).includes('registry-available');
+  const [packageFiles, setPackageFiles] = useState<Array<{ path: string; size: number }> | null>(null);
+  const [registryReadme, setRegistryReadme] = useState<string | null>(null);
 
   // Skill status from OpenClaw (deps, eligibility, install options)
   const [skillStatus, setSkillStatus] = useState<gwService.SkillStatus | null>(null);
@@ -148,10 +162,6 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
   const [configEnv, setConfigEnv] = useState<Record<string, string>>({});
   const [configDirty, setConfigDirty] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
-
-  // Agents assigned to this app
-  const [assignedAgents, setAssignedAgents] = useState<Array<{ id: string; name: string; display_name: string; avatar: string | null }>>([]);
-  const [allAgents, setAllAgents] = useState<Array<{ id: string; name: string; display_name: string; avatar: string | null; skills: Array<{ id: string }> }>>([]);
 
   // Reset state when app changes (keep activeTab to preserve user's current tab)
   useEffect(() => {
@@ -190,18 +200,19 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
     loadFiles();
   }, [app.app_name]);
 
-  // Fetch agents and which ones have this skill
+  // Registry: README + ficheros del paquete (.claw) → panel común. Funciona tanto para
+  // paquetes instalados como disponibles (el endpoint del registry no exige instalación).
   useEffect(() => {
-    api.get<{ data: Array<{ id: string; name: string; display_name: string; avatar: string | null; skills: Array<{ id: string; name: string }> }> }>('/managed-agents')
-      .then(res => {
-        setAllAgents(res.data);
-        const assigned = res.data.filter(a =>
-          a.skills.some(s => s.id === app.app_name || s.name === app.app_name || s.id === `claw-${app.app_name}`)
-        );
-        setAssignedAgents(assigned);
+    setPackageFiles(null);
+    setRegistryReadme(null);
+    if (!isRegistry) return;
+    api.get<{ data: { readme?: string; files?: Array<{ path: string; size: number }> } }>(`/apps/registry/${app.app_name}`)
+      .then((res) => {
+        setPackageFiles(res.data.files ?? []);
+        setRegistryReadme(res.data.readme ?? null);
       })
-      .catch(() => {});
-  }, [app.app_name]);
+      .catch(() => { /* no registry detail → sin ficheros */ });
+  }, [app.app_name, isRegistry]);
 
   // Fetch skill config (for OpenClaw bundled skills)
   useEffect(() => {
@@ -231,21 +242,6 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
       setConfigDirty(false);
     } catch { toast.error('Failed to save config'); }
     finally { setConfigSaving(false); }
-  };
-
-  const handleAssignAgent = async (agentId: string) => {
-    const agent = allAgents.find(a => a.id === agentId);
-    if (!agent) return;
-    const currentSkills = agent.skills.map(s => s.id);
-    if (currentSkills.includes(app.app_name)) return;
-    try {
-      await api.patch(`/managed-agents/${agentId}/skills`, { skills: [...currentSkills, app.app_name] });
-      toast.success(`Assigned to ${agent.display_name}`);
-      // Refresh agents
-      const res = await api.get<{ data: typeof allAgents }>('/managed-agents');
-      setAllAgents(res.data);
-      setAssignedAgents(res.data.filter(a => a.skills.some(s => s.id === app.app_name)));
-    } catch { toast.error('Failed to assign'); }
   };
 
   const handleScan = async () => {
@@ -284,6 +280,9 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         setRestartRequired('openclaw', `${app.app_name} was ${newStatus}`);
       }
       onRefresh();
+      // Módulos dinámicos servidos por Core (p.ej. n8n): reflejar enable/disable en el
+      // sidebar al instante, sin recargar (su backend es nativo + gated por status).
+      void useUiModulesStore.getState().refresh();
       toast.success(`App ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
     } catch {
       toast.error('Failed to update status');
@@ -292,32 +291,25 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
 
   const handleUninstall = async () => {
     try {
-      const result = await uninstallApp(app.app_name);
+      // Apps del registry: purge (borra dir+fila, el .claw sigue en el store → vuelve a
+      // "available"), igual que la lista del Registry. Sin esto se quedarían 'archived' pero
+      // la fila persistiría y GET /apps?source=registry (no filtra status) las re-mostraría
+      // como tarjeta zombi. El resto: archive (recuperable con purge posterior).
+      const result = await uninstallApp(app.app_name, isRegistry);
       if (result.requires_restart) {
         setRestartRequired(
           app.app_level === 1 ? 'openclaw' : 'core',
           `${app.app_name} was uninstalled`,
         );
       }
-      toast.success('App archived');
+      toast.success(isRegistry ? 'App uninstalled' : 'App archived');
       onBack();
       onRefresh();
+      void useUiModulesStore.getState().refresh();
     } catch {
       toast.error('Failed to uninstall');
     }
     setDeleteDialog(false);
-  };
-
-  const handlePurge = async () => {
-    try {
-      await uninstallApp(app.app_name, true);
-      toast.success('App permanently deleted');
-      onBack();
-      onRefresh();
-    } catch {
-      toast.error('Failed to purge');
-    }
-    setPurgeDialog(false);
   };
 
   const [forkDialogOpen, setForkDialogOpen] = useState(false);
@@ -465,15 +457,38 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
           {activeTab === 'readme' && (
             <div className="app-detail-md">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
-                {readmeContent || manifest?.description || `# ${manifest?.name || app.app_name}\n\nNo README available.`}
+                {readmeContent || registryReadme || manifest?.description || `# ${manifest?.name || app.app_name}\n\nNo README available.`}
               </ReactMarkdown>
+
+              {/* Ficheros del paquete (.claw) — solo apps del registry. Fundido aquí desde el
+                  panel propio de RegistryBrowser (ahora hay un único panel de detalles). */}
+              {packageFiles && packageFiles.length > 0 && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 6, letterSpacing: '0.04em' }}>
+                    Archivos del paquete ({packageFiles.length})
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {packageFiles.map((f) => (
+                      <div key={f.path} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                        fontSize: '0.72rem', padding: '3px 6px', borderRadius: 'var(--radius-sm)',
+                        fontFamily: 'var(--font-mono)', color: 'var(--text-dim)',
+                      }}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
+                        <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{formatSize(f.size)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'skill' && (
             <div className="app-detail-md">
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
-                {(skillContent?.replace(/^---\n[\s\S]*?\n---\s*/, '') ?? '_Loading SKILL.md..._').trim()}
+                {(skillContent?.replace(/^---\n[\s\S]*?\n---\s*/, '')
+                  ?? (registryAvailable ? '_El SKILL.md estará disponible al instalar el paquete (ver README)._' : '_Loading SKILL.md..._')).trim()}
               </ReactMarkdown>
             </div>
           )}
@@ -507,19 +522,19 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                         </div>
                         {isMissing && (skillStatus!.install?.length ?? 0) > 0 && (
                           <button onClick={async () => {
-                            const installId = skillStatus!.install[0].id;
-                            toast('Installing ' + bin + '...', { duration: 300000 });
+                            const installId = skillStatus!.install[0]!.id;
+                            const tid = toast.loading('Installing ' + bin + '...');
                             try {
                               const result = await gwService.installAppDeps(skillStatus!.name, installId);
-                              if (result.ok) { toast.success(bin + ' installed!'); }
-                              else { toast.error('Failed: ' + result.message); }
-                            } catch { toast.error('Install failed'); }
+                              if (result.ok) { toast.success(bin + ' installed!', { id: tid }); }
+                              else { toast.error('Failed: ' + result.message, { id: tid }); }
+                            } catch { toast.error('Install failed', { id: tid }); }
                           }} style={{
                             padding: '3px 10px', fontSize: '0.6875rem', fontWeight: 500,
                             background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-sm)',
                             color: '#000', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                           }}>
-                            Install ({skillStatus!.install[0].label || skillStatus!.install[0].kind})
+                            Install ({skillStatus!.install[0]!.label || skillStatus!.install[0]!.kind})
                           </button>
                         )}
                       </div>
@@ -571,7 +586,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                       <div key={cfg} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 0' }}>
                         <span style={{ fontSize: '0.8125rem', color: isMissing ? 'var(--amber)' : '#22c55e' }}>{isMissing ? '⚠' : '✓'}</span>
                         <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
-                          {channelMatch ? `Requires ${channelMatch[1].charAt(0).toUpperCase() + channelMatch[1].slice(1)} channel to be configured` : cfg}
+                          {channelMatch ? `Requires ${channelMatch[1]!.charAt(0).toUpperCase() + channelMatch[1]!.slice(1)} channel to be configured` : cfg}
                         </span>
                       </div>
                     );
@@ -591,22 +606,25 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
                 </div>
               )}
 
-              {/* Enable/disable toggle */}
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-                  <div>
-                    <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enabled</span>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>When disabled, agents won't see this app</div>
-                  </div>
-                  <div onClick={() => { setConfigEnabled(!configEnabled); setConfigDirty(true); }} style={{
-                    width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
-                    background: configEnabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-                    position: 'relative', flexShrink: 0, transition: 'background 0.2s',
-                  }}>
-                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: configEnabled ? 18 : 2, transition: 'left 0.2s' }} />
+              {/* Enable/disable toggle — solo para skills bundled de OpenClaw (handleSaveConfig solo
+                  persiste su entries; para el resto sería un no-op que muestra "Config saved" falso). */}
+              {app.source === 'openclaw' && (
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+                    <div>
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enabled</span>
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>When disabled, agents won't see this app</div>
+                    </div>
+                    <div onClick={() => { setConfigEnabled(!configEnabled); setConfigDirty(true); }} style={{
+                      width: 36, height: 20, borderRadius: 10, cursor: 'pointer',
+                      background: configEnabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+                      position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+                    }}>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: configEnabled ? 18 : 2, transition: 'left 0.2s' }} />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Save */}
               {configDirty && (
@@ -661,53 +679,63 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         )}
       </ScrollArea>
 
-      {/* Actions footer */}
+      {/* Actions footer. Un paquete del registry NO instalado (registryAvailable) no tiene
+          acciones aquí: se instala desde la lista de la pestaña Registry. */}
       <div style={{
         padding: '10px 16px', borderTop: '1px solid var(--border)',
-        display: 'flex', gap: 6, justifyContent: 'flex-end',
+        display: 'flex', gap: 6, alignItems: 'center',
+        justifyContent: registryAvailable ? 'center' : 'flex-end',
       }}>
-        {isPreinstalled && (
-          <FooterButton
-            icon={<Copy size={13} />}
-            label="Fork"
-            onClick={handleFork}
-            title="Create an editable copy of this app"
-          />
-        )}
-        {app.source === 'adapted' && onEditFiles && (
-          <FooterButton
-            icon={<Code size={13} />}
-            label="Edit Files"
-            onClick={onEditFiles}
-            title="Open file editor for this adapted app"
-          />
-        )}
-        <FooterButton
-          icon={<Power size={13} />}
-          label={app.status === 'active' ? 'Disable' : 'Enable'}
-          onClick={handleToggleStatus}
-        />
-        <FooterButton
-          icon={<Download size={13} />}
-          label="Export .claw"
-          onClick={handleExport}
-        />
-        {app.source === 'adapted' ? (
-          <FooterButton
-            icon={<Trash2 size={13} />}
-            label="Delete"
-            onClick={() => setDeleteDialog(true)}
-            danger
-          />
+        {registryAvailable ? (
+          <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            Paquete disponible — instálalo desde la lista para gestionarlo.
+          </span>
         ) : (
-          <FooterButton
-            icon={<Trash2 size={13} />}
-            label="Uninstall"
-            onClick={() => setDeleteDialog(true)}
-            danger
-            disabled={isPreinstalled}
-            title={isPreinstalled ? 'Preinstalled apps cannot be uninstalled' : undefined}
-          />
+          <>
+            {isPreinstalled && (
+              <FooterButton
+                icon={<Copy size={13} />}
+                label="Fork"
+                onClick={handleFork}
+                title="Create an editable copy of this app"
+              />
+            )}
+            {app.source === 'adapted' && onEditFiles && (
+              <FooterButton
+                icon={<Code size={13} />}
+                label="Edit Files"
+                onClick={onEditFiles}
+                title="Open file editor for this adapted app"
+              />
+            )}
+            <FooterButton
+              icon={<Power size={13} />}
+              label={app.status === 'active' ? 'Disable' : 'Enable'}
+              onClick={handleToggleStatus}
+            />
+            <FooterButton
+              icon={<Download size={13} />}
+              label="Export .claw"
+              onClick={handleExport}
+            />
+            {app.source === 'adapted' ? (
+              <FooterButton
+                icon={<Trash2 size={13} />}
+                label="Delete"
+                onClick={() => setDeleteDialog(true)}
+                danger
+              />
+            ) : (
+              <FooterButton
+                icon={<Trash2 size={13} />}
+                label="Uninstall"
+                onClick={() => setDeleteDialog(true)}
+                danger
+                disabled={isPreinstalled}
+                title={isPreinstalled ? 'Preinstalled apps cannot be uninstalled' : undefined}
+              />
+            )}
+          </>
         )}
       </div>
 
@@ -718,18 +746,10 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         title={app.source === 'adapted' ? `Delete ${app.app_name}?` : `Uninstall ${app.app_name}?`}
         description={app.source === 'adapted'
           ? 'This will permanently delete the adapted app and all its files.'
-          : 'The app will be archived. You can purge it permanently later.'}
+          : isRegistry
+            ? 'The app will be uninstalled. The package stays in the registry — you can reinstall it later.'
+            : 'The app will be archived (recoverable).'}
         confirmLabel={app.source === 'adapted' ? 'Delete' : 'Uninstall'}
-        variant="danger"
-      />
-
-      <ConfirmDialog
-        open={purgeDialog}
-        onClose={() => setPurgeDialog(false)}
-        onConfirm={handlePurge}
-        title={`Permanently delete ${app.app_name}?`}
-        description="This will remove all data, schemas, and files. This cannot be undone."
-        confirmLabel="Purge"
         variant="danger"
       />
 
