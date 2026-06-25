@@ -65,6 +65,10 @@ interface InventoryState {
   createItem: (body: Record<string, unknown>) => Promise<InventoryItem>;
   updateItem: (id: string, body: Record<string, unknown>) => Promise<InventoryItem>;
   deleteItem: (id: string) => Promise<void>;
+  bulkMoveItems: (ids: string[], locationId: string | null) => Promise<void>;
+  bulkSetStatusItems: (ids: string[], status: string) => Promise<void>;
+  bulkAddTagItems: (ids: string[], tag: string) => Promise<void>;
+  bulkDeleteItems: (ids: string[]) => Promise<void>;
   lendItem: (id: string, body: { contact_id: string; lent_until?: string; notes?: string }) => Promise<void>;
   returnItem: (id: string, body?: { notes?: string }) => Promise<void>;
   setStatus: (id: string, status: string) => Promise<void>;
@@ -195,6 +199,38 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   deleteItem: async (id) => {
     await api.delete(`/inventory/items/${id}`);
     set({ items: get().items.filter(i => i.id !== id), selectedItemId: null });
+  },
+
+  // Acciones masivas: aplican una operación a N items y refrescan una sola vez
+  // (en vez de N veces). Respetan el ledger — solo tocan metadatos del item
+  // (ubicación/tags/estado) o lo borran (soft-delete); la cantidad sigue siendo
+  // derivada y los movimientos de stock no se tocan.
+  bulkMoveItems: async (ids, locationId) => {
+    await Promise.all(ids.map(id => api.patch(`/inventory/items/${id}`, { location_id: locationId })));
+    await Promise.all([get().fetchItems(), get().fetchLocations()]);
+  },
+
+  bulkSetStatusItems: async (ids, status) => {
+    await Promise.all(ids.map(id => api.post(`/inventory/items/${id}/status`, { status })));
+    await Promise.all([get().fetchItems(), get().fetchAlerts()]);
+  },
+
+  bulkAddTagItems: async (ids, tag) => {
+    const byId = new Map(get().items.map(i => [i.id, i]));
+    await Promise.all(ids.map(id => {
+      const it = byId.get(id);
+      const existing = it?.tags ?? [];
+      if (existing.includes(tag)) return Promise.resolve(undefined);
+      return api.patch(`/inventory/items/${id}`, { tags: [...existing, tag] }).then(() => undefined);
+    }));
+    await Promise.all([get().fetchItems(), get().fetchTags()]);
+  },
+
+  bulkDeleteItems: async (ids) => {
+    await Promise.all(ids.map(id => api.delete(`/inventory/items/${id}`)));
+    const removed = new Set(ids);
+    set({ items: get().items.filter(i => !removed.has(i.id)), selectedItemId: null });
+    void get().fetchAlerts();
   },
 
   lendItem: async (id, body) => {

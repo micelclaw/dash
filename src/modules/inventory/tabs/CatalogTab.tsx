@@ -11,12 +11,13 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { Boxes, Search, X } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronUp, ChevronsUpDown, MapPin, Search, Tag as TagIcon, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { StatusPill } from '@/modules/gateway/components/StatusPill';
 import { TagChip } from '@/components/shared/TagChip';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ViewToggle } from '@/components/shared/ViewToggle';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useInventoryStore, type ItemFilters } from '@/stores/inventory.store';
 import { CustomFieldsEditor, CATEGORY_FIELD_TEMPLATES } from '@/modules/inventory/components/CustomFieldsEditor';
 import {
@@ -128,7 +129,7 @@ function ItemStatusPill({ status, size = 'sm' }: { status: string; size?: 'sm' |
 function WarrantyCell({ date }: { date: string | null }) {
   const d = daysUntil(date);
   if (d === null) return <span style={{ color: 'var(--text-dim)' }}>—</span>;
-  if (d < 0) return <span style={{ color: '#f43f5e' }}>expired</span>;
+  if (d < 0) return <span style={{ color: 'var(--error)' }}>expired</span>;
   return <span style={{ color: d < 90 ? 'var(--amber)' : 'var(--text)' }}>{d}d</span>;
 }
 
@@ -138,7 +139,7 @@ function QtyCell({ item }: { item: InventoryItem }) {
   const min = item.min_qty !== null ? parseFloat(item.min_qty) : null;
   const low = min !== null && Number.isFinite(qty) && Number.isFinite(min) && qty < min;
   return (
-    <span style={{ color: low ? '#f43f5e' : 'var(--text)' }}>
+    <span style={{ color: low ? 'var(--error)' : 'var(--text)' }}>
       {item.quantity}/{item.min_qty ?? '—'}
     </span>
   );
@@ -508,9 +509,64 @@ function NewItemModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Ordenación de la tabla (cliente, sobre los items cargados) ─────
+type SortKey = 'name' | 'category' | 'location' | 'qty' | 'value' | 'warranty' | 'status';
+type SortDir = 'asc' | 'desc';
+
+function sortValue(item: InventoryItem, key: SortKey, locationNames: Map<string, string>): string | number {
+  switch (key) {
+    case 'name': return item.name?.toLowerCase() ?? '';
+    case 'category': return item.category?.toLowerCase() ?? '';
+    case 'location': return item.location_id ? (locationNames.get(item.location_id) ?? '').toLowerCase() : '';
+    case 'qty': { const q = parseFloat(item.quantity); return Number.isFinite(q) ? q : 0; }
+    case 'value': {
+      const p = parseFloat(item.purchase_price ?? '');
+      const q = parseFloat(item.quantity);
+      return Number.isFinite(p) ? p * (Number.isFinite(q) ? q : 1) : -1;
+    }
+    case 'warranty': { const d = daysUntil(item.warranty_until); return d === null ? Number.POSITIVE_INFINITY : d; }
+    case 'status': return (SYSTEM_STATUS_LABELS[item.status] ?? item.status ?? '').toLowerCase();
+  }
+}
+
+function sortItems(items: InventoryItem[], key: SortKey | null, dir: SortDir, locationNames: Map<string, string>): InventoryItem[] {
+  if (!key) return items;
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...items].sort((a, b) => {
+    const av = sortValue(a, key, locationNames);
+    const bv = sortValue(b, key, locationNames);
+    if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sign;
+    return String(av).localeCompare(String(bv), 'es', { numeric: true }) * sign;
+  });
+}
+
+/** Cabecera de columna ordenable. */
+function SortTh({ label, sortKey, active, dir, onSort, style }: {
+  label: string; sortKey: SortKey; active: boolean; dir: SortDir; onSort: (k: SortKey) => void; style: CSSProperties;
+}) {
+  const Icon = !active ? ChevronsUpDown : dir === 'asc' ? ChevronUp : ChevronDown;
+  return (
+    <th style={style} scope="col" aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none',
+          padding: 0, font: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit',
+          color: active ? 'var(--text)' : 'var(--text-dim)', cursor: 'pointer',
+        }}
+      >
+        {label}
+        <Icon size={12} style={{ opacity: active ? 1 : 0.5 }} />
+      </button>
+    </th>
+  );
+}
+
 export function CatalogTab() {
   const {
     items,
+    itemsTotal,
     loading,
     locations,
     categories,
@@ -521,6 +577,10 @@ export function CatalogTab() {
     fetchCategories,
     fetchTags,
     selectItem,
+    bulkMoveItems,
+    bulkSetStatusItems,
+    bulkAddTagItems,
+    bulkDeleteItems,
   } = useInventoryStore();
 
   const [view, setView] = useState<'grid' | 'list'>(() => {
@@ -530,6 +590,12 @@ export function CatalogTab() {
   const [search, setSearch] = useState(itemFilters.search ?? '');
   const [filters, setFilters] = useState<ItemFilters>(itemFilters);
   const [showModal, setShowModal] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bulkTag, setBulkTag] = useState('');
 
   const filtersRef = useRef<ItemFilters>(filters);
   filtersRef.current = filters;
@@ -552,10 +618,74 @@ export function CatalogTab() {
 
   const hasStockItems = useMemo(() => items.some(i => i.track_stock), [items]);
 
+  const sortedItems = useMemo(
+    () => sortItems(items, sortKey, sortDir, locationNames),
+    [items, sortKey, sortDir, locationNames],
+  );
+
+  // La selección se limita a los items actualmente cargados: si cambian los
+  // filtros/búsqueda, se purga lo que ya no esté presente.
+  useEffect(() => {
+    setSelected(prev => {
+      if (prev.size === 0) return prev;
+      const present = new Set(items.map(i => i.id));
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) { if (present.has(id)) next.add(id); else changed = true; }
+      return changed ? next : prev;
+    });
+  }, [items]);
+
+  const selectedCount = selected.size;
+  const allSelected = items.length > 0 && selectedCount === items.length;
+
   const changeView = (v: 'grid' | 'list') => {
     setView(v);
     localStorage.setItem(VIEW_STORAGE_KEY, v);
   };
+
+  const onSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(items.map(i => i.id)));
+  };
+  const clearSelection = () => setSelected(new Set());
+
+  const runBulk = async (label: string, fn: () => Promise<void>) => {
+    setBulkBusy(true);
+    try {
+      await fn();
+      toast.success(label);
+      setSelected(new Set());
+    } catch {
+      toast.error('Bulk action failed');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const ids = () => [...selected];
+  const onBulkMove = (locationId: string | null) =>
+    runBulk(`${selectedCount} item(s) moved`, () => bulkMoveItems(ids(), locationId));
+  const onBulkStatus = (status: string) =>
+    runBulk(`${selectedCount} item(s) updated`, () => bulkSetStatusItems(ids(), status));
+  const onBulkTag = (tag: string) => {
+    const t = tag.trim();
+    if (!t) return;
+    void runBulk(`Tag "${t}" added to ${selectedCount} item(s)`, () => bulkAddTagItems(ids(), t));
+  };
+  const onBulkDelete = () =>
+    runBulk(`${selectedCount} item(s) deleted`, () => bulkDeleteItems(ids()));
 
   const applyFilters = (patch: Partial<ItemFilters>) => {
     const next: ItemFilters = { ...filtersRef.current, ...patch };
@@ -643,10 +773,88 @@ export function CatalogTab() {
           </label>
         )}
 
-        <button style={{ ...primaryBtnStyle, marginLeft: 'auto' }} onClick={() => setShowModal(true)}>
+        <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+          {!loading && (items.length === itemsTotal
+            ? `${itemsTotal} ${itemsTotal === 1 ? 'item' : 'items'}`
+            : `${items.length} of ${itemsTotal}`)}
+        </span>
+        <button style={primaryBtnStyle} onClick={() => setShowModal(true)}>
           + New item
         </button>
       </div>
+
+      {/* Barra de acciones masivas — aparece al seleccionar filas */}
+      {selectedCount > 0 && (
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 3,
+            background: 'color-mix(in srgb, var(--mod-inventory) 12%, var(--card))',
+            borderBottom: '1px solid var(--mod-inventory)',
+            padding: '8px 16px',
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
+            {selectedCount} selected
+          </span>
+
+          {/* Mover a ubicación */}
+          <select
+            style={selectStyle}
+            value=""
+            disabled={bulkBusy}
+            onChange={e => { const v = e.target.value; if (v) onBulkMove(v === '__none__' ? null : v); e.currentTarget.value = ''; }}
+            aria-label="Move to location"
+          >
+            <option value="">Move to…</option>
+            <option value="__none__">No location</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+
+          {/* Cambiar estado */}
+          <select
+            style={selectStyle}
+            value=""
+            disabled={bulkBusy}
+            onChange={e => { const v = e.target.value; if (v) onBulkStatus(v); e.currentTarget.value = ''; }}
+            aria-label="Set status"
+          >
+            <option value="">Set status…</option>
+            {systemStatuses.map(s => <option key={s} value={s}>{SYSTEM_STATUS_LABELS[s] ?? s}</option>)}
+          </select>
+
+          {/* Añadir tag */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <TagIcon size={13} style={{ position: 'absolute', left: 8, color: 'var(--text-dim)', pointerEvents: 'none' }} />
+            <input
+              style={{ ...inputStyle, width: 150, padding: '5px 8px 5px 26px' }}
+              placeholder="Add tag + Enter"
+              value={bulkTag}
+              disabled={bulkBusy}
+              onChange={e => setBulkTag(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && bulkTag.trim()) { onBulkTag(bulkTag); setBulkTag(''); } }}
+            />
+          </div>
+
+          {/* Borrar en lote */}
+          <button
+            style={{ ...secondaryBtnStyle, color: 'var(--error)', borderColor: 'var(--error)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            disabled={bulkBusy}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={13} /> Delete
+          </button>
+
+          <button style={{ ...secondaryBtnStyle, marginLeft: 'auto' }} disabled={bulkBusy} onClick={clearSelection}>
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Body */}
       <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -670,26 +878,48 @@ export function CatalogTab() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ ...thStyle, width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={el => { if (el) el.indeterminate = selectedCount > 0 && !allSelected; }}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all items"
+                    style={{ cursor: 'pointer' }}
+                  />
+                </th>
                 <th style={{ ...thStyle, width: 38 }} />
-                <th style={thStyle}>Name</th>
-                <th style={thStyle}>Category</th>
-                <th style={thStyle}>Location</th>
-                <th style={thStyle}>Qty</th>
-                <th style={thStyle}>Value</th>
-                <th style={thStyle}>Warranty</th>
-                <th style={thStyle}>Tags</th>
-                <th style={thStyle}>Status</th>
+                <SortTh label="Name" sortKey="name" active={sortKey === 'name'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <SortTh label="Category" sortKey="category" active={sortKey === 'category'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <SortTh label="Location" sortKey="location" active={sortKey === 'location'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <SortTh label="Qty" sortKey="qty" active={sortKey === 'qty'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <SortTh label="Value" sortKey="value" active={sortKey === 'value'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <SortTh label="Warranty" sortKey="warranty" active={sortKey === 'warranty'} dir={sortDir} onSort={onSort} style={thStyle} />
+                <th style={thStyle} scope="col">Tags</th>
+                <SortTh label="Status" sortKey="status" active={sortKey === 'status'} dir={sortDir} onSort={onSort} style={thStyle} />
               </tr>
             </thead>
             <tbody>
-              {items.map(item => (
+              {sortedItems.map(item => {
+                const isSel = selected.has(item.id);
+                const baseBg = isSel ? 'color-mix(in srgb, var(--mod-inventory) 10%, transparent)' : 'transparent';
+                return (
                 <tr
                   key={item.id}
                   onClick={() => selectItem(item.id)}
                   onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                  style={{ cursor: 'pointer' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = baseBg; }}
+                  style={{ cursor: 'pointer', background: baseBg }}
                 >
+                  <td style={tdStyle} onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => toggleSelect(item.id)}
+                      aria-label={`Select ${item.name}`}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </td>
                   <td style={tdStyle}><ItemThumb item={item} size={28} /></td>
                   <td style={tdStyle}>
                     <div style={{ fontWeight: 500 }}>{item.name}</div>
@@ -711,7 +941,8 @@ export function CatalogTab() {
                   <td style={tdStyle}><ItemTagChips tags={item.tags} onTagClick={t => applyFilters({ tag: t })} /></td>
                   <td style={tdStyle}><ItemStatusPill status={item.status} /></td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         ) : (
@@ -723,15 +954,18 @@ export function CatalogTab() {
               padding: '12px 16px',
             }}
           >
-            {items.map(item => (
+            {sortedItems.map(item => {
+              const isSel = selected.has(item.id);
+              return (
               <div
                 key={item.id}
                 onClick={() => selectItem(item.id)}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--card)'; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-hover)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = isSel ? 'var(--mod-inventory)' : 'var(--border)'; }}
                 style={{
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
+                  position: 'relative',
+                  background: isSel ? 'color-mix(in srgb, var(--mod-inventory) 10%, var(--card))' : 'var(--card)',
+                  border: `1px solid ${isSel ? 'var(--mod-inventory)' : 'var(--border)'}`,
                   borderRadius: 'var(--radius-md)',
                   padding: 8,
                   display: 'flex',
@@ -740,6 +974,24 @@ export function CatalogTab() {
                   cursor: 'pointer',
                 }}
               >
+                <label
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    position: 'absolute', top: 6, left: 6, zIndex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: 'var(--radius-sm)',
+                    background: 'color-mix(in srgb, var(--bg) 70%, transparent)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSel}
+                    onChange={() => toggleSelect(item.id)}
+                    aria-label={`Select ${item.name}`}
+                    style={{ cursor: 'pointer', margin: 0 }}
+                  />
+                </label>
                 <ItemThumb item={item} size="100%" />
                 <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {item.name}
@@ -751,7 +1003,8 @@ export function CatalogTab() {
                   <ItemStatusPill status={item.status} size="sm" />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -761,6 +1014,16 @@ export function CatalogTab() {
       </div>
 
       {showModal && <NewItemModal onClose={() => setShowModal(false)} />}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={onBulkDelete}
+        title={`Delete ${selectedCount} item${selectedCount === 1 ? '' : 's'}?`}
+        description="This soft-deletes the selected items. Their stock ledger is preserved and they can be recovered from the database."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
