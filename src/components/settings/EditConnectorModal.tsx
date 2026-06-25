@@ -220,7 +220,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         width: 440, maxHeight: '80vh',
-        background: 'rgba(17, 17, 24, 0.85)',
+        background: 'var(--glass-modal)',
         backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
         boxShadow: '0 16px 64px rgba(0,0,0,0.5)', zIndex: 201,

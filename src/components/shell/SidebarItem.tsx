@@ -46,7 +46,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
     transition: 'background var(--transition-fast)',
     color: 'var(--text)',
     fontSize: '0.8125rem',
-    fontWeight: isActive ? 500 : 400,
+    fontWeight: isActive ? 'var(--weight-medium)' : 'var(--weight-normal)',
     fontFamily: 'var(--font-sans)',
     textDecoration: 'none',
     boxSizing: 'border-box' as const,
@@ -62,7 +62,7 @@ export function SidebarItem({ module, collapsed, onAction, onNavigate }: Sidebar
     <>
       <Icon
         size={20}
-        style={{ color: module.color, flexShrink: 0, opacity: isActive ? 1 : 0.7 }}
+        style={{ color: module.color, flexShrink: 0, opacity: isActive ? 1 : 'var(--icon-idle-opacity)', filter: 'var(--icon-filter)' }}
       />
       {!collapsed && <span>{module.label}</span>}
       {!collapsed && pendingCount > 0 && (

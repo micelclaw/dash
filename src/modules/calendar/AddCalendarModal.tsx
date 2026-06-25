@@ -89,7 +89,7 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: 'rgba(17, 17, 24, 0.85)',
+          background: 'var(--glass-modal)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 'var(--radius-lg)',

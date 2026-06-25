@@ -427,7 +427,7 @@ export function MailSidebar({
               left: '50%',
               transform: 'translate(-50%, -50%)',
               zIndex: 'var(--z-dropdown)' as any,
-              background: 'rgba(17, 17, 24, 0.95)',
+              background: 'var(--glass-95)',
               border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
               padding: 12,

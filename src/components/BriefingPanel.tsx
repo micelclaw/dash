@@ -222,7 +222,7 @@ export function BriefingPanel() {
       style={{
         position: 'absolute', top: 44, right: 0,
         width: 360, maxHeight: 480,
-        background: 'rgba(17, 17, 24, 0.75)',
+        background: 'var(--glass-75)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid var(--border)',

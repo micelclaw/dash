@@ -205,7 +205,7 @@ export function BtcSetupWizard({ mode, initialConfig, onClose, onDone }: Props) 
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         width: 480, maxHeight: '85vh',
-        background: 'rgba(17, 17, 24, 0.85)',
+        background: 'var(--glass-modal)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid var(--border)',

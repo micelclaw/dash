@@ -87,7 +87,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
         marginTop: 4,
         width: 340,
         maxHeight: 420,
-        background: 'rgba(17, 17, 24, 0.75)',
+        background: 'var(--glass-75)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         border: '1px solid var(--border)',

@@ -158,7 +158,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         style={{
           width: 36,
           flexShrink: 0,
-          background: 'rgba(17, 17, 24, 0.5)',
+          background: 'var(--glass-50)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           borderLeft: '1px solid var(--border)',
@@ -195,7 +195,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
       style={{
         width: 400,
         flexShrink: 0,
-        background: 'rgba(17, 17, 24, 0.5)',
+        background: 'var(--glass-50)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         borderLeft: '1px solid var(--border)',
