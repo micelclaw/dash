@@ -10,12 +10,10 @@
  * https://micelclaw.com
  */
 
-import { Shield, ShieldAlert, Download, Power, Scan } from 'lucide-react';
-import { toast } from 'sonner';
+import { Download, Power, Scan } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { scanApp, exportApp, updateAppStatus } from '@/services/apps.service';
-import { useAppsStore } from '@/stores/apps.store';
 import type { InstalledApp } from '@/types/apps';
+import { useAppActions } from './useAppActions';
 
 interface AppCardProps {
   app: InstalledApp;
@@ -40,56 +38,9 @@ const ORIGIN_STYLES: Record<string, { bg: string; color: string }> = {
 };
 
 export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardProps) {
-  const setRestartRequired = useAppsStore((s) => s.setRestartRequired);
   const manifest = app.manifest;
   const levelStyle = LEVEL_STYLES[String(app.app_level)] ?? LEVEL_STYLES['1'];
-
-  const handleScan = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const result = await scanApp(app.app_name);
-      if (result.passed) {
-        toast.success(`Scan passed — ${result.warnings.length} warning(s)`);
-      } else {
-        toast.error(`Scan failed — ${result.errors.length} error(s)`);
-      }
-    } catch {
-      toast.error('Scan failed');
-    }
-  };
-
-  const handleExport = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const blob = await exportApp(app.app_name);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${app.app_name}-${app.version}.claw`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Export downloaded');
-    } catch {
-      toast.error('Export failed');
-    }
-  };
-
-  const handleToggleStatus = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newStatus = app.status === 'active' ? 'disabled' : 'active';
-    try {
-      await updateAppStatus(app.app_name, newStatus);
-      if (app.app_level === 1) {
-        setRestartRequired('openclaw', `${app.app_name} was ${newStatus}`);
-      } else {
-        setRestartRequired('core', `${app.app_name} was ${newStatus}`);
-      }
-      onRefresh();
-      toast.success(`App ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
-    } catch {
-      toast.error('Failed to update status');
-    }
-  };
+  const { handleScan, handleExport, handleToggleStatus } = useAppActions(app, onRefresh);
 
   const isError = app.status === 'error';
 
@@ -112,26 +63,31 @@ export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardPr
         if (!selected) e.currentTarget.style.borderColor = 'var(--border)';
       }}
     >
-      {/* Top row: eligibility dot + icon + name + badges */}
+      {/* Fila 1: punto de elegibilidad + icono + NOMBRE (ancho completo) + nivel.
+          Los demás tags bajan a la fila 2 para que el nombre no se corte. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Eligibility indicator */}
+        {/* Eligibility indicator — el status real (disabled/error) manda sobre los tags. */}
         <div style={{
           width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-          background: manifest?.tags?.includes('unsupported') ? '#ef4444'
+          background: app.status === 'error' ? '#ef4444'
+            : app.status === 'disabled' ? 'var(--text-muted)'
+            : manifest?.tags?.includes('unsupported') ? '#ef4444'
             : manifest?.tags?.includes('needs-setup') ? 'var(--amber)'
             : '#22c55e', // available (ready or installable)
         }} title={
-          manifest?.tags?.includes('unsupported') ? 'Not supported on this OS'
+          app.status === 'error' ? 'Error'
+            : app.status === 'disabled' ? 'Disabled'
+            : manifest?.tags?.includes('unsupported') ? 'Not supported on this OS'
             : manifest?.tags?.includes('needs-setup') ? 'Needs API key or configuration'
             : manifest?.tags?.includes('installable') ? 'Available (will install deps on assign)'
             : 'Ready to use'
         } />
-        <span style={{ fontSize: 22 }}>
+        <span style={{ fontSize: 22, flexShrink: 0 }}>
           {manifest?.icon || manifest?.ui?.module?.icon || '📦'}
         </span>
         <span style={{
           fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)',
-          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {manifest?.name || app.app_name}
         </span>
@@ -139,11 +95,14 @@ export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardPr
         <Badge
           variant="outline"
           className="text-[10px] px-1.5 py-0"
-          style={{ borderColor: levelStyle?.border, color: levelStyle?.color }}
+          style={{ borderColor: levelStyle?.border, color: levelStyle?.color, flexShrink: 0 }}
         >
           L{app.app_level}
         </Badge>
+      </div>
 
+      {/* Fila 2: tags (origin · tier · verified · error). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
         {origin && (
           <span style={{
             fontSize: '0.5625rem', fontWeight: 500, padding: '1px 6px',
@@ -205,10 +164,12 @@ export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardPr
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions — para TODA app (L1/L2/L3): scan (un SKILL.md puede llevar texto malicioso),
+          export .claw y enable/disable (= asignable o no) van por /apps/:name, que ahora resuelve
+          también las apps L1 de disco. */}
       <div style={{
         display: 'flex', gap: 4, borderTop: '1px solid var(--border)',
-        paddingTop: 8, marginTop: 2,
+        paddingTop: 8, marginTop: 2, alignItems: 'center',
       }}>
         <ActionButton icon={<Scan size={12} />} label="Scan" onClick={handleScan} />
         <ActionButton icon={<Download size={12} />} label="Export" onClick={handleExport} />
