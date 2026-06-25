@@ -50,6 +50,7 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   { key: 'projects', label: 'Projects', group: 'Productivity', tier: 'opt_in' },
   { key: 'inventory', label: 'Inventory', group: 'Productivity', tier: 'opt_in' },
   { key: 'office', label: 'Office', group: 'Productivity', tier: 'opt_in' },
+  { key: 'finance', label: 'Finance', group: 'Finance', tier: 'default' },
   { key: 'firefly', label: 'Firefly III', group: 'Finance', tier: 'opt_in' },
   { key: 'solidinvoice', label: 'SolidInvoice', group: 'Finance', tier: 'opt_in' },
   { key: 'crypto', label: 'Crypto Stack', group: 'Finance', tier: 'opt_in' },

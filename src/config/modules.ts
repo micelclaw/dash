@@ -41,6 +41,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'inventory', label: 'Inventory',   icon: Boxes,         color: 'var(--mod-inventory)', path: '/inventory', group: 'Productivity' },
   { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
   // Finance
+  { id: 'finance',      label: 'Finance',        icon: Wallet,   color: 'var(--mod-finance)', path: '/finance',              group: 'Finance' },
   { id: 'firefly',      label: 'Firefly III',    icon: Wallet,   color: 'var(--mod-finance)', path: '/finance/firefly',      group: 'Finance' },
   { id: 'solidinvoice', label: 'SolidInvoice',    icon: Receipt,  color: 'var(--mod-finance)', path: '/finance/solidinvoice', group: 'Finance' },
   { id: 'crypto',       label: 'Crypto Stack',    icon: Bitcoin,      color: '#f7931a',              path: '/crypto',              group: 'Finance' },

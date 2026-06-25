@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Workflow, PlayCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, type LucideIcon } from 'lucide-react';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
@@ -205,7 +205,109 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     label: 'Base de datos',
     route: () => `/office/databases`,
   },
+  // flows: el flow abre su editor (/flows/:id, que ya lee :flowId). El run no tiene
+  // página propia → abre el listado en la pestaña History resaltando ese run
+  // (FlowsPage lee ?run=). El id de la chip de run es el id del propio run.
+  flow: {
+    Icon: Workflow,
+    color: 'var(--mod-flows)',
+    label: 'Flow',
+    route: (id) => `/flows/${encodeURIComponent(id)}`,
+  },
+  flow_run: {
+    Icon: PlayCircle,
+    color: 'var(--mod-flows)',
+    label: 'Run',
+    route: (id) => `/flows?run=${encodeURIComponent(id)}`,
+  },
+  // Finance — Firefly III. Las chips navegan al embed del módulo (deep-link a un
+  // registro concreto = futuro; el iframe es cross-origin). El id se ignora.
+  firefly_transaction: {
+    Icon: ArrowLeftRight,
+    color: 'var(--mod-finance)',
+    label: 'Transacción',
+    route: () => `/finance/firefly`,
+  },
+  firefly_account: {
+    Icon: Wallet,
+    color: 'var(--mod-finance)',
+    label: 'Cuenta',
+    route: () => `/finance/firefly`,
+  },
+  firefly_budget: {
+    Icon: PieChart,
+    color: 'var(--mod-finance)',
+    label: 'Presupuesto',
+    route: () => `/finance/firefly`,
+  },
+  firefly_bill: {
+    Icon: Receipt,
+    color: 'var(--mod-finance)',
+    label: 'Factura',
+    route: () => `/finance/firefly`,
+  },
+  // Finance — Personal NATIVO. Chips → la lente Personal (/finance?tab=personal).
+  finance_account: {
+    Icon: Wallet,
+    color: 'var(--mod-finance)',
+    label: 'Cuenta',
+    route: () => `/finance?tab=personal`,
+  },
+  finance_transaction: {
+    Icon: ArrowLeftRight,
+    color: 'var(--mod-finance)',
+    label: 'Movimiento',
+    route: () => `/finance?tab=personal`,
+  },
+  // Finance — Facturación NATIVO (F2b). Chips → la lente Facturación
+  // (/finance?tab=facturacion). El id deep-linkea al doc/party concreto:
+  // FacturacionLens lee ?doc=/?party= para abrir la factura/ficha del cliente.
+  finance_invoice: {
+    Icon: Receipt,
+    color: 'var(--mod-finance)',
+    label: 'Factura',
+    route: (id) => `/finance?tab=facturacion&doc=${encodeURIComponent(id)}`,
+  },
+  finance_party: {
+    Icon: Users,
+    color: 'var(--mod-finance)',
+    label: 'Facturación', // party = cliente O proveedor; etiqueta neutra
+    route: (id) => `/finance?tab=facturacion&party=${encodeURIComponent(id)}`,
+  },
+  // Slugs CANÓNICOS (= entity_links / lo que devuelven búsqueda, grafo y picker).
+  // finance_invoice/finance_transaction quedan como aliases visuales equivalentes.
+  finance_document: {
+    Icon: Receipt,
+    color: 'var(--mod-finance)',
+    label: 'Factura',
+    route: (id) => `/finance?tab=facturacion&doc=${encodeURIComponent(id)}`,
+  },
+  finance_journal_entry: {
+    Icon: ArrowLeftRight,
+    color: 'var(--mod-finance)',
+    label: 'Movimiento',
+    route: () => `/finance?tab=personal`,
+  },
+  // Finance — SolidInvoice. Chips → embed de SolidInvoice.
+  solidinvoice_client: {
+    Icon: Users,
+    color: 'var(--mod-finance)',
+    label: 'Cliente',
+    route: () => `/finance/solidinvoice`,
+  },
+  solidinvoice_invoice: {
+    Icon: Receipt,
+    color: 'var(--mod-finance)',
+    label: 'Factura',
+    route: () => `/finance/solidinvoice`,
+  },
+  solidinvoice_quote: {
+    Icon: FileText,
+    color: 'var(--mod-finance)',
+    label: 'Presupuesto',
+    route: () => `/finance/solidinvoice`,
+  },
 };
 
 /** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
-export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card'] as const;
+export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry', 'finance_party'] as const;

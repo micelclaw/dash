@@ -86,6 +86,7 @@ const router = createBrowserRouter([
           { path: '/office/pdf/:fileId', lazy: () => import('@/modules/office/PdfViewer') },
           { path: '/office/pdf/tools', lazy: () => import('@/modules/office/PdfToolsFrame') },
           { path: '/office/databases', lazy: () => import('@/modules/office/DatabasesFrame') },
+          { path: '/finance', lazy: () => import('@/modules/finance/FinanceLauncher') },
           { path: '/finance/firefly', lazy: () => import('@/modules/finance/FireflyPage') },
           { path: '/finance/solidinvoice', lazy: () => import('@/modules/finance/SolidInvoicePage') },
           { path: '/video', lazy: () => import('@/modules/video/VideoPage') },
@@ -134,6 +135,9 @@ const router = createBrowserRouter([
           { path: '/gateway', lazy: () => import('@/modules/gateway/GatewayPage') },
           { path: '/flows', lazy: () => import('@/modules/flows/FlowsPage') },
           { path: '/flows/:flowId', lazy: () => import('@/modules/flows/FlowEditor') },
+          // Ruta genérica de módulos dinámicos (apps L3 servidas por Core como
+          // iframe): el AppModuleHost resuelve :appName contra el ui-modules store.
+          { path: '/app/:appName', lazy: () => import('@/modules/app-host/AppModuleHost') },
           { path: '/activity', lazy: () => import('@/modules/activity/ActivityModule') },
           { path: '/studio', lazy: () => import('@/modules/studio/StudioPage') },
           { path: '/studio/:projectId', lazy: () => import('@/modules/studio/ProjectDetailPage') },
