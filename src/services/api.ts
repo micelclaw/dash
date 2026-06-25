@@ -206,7 +206,7 @@ class ApiClient {
     return this.request<T>('DELETE', path, body !== undefined ? { body } : undefined);
   }
 
-  async upload<T>(path: string, formData: FormData, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
+  async upload<T>(path: string, formData: FormData, method: 'POST' | 'PUT' = 'POST', opts?: { timeout?: number }): Promise<T> {
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
       const { getMockResponse } = await import('./mock');
@@ -217,7 +217,7 @@ class ApiClient {
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
     // No Content-Type — browser sets multipart boundary
-    const res = await fetch(url, { method, headers, body: formData, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const res = await fetch(url, { method, headers, body: formData, signal: AbortSignal.timeout(opts?.timeout ?? REQUEST_TIMEOUT_MS) });
     if (!res.ok) {
       const text = await res.text();
       throw new ApiError('UPLOAD_FAILED', text, undefined, res.status);
