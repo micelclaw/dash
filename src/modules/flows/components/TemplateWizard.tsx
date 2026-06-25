@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { X, ChevronLeft, ChevronRight, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,7 +26,7 @@ interface WizardStep {
   fields: WizardField[];
 }
 
-interface TemplateData {
+export interface TemplateData {
   id: string;
   name: string;
   description: string;
@@ -96,17 +96,24 @@ export function TemplateWizard({ template, onClose }: TemplateWizardProps) {
           continue;
         }
 
-        // Simple path resolution: "steps[0].config.account" → set nested value
+        // Simple path resolution: "steps[0].config.account" → set nested value.
+        // Guard every hop: a malformed template (maps_to pointing at a step
+        // index that doesn't exist) used to throw "Cannot set properties of
+        // undefined" mid-loop instead of skipping the bad field.
         const parts = mapsTo.split('.');
         let target: any = flowData;
+        let resolved = true;
         for (let i = 0; i < parts.length - 1; i++) {
           const p = parts[i]!;
           const match = p.match(/^(\w+)\[(\d+)\]$/);
-          if (match && match[1] && match[2]) {
-            target = target[match[1]][Number(match[2])];
-          } else {
-            target = target[p];
-          }
+          target = match && match[1] && match[2]
+            ? target?.[match[1]]?.[Number(match[2])]
+            : target?.[p];
+          if (target == null || typeof target !== 'object') { resolved = false; break; }
+        }
+        if (!resolved) {
+          console.warn('flows: wizard maps_to path unresolved, skipping field', { field: field.id, mapsTo });
+          continue;
         }
         const lastKey = parts[parts.length - 1]!;
         target[lastKey] = val;
@@ -131,6 +138,13 @@ export function TemplateWizard({ template, onClose }: TemplateWizardProps) {
     }
   }, [applyWizardValues, createFlow, template.name, onClose, navigate]);
 
+  // Close on Escape — the custom flow modals weren't keyboard-dismissable.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       onClick={onClose}
@@ -141,6 +155,9 @@ export function TemplateWizard({ template, onClose }: TemplateWizardProps) {
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Create flow from ${template.name}`}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12,

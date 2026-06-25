@@ -310,6 +310,12 @@ function EventConfig({ triggerConfig, onChange }: {
         style={inputStyle}
       >
         <option value="">Select an event…</option>
+        {/* If the saved event is no longer in the catalog, surface it so the
+            select doesn't silently render "Select an event…" while the config
+            still holds the stale value (UI↔state mismatch). */}
+        {event && !keys.some((k) => k.key === event) && (
+          <option value={event}>{event} (unavailable)</option>
+        )}
         {[...grouped.entries()].map(([domain, items]) => (
           <optgroup key={domain} label={domain}>
             {items.map((k) => (
@@ -325,10 +331,13 @@ function EventConfig({ triggerConfig, onChange }: {
   );
 }
 
-// SensorConfig retirado 2026-06-05 (trigger 'sensor' eliminado con sensor-fusion).
-
 function WebhookConfig({ flowId, secret }: { flowId?: string; secret?: string }) {
-  const url = flowId ? `${window.location.origin}/api/v1/flows/${flowId}/webhook` : '';
+  // Use the configured API origin (VITE_API_URL) when Core is served from a
+  // different host than the dash; otherwise the current origin (reverse-proxy
+  // setups serve both from the same one). NOTE: for an EXTERNAL caller this
+  // still has to be a publicly-reachable URL — see the hint below.
+  const apiOrigin = (import.meta.env.VITE_API_URL as string | undefined) || window.location.origin;
+  const url = flowId ? `${apiOrigin}/api/v1/flows/${flowId}/webhook` : '';
   const curlExample = flowId && secret
     ? `curl -X POST -H "Authorization: Bearer ${secret}" \\\n  ${url} -d '{"hello":"world"}'`
     : '';
@@ -357,6 +366,10 @@ function WebhookConfig({ flowId, secret }: { flowId?: string; secret?: string })
           <Copy size={12} />
         </button>
       </div>
+      <p style={{ ...hintBoxStyle, marginTop: 4 }}>
+        For an external service this must be a publicly-reachable address — replace the
+        host with your domain / Tailscale URL if it differs from the one shown.
+      </p>
 
       {secret && (
         <>

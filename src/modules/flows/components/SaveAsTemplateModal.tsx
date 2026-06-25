@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { X, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { useFlowsStore } from '@/stores/flows.store';
@@ -34,6 +34,12 @@ export function SaveAsTemplateModal({ flowId, flowName, flowColor, onClose }: Sa
     }
   }, [flowId, saveAsTemplate, onClose]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div
       onClick={onClose}
@@ -44,6 +50,9 @@ export function SaveAsTemplateModal({ flowId, flowName, flowColor, onClose }: Sa
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Save as template"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12,

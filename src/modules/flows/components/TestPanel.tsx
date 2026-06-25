@@ -30,16 +30,24 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
   const [totalTokens, setTotalTokens] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
   const [expandedStep, setExpandedStep] = useState<string | null>(null);
+  // simulated=true → static preview (Lobster unavailable); else a real
+  // dry-run ran: `validated` says whether Lobster accepted the flow.
+  const [simulated, setSimulated] = useState(true);
+  const [validated, setValidated] = useState<boolean | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const runTest = useCallback(async () => {
     setTesting(true);
     setResults(null);
     try {
-      const res = await api.post<{ data: { steps: TestResult[]; total_duration_ms: number; total_tokens: number; cost_estimate: number } }>(`/flows/${flowId}/test`);
+      const res = await api.post<{ data: { steps: TestResult[]; total_duration_ms: number; total_tokens: number; cost_estimate: number; simulated?: boolean; validated?: boolean; error?: string } }>(`/flows/${flowId}/test`);
       setResults(res.data.steps ?? []);
       setTotalDuration(res.data.total_duration_ms ?? 0);
       setTotalTokens(res.data.total_tokens ?? 0);
       setTotalCost(res.data.cost_estimate ?? 0);
+      setSimulated(res.data.simulated !== false);
+      setValidated(res.data.validated ?? null);
+      setValidationError(res.data.error ?? null);
     } catch (err) {
       toast.error(`Test failed: ${(err as Error).message}`);
     } finally {
@@ -81,9 +89,12 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
         )}
 
         {!testing && results && (
-          <div style={{ color: 'var(--text-dim)', fontSize: 11, marginBottom: 8 }}>
-            This is a static preview of the flow steps. Nothing was executed —
-            real dry-run requires a Lobster spec change.
+          <div style={{ color: validationError ? 'var(--error)' : 'var(--text-dim)', fontSize: 11, marginBottom: 8 }}>
+            {validationError
+              ? `Dry-run found a problem: ${validationError}`
+              : simulated
+                ? 'Static preview of the flow steps. Nothing was executed (the flow engine is unavailable).'
+                : `Validated via Lobster dry-run${validated ? '' : ' (with warnings)'}. Nothing was executed.`}
           </div>
         )}
 
@@ -108,7 +119,7 @@ export function TestPanel({ flowId, onClose }: TestPanelProps) {
                       <CheckCircle2 size={12} style={{ color: 'var(--success)' }} />
                     )}
                     <span style={{ fontSize: 12, color: 'var(--text)', flex: 1 }}>
-                      Step {r.step_id}: {r.output_summary}
+                      {r.output_summary || r.step_id}
                     </span>
                     {isSimulated && <span style={{ fontSize: 9, color: 'var(--info)', background: 'rgba(56,189,248,0.1)', padding: '1px 4px', borderRadius: 3 }}>simulated</span>}
                     {r.tokens_used ? <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{r.tokens_used} tokens</span> : null}

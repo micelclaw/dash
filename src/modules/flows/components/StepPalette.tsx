@@ -3,7 +3,7 @@
  * All rights reserved.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Search } from 'lucide-react';
 import { useFlowsStore } from '@/stores/flows.store';
 import { STEP_CATEGORIES } from '../types';
@@ -17,6 +17,12 @@ export function StepPalette({ onSelect, onClose }: StepPaletteProps) {
   const stepTypes = useFlowsStore((s) => s.stepTypes);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const filtered = stepTypes.filter((st) => {
     if (search) {
@@ -45,6 +51,9 @@ export function StepPalette({ onSelect, onClose }: StepPaletteProps) {
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add step"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12,

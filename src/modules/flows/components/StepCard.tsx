@@ -261,19 +261,48 @@ function ParamField({ param, value, onChange }: {
           <option value="">— pick one —</option>
           {dynamicOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+      ) : param.type === 'multi_select' ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, padding: '2px 0' }}>
+          {param.options?.map((o) => {
+            const selected = Array.isArray(value) && (value as string[]).includes(o.value);
+            return (
+              <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={selected}
+                  onChange={(e) => {
+                    const cur = Array.isArray(value) ? (value as string[]) : [];
+                    onChange(e.target.checked ? [...cur, o.value] : cur.filter((v) => v !== o.value));
+                  }}
+                />
+                {o.label}
+              </label>
+            );
+          })}
+        </div>
       ) : param.type === 'select' ? (
         <select
           value={(value as string) ?? (param.default as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
           style={selectStyle}
         >
+          {/* No default → a disabled placeholder so the field reads as
+              "unset" instead of silently adopting the first option. */}
+          {param.default === undefined && <option value="" disabled>— pick one —</option>}
           {param.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       ) : param.type === 'number' ? (
         <input
           type="number"
           value={(value as number) ?? (param.default as number) ?? ''}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => {
+            // Empty field → undefined (not 0). `Number('')` is 0 and would
+            // silently force e.g. limit:0; NaN would persist as null.
+            const v = e.target.value;
+            if (v === '') { onChange(undefined); return; }
+            const n = Number(v);
+            if (!Number.isNaN(n)) onChange(n);
+          }}
           style={inputStyle}
         />
       ) : param.type === 'tag_input' ? (
