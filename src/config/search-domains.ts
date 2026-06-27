@@ -43,7 +43,6 @@ export const SEARCHABLE_DOMAINS: SearchableDomain[] = [
   { key: 'inventory', label: 'Inventory',     domains: ['inventory'] },
   { key: 'invoices',  label: 'Facturas',      domains: ['finance_document'] },
   { key: 'movements', label: 'Movimientos',   domains: ['finance_journal_entry'] },
-  { key: 'parties',   label: 'Clientes',      domains: ['finance_party'] },
   { key: 'chat',      label: 'Conversations', domains: ['conversation'] },
   { key: 'messages',  label: 'Messages',      domains: ['message'] },
   { key: 'music',     label: 'Music',         domains: ['music'] },

@@ -37,7 +37,12 @@ const DOMAIN_ENDPOINTS: Record<string, { path: string; titleKey: string }> = {
   contact: { path: '/contacts', titleKey: 'display_name' },
   email: { path: '/emails', titleKey: 'subject' },
   file: { path: '/files', titleKey: 'filename' },
+  diary: { path: '/diary', titleKey: 'entry_date' },
   kanban_card: { path: '/projects/cards', titleKey: 'title' },
+  // Cruce con inventario y finanzas (GET de detalle nativos).
+  inventory_item: { path: '/inventory/items', titleKey: 'name' },
+  finance_document: { path: '/finance/documents', titleKey: 'number' },
+  finance_journal_entry: { path: '/finance/transactions', titleKey: 'description' },
 };
 
 async function resolveTitle(type: string, id: string): Promise<string> {

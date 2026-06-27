@@ -35,6 +35,8 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { useInventoryLinks } from '@/modules/inventory/hooks/use-inventory-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
+import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
+import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { TagInput } from '@/components/shared/TagInput';
 import { TagChip } from '@/components/shared/TagChip';
 import { AddLinkPopover } from './AddLinkPopover';
@@ -1350,14 +1352,16 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
             )}
           </div>
 
-          {/* 7. Related */}
-          <div style={{ position: 'relative' }}>
+          {/* 7. Related — `margin -16` cancela el padding del header → sin tabulación */}
+          <div style={{ position: 'relative', margin: '0 -16px' }}>
             {!readOnly && (
               <div style={{ position: 'absolute', top: 4, right: 16, zIndex: 2 }}>
                 <AddLinkPopover itemId={itemId} onLinked={refreshLinks} />
               </div>
             )}
-            <RelatedItemsPanel links={relatedLinks} loading={relatedLoading} onNavigate={() => selectItem(null)} />
+            <RelatedItemsPanel links={relatedLinks} loading={relatedLoading} onNavigate={() => selectItem(null)} sourceType="inventory_item" sourceId={itemId} />
+            {itemId && <SimilarContentPanel sourceType="inventory_item" sourceId={itemId} />}
+            {itemId && <GraphProximityPanel sourceType="inventory_item" sourceId={itemId} />}
           </div>
 
           {/* 8. Timeline */}

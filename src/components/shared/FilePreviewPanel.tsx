@@ -129,7 +129,7 @@ export function FilePreviewPanel({
           )}
 
           {showRelated && (
-            <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} />
+            <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} sourceType="file" sourceId={file.id} />
           )}
 
           <SimilarContentPanel sourceType="file" sourceId={file.id} />

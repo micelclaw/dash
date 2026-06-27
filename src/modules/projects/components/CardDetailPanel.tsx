@@ -12,13 +12,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink } from 'lucide-react';
+import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { api } from '@/services/api';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
+import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
 import { useCardLinks } from '../hooks/use-card-links';
 import { getChecklistProgressColor } from '../utils/design-tokens';
 import type { ChecklistItem, Comment, Dependency, CustomFieldDef, Column } from '../types';
@@ -53,6 +54,10 @@ const DOMAIN_ICONS: Record<string, typeof FileText> = {
   contact: User,
   file: File,
   bookmarks: Bookmark,
+  diary: BookOpen, diary_entries: BookOpen,
+  inventory_item: Package, inventory: Package,
+  finance_document: Receipt,
+  finance_journal_entry: ArrowLeftRight,
 };
 
 const DOMAIN_ROUTES: Record<string, string> = {
@@ -61,7 +66,11 @@ const DOMAIN_ROUTES: Record<string, string> = {
   contact: '/contacts',
   email: '/mail',
   file: '/drive',
+  diary: '/diary',
   kanban_card: '/projects',
+  inventory_item: '/inventory',
+  finance_document: '/finance',
+  finance_journal_entry: '/finance',
 };
 
 interface CardDetailPanelProps {
@@ -550,6 +559,9 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
             </div>
           )}
         </div>
+
+        {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
+        <RelationIntelligence sourceType="kanban_card" sourceId={cardId} />
 
         {/* Comments / Activity section (collapsible) */}
         <div>

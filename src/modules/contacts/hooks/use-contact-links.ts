@@ -13,38 +13,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 import type { EntityLink, LinkedRecord } from '@/types/links';
-import type { ApiListResponse, ApiResponse } from '@/types/api';
-
-const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
-  note: { endpoint: '/notes', titleField: 'title' },
-  notes: { endpoint: '/notes', titleField: 'title' },
-  email: { endpoint: '/emails', titleField: 'subject' },
-  emails: { endpoint: '/emails', titleField: 'subject' },
-  event: { endpoint: '/events', titleField: 'title' },
-  events: { endpoint: '/events', titleField: 'title' },
-  contact: { endpoint: '/contacts', titleField: 'display_name' },
-  contacts: { endpoint: '/contacts', titleField: 'display_name' },
-  file: { endpoint: '/files', titleField: 'filename' },
-  files: { endpoint: '/files', titleField: 'filename' },
-  diary: { endpoint: '/diary', titleField: 'entry_date' },
-  diary_entries: { endpoint: '/diary', titleField: 'entry_date' },
-  inventory_item: { endpoint: '/inventory/items', titleField: 'name' },
-};
-
-const ROUTE_MAP: Record<string, string> = {
-  note: '/notes', notes: '/notes',
-  event: '/calendar', events: '/calendar',
-  contact: '/contacts', contacts: '/contacts',
-  email: '/mail', emails: '/mail',
-  file: '/drive', files: '/drive',
-  diary: '/diary', diary_entries: '/diary',
-};
-
-function routeFor(domain: string, recordId: string): string {
-  // The inventory drawer opens via store, not URL — route to the module only.
-  if (domain === 'inventory_item') return '/inventory?tab=catalog';
-  return `${ROUTE_MAP[domain] || '/'}?id=${recordId}`;
-}
+import type { ApiListResponse } from '@/types/api';
+import { resolveLink, enrichLinkedRecords } from '@/config/related-links';
 
 export function useContactLinks(contactId: string | null) {
   const [linkedRecords, setLinkedRecords] = useState<LinkedRecord[]>([]);
@@ -60,35 +30,22 @@ export function useContactLinks(contactId: string | null) {
   useEffect(() => {
     if (!contactId) { setLinkedRecords([]); return; }
 
+    let cancelled = false;
     setLoading(true);
     api.get<ApiListResponse<EntityLink>>('/links', { entity_type: 'contact', entity_id: contactId })
       .then(async (res) => {
-        const records: LinkedRecord[] = [];
-        for (const link of res.data) {
-          const isSource = link.source_id === contactId;
-          const domain = isSource ? link.target_type : link.source_type;
-          const recordId = isSource ? link.target_id : link.source_id;
-          const config = DOMAIN_MAP[domain];
-          if (!config) continue;
-          try {
-            const rec = await api.get<ApiResponse<Record<string, unknown>>>(`${config.endpoint}/${recordId}`);
-            records.push({
-              link,
-              domain,
-              record: {
-                id: recordId,
-                title: String(rec.data?.[config.titleField] || recordId),
-                route: routeFor(domain, recordId),
-              },
-            });
-          } catch {
-            records.push({ link, domain, record: { id: recordId, title: recordId, route: routeFor(domain, recordId) } });
-          }
-        }
-        setLinkedRecords(records);
+        if (cancelled) return;
+        const resolved = res.data
+          .map(link => resolveLink(link, contactId))
+          .filter(r => r.domain !== 'graph_entity');
+        setLinkedRecords([...resolved]);
+        setLoading(false);
+        await enrichLinkedRecords(resolved);
+        if (!cancelled) setLinkedRecords([...resolved]);
       })
-      .catch(() => setLinkedRecords([]))
-      .finally(() => setLoading(false));
+      .catch(() => { if (!cancelled) { setLinkedRecords([]); setLoading(false); } });
+
+    return () => { cancelled = true; };
   }, [contactId, version]);
 
   return { linkedRecords, loading };

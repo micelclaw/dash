@@ -620,7 +620,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
       {/* Intelligence panels */}
       <div style={{ borderTop: '1px solid var(--border)' }}>
-        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
+        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} sourceType="note" sourceId={noteId} />
         <SimilarContentPanel sourceType="note" sourceId={noteId} />
         <GraphProximityPanel sourceType="note" sourceId={noteId} />
       </div>

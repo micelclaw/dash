@@ -449,7 +449,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           onForward={handleForward}
         />
         <div style={{ padding: '0 16px 16px' }}>
-          <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} />
+          <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} sourceType="email" sourceId={emailId} />
           <SimilarContentPanel sourceType="email" sourceId={emailId} />
           <GraphProximityPanel sourceType="email" sourceId={emailId} />
         </div>
@@ -679,7 +679,7 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
       </div>
 
       {/* Related items */}
-      <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} />
+      <RelatedItemsPanel links={linkedRecords} loading={linksLoading} onNavigate={onNavigate} sourceType="email" sourceId={emailId} />
       <SimilarContentPanel sourceType="email" sourceId={emailId} />
       <GraphProximityPanel sourceType="email" sourceId={emailId} />
 

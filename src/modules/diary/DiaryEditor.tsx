@@ -71,7 +71,9 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      // StarterKit de TipTap 3.x ya incluye link y underline; los desactivamos
+      // aquí para añadirlos configurados aparte sin colisión de nombres.
+      StarterKit.configure({ codeBlock: false, link: false, underline: false }),
       Placeholder.configure({ placeholder }),
       UnderlineExt,
       Link.configure({ openOnClick: false }),
@@ -84,6 +86,9 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
       isDirtyRef.current = true;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
+        // Si el editor se desmontó mientras el debounce estaba pendiente, su schema
+        // ya es null y getHTML() petaría ("schema is null"). Salir en silencio.
+        if (ed.isDestroyed) return;
         autoSave(ed.getHTML());
       }, 1500);
     },
@@ -103,6 +108,12 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   useEffect(() => {
     isDirtyRef.current = false;
   }, [entry.id]);
+
+  // Cancelar el autosave debounced al desmontar para que no dispare sobre un editor
+  // ya destruido (causa del crash "schema is null").
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
 
   const autoSave = useCallback(async (content: string) => {
     setSaving(true);
@@ -287,7 +298,7 @@ export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
       {/* Day context + Intelligence panels */}
       <div style={{ borderTop: '1px solid var(--border)' }}>
         <DayContext entryDate={entry.entry_date} />
-        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} />
+        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} sourceType="diary_entry" sourceId={entry.id} />
         <SimilarContentPanel sourceType="diary_entry" sourceId={entry.id} />
         <GraphProximityPanel sourceType="diary_entry" sourceId={entry.id} />
       </div>

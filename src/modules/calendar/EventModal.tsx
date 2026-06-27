@@ -444,7 +444,7 @@ function ViewMode({
 
       {/* Related items */}
       <div style={{ borderTop: '1px solid var(--border)', marginTop: 4 }}>
-        <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onNavigate} />
+        <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onNavigate} sourceType="event" sourceId={event.id} />
         <SimilarContentPanel sourceType="event" sourceId={event.id} />
         <GraphProximityPanel sourceType="event" sourceId={event.id} />
       </div>

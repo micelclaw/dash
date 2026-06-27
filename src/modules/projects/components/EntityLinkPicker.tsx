@@ -47,7 +47,6 @@ const DOMAIN_ICONS: Record<string, typeof FileText> = {
   inventory: Package,
   finance_document: Receipt,
   finance_journal_entry: ArrowLeftRight,
-  finance_party: User,
 };
 
 function getResultTitle(result: SearchResult): string {
@@ -63,7 +62,6 @@ function getResultTitle(result: SearchResult): string {
     case 'inventory': return String(r.name || 'Artículo');
     case 'finance_document': return String(r.number || r.bill_to_name || 'Factura');
     case 'finance_journal_entry': return String(r.description || 'Movimiento');
-    case 'finance_party': return String(r.name || 'Cliente');
     default: return String(r.title || r.name || 'Unknown');
   }
 }

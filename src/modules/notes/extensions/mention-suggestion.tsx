@@ -44,7 +44,6 @@ function resultLabel(domain: string, record: Record<string, unknown> | null, sni
     case 'inventory': return pick('name');
     case 'finance_document': return pick('number', 'bill_to_name') || snippet.slice(0, 60);
     case 'finance_journal_entry': return pick('description') || snippet.slice(0, 60);
-    case 'finance_party': return pick('name', 'legal_name');
     case 'diary': return pick('title', 'entry_date') || snippet.slice(0, 60);
     default: return pick('title', 'name') || snippet.slice(0, 60);
   }

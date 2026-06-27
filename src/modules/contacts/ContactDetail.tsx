@@ -549,7 +549,7 @@ export function ContactDetail({
         )}
 
         {/* Related items */}
-        <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onBack} />
+        <RelatedItemsPanel links={linkedRecords} loading={linkedRecordsLoading} onNavigate={onBack} sourceType="contact" sourceId={contact.id} />
         <SimilarContentPanel sourceType="contact" sourceId={contact.id} />
         <GraphProximityContactPanel contactId={contact.id} />
 

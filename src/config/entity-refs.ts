@@ -260,19 +260,14 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     route: () => `/finance?tab=personal`,
   },
   // Finance — Facturación NATIVO (F2b). Chips → la lente Facturación
-  // (/finance?tab=facturacion). El id deep-linkea al doc/party concreto:
-  // FacturacionLens lee ?doc=/?party= para abrir la factura/ficha del cliente.
+  // (/finance?tab=facturacion). El id deep-linkea al doc concreto:
+  // FacturacionLens lee ?doc= para abrir la factura. Los clientes/proveedores
+  // son CONTACTOS (dominio `contact`), no un dominio de facturación propio.
   finance_invoice: {
     Icon: Receipt,
     color: 'var(--mod-finance)',
     label: 'Factura',
     route: (id) => `/finance?tab=facturacion&doc=${encodeURIComponent(id)}`,
-  },
-  finance_party: {
-    Icon: Users,
-    color: 'var(--mod-finance)',
-    label: 'Facturación', // party = cliente O proveedor; etiqueta neutra
-    route: (id) => `/finance?tab=facturacion&party=${encodeURIComponent(id)}`,
   },
   // Slugs CANÓNICOS (= entity_links / lo que devuelven búsqueda, grafo y picker).
   // finance_invoice/finance_transaction quedan como aliases visuales equivalentes.
@@ -310,4 +305,4 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
 };
 
 /** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
-export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry', 'finance_party'] as const;
+export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'] as const;

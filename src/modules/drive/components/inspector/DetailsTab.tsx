@@ -224,7 +224,7 @@ export function DetailsTab({ file: fileProp, onRefetch, onDelete, onToggleStar }
 
         {/* AI panels (same components Explorer's FilePreviewPanel uses) */}
         <div>
-          <RelatedItemsPanel links={links} loading={linksLoading} />
+          <RelatedItemsPanel links={links} loading={linksLoading} sourceType="file" sourceId={file.id} />
           <SimilarContentPanel sourceType="file" sourceId={file.id} />
           <GraphProximityPanel sourceType="file" sourceId={file.id} />
         </div>

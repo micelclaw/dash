@@ -12,9 +12,10 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, Trash2 } from 'lucide-react';
+import { ArrowRight, Trash2, Link2 } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { IntelligencePanelHeader } from '@/components/shared/IntelligencePanelHeader';
+import { RelateEntityModal } from '@/components/shared/RelateEntityModal';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { resolveEntity } from '@/config/entity-registry';
@@ -27,31 +28,58 @@ interface RelatedItemsPanelProps {
   loading?: boolean;
   /** Called before navigating — use to close modals/panels */
   onNavigate?: () => void;
+  /** Registro actual (origen). Si se pasan ambos, el header muestra el botón de
+   *  enlazar (siempre visible, también colapsado) para relacionar nuevas entidades. */
+  sourceType?: string;
+  sourceId?: string;
 }
 
 const MAX_VISIBLE = 3;
 
-export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPanelProps) {
+export function RelatedItemsPanel({ links, loading, onNavigate, sourceType, sourceId }: RelatedItemsPanelProps) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
+  const [relating, setRelating] = useState(false);
+
+  const canRelate = !!sourceType && !!sourceId;
+  const linkBtn = canRelate ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); setRelating(true); }}
+      title="Relacionar con otra entidad"
+      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', padding: 2 }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--amber)')}
+      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
+    >
+      <Link2 size={13} />
+    </button>
+  ) : undefined;
+  const relateModal = relating && canRelate ? (
+    <RelateEntityModal sourceType={sourceType!} sourceId={sourceId!} onClose={() => setRelating(false)} />
+  ) : null;
 
   if (loading) {
     return (
-      <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false}>
-        {[1, 2, 3].map(i => (
-          <div key={i} style={{ height: 32, background: 'var(--surface)', borderRadius: 4, marginBottom: 4 }} />
-        ))}
-      </IntelligencePanelHeader>
+      <>
+        <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ height: 32, background: 'var(--surface)', borderRadius: 4, marginBottom: 4 }} />
+          ))}
+        </IntelligencePanelHeader>
+        {relateModal}
+      </>
     );
   }
 
   if (links.length === 0) {
     return (
-      <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false}>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '2px 0' }}>
-          No linked records yet
-        </div>
-      </IntelligencePanelHeader>
+      <>
+        <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '2px 0' }}>
+            No linked records yet
+          </div>
+        </IntelligencePanelHeader>
+        {relateModal}
+      </>
     );
   }
 
@@ -59,7 +87,8 @@ export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPa
   const remaining = links.length - MAX_VISIBLE;
 
   return (
-    <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false}>
+    <>
+    <IntelligencePanelHeader title="Related Entities" storageKey="related-entities" defaultCollapsed={false} headerRight={linkBtn}>
       {visible.map(rec => {
         const { Icon, color } = resolveEntity(rec.domain, undefined, rec.record as Record<string, unknown> | null);
 
@@ -132,5 +161,7 @@ export function RelatedItemsPanel({ links, loading, onNavigate }: RelatedItemsPa
         </button>
       )}
     </IntelligencePanelHeader>
+    {relateModal}
+    </>
   );
 }

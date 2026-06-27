@@ -18,6 +18,8 @@ interface IntelligencePanelHeaderProps {
   storageKey: string;
   defaultCollapsed?: boolean;
   children: React.ReactNode;
+  /** Acción SIEMPRE visible a la derecha del título (también colapsado): p.ej. el botón de enlazar. */
+  headerRight?: React.ReactNode;
 }
 
 export function IntelligencePanelHeader({
@@ -25,6 +27,7 @@ export function IntelligencePanelHeader({
   storageKey,
   defaultCollapsed = true,
   children,
+  headerRight,
 }: IntelligencePanelHeaderProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -45,32 +48,36 @@ export function IntelligencePanelHeader({
 
   return (
     <div style={{ padding: '4px 16px 8px' }}>
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          padding: '4px 0',
-          width: '100%',
-          textAlign: 'left',
-          fontFamily: 'var(--font-sans)',
-        }}
-      >
-        <Chevron size={12} style={{ color: 'var(--text-muted)' }} />
-        <span style={{
-          fontSize: '0.6875rem',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-        }}>
-          {title}
-        </span>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '4px 0',
+            flex: 1,
+            minWidth: 0,
+            textAlign: 'left',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <Chevron size={12} style={{ color: 'var(--text-muted)' }} />
+          <span style={{
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            color: 'var(--text-muted)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}>
+            {title}
+          </span>
+        </button>
+        {headerRight && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>{headerRight}</div>}
+      </div>
       {!collapsed && (
         <div style={{ paddingTop: 4 }}>
           {children}
