@@ -57,12 +57,15 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
                 </td>
               </tr>
             ) : (
-              rows.map((row) => {
-                const key = getKey(row);
-                const isSelected = selectedRow && getKey(selectedRow) === key;
+              rows.map((row, index) => {
+                const rowKey = getKey(row);
+                const isSelected = selectedRow && getKey(selectedRow) === rowKey;
                 return (
                   <tr
-                    key={key}
+                    // El index desempata filas de log con misma firma de contenido
+                    // (mismo ts-ms + source + primeros chars, sin req_id) que colisionaban
+                    // en los tabs de logs. La selección sigue comparando rowKey (contenido).
+                    key={`${rowKey}::${index}`}
                     onClick={() => setSelectedRow(row)}
                     className={`cursor-pointer border-b border-[var(--border)] hover:bg-[var(--surface-hover)] ${
                       isSelected ? 'bg-[var(--surface-hover)]' : ''

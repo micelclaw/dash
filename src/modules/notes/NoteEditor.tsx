@@ -163,6 +163,12 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5, 6] },
         codeBlock: false,
+        // StarterKit de TipTap 3.x ya incluye link/underline/listKeymap; los
+        // desactivamos para añadir nuestras versiones a medida (autolink,
+        // openOnClick:false, ListKeymap) sin colisión de nombres de extensión.
+        link: false,
+        underline: false,
+        listKeymap: false,
       }),
       Placeholder.configure({ placeholder: 'Start writing...' }),
       UnderlineExt,

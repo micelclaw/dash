@@ -493,7 +493,10 @@ export function Component() {
   // Dev-only: warn on console if the search index has drifted from the
   // section registry. Keeps drift detectable without a test runner.
   useEffect(() => {
-    if (import.meta.env.DEV) validateSearchIndex(KNOWN_SECTION_IDS);
+    // 'raw' no está en SECTION_REGISTRY (es una página standalone a la que se
+    // redirige, ver useEffect de redirectedSection), pero SÍ es un destino de
+    // búsqueda válido; lo incluimos para que el checker no lo marque fantasma.
+    if (import.meta.env.DEV) validateSearchIndex([...KNOWN_SECTION_IDS, 'raw']);
   }, []);
 
   if (loading && !settings) {

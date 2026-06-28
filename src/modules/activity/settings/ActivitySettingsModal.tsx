@@ -17,6 +17,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -154,6 +155,9 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
       <DialogContent className="max-w-3xl max-h-[88vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Activity Center · Settings</DialogTitle>
+          <DialogDescription>
+            Presupuesto de almacenamiento, reglas de notificación y exportación/borrado de tus datos de actividad.
+          </DialogDescription>
         </DialogHeader>
 
         {loading ? (
