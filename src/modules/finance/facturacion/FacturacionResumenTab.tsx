@@ -332,7 +332,7 @@ function ApAgingChart({ aging }: { aging: ApAging }) {
 }
 
 // (c) Top clientes — barras horizontales (facturado) + pendiente, clicable.
-function TopClientsChart({ rows, onOpen }: { rows: InvoicingTopClient[]; onOpen: (partyId: string) => void }) {
+function TopClientsChart({ rows, onOpen }: { rows: InvoicingTopClient[]; onOpen: (contactId: string) => void }) {
   const data = useMemo(() => rows.map((r) => ({ ...r, invoicedNum: Number(r.invoiced), outstandingNum: Number(r.outstanding) })), [rows]);
   if (data.length === 0) return <EmptyChart height={160} label="Sin clientes facturados todavía." />;
   const max = Math.max(...data.map((d) => d.invoicedNum), 1);
@@ -342,13 +342,13 @@ function TopClientsChart({ rows, onOpen }: { rows: InvoicingTopClient[]; onOpen:
         const rowProps: React.HTMLAttributes<HTMLDivElement> = {
           role: 'button',
           tabIndex: 0,
-          onClick: () => onOpen(d.party_id),
-          onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(d.party_id); } },
+          onClick: () => onOpen(d.contact_id),
+          onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(d.contact_id); } },
           onMouseEnter: (e) => { e.currentTarget.style.background = 'var(--surface-hover)'; },
           onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent'; },
         };
         return (
-          <div key={d.party_id} {...rowProps} style={{ padding: '6px 6px', borderRadius: 4, cursor: 'pointer' }}>
+          <div key={d.contact_id} {...rowProps} style={{ padding: '6px 6px', borderRadius: 4, cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, fontSize: 13 }}>
               <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{d.name}</span>
               <span style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexShrink: 0 }}>
@@ -378,7 +378,7 @@ export function FacturacionResumenTab() {
   // filtradas (Facturas→invoice, Recibidas→bill) SOBREESCRIBEN al montar. El
   // Resumen recarga SIN filtro al montar para ver siempre el set completo.
   useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
-  const { openInvoice, openParty } = useFacturacionNav();
+  const { openInvoice, openContact } = useFacturacionNav();
 
   // Selector de periodo (conduce la gráfica de facturación; compartido con Personal).
   const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, range, title } = usePeriodRange('12m');
@@ -561,7 +561,7 @@ export function FacturacionResumenTab() {
         </div>
       ) : invoicing ? (
         <ChartCard title="Top clientes" subtitle="por facturado" flex="1 1 100%">
-          <TopClientsChart rows={invoicing.top_clients} onOpen={openParty} />
+          <TopClientsChart rows={invoicing.top_clients} onOpen={openContact} />
         </ChartCard>
       ) : null}
 

@@ -11,8 +11,8 @@
  */
 
 // F2c — Diálogo de envío de una factura por email. Recibe el documento ya
-// guardado/emitido y (opcionalmente) el detalle del cliente para prefill del
-// destinatario (PartyDetail.contacts[0].contact_email). Al abrir carga las
+// guardado/emitido y (opcionalmente) el detalle del contacto cliente para
+// prefill del destinatario (FinanceContactDetail.emails[0]). Al abrir carga las
 // cuentas de correo del usuario (GET /finance/email-accounts) y deja elegir la
 // emisora (preselecciona la is_default). Si no hay cuentas, lo dice claramente
 // y enlaza a Mail para añadir una. Envío → sendInvoice(doc.id, {to, subject,
@@ -25,29 +25,27 @@ import {
   useFinanceBillingStore,
   type EmailAccount,
   type FinanceDoc,
-  type PartyDetail,
+  type FinanceContactDetail,
 } from '@/stores/finance-billing.store';
+import { useEscapeClose } from '../use-escape-close';
 
-/** Primer email conocido del cliente (primer contacto con email). */
-function firstContactEmail(party: PartyDetail | null | undefined): string {
-  if (!party) return '';
-  for (const c of party.contacts ?? []) {
-    const e = c.contact_email?.find((x) => x && x.trim());
-    if (e) return e.trim();
-  }
-  return '';
+/** Primer email conocido del contacto cliente. */
+function firstContactEmail(contact: FinanceContactDetail | null | undefined): string {
+  if (!contact) return '';
+  const e = (contact.emails ?? []).find((x) => x && x.trim());
+  return e ? e.trim() : '';
 }
 
 export function EnviarFacturaDialog({
   open,
   onClose,
   document: doc,
-  party,
+  contact,
 }: {
   open: boolean;
   onClose: () => void;
   document: FinanceDoc | null;
-  party?: PartyDetail | null;
+  contact?: FinanceContactDetail | null;
 }) {
   const { fetchEmailAccounts, sendInvoice } = useFinanceBillingStore();
 
@@ -65,7 +63,7 @@ export function EnviarFacturaDialog({
   // Carga de cuentas + prefill al abrir.
   useEffect(() => {
     if (!open || !doc) return;
-    const prefillTo = firstContactEmail(party);
+    const prefillTo = firstContactEmail(contact);
     setTo(prefillTo);
     setSubject(`Factura ${docNumber}`);
     setMessage(
@@ -92,6 +90,8 @@ export function EnviarFacturaDialog({
     setTimeout(() => toRef.current?.focus(), 50);
     return () => { cancelled = true; };
   }, [open, doc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEscapeClose(open, onClose);
 
   if (!open || !doc) return null;
 

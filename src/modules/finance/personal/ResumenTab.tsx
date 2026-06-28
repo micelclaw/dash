@@ -154,7 +154,7 @@ function NetWorthChart({ series }: { series: FinanceSeriesPoint[] }) {
         />
         <YAxis
           yAxisId="left"
-          tickFormatter={(v: number) => fmtMoney(v).replace(/[\s ]?€/, '€')}
+          tickFormatter={moneyAxisShort}
           tick={{ fontSize: 11, fill: 'var(--text-muted)' }}
           axisLine={false}
           tickLine={false}

@@ -10,41 +10,37 @@
  * https://micelclaw.com
  */
 
-// A5 — Ficha de cliente RICA. Muestra (con color) todos los datos del party:
-// nombre, razón social, CIF/NIF, divisa, condiciones de pago, direcciones de
-// facturación, contactos vinculados (del detalle), notas, tags, y un editor de
-// DATOS EXTRA (custom_fields) clave/valor. Además resume SUS FACTURAS (fetch
-// GET /finance/documents?party_id=<id>: facturado/cobrado/pendiente + lista
-// clicable que abre cada factura en el editor). Editable: guarda vía
-// updateParty (PATCH /finance/parties/:id) con TODOS los campos incl.
-// custom_fields. Reusa STATUS_META para los estados y fmtMoney local.
+// Ficha RICA de un contacto cliente/proveedor. Muestra (con color) todos sus
+// datos de finanzas: nombre, razón social, CIF/NIF, divisa, condiciones de pago,
+// dirección de facturación, web, emails, notas y tags. Los saldos (receivable /
+// payable / invoiced / billed) y sus documentos vienen del detalle plano
+// (GET /finance/contacts/:id). Editable in situ: guarda vía saveFinanceContact
+// (PATCH /finance/contacts/:id). Un contacto puede ser cliente Y proveedor.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
 import {
-  Pencil, FileText, Users, MapPin, StickyNote, Tag, Database, Wallet,
-  Plus, Trash2, Save, XCircle, Loader2,
+  Pencil, FileText, Globe, Mail, MapPin, StickyNote, Tag, Wallet,
+  Save, XCircle, Loader2,
 } from 'lucide-react';
 import {
   useFinanceBillingStore,
-  type Party,
-  type PartyDetail,
-  type PartyContact,
+  type FinanceContact,
+  type FinanceContactDetail,
+  type FinanceContactBalances,
+  type FinanceRole,
   type BillingAddress,
-  type CustomFields,
   type FinanceDoc,
   type DocStatus,
   type DocType,
 } from '@/stores/finance-billing.store';
 import { STATUS_META, tintedPillStyle, statusLabel } from './statusMeta';
 
-const KIND_LABEL: Record<Party['kind'], string> = {
+const ROLE_LABEL: Record<FinanceRole, string> = {
   customer: 'Cliente',
   supplier: 'Proveedor',
-  employee: 'Empleado',
-  self: 'Propio',
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -57,49 +53,19 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
 
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
 
-function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): string {
+function fmtMoney(value: string | number | null | undefined, currency?: string | null): string {
   const n = Number(value ?? 0);
+  const cur = currency || 'EUR'; // un contacto del CRM etiquetado puede no tener divisa → EUR
   try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(n);
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(n);
   } catch {
-    return `${n.toFixed(2)} ${currency}`;
+    return `${n.toFixed(2)} ${cur}`;
   }
 }
 
 function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType }) {
   const m = STATUS_META[status];
   return <span style={tintedPillStyle(m.color)}>{statusLabel(status, docType)}</span>;
-}
-
-// custom_fields como filas editables (orden estable).
-interface KvRow { key: string; value: string }
-
-function recordToRows(cf: CustomFields | null | undefined): KvRow[] {
-  if (!cf || typeof cf !== 'object') return [];
-  return Object.entries(cf).map(([key, value]) => ({
-    key,
-    value: typeof value === 'string' ? value : JSON.stringify(value),
-  }));
-}
-
-function rowsToRecord(rows: KvRow[]): CustomFields {
-  const out: CustomFields = {};
-  for (const r of rows) {
-    const k = r.key.trim();
-    if (!k) continue;
-    // Intenta tipar el valor (number/bool/json); si no, string crudo.
-    const raw = r.value;
-    const trimmed = raw.trim();
-    let parsed: unknown = raw;
-    if (trimmed === 'true') parsed = true;
-    else if (trimmed === 'false') parsed = false;
-    else if (trimmed !== '' && !Number.isNaN(Number(trimmed)) && /^-?\d+(\.\d+)?$/.test(trimmed)) parsed = Number(trimmed);
-    else if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-      try { parsed = JSON.parse(trimmed); } catch { parsed = raw; }
-    }
-    out[k] = parsed;
-  }
-  return out;
 }
 
 function fmtAddress(a: BillingAddress): string {
@@ -109,18 +75,17 @@ function fmtAddress(a: BillingAddress): string {
 }
 
 export function ClienteDetalle({
-  partyId,
+  contactId,
   onOpenInvoice,
 }: {
-  partyId: string;
+  contactId: string;
   onOpenInvoice: (docId: string) => void;
 }) {
   const navigate = useNavigate();
-  const { parties, fetchPartyDetail, updateParty } = useFinanceBillingStore();
-  const partyFromList = parties.find((p) => p.id === partyId) ?? null;
+  const { contacts, fetchContactDetail, saveFinanceContact } = useFinanceBillingStore();
+  const contactFromList = contacts.find((c) => c.id === contactId) ?? null;
 
-  const [detail, setDetail] = useState<PartyDetail | null>(null);
-  const [docs, setDocs] = useState<FinanceDoc[] | null>(null);
+  const [detail, setDetail] = useState<FinanceContactDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -130,64 +95,49 @@ export function ClienteDetalle({
   const [taxId, setTaxId] = useState('');
   const [currency, setCurrency] = useState('EUR');
   const [paymentTerms, setPaymentTerms] = useState('');
+  const [website, setWebsite] = useState('');
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState('');
-  const [addresses, setAddresses] = useState<BillingAddress[]>([]);
-  const [kvRows, setKvRows] = useState<KvRow[]>([]);
+  const [addr, setAddr] = useState<BillingAddress>({});
 
-  const hydrate = useCallback((p: Party | PartyDetail) => {
-    setName(p.name ?? '');
-    setLegalName(p.legal_name ?? '');
-    setTaxId(p.tax_id ?? '');
-    setCurrency(p.default_currency || 'EUR');
-    setPaymentTerms(p.payment_terms != null ? String(p.payment_terms) : '');
-    setNotes(p.notes ?? '');
-    setTags((p.tags ?? []).join(', '));
-    setAddresses(Array.isArray(p.billing_addresses) ? p.billing_addresses : []);
-    setKvRows(recordToRows(p.custom_fields));
+  const hydrate = useCallback((c: FinanceContact) => {
+    setName(c.name ?? '');
+    setLegalName(c.legal_name ?? '');
+    setTaxId(c.tax_id ?? '');
+    setCurrency(c.currency || 'EUR');
+    setPaymentTerms(c.payment_terms != null ? String(c.payment_terms) : '');
+    setWebsite(c.website ?? '');
+    setNotes(c.notes ?? '');
+    setTags((c.tags ?? []).join(', '));
+    setAddr(c.billing_address ?? {});
   }, []);
 
-  // Detalle (contactos + custom_fields completos) al cambiar de cliente.
+  // Detalle (saldos + documentos) al cambiar de contacto.
   useEffect(() => {
     let alive = true;
     setDetail(null);
     setEditing(false);
-    fetchPartyDetail(partyId)
+    fetchContactDetail(contactId)
       .then((d) => { if (alive) { setDetail(d); hydrate(d); } })
-      .catch(() => { if (alive && partyFromList) { hydrate(partyFromList); } });
+      .catch(() => { if (alive && contactFromList) { hydrate(contactFromList); } });
     return () => { alive = false; };
-  }, [partyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contactId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Facturas del cliente (resumen + lista clicable).
-  useEffect(() => {
-    let alive = true;
-    setDocs(null);
-    api.get<{ data: FinanceDoc[] }>('/finance/documents', { party_id: partyId } as Record<string, string>)
-      .then((r) => { if (alive) setDocs(r.data); })
-      .catch(() => { if (alive) setDocs([]); });
-    return () => { alive = false; };
-  }, [partyId]);
+  const contact = detail ?? contactFromList;
+  const docs: FinanceDoc[] | null = detail?.documents ?? null;
+  const balances: FinanceContactBalances | null = detail?.balances ?? null;
+  const isSupplier = !!contact?.roles.includes('supplier');
+  const isCustomer = !!contact?.roles.includes('customer');
 
-  const party = detail ?? partyFromList;
-  const contacts: PartyContact[] = detail?.contacts ?? [];
-  const isSupplier = party?.kind === 'supplier';
+  // Robusto ante ambas formas: el backend aplana a string[], pero un email del CRM
+  // puede llegar como objeto {address,label,primary} → extrae la dirección de texto.
+  const emails = useMemo(() => (contact?.emails ?? [])
+    .map((e) => (typeof e === 'string' ? e : (e && typeof e === 'object' ? (e as { address?: unknown }).address : null)))
+    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
+    [contact?.emails]);
 
-  // Totales sobre los documentos del party.
-  // Cliente → facturas emitidas (invoice). Proveedor → facturas recibidas (bill).
-  const summary = useMemo(() => {
-    const list = docs ?? [];
-    const docType: DocType = isSupplier ? 'bill' : 'invoice';
-    const rows = list.filter((d) => d.type === docType && d.status !== 'draft');
-    const facturado = rows.reduce((s, d) => s + Number(d.total), 0);
-    const cobrado = rows.filter((d) => d.status === 'paid').reduce((s, d) => s + Number(d.total), 0);
-    const pendiente = rows
-      .filter((d) => ['sent', 'partial', 'overdue'].includes(d.status))
-      .reduce((s, d) => s + Number(d.total), 0);
-    return { facturado, cobrado, pendiente, count: list.length };
-  }, [docs, isSupplier]);
-
-  const startEdit = () => { if (party) hydrate(party); setEditing(true); };
-  const cancelEdit = () => { if (party) hydrate(party); setEditing(false); };
+  const startEdit = () => { if (contact) hydrate(contact); setEditing(true); };
+  const cancelEdit = () => { if (contact) hydrate(contact); setEditing(false); };
 
   const save = async () => {
     const trimmed = name.trim();
@@ -196,24 +146,28 @@ export function ClienteDetalle({
     if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Condiciones de pago: indica un número de días válido'); return; }
     setSaving(true);
     try {
-      const cleanAddresses = addresses.filter((a) => Object.values(a).some((v) => (v ?? '').toString().trim() !== ''));
-      const updated = await updateParty(partyId, {
-        kind: party?.kind ?? 'customer',
+      const cleanAddr = Object.fromEntries(
+        Object.entries(addr).filter(([, v]) => (v ?? '').toString().trim() !== ''),
+      ) as BillingAddress;
+      const hasAddr = Object.keys(cleanAddr).length > 0;
+      await saveFinanceContact({
+        id: contactId,
         name: trimmed,
+        roles: contact?.roles ?? ['customer'], // los roles se gestionan en el diálogo de alta/edición
         legal_name: legalName.trim() || undefined,
         tax_id: taxId.trim() || undefined,
-        default_currency: currency,
+        currency,
         payment_terms: pt ? Number(pt) : null,
+        website: website.trim() || undefined,
+        billing_address: hasAddr ? cleanAddr : null,
         notes: notes.trim() || null,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        billing_addresses: cleanAddresses,
-        custom_fields: rowsToRecord(kvRows),
       });
-      // Refresca el detalle para reflejar contactos/saldo y normalización del backend.
-      const fresh = await fetchPartyDetail(partyId).catch(() => null);
-      setDetail(fresh ?? { ...(detail ?? (updated as PartyDetail)), ...updated, contacts });
+      // Refresca el detalle para reflejar saldos/normalización del backend.
+      const fresh = await fetchContactDetail(contactId).catch(() => null);
+      setDetail(fresh ?? detail);
       setEditing(false);
-      toast.success('Cliente actualizado');
+      toast.success('Contacto actualizado');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
     } finally {
@@ -221,7 +175,7 @@ export function ClienteDetalle({
     }
   };
 
-  if (!party) {
+  if (!contact) {
     return <div style={{ padding: 24, color: 'var(--text-muted)', fontSize: 13 }}><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Cargando…</div>;
   }
 
@@ -236,11 +190,14 @@ export function ClienteDetalle({
               background: 'color-mix(in srgb, var(--mod-finance) 18%, transparent)',
               color: 'var(--mod-finance)', display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 17, fontWeight: 700,
-            }}>{(party.name || '?').charAt(0).toUpperCase()}</span>
+            }}>{(contact.name || '?').charAt(0).toUpperCase()}</span>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>{party.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {KIND_LABEL[party.kind]}{party.legal_name ? ` · ${party.legal_name}` : ''}
+              <div style={{ fontSize: 19, fontWeight: 600, color: 'var(--text)' }}>{contact.name}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                {contact.roles.map((r) => (
+                  <span key={r} style={tintedPillStyle(r === 'supplier' ? 'var(--amber)' : 'var(--info)')}>{ROLE_LABEL[r]}</span>
+                ))}
+                {contact.legal_name && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· {contact.legal_name}</span>}
               </div>
             </div>
           </div>
@@ -259,28 +216,23 @@ export function ClienteDetalle({
         )}
       </div>
 
-      {/* Resumen de documentos (KPIs con color). Cliente=ventas / Proveedor=compras */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
-        {isSupplier ? (
-          <>
-            <Kpi label="Gastado" value={fmtMoney(summary.facturado, party.default_currency)} accent="var(--error)" />
-            <Kpi label="Pagado" value={fmtMoney(summary.cobrado, party.default_currency)} accent="var(--warning)" />
-            <Kpi label="Por pagar" value={fmtMoney(summary.pendiente, party.default_currency)} accent="var(--amber)" muted={summary.pendiente <= 0} />
-          </>
-        ) : (
-          <>
-            <Kpi label="Facturado" value={fmtMoney(summary.facturado, party.default_currency)} accent="var(--amber)" />
-            <Kpi label="Cobrado" value={fmtMoney(summary.cobrado, party.default_currency)} accent="var(--mod-finance)" />
-            <Kpi label="Pendiente" value={fmtMoney(summary.pendiente, party.default_currency)} accent="var(--info)" muted={summary.pendiente <= 0} />
-          </>
-        )}
-        <Kpi
-          label="Saldo a favor"
-          value={fmtMoney(party.credit_balance, party.default_currency)}
-          accent="var(--mod-finance)"
-          muted={Number(party.credit_balance) <= 0}
-        />
-      </div>
+      {/* Saldos (KPIs con color). Cliente=cobrar / Proveedor=pagar */}
+      {balances && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+          {isCustomer && (
+            <>
+              <Kpi label="Facturado" value={fmtMoney(balances.invoiced, contact.currency)} accent="var(--amber)" />
+              <Kpi label="Por cobrar" value={fmtMoney(balances.receivable, contact.currency)} accent="var(--info)" muted={Number(balances.receivable) <= 0} />
+            </>
+          )}
+          {isSupplier && (
+            <>
+              <Kpi label="Comprado" value={fmtMoney(balances.billed, contact.currency)} accent="var(--error)" muted={Number(balances.billed) <= 0} />
+              <Kpi label="Por pagar" value={fmtMoney(balances.payable, contact.currency)} accent="var(--warning)" muted={Number(balances.payable) <= 0} />
+            </>
+          )}
+        </div>
+      )}
 
       {/* Datos fiscales / de pago */}
       <Section icon={<Wallet size={14} />} title="Datos">
@@ -301,121 +253,79 @@ export function ClienteDetalle({
                 <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} inputMode="numeric" placeholder="p.ej. 30" style={{ ...inputStyle, fontFamily: 'var(--font-mono, monospace)' }} />
               </Field>
             </div>
+            <Field label="Sitio web"><input type="url" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" style={inputStyle} /></Field>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 10 }}>
-            <InfoCard label="CIF / NIF" value={party.tax_id || '—'} mono />
-            <InfoCard label="Moneda" value={party.default_currency} mono />
-            <InfoCard label="Condiciones de pago" value={party.payment_terms != null ? `${party.payment_terms} días` : '—'} />
+            <InfoCard label="CIF / NIF" value={contact.tax_id || '—'} mono />
+            <InfoCard label="Moneda" value={contact.currency || 'EUR'} mono />
+            <InfoCard label="Condiciones de pago" value={contact.payment_terms != null ? `${contact.payment_terms} días` : '—'} />
+            {contact.website && (
+              <div style={{ flex: '1 1 150px', minWidth: 150, padding: '10px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Sitio web</div>
+                <a href={contact.website} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14, fontWeight: 600, color: 'var(--info)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Globe size={13} /> {contact.website.replace(/^https?:\/\//, '')}
+                </a>
+              </div>
+            )}
           </div>
         )}
       </Section>
 
-      {/* Direcciones de facturación */}
-      <Section icon={<MapPin size={14} />} title="Direcciones de facturación">
-        {editing ? (
-          <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {addresses.map((a, i) => (
-              <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 10, position: 'relative' }}>
-                <button onClick={() => setAddresses(addresses.filter((_, j) => j !== i))} title="Quitar"
-                  style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <Trash2 size={14} />
-                </button>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {(['label', 'line1', 'line2', 'postal_code', 'city', 'region', 'country'] as (keyof BillingAddress)[]).map((f) => (
-                    <input
-                      key={f}
-                      value={(a[f] as string) ?? ''}
-                      onChange={(e) => setAddresses(addresses.map((x, j) => j === i ? { ...x, [f]: e.target.value } : x))}
-                      placeholder={ADDR_PLACEHOLDER[f]}
-                      style={{ ...inputStyle, flex: f === 'line1' ? '1 1 100%' : '1 1 140px' }}
-                    />
-                  ))}
-                </div>
-              </div>
+      {/* Emails (del contacto del CRM) */}
+      {!editing && emails.length > 0 && (
+        <Section icon={<Mail size={14} />} title="Emails">
+          <div style={{ paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {emails.map((e) => (
+              <a key={e} href={`mailto:${e}`} style={{ fontSize: 13, color: 'var(--info)', textDecoration: 'none' }}>{e}</a>
             ))}
-            <button onClick={() => setAddresses([...addresses, {}])} style={btnDashed}>
-              <Plus size={14} /> Añadir dirección
-            </button>
+          </div>
+        </Section>
+      )}
+
+      {/* Dirección de facturación (objeto único) */}
+      <Section icon={<MapPin size={14} />} title="Dirección de facturación">
+        {editing ? (
+          <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {(['line1', 'line2', 'postal_code', 'city', 'region', 'country'] as (keyof BillingAddress)[]).map((f) => (
+              <input
+                key={f}
+                value={(addr[f] as string) ?? ''}
+                onChange={(e) => setAddr((prev) => ({ ...prev, [f]: e.target.value }))}
+                placeholder={ADDR_PLACEHOLDER[f]}
+                style={inputStyle}
+              />
+            ))}
           </div>
         ) : (
           <div style={{ paddingTop: 6 }}>
-            {(party.billing_addresses ?? []).length === 0 && <div style={emptyStyle}>Sin direcciones.</div>}
-            {(party.billing_addresses ?? []).map((a, i) => (
-              <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                {a.label && <span style={{ color: 'var(--text-dim)', fontWeight: 600, marginRight: 8 }}>{a.label}</span>}
-                <span style={{ color: 'var(--text)' }}>{fmtAddress(a) || '—'}</span>
-              </div>
-            ))}
+            {!contact.billing_address || fmtAddress(contact.billing_address) === '' ? (
+              <div style={emptyStyle}>Sin dirección.</div>
+            ) : (
+              <div style={{ padding: '7px 0', fontSize: 13, color: 'var(--text)' }}>{fmtAddress(contact.billing_address)}</div>
+            )}
           </div>
         )}
-      </Section>
-
-      {/* Contactos vinculados (del CRM) — clicables, navegan a /contacts?id= */}
-      <Section icon={<Users size={14} />} title={`Contactos (${contacts.length})`}>
-        <div style={{ paddingTop: 6 }}>
-          {contacts.length === 0 ? (
-            <div style={emptyStyle}>
-              Este cliente aún no tiene ningún contacto del CRM enlazado. Lo ideal es que cada
-              cliente parta de un contacto de tu CRM (al crearlo desde «Usar un contacto del CRM»)
-              para no duplicar datos entre dominios.
-            </div>
-          ) : (
-            contacts.map((c) => {
-              const isPrimary = !!party.primary_contact_id && c.contact_id === party.primary_contact_id;
-              const email = Array.isArray(c.contact_email) ? c.contact_email.find(Boolean) ?? null : null;
-              return (
-                <div
-                  key={c.contact_id}
-                  role="button"
-                  tabIndex={0}
-                  title="Ver el contacto en el CRM"
-                  onClick={() => navigate(`/contacts?id=${c.contact_id}`)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/contacts?id=${c.contact_id}`); } }}
-                  style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-                    padding: '8px 6px', borderBottom: '1px solid var(--border)', fontSize: 13,
-                    cursor: 'pointer', borderRadius: 4,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                    <Users size={14} style={{ color: 'var(--mod-finance)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.contact_name || c.contact_id}
-                    </span>
-                    {isPrimary && <span style={tintedPillStyle('var(--mod-finance)')}>principal</span>}
-                  </span>
-                  <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-                    {email && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{email}</span>}
-                    {c.role && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.role}</span>}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
       </Section>
 
       {/* Notas + Tags */}
       <Section icon={<StickyNote size={14} />} title="Notas">
         {editing ? (
           <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Notas internas sobre el cliente…" style={{ ...inputStyle, resize: 'vertical' }} />
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Notas internas sobre el contacto…" style={{ ...inputStyle, resize: 'vertical' }} />
             <Field label="Etiquetas (separadas por coma)">
               <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, recurrente, moroso" style={inputStyle} />
             </Field>
           </div>
         ) : (
           <div style={{ paddingTop: 8 }}>
-            <div style={{ fontSize: 13, color: party.notes ? 'var(--text)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', marginBottom: (party.tags ?? []).length ? 10 : 0 }}>
-              {party.notes || 'Sin notas.'}
+            <div style={{ fontSize: 13, color: contact.notes ? 'var(--text)' : 'var(--text-muted)', whiteSpace: 'pre-wrap', marginBottom: (contact.tags ?? []).length ? 10 : 0 }}>
+              {contact.notes || 'Sin notas.'}
             </div>
-            {(party.tags ?? []).length > 0 && (
+            {(contact.tags ?? []).length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 <Tag size={12} style={{ color: 'var(--text-muted)' }} />
-                {(party.tags ?? []).map((t) => (
+                {(contact.tags ?? []).map((t) => (
                   <span key={t} style={tintedPillStyle('var(--mod-finance)')}>{t}</span>
                 ))}
               </div>
@@ -424,39 +334,23 @@ export function ClienteDetalle({
         )}
       </Section>
 
-      {/* Datos extra (custom_fields) */}
-      <Section icon={<Database size={14} />} title="Datos extra">
-        {editing ? (
-          <div style={{ paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {kvRows.map((row, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input value={row.key} onChange={(e) => setKvRows(kvRows.map((r, j) => j === i ? { ...r, key: e.target.value } : r))} placeholder="clave" style={{ ...inputStyle, flex: '0 0 38%', fontFamily: 'var(--font-mono, monospace)' }} />
-                <input value={row.value} onChange={(e) => setKvRows(kvRows.map((r, j) => j === i ? { ...r, value: e.target.value } : r))} placeholder="valor" style={{ ...inputStyle, flex: 1 }} />
-                <button onClick={() => setKvRows(kvRows.filter((_, j) => j !== i))} title="Quitar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><Trash2 size={14} /></button>
-              </div>
-            ))}
-            <button onClick={() => setKvRows([...kvRows, { key: '', value: '' }])} style={btnDashed}>
-              <Plus size={14} /> Añadir campo
-            </button>
-          </div>
-        ) : (
-          <div style={{ paddingTop: 6 }}>
-            {recordToRows(party.custom_fields).length === 0 && <div style={emptyStyle}>Sin datos extra.</div>}
-            {recordToRows(party.custom_fields).map((row) => (
-              <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
-                <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>{row.key}</span>
-                <span style={{ color: 'var(--text)', textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+      {/* Enlace al contacto del CRM */}
+      {!editing && (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            onClick={() => navigate(`/contacts?id=${contact.id}`)}
+            style={{ ...btnGhost, fontSize: 12 }}
+          >
+            <FileText size={13} /> Ver en el CRM
+          </button>
+        </div>
+      )}
 
-      {/* Facturas del cliente — lista clicable */}
-      <Section icon={<FileText size={14} />} title={`Facturas (${docs?.length ?? 0})`}>
+      {/* Documentos del contacto — lista clicable */}
+      <Section icon={<FileText size={14} />} title={`Documentos (${docs?.length ?? 0})`}>
         <div style={{ paddingTop: 6 }}>
           {docs === null && <div style={emptyStyle}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Cargando…</div>}
-          {docs !== null && docs.length === 0 && <div style={emptyStyle}>Este cliente aún no tiene documentos.</div>}
+          {docs !== null && docs.length === 0 && <div style={emptyStyle}>Este contacto aún no tiene documentos.</div>}
           {(docs ?? []).map((d) => (
             <div
               key={d.id}
@@ -486,6 +380,11 @@ export function ClienteDetalle({
         </div>
       </Section>
 
+      {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
+      <div style={{ marginTop: 8 }}>
+        <RelationIntelligence sourceType="contact" sourceId={contactId} />
+      </div>
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -494,7 +393,7 @@ export function ClienteDetalle({
 // ─── Sub-componentes / estilos ───────────────────────────────────────────
 
 const ADDR_PLACEHOLDER: Record<keyof BillingAddress, string> = {
-  label: 'Etiqueta (Sede, Almacén…)',
+  label: 'Etiqueta',
   line1: 'Calle y número',
   line2: 'Piso / puerta',
   postal_code: 'C.P.',
@@ -517,10 +416,6 @@ const btnGhost: React.CSSProperties = {
 const btnPrimary: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: 'var(--amber)',
   border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600,
-};
-const btnDashed: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', background: 'transparent',
-  border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13,
 };
 
 function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: React.CSSProperties }) {

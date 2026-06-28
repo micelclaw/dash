@@ -19,6 +19,8 @@ import { X, ArrowRight, Undo2 } from 'lucide-react';
 import { useFinancePersonalStore, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { fmtMoney, movementFace, categoryVisual, tintBackground } from './lib';
 import { RecurrenceBadge } from './RecurrenceBadge';
+import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
+import { useEscapeClose } from '../use-escape-close';
 
 const KIND_LABEL = (isTransfer: boolean, signed: number) =>
   isTransfer ? 'Transferencia' : signed >= 0 ? 'Ingreso' : 'Gasto';
@@ -26,6 +28,7 @@ const KIND_LABEL = (isTransfer: boolean, signed: number) =>
 export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | null; onClose: () => void }) {
   const { accounts, categories, reverseTransaction } = useFinancePersonalStore();
   const [busy, setBusy] = useState(false);
+  useEscapeClose(!!tx, onClose);
 
   if (!tx) return null;
 
@@ -93,6 +96,11 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
             </span>
           ) : <span style={{ color: 'var(--text-muted)' }}>Sin categoría</span>)}
           {recurring && row('Recurrencia', <RecurrenceBadge />)}
+        </div>
+
+        {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
+        <div style={{ marginTop: 14 }}>
+          <RelationIntelligence sourceType="finance_journal_entry" sourceId={tx.id} />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 18 }}>

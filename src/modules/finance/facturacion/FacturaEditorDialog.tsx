@@ -11,7 +11,7 @@
  */
 
 // F4/F5/F6 — Editor de factura (la pantalla más importante): selector de Cliente
-// (de store.parties + "+ Nuevo cliente"), tabla de líneas (descripción, cantidad,
+// (de store.contacts + "+ Nuevo cliente"), tabla de líneas (descripción, cantidad,
 // precio, IVA por línea con su modo inc/exc visible, importe), "+ Línea", panel de
 // TOTALES en vivo (Base / Descuento / IVA / TOTAL desde el doc tras addLine→fetch),
 // y acciones [Guardar borrador] + [Emitir y enviar]. El nº es provisional.
@@ -26,13 +26,14 @@ import {
   type DocType,
   type DiscountKind,
   type FinanceDocDetail,
-  type PartyDetail,
+  type FinanceContactDetail,
 } from '@/stores/finance-billing.store';
 import { useFinancePersonalStore } from '@/stores/finance-personal.store';
 import { api } from '@/services/api';
 import { fmtMoney, todayISO } from '@/modules/finance/personal/lib';
 import { ClienteDialog } from './ClienteDialog';
 import { InventoryItemSelect } from '@/components/inventory/InventoryItemSelect';
+import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
 import { EnviarFacturaDialog } from './EnviarFacturaDialog';
 import { openInvoicePdf } from './invoicePdf';
 import { useFacturacionNav } from './navigation';
@@ -67,7 +68,7 @@ export function FacturaEditorDialog({
   docType?: DocType;
 }) {
   const {
-    parties,
+    contacts,
     taxRates,
     createDocument,
     updateDocument,
@@ -77,8 +78,8 @@ export function FacturaEditorDialog({
     emitDocument,
     convertQuote,
     fetchDocument,
-    fetchPartyDetail,
-    fetchParties,
+    fetchContactDetail,
+    fetchFinanceContacts,
     fetchTaxRates,
     fetchPreviewHtml,
     attachDocument,
@@ -87,11 +88,12 @@ export function FacturaEditorDialog({
   const { categories, fetchCategories } = useFinancePersonalStore();
   const { openInvoice } = useFacturacionNav();
 
-  const [partyId, setPartyId] = useState('');
+  const [contactId, setContactId] = useState('');
   const [issueDate, setIssueDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState('');
   const [discountValue, setDiscountValue] = useState('');
   const [discountKind, setDiscountKind] = useState<DiscountKind>('percent');
+  const [categoryId, setCategoryId] = useState(''); // categoría de ingreso de la venta (#4); '' = sin categoría
   const [supplierNumber, setSupplierNumber] = useState(''); // nº del proveedor (solo bills)
   const [terms, setTerms] = useState('');
   const [notes, setNotes] = useState('');
@@ -101,14 +103,14 @@ export function FacturaEditorDialog({
   const [busy, setBusy] = useState<null | 'draft' | 'emit' | 'pdf' | 'send' | 'preview' | 'convert' | 'attach'>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
-  const [sendParty, setSendParty] = useState<PartyDetail | null>(null);
+  const [sendContact, setSendContact] = useState<FinanceContactDetail | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
 
   // Reset / hidratación al abrir.
   useEffect(() => {
     if (!open) return;
-    void fetchParties();
+    void fetchFinanceContacts();
     void fetchTaxRates();
     void fetchCategories(); // categorías de gasto para facturas recibidas
     setRemovedIds([]);
@@ -119,12 +121,13 @@ export function FacturaEditorDialog({
         const doc = useFinanceBillingStore.getState().currentDoc;
         if (doc && doc.id === documentId) {
           setSavedDoc(doc);
-          setPartyId(doc.party_id);
+          setContactId(doc.contact_id);
           setSupplierNumber(doc.number ?? '');
           setIssueDate(doc.issue_date);
           setDueDate(doc.due_date ?? '');
           setDiscountValue(doc.discount_value != null && Number(doc.discount_value) > 0 ? String(Number(doc.discount_value)) : '');
           setDiscountKind(doc.discount_kind ?? 'percent');
+          setCategoryId(doc.category_id ?? '');
           setTerms(doc.terms ?? '');
           setNotes(doc.notes ?? '');
           setLines(
@@ -146,12 +149,13 @@ export function FacturaEditorDialog({
       })();
     } else {
       setSavedDoc(null);
-      setPartyId('');
+      setContactId('');
       setSupplierNumber('');
       setIssueDate(todayISO());
       setDueDate('');
       setDiscountValue('');
       setDiscountKind('percent');
+      setCategoryId('');
       setTerms('');
       setNotes('');
       setLines([emptyLine()]);
@@ -214,7 +218,7 @@ export function FacturaEditorDialog({
   })();
 
   const currency = savedDoc?.currency
-    ?? parties.find((p) => p.id === partyId)?.default_currency
+    ?? contacts.find((c) => c.id === contactId)?.currency
     ?? 'EUR';
 
   const lineImporte = (l: DraftLine) => {
@@ -280,19 +284,20 @@ export function FacturaEditorDialog({
   // Persiste el borrador (crea el doc si no existía + sincroniza sus líneas).
   // Devuelve el doc detallado actualizado.
   const persist = async (): Promise<FinanceDocDetail> => {
-    if (!partyId) throw new Error(isBill ? 'Elige un proveedor' : 'Elige un cliente');
+    if (!contactId) throw new Error(isBill ? 'Elige un proveedor' : 'Elige un cliente');
     if (isBill && !supplierNumber.trim()) throw new Error('Indica el número de la factura del proveedor');
     if (validLines.length === 0) throw new Error('Añade al menos una línea');
 
     if (!savedDoc) {
       const doc = await createDocument({
         type: effectiveType,
-        party_id: partyId,
+        contact_id: contactId,
         ...(isBill ? { number: supplierNumber.trim() } : {}),
         issue_date: issueDate,
         due_date: dueDate || undefined,
         discount_value: discountNum,
         discount_kind: discountNum != null ? discountKind : undefined,
+        ...(isBill ? {} : { category_id: categoryId || null }),
         notes: notes.trim() || undefined,
         terms: terms.trim() || undefined,
         lines: validLines.map(toLineInput),
@@ -305,6 +310,7 @@ export function FacturaEditorDialog({
     // condiciones, descuento) — el backend recalcula totales con el descuento.
     await updateDocument(savedDoc.id, {
       ...(isBill ? { number: supplierNumber.trim() } : {}),
+      ...(isBill ? {} : { category_id: categoryId || null }),
       notes: notes.trim(),
       terms: terms.trim(),
       discount_value: discountNum ?? 0,
@@ -405,13 +411,13 @@ export function FacturaEditorDialog({
     if (!savedDoc) return;
     setBusy('send');
     try {
-      let party: PartyDetail | null = null;
+      let contact: FinanceContactDetail | null = null;
       try {
-        party = await fetchPartyDetail(savedDoc.party_id);
+        contact = await fetchContactDetail(savedDoc.contact_id);
       } catch {
-        party = null;
+        contact = null;
       }
-      setSendParty(party);
+      setSendContact(contact);
       setSendOpen(true);
     } finally {
       setBusy(null);
@@ -426,7 +432,7 @@ export function FacturaEditorDialog({
     try {
       let docId = savedDoc?.id;
       if (!isEmitted) {
-        if (!partyId) { toast.error('Elige un cliente para previsualizar'); return; }
+        if (!contactId) { toast.error('Elige un cliente para previsualizar'); return; }
         if (validLines.length === 0) { toast.error('Añade al menos una línea válida para previsualizar'); return; }
         const doc = await persist();
         docId = doc.id;
@@ -512,16 +518,17 @@ export function FacturaEditorDialog({
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
-        {/* Cuerpo: formulario (izq) + totales (der) */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', gap: 16, padding: 20 }}>
+        {/* Cuerpo: formulario (izq) + totales (der), y debajo a ancho completo los 3 colapsables */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
+          <div style={{ display: 'flex', gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Cliente (venta) / Proveedor (factura recibida) */}
             <div>
               <label style={labelStyle}>{isBill ? 'Proveedor' : 'Cliente'}</label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <select ref={firstFieldRef} value={partyId} onChange={(e) => setPartyId(e.target.value)} disabled={isEmitted} style={{ ...fieldStyle, flex: 1 }}>
+                <select ref={firstFieldRef} value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={isEmitted} style={{ ...fieldStyle, flex: 1 }}>
                   <option value="">{isBill ? '— elige proveedor —' : '— elige cliente —'}</option>
-                  {parties.filter((p) => p.kind === (isBill ? 'supplier' : 'customer')).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {contacts.filter((c) => c.roles.includes(isBill ? 'supplier' : 'customer')).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 {!isEmitted && (
                   <button onClick={() => setClienteOpen(true)} title={isBill ? 'Nuevo proveedor' : 'Nuevo cliente'} style={{ ...fieldStyle, width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -551,6 +558,22 @@ export function FacturaEditorDialog({
                 <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={isEmitted} style={fieldStyle} />
               </div>
             </div>
+
+            {/* Categoría de ingreso (solo ventas — la factura recibida usa categoría por línea) */}
+            {!isBill && (
+              <div>
+                <label style={labelStyle}>Categoría de ingreso</label>
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
+                  <option value="">— sin categoría —</option>
+                  {categories.filter((c) => c.kind === 'income').map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Clasifica el ingreso de esta venta en el desglose de Finanzas (Resumen → Ingreso por categoría).
+                </div>
+              </div>
+            )}
 
             {/* Descuento de documento */}
             <div>
@@ -759,6 +782,9 @@ export function FacturaEditorDialog({
               )}
             </div>
           </div>
+          </div>
+          {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
+          {savedDoc?.id && <RelationIntelligence sourceType="finance_document" sourceId={savedDoc.id} />}
         </div>
 
         {/* Pie de acciones */}
@@ -846,12 +872,12 @@ export function FacturaEditorDialog({
         </div>
       )}
 
-      <ClienteDialog open={clienteOpen} onClose={() => setClienteOpen(false)} kind={isBill ? 'supplier' : 'customer'} />
+      <ClienteDialog open={clienteOpen} onClose={() => setClienteOpen(false)} role={isBill ? 'supplier' : 'customer'} />
       <EnviarFacturaDialog
         open={sendOpen}
         onClose={() => setSendOpen(false)}
         document={savedDoc}
-        party={sendParty}
+        contact={sendContact}
       />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

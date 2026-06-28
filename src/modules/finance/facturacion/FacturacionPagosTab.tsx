@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { X, Banknote } from 'lucide-react';
+import { Banknote } from 'lucide-react';
 import { api } from '@/services/api';
 import {
   useFinanceBillingStore,
@@ -29,6 +29,7 @@ import {
 import { STATUS_META, tintedPillStyle } from './statusMeta';
 import { useSortable, SortableTh } from '@/modules/finance/sortable';
 import { useFacturacionNav } from './navigation';
+import { RegistrarPagoDialog } from './RegistrarPagoDialog';
 
 // ─── Helpers locales ───────────────────────────────────────────────────────
 
@@ -39,10 +40,6 @@ function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): 
   } catch {
     return `${n.toFixed(2)} ${currency}`;
   }
-}
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function StatusBadge({ status }: { status: DocStatus }) {
@@ -56,13 +53,14 @@ const PAYABLE: DocStatus[] = ['sent', 'partial', 'overdue', 'paid'];
 // ─── Tab ───────────────────────────────────────────────────────────────────
 
 export function FacturacionPagosTab() {
-  const { documents, parties, fetchDocument } = useFinanceBillingStore();
-  const { openInvoice, openParty } = useFacturacionNav();
+  const { documents, contacts } = useFinanceBillingStore();
+  const { openInvoice, openContact } = useFacturacionNav();
   // cobrado real por documento (suma de payments), cargado del detalle.
   const [paidByDoc, setPaidByDoc] = useState<Record<string, number>>({});
-  const [payFor, setPayFor] = useState<FinanceDoc | null>(null);
+  // El detalle COMPLETO de la factura a cobrar (con pagos), para el modal compartido.
+  const [payFor, setPayFor] = useState<FinanceDocDetail | null>(null);
 
-  const partyName = useMemo(() => new Map(parties.map((p) => [p.id, p.name])), [parties]);
+  const contactName = useMemo(() => new Map(contacts.map((c) => [c.id, c.name])), [contacts]);
 
   const invoices = useMemo(
     () =>
@@ -105,7 +103,7 @@ export function FacturacionPagosTab() {
   // Orden por columna (cobrado/pendiente se recalculan al interactuar tras cargar pagos).
   const sort = useSortable(invoices, {
     numero: (d) => d.number ?? '',
-    cliente: (d) => partyName.get(d.party_id) ?? '',
+    cliente: (d) => contactName.get(d.contact_id) ?? '',
     emitida: (d) => d.issue_date,
     vence: (d) => d.due_date ?? null,
     total: (d) => Number(d.total),
@@ -173,19 +171,19 @@ export function FacturacionPagosTab() {
                     </span>
                   </td>
                   <td style={td}>
-                    {partyName.get(d.party_id)
+                    {contactName.get(d.contact_id)
                       ? (
                         <span
                           role="button"
                           tabIndex={0}
                           title="Ver ficha del cliente"
-                          onClick={() => openParty(d.party_id)}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openParty(d.party_id); } }}
+                          onClick={() => openContact(d.contact_id)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openContact(d.contact_id); } }}
                           style={{ cursor: 'pointer' }}
                           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--mod-finance)'; e.currentTarget.style.textDecoration = 'underline'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.color = ''; e.currentTarget.style.textDecoration = 'none'; }}
                         >
-                          {partyName.get(d.party_id)}
+                          {contactName.get(d.contact_id)}
                         </span>
                       )
                       : '—'}
@@ -199,7 +197,15 @@ export function FacturacionPagosTab() {
                   <td style={{ ...td, textAlign: 'right' }}>
                     {pending > 0 ? (
                       <button
-                        onClick={() => setPayFor(d)}
+                        onClick={async () => {
+                          // Carga el detalle COMPLETO (con pagos) para el modal compartido.
+                          try {
+                            const r = await api.get<{ data: FinanceDocDetail }>(`/finance/documents/${d.id}`);
+                            setPayFor(r.data);
+                          } catch {
+                            toast.error('No se pudo cargar la factura');
+                          }
+                        }}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
                       >
                         <Banknote size={13} /> Registrar cobro
@@ -217,17 +223,13 @@ export function FacturacionPagosTab() {
 
       {payFor && (
         <RegistrarPagoDialog
-          doc={payFor}
-          pending={pendingOf(payFor)}
-          onClose={() => setPayFor(null)}
-          onSaved={() => {
-            // invalida el cobrado cacheado para esta factura y refresca su detalle
-            setPaidByDoc((prev) => {
-              const next = { ...prev };
-              delete next[payFor.id];
-              return next;
-            });
-            void fetchDocument(payFor.id);
+          open
+          document={payFor}
+          onClose={() => {
+            // El modal compartido refresca el store al cobrar; invalidamos el cobrado
+            // cacheado de esta factura para que su "cobrado/pendiente" se recalcule.
+            const id = payFor.id;
+            setPaidByDoc((prev) => { const next = { ...prev }; delete next[id]; return next; });
             setPayFor(null);
           }}
         />
@@ -236,124 +238,3 @@ export function FacturacionPagosTab() {
   );
 }
 
-// ─── Modal Registrar cobro ─────────────────────────────────────────────────
-
-interface PayAccount {
-  id: string;
-  name: string;
-  type: string;
-  currency: string;
-}
-
-function RegistrarPagoDialog({
-  doc,
-  pending,
-  onClose,
-  onSaved,
-}: {
-  doc: FinanceDoc;
-  pending: number;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { recordPayment, parties } = useFinanceBillingStore();
-  const [accounts, setAccounts] = useState<PayAccount[]>([]);
-  const [accountId, setAccountId] = useState('');
-  const [amount, setAmount] = useState(pending > 0 ? pending.toFixed(2) : '');
-  const [date, setDate] = useState(todayISO());
-  const [method, setMethod] = useState('');
-  const [reference, setReference] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const partyName = parties.find((p) => p.id === doc.party_id)?.name ?? '—';
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await api.get<{ data: PayAccount[] }>('/finance/accounts');
-        const cash = r.data.filter((a) => a.type === 'asset');
-        setAccounts(cash);
-        if (cash[0]) setAccountId(cash[0].id);
-      } catch {
-        setAccounts([]);
-      }
-    })();
-  }, []);
-
-  const submit = async () => {
-    const amt = amount.replace(',', '.').trim();
-    if (!amt || Number(amt) <= 0) { toast.error('Indica un importe'); return; }
-    if (!accountId) { toast.error('Elige la cuenta del cobro'); return; }
-    setSaving(true);
-    try {
-      await recordPayment({
-        document_id: doc.id,
-        amount: Number(amt).toFixed(2),
-        account_id: accountId,
-        date,
-        method: method || undefined,
-        reference: reference || undefined,
-      });
-      toast.success('Cobro registrado');
-      onSaved();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo registrar el cobro');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const fieldStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13 };
-  const labelStyle: React.CSSProperties = { fontSize: 12, color: 'var(--text-dim)', marginBottom: 4, display: 'block' };
-
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '8vh' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Registrar cobro</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Factura <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>{doc.number ?? '—'}</span> · {partyName} · pendiente{' '}
-          <span style={{ color: 'var(--info)', fontFamily: 'var(--font-mono, monospace)' }}>{fmtMoney(pending, doc.currency)}</span>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={labelStyle}>Importe</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00 €"
-              style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center' }} />
-          </div>
-          <div>
-            <label style={labelStyle}>Cuenta del cobro</label>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
-              <option value="">— elige cuenta —</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Método</label>
-              <input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="p.ej. Transferencia" style={fieldStyle} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Fecha</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
-            </div>
-          </div>
-          <div>
-            <label style={labelStyle}>Referencia</label>
-            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="opcional" style={fieldStyle} />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
-          <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : 'Registrar cobro'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

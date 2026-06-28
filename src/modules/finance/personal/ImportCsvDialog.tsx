@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { X, FileUp } from 'lucide-react';
 import { useFinancePersonalStore, type MovementInput } from '@/stores/finance-personal.store';
 import { fmtMoney } from './lib';
+import { useEscapeClose } from '../use-escape-close';
 
 // ── Parser CSV simple y robusto ──────────────────────────────────────
 /** Detecta el delimitador dominante de la primera línea (coma o punto y coma). */
@@ -144,6 +145,8 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
     }
     return { valid: out, invalid: bad };
   }, [matrix, hasHeader, dateCol, amountCol, descCol]);
+
+  useEscapeClose(open, onClose);
 
   if (!open) return null;
 

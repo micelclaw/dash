@@ -42,7 +42,7 @@ export function FacturacionAjustesTab() {
   const [mode, setMode] = useState<TaxMode>('exclusive');
   const [busy, setBusy] = useState(false);
 
-  // ─── Estado de empresa (party kind='self', cabecera del PDF) ──────────────
+  // ─── Estado de empresa emisora (cabecera del PDF) ─────────────────────────
   const [coName, setCoName] = useState('');
   const [coLegalName, setCoLegalName] = useState('');
   const [coTaxId, setCoTaxId] = useState('');
@@ -81,8 +81,8 @@ export function FacturacionAjustesTab() {
     })();
   }, [fetchBrand]);
 
-  // Carga los datos de empresa (party kind='self') al montar; si no existe aún,
-  // se quedan los defaults vacíos y el usuario los rellena por primera vez.
+  // Carga los datos de la empresa emisora al montar; si no existe aún, se quedan
+  // los defaults vacíos y el usuario los rellena por primera vez.
   useEffect(() => {
     void (async () => {
       try {
@@ -91,7 +91,7 @@ export function FacturacionAjustesTab() {
         setCoName(c.name ?? '');
         setCoLegalName(c.legal_name ?? '');
         setCoTaxId(c.tax_id ?? '');
-        const addr = c.billing_addresses?.[0];
+        const addr = c.billing_address;
         if (addr) {
           setCoLine1(addr.line1 ?? '');
           setCoCity(addr.city ?? '');
@@ -151,7 +151,7 @@ export function FacturacionAjustesTab() {
         name: coName.trim(),
         legal_name: coLegalName.trim() || undefined,
         tax_id: coTaxId.trim() || undefined,
-        billing_addresses: hasAddr ? [addr] : undefined,
+        billing_address: hasAddr ? addr : undefined,
         default_currency: coCurrency.trim() || undefined,
         email: coEmail.trim() || undefined,
         phone: coPhone.trim() || undefined,
@@ -224,7 +224,7 @@ export function FacturacionAjustesTab() {
   const labelStyle: React.CSSProperties = { fontSize: 12, color: 'var(--text-dim)', marginBottom: 4, display: 'block' };
 
   return (
-    <div style={{ padding: 24, maxWidth: 720 }}>
+    <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Percent size={16} style={{ color: 'var(--mod-finance)' }} />
         <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tarifas de IVA</h3>

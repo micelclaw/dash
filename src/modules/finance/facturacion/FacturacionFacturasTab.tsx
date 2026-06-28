@@ -31,6 +31,7 @@ import { STATUS_META, tintedPillStyle, statusLabel } from './statusMeta';
 import { useSortable, SortableTh } from '@/modules/finance/sortable';
 import { RegistrarPagoDialog } from './RegistrarPagoDialog';
 import { useFacturacionNav } from './navigation';
+import { useEscapeClose } from '../use-escape-close';
 
 // ─── Etiqueta de tipo de documento ───────────────────────────────────────
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -49,10 +50,11 @@ function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType
 // Las facturas RECIBIDAS (bill) tienen su propia pestaña "Recibidas" (lockedType);
 // no se ofrecen aquí para no duplicar la puerta de acceso (la pestaña Facturas es
 // el lado VENTAS: factura/presupuesto/recibo/abono).
+// Sin 'quote' ni 'bill': los presupuestos tienen su pestaña "Presupuestos" y las
+// facturas recibidas la suya "Recibidas". Aquí solo documentos de VENTA emitidos.
 const TYPE_FILTERS: { id: '' | DocType; label: string }[] = [
   { id: '', label: 'Todos' },
   { id: 'invoice', label: 'Facturas' },
-  { id: 'quote', label: 'Presupuestos' },
   { id: 'receipt', label: 'Recibos' },
   { id: 'credit_note', label: 'Abonos' },
 ];
@@ -73,12 +75,12 @@ const STATUS_FILTERS: { id: '' | DocStatus; label: string }[] = [
 export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } = {}) {
   const {
     documents,
-    parties,
+    contacts,
     fetchDocuments,
     convertQuote,
     createCreditNote,
   } = useFinanceBillingStore();
-  const { openInvoice, openNewQuote, openNewBill, openParty } = useFacturacionNav();
+  const { openInvoice, openNewQuote, openNewBill, openContact } = useFacturacionNav();
 
   // Cuando `lockedType` viene (p. ej. vista de Presupuestos), el filtro de tipo
   // queda fijado a ese valor y su <select> se oculta; el resto de filtros y la
@@ -93,24 +95,36 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
     if (lockedType) setType(lockedType);
   }, [lockedType]);
 
-  const partyById = useMemo(() => new Map(parties.map((p) => [p.id, p.name])), [parties]);
-  // La pestaña Facturas (lado VENTAS, sin lockedType) EXCLUYE las facturas recibidas:
-  // los bills tienen su pestaña "Recibidas". El filtro "Todos" trae bills del backend,
-  // así que se filtran aquí para no mezclar compras con ventas.
-  const visibleDocs = useMemo(() => (lockedType ? documents : documents.filter((d) => d.type !== 'bill')), [documents, lockedType]);
+  const contactById = useMemo(() => new Map(contacts.map((c) => [c.id, c.name])), [contacts]);
+  // Filtrado 100% CLIENTE-SIDE desde el array COMPLETO del store (que carga TODOS los
+  // documentos). Antes se re-consultaba el backend por tipo/estado, lo que MACHACABA el
+  // array `documents` compartido y dejaba a la pestaña Cobros (y a otras) sin facturas
+  // según el orden de navegación. lockedType acota a su tipo; sin él, Facturas excluye
+  // las recibidas (bill), que tienen su propia pestaña.
+  const visibleDocs = useMemo(() => {
+    let list = lockedType
+      ? documents.filter((d) => d.type === lockedType)
+      : documents.filter((d) => d.type !== 'bill' && d.type !== 'quote');
+    if (!lockedType && type) list = list.filter((d) => d.type === type);
+    if (status) list = list.filter((d) => d.status === status);
+    return list;
+  }, [documents, lockedType, type, status]);
   // Orden por columna de la tabla de documentos.
   const sort = useSortable(visibleDocs, {
     number: (d) => d.number ?? '',
-    client: (d) => partyById.get(d.party_id) ?? '',
+    client: (d) => contactById.get(d.contact_id) ?? '',
     issue: (d) => d.issue_date,
     due: (d) => d.due_date ?? null,
     total: (d) => Number(d.total),
     status: (d) => STATUS_META[d.status]?.label ?? d.status,
   });
 
+  // Carga TODOS los documentos al montar (sin filtro de tipo/estado). El filtrado de la
+  // tabla es cliente-side (visibleDocs). Así esta pestaña nunca deja el store con un
+  // subconjunto que rompa Cobros u otras vistas que comparten el array `documents`.
   useEffect(() => {
-    void fetchDocuments({ type: type || undefined, status: status || undefined });
-  }, [type, status]); // eslint-disable-line react-hooks/exhaustive-deps
+    void fetchDocuments();
+  }, [fetchDocuments]);
 
   // Abrir en el editor (deep-link de la lente). Cierra antes el panel de detalle.
   const openEdit = (id: string) => {
@@ -189,19 +203,19 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
                   {doc.type !== 'invoice' && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'inherit' }}>{DOC_TYPE_LABEL[doc.type]}</span>}
                 </td>
                 <td style={td}>
-                  {partyById.get(doc.party_id)
+                  {contactById.get(doc.contact_id)
                     ? (
                       <span
                         role="button"
                         tabIndex={0}
                         title="Ver ficha del cliente"
-                        onClick={(e) => { e.stopPropagation(); openParty(doc.party_id); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openParty(doc.party_id); } }}
+                        onClick={(e) => { e.stopPropagation(); openContact(doc.contact_id); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openContact(doc.contact_id); } }}
                         style={{ cursor: 'pointer' }}
                         onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--mod-finance)'; e.currentTarget.style.textDecoration = 'underline'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.color = ''; e.currentTarget.style.textDecoration = 'none'; }}
                       >
-                        {partyById.get(doc.party_id)}
+                        {contactById.get(doc.contact_id)}
                       </span>
                     )
                     : <span style={{ color: 'var(--text-muted)' }}>—</span>}
@@ -219,7 +233,7 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
       {openDocId && (
         <DocDetailPanel
           docId={openDocId}
-          partyName={partyById.get(documents.find((d) => d.id === openDocId)?.party_id ?? '') ?? null}
+          contactName={contactById.get(documents.find((d) => d.id === openDocId)?.contact_id ?? '') ?? null}
           onClose={() => setOpenDocId(null)}
           onEdit={openEdit}
           onConvert={async (id) => {
@@ -257,14 +271,14 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
 
 function DocDetailPanel({
   docId,
-  partyName,
+  contactName,
   onClose,
   onEdit,
   onConvert,
   onCreditNote,
 }: {
   docId: string;
-  partyName: string | null;
+  contactName: string | null;
   onClose: () => void;
   onEdit: (id: string) => void;
   onConvert: (id: string) => void | Promise<void>;
@@ -276,6 +290,10 @@ function DocDetailPanel({
   const [decideBusy, setDecideBusy] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [related, setRelated] = useState<DocRelated | null>(null);
+
+  // Escape cierra el detalle, pero solo si no hay un modal de pago anidado encima
+  // (en ese caso Escape lo cierra a él primero).
+  useEscapeClose(!payOpen, onClose);
 
   useEffect(() => {
     void fetchDocument(docId);
@@ -367,7 +385,7 @@ function DocDetailPanel({
         {doc && (
           <>
             <div style={{ marginBottom: 14 }}>
-              <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Proveedor' : 'Cliente'}</span><span style={valueStyle}>{partyName ?? '—'}</span></div>
+              <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Proveedor' : 'Cliente'}</span><span style={valueStyle}>{contactName ?? '—'}</span></div>
               <div style={rowStyle}><span style={labelStyle}>Estado</span><StatusBadge status={doc.status} docType={doc.type} /></div>
               <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Recibida' : 'Emitida'}</span><span style={valueStyle}>{doc.issue_date}</span></div>
               <div style={rowStyle}><span style={labelStyle}>Vence</span><span style={valueStyle}>{doc.due_date ?? '—'}</span></div>
@@ -408,7 +426,7 @@ function DocDetailPanel({
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 16, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 4 }}><span>TOTAL</span><span>{fmtMoney(doc.total, doc.currency)}</span></div>
               {paid > 0 && (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--mod-finance)' }}><span>Cobrado</span><span>{fmtMoney(paid, doc.currency)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--mod-finance)' }}><span>{doc.type === 'bill' ? 'Pagado' : 'Cobrado'}</span><span>{fmtMoney(paid, doc.currency)}</span></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: balance > 0 ? 'var(--info)' : 'var(--text-dim)' }}><span>Pendiente</span><span>{fmtMoney(balance, doc.currency)}</span></div>
                 </>
               )}

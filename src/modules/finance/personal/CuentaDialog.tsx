@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { useFinancePersonalStore, type FinanceAccount } from '@/stores/finance-personal.store';
+import { useEscapeClose } from '../use-escape-close';
 
 type WalletType = 'asset' | 'liability';
 
@@ -87,6 +88,8 @@ export function CuentaDialog({
     }
     setTimeout(() => nameRef.current?.focus(), 50);
   }, [open, account]);
+
+  useEscapeClose(open, onClose);
 
   if (!open) return null;
 

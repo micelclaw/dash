@@ -12,9 +12,9 @@
 
 // A4 — Navegación intra-lente de Facturación. Un contexto ligero que permite a
 // cualquier sub-pestaña (Resumen / Facturas / Pagos / Clientes) abrir una
-// factura por id (en el editor) o la ficha de un cliente por id, sin
+// factura por id (en el editor) o la ficha de un contacto por id, sin
 // prop-drilling. Lo provee FacturacionLens (que es quien posee los diálogos /
-// overlays + el deep-link ?doc=/?party=).
+// overlays + el deep-link ?doc=/?contact=).
 
 import { createContext, useContext } from 'react';
 
@@ -25,12 +25,12 @@ export interface FacturacionNav {
   openNewQuote: () => void;
   /** Abre el editor en modo "nueva factura recibida" (compra, type='bill'). */
   openNewBill: () => void;
-  /** Abre la ficha rica del cliente por id. */
-  openParty: (partyId: string) => void;
+  /** Abre la ficha rica del contacto cliente/proveedor por id. */
+  openContact: (contactId: string) => void;
 }
 
 const noop = () => {};
-const FacturacionNavContext = createContext<FacturacionNav>({ openInvoice: noop, openNewQuote: noop, openNewBill: noop, openParty: noop });
+const FacturacionNavContext = createContext<FacturacionNav>({ openInvoice: noop, openNewQuote: noop, openNewBill: noop, openContact: noop });
 
 export const FacturacionNavProvider = FacturacionNavContext.Provider;
 

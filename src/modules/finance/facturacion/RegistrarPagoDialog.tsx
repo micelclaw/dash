@@ -21,6 +21,7 @@ import { X } from 'lucide-react';
 import { api } from '@/services/api';
 import { useFinanceBillingStore, type FinanceDocDetail } from '@/stores/finance-billing.store';
 import { fmtMoney, todayISO } from '@/modules/finance/personal/lib';
+import { useEscapeClose } from '../use-escape-close';
 
 interface AccountOption {
   id: string;
@@ -84,6 +85,8 @@ export function RegistrarPagoDialog({
       }
     })();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEscapeClose(open, onClose);
 
   if (!open) return null;
 

@@ -10,37 +10,35 @@
  * https://micelclaw.com
  */
 
-// Alta/edición de cliente (party kind=customer). Molde = NuevoMovimientoDialog
-// de la lente Personal. Si recibe `partyId` precarga los datos y hace updateParty;
-// si no, crea uno nuevo con createParty.
+// Alta/edición de un CONTACTO cliente/proveedor. Un cliente/proveedor ES un
+// contacto del CRM; sus datos de finanzas viven en él. Si recibe `contactId`
+// precarga y hace PATCH; si no, crea uno nuevo con POST. Los roles
+// (Cliente/Proveedor) son multi-selección. "Usar un contacto del CRM" marca un
+// contacto existente con el rol elegido (POST /finance/contacts/:id/role).
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X, Users, Search, Loader2 } from 'lucide-react';
-import { useFinanceBillingStore, type PartyKind } from '@/stores/finance-billing.store';
+import { useFinanceBillingStore, type FinanceRole } from '@/stores/finance-billing.store';
 import { api } from '@/services/api';
+import { useEscapeClose } from '../use-escape-close';
 
 interface CrmContact { id: string; display_name: string; company: string | null }
 
-const KINDS: { id: PartyKind; label: string }[] = [
-  { id: 'customer', label: 'Cliente' },
-  { id: 'supplier', label: 'Proveedor' },
-  { id: 'employee', label: 'Empleado' },
-  { id: 'self', label: 'Propio' },
-];
-
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
 
-export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'customer' }: { open: boolean; onClose: () => void; partyId?: string; kind?: PartyKind }) {
-  const { parties, createParty, partyFromContact, updateParty } = useFinanceBillingStore();
-  const editing = parties.find((p) => p.id === partyId) ?? null;
+export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'customer' }: { open: boolean; onClose: () => void; contactId?: string; role?: FinanceRole }) {
+  const { contacts, saveFinanceContact, tagContact } = useFinanceBillingStore();
+  const editing = contacts.find((c) => c.id === contactId) ?? null;
 
   // ¿Es un alta de proveedor? Determina los textos contextuales del diálogo.
-  const isSupplier = kindProp === 'supplier';
+  const isSupplier = roleProp === 'supplier';
   const entityLabel = isSupplier ? 'proveedor' : 'cliente';
   const entityLabelCap = isSupplier ? 'Proveedor' : 'Cliente';
 
-  const [kind, setKind] = useState<PartyKind>(kindProp);
+  // Roles del contacto (multi-selección): cliente y/o proveedor.
+  const [isCustomer, setIsCustomer] = useState(false);
+  const [isSupplierRole, setIsSupplierRole] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [legalName, setLegalName] = useState('');
@@ -49,7 +47,7 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
   const [paymentTerms, setPaymentTerms] = useState('');
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState('');
-  // Dirección de facturación (primera dirección) + sitio web (custom_fields.website)
+  // Dirección de facturación (objeto único) + sitio web
   const [line1, setLine1] = useState('');
   const [line2, setLine2] = useState('');
   const [city, setCity] = useState('');
@@ -60,7 +58,8 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
   const [saving, setSaving] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // F3 — alta "desde un contacto del CRM" (cruce sin duplicar)
+  // Alta "desde un contacto del CRM" (cruce sin duplicar): marca un contacto
+  // existente con el rol elegido.
   const [crmOpen, setCrmOpen] = useState(false);
   const [crmQuery, setCrmQuery] = useState('');
   const [crmResults, setCrmResults] = useState<CrmContact[]>([]);
@@ -86,8 +85,10 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
   const pickContact = async (c: CrmContact) => {
     setSaving(true);
     try {
-      await partyFromContact(c.id, kind === 'supplier' ? 'supplier' : 'customer');
-      toast.success(`${entityLabelCap} vinculado: ${c.company || c.display_name}`);
+      // Marca el contacto del CRM existente con el rol activo (o el de la prop).
+      const role: FinanceRole = isSupplierRole && !isCustomer ? 'supplier' : isCustomer && !isSupplierRole ? 'customer' : roleProp;
+      await tagContact(c.id, role);
+      toast.success(`${role === 'supplier' ? 'Proveedor' : 'Cliente'} vinculado: ${c.company || c.display_name}`);
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo vincular el contacto');
@@ -101,25 +102,26 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
     if (!open) return;
     setEmail('');
     if (editing) {
-      setKind(editing.kind);
+      setIsCustomer(editing.roles.includes('customer'));
+      setIsSupplierRole(editing.roles.includes('supplier'));
       setName(editing.name);
       setLegalName(editing.legal_name ?? '');
       setTaxId(editing.tax_id ?? '');
-      setCurrency(editing.default_currency || 'EUR');
+      setCurrency(editing.currency || 'EUR');
       setPaymentTerms(editing.payment_terms != null ? String(editing.payment_terms) : '');
       setNotes(editing.notes ?? '');
       setTags((editing.tags ?? []).join(', '));
-      const addr = editing.billing_addresses?.[0];
+      const addr = editing.billing_address;
       setLine1(addr?.line1 ?? '');
       setLine2(addr?.line2 ?? '');
       setCity(addr?.city ?? '');
       setPostalCode(addr?.postal_code ?? '');
       setRegion(addr?.region ?? '');
       setCountry(addr?.country ?? '');
-      const w = editing.custom_fields?.website;
-      setWebsite(typeof w === 'string' ? w : '');
+      setWebsite(editing.website ?? '');
     } else {
-      setKind(kindProp);
+      setIsCustomer(roleProp === 'customer');
+      setIsSupplierRole(roleProp === 'supplier');
       setName('');
       setLegalName('');
       setTaxId('');
@@ -139,18 +141,24 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
     setCrmQuery('');
     setCrmResults([]);
     setTimeout(() => nameRef.current?.focus(), 50);
-  }, [open, partyId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, contactId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEscapeClose(open, onClose);
 
   if (!open) return null;
 
   const submit = async () => {
     const trimmed = name.trim();
     if (!trimmed) { toast.error('Indica el nombre'); return; }
+    const roles: FinanceRole[] = [];
+    if (isCustomer) roles.push('customer');
+    if (isSupplierRole) roles.push('supplier');
+    if (roles.length === 0) { toast.error('Marca al menos un rol (Cliente o Proveedor)'); return; }
     const pt = paymentTerms.trim();
     if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Vencimiento: indica un número de días válido'); return; }
     setSaving(true);
     try {
-      // Dirección de facturación (primera dirección). Vacíos → null.
+      // Dirección de facturación (objeto único). Vacíos → null.
       const addr = {
         line1: line1.trim() || null,
         line2: line2.trim() || null,
@@ -162,40 +170,21 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
       const hasAddr = Object.values(addr).some((v) => v != null);
       const websiteTrimmed = website.trim();
 
-      const payload = {
-        kind,
+      await saveFinanceContact({
+        id: editing?.id,
         name: trimmed,
+        roles,
         tax_id: taxId.trim() || undefined,
         legal_name: legalName.trim() || undefined,
-        default_currency: currency,
+        currency,
         payment_terms: pt ? Number(pt) : null,
+        website: websiteTrimmed || undefined,
+        billing_address: hasAddr ? addr : null,
         notes: notes.trim() || null,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      };
-      if (editing) {
-        // Reemplaza solo la primera dirección, conservando el resto.
-        const billingAddresses = hasAddr
-          ? [addr, ...(editing.billing_addresses?.slice(1) ?? [])]
-          : (editing.billing_addresses ?? undefined);
-        // Merge de custom_fields para no perder otras claves.
-        const customFields = { ...(editing.custom_fields ?? {}) };
-        if (websiteTrimmed) customFields.website = websiteTrimmed;
-        else delete customFields.website;
-        await updateParty(editing.id, {
-          ...payload,
-          billing_addresses: billingAddresses,
-          custom_fields: customFields,
-        });
-        toast.success(`${entityLabelCap} actualizado`);
-      } else {
-        await createParty({
-          ...payload,
-          email: email.trim() || undefined,
-          billing_addresses: hasAddr ? [addr] : undefined,
-          custom_fields: websiteTrimmed ? { website: websiteTrimmed } : undefined,
-        });
-        toast.success(`${entityLabelCap} creado`);
-      }
+        ...(editing ? {} : { email: email.trim() || undefined }),
+      });
+      toast.success(editing ? `${entityLabelCap} actualizado` : `${entityLabelCap} creado`);
       onClose();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -210,6 +199,16 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
   };
   const labelStyle: React.CSSProperties = { fontSize: 12, color: 'var(--text-dim)', marginBottom: 4, display: 'block' };
 
+  // Checkbox de rol con aspecto de toggle.
+  const RoleCheck = ({ checked, onToggle, label }: { checked: boolean; onToggle: () => void; label: string }) => (
+    <button onClick={onToggle} type="button" style={{
+      flex: 1, padding: '8px 0', borderRadius: 'var(--radius-sm, 4px)', cursor: 'pointer', fontSize: 13,
+      border: '1px solid', borderColor: checked ? 'var(--mod-finance)' : 'var(--border)',
+      background: checked ? 'var(--mod-finance)' : 'transparent',
+      color: checked ? '#0a0a0a' : 'var(--text-dim)', fontWeight: checked ? 600 : 500,
+    }}>{label}</button>
+  );
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '8vh' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 480, maxWidth: '92vw', maxHeight: '84vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
@@ -218,7 +217,7 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
-        {/* F3 — alta desde un contacto del CRM (cruce sin duplicar) */}
+        {/* Alta desde un contacto del CRM (cruce sin duplicar) */}
         {!editing && (
           <div style={{ marginBottom: 14 }}>
             {!crmOpen ? (
@@ -228,7 +227,7 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
             ) : (
               <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 10, background: 'var(--card)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>Vincular contacto del CRM</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>Marcar contacto del CRM como {entityLabel}</span>
                   <button onClick={() => setCrmOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>Escribir a mano</button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -315,7 +314,7 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
                 style={fieldStyle}
               />
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                Se creará/enlazará un contacto del CRM con este {entityLabel}.
+                Se creará un contacto del CRM con este {entityLabel}.
               </div>
             </div>
           )}
@@ -333,15 +332,10 @@ export function ClienteDialog({ open, onClose, partyId, kind: kindProp = 'custom
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>Tipo</label>
-              <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
-                {KINDS.map((k) => (
-                  <button key={k.id} onClick={() => setKind(k.id)} style={{
-                    flex: 1, padding: '7px 0', borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: 'pointer', fontSize: 13,
-                    background: kind === k.id ? 'var(--mod-finance)' : 'transparent',
-                    color: kind === k.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: kind === k.id ? 600 : 500,
-                  }}>{k.label}</button>
-                ))}
+              <label style={labelStyle}>Rol <span style={{ color: 'var(--text-muted)' }}>(uno o ambos)</span></label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <RoleCheck checked={isCustomer} onToggle={() => setIsCustomer((v) => !v)} label="Cliente" />
+                <RoleCheck checked={isSupplierRole} onToggle={() => setIsSupplierRole((v) => !v)} label="Proveedor" />
               </div>
             </div>
             <div style={{ width: 130 }}>

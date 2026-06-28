@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { useFinancePersonalStore, type MovementKind, type RecurrenceInterval } from '@/stores/finance-personal.store';
 import { todayISO } from './lib';
+import { useEscapeClose } from '../use-escape-close';
 
 const KINDS: { id: MovementKind; label: string; glyph: string }[] = [
   { id: 'expense', label: 'Gasto', glyph: '⟵' },
@@ -56,6 +57,8 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
       if (!accountId && assetAccounts[0]) setAccountId(assetAccounts[0].id);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEscapeClose(open, onClose);
 
   if (!open) return null;
 

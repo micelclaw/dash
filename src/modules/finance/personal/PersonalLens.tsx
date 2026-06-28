@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react';
 import { LayoutDashboard, ArrowLeftRight, Wallet, Tag, PiggyBank, Plus, Loader2 } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
 import { useFinancePersonalStore, type FinanceTransaction } from '@/stores/finance-personal.store';
+import { useFinanceLiveRefresh } from '../use-finance-live-refresh';
 import { ResumenTab } from './ResumenTab';
 import { MovimientosTab } from './MovimientosTab';
 import { CuentasTab } from './CuentasTab';
@@ -40,6 +41,8 @@ export function PersonalLens() {
   const [detailTx, setDetailTx] = useState<FinanceTransaction | null>(null);
 
   useEffect(() => { void refreshAll(); }, [refreshAll]);
+  // Auto-refresco en vivo (WS change.finance.* + foco de pestaña), igual que Facturación.
+  useFinanceLiveRefresh(refreshAll);
 
   // Navegación intra-lente: abrir una cuenta = ir a Cuentas con esa seleccionada;
   // abrir un movimiento = mostrar su detalle en un diálogo.
