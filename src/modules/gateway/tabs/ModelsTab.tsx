@@ -1655,7 +1655,12 @@ function CatalogRow({ model, isMobile, isHovered, onHover, mutatingModel, isAddi
           )}
           {model.available
             ? <StatusPill status="available" />
-            : <StatusPill status="no_auth" />
+            : model.local
+              // Modelo local (Ollama) configurado pero ausente de `/api/tags` — el
+              // usuario lo borró con `ollama rm`. NO es un problema de auth: está sin
+              // descargar. (El backend ya lo marca available:false/missing:true.)
+              ? <StatusPill status="warn" label="No descargado" />
+              : <StatusPill status="no_auth" />
           }
         </div>
         <div style={{
