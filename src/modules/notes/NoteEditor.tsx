@@ -140,11 +140,23 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const [sourceMode, setSourceMode] = useState(false);
   const { links, loading: linksLoading } = useNoteLinks(noteId);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // La extensión TableOfContents dispara su onUpdate de forma SÍNCRONA durante la
+  // creación del editor (en render, antes de montar). Para no hacer setState
+  // pre-mount ("...component that hasn't mounted yet") guardamos el primer TOC en
+  // un ref y lo volcamos en el useEffect de montaje; después de montar, va directo.
+  const tocMountedRef = useRef(false);
+  const pendingTocRef = useRef<TableOfContentDataItem[] | null>(null);
   // El onUpdate de TipTap es un closure estable — el formato vivo va en un ref
   // para serializar siempre según el formato ACTUAL de la nota.
   const formatRef = useRef<NoteFormat>('markdown');
   const format: NoteFormat = note?.content_format ?? 'markdown';
   formatRef.current = format;
+
+  useEffect(() => {
+    tocMountedRef.current = true;
+    if (pendingTocRef.current) { setTocItems(pendingTocRef.current); pendingTocRef.current = null; }
+    return () => { tocMountedRef.current = false; };
+  }, []);
 
   // Fetch note
   useEffect(() => {
@@ -190,7 +202,13 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
       TextStyle, Color,
       TableOfContents.configure({
         getIndex: getHierarchicalIndexes,
-        onUpdate: (items) => setTocItems(items),
+        // Antes de montar, el primer onUpdate (síncrono en la creación del editor)
+        // se guarda en pendingTocRef y se vuelca en el useEffect de montaje; ya
+        // montado, el setState va directo. Evita el warning de setState pre-mount.
+        onUpdate: (items) => {
+          if (tocMountedRef.current) setTocItems(items);
+          else pendingTocRef.current = items;
+        },
       }),
       FileHandler.configure({
         allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
