@@ -22,9 +22,9 @@
 // supply (a) the docKey, (b) the trigger callbacks, and (c) the copy.
 
 import { useEffect, useState } from 'react';
-import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2, Search, Palette } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
+import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioDesignSystem } from '@/stores/studio.store';
 import { useStudioStream } from '../hooks/useStudioStream';
 import { StreamingMarkdown } from '../components/StreamingMarkdown';
 import { QuestionCardsPanel } from '../components/QuestionCardsPanel';
@@ -142,9 +142,17 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // first-turn user context. Only shown for phase==='frontend' + guided.
   const [feel, setFeel] = useState<string | null>(null);
   const [brandColors, setBrandColors] = useState('');
+  // S4: "start from a known design" — catalog picker (Frontend, Guided).
+  const [dsQuery, setDsQuery] = useState('');
+  const [dsResults, setDsResults] = useState<StudioDesignSystem[]>([]);
+  const [dsLoading, setDsLoading] = useState(false);
+  // The bound base system is project state (persisted server-side).
+  const selectedSystem = project.design_system;
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
+  const searchDesignSystems = useStudioStore((s) => s.searchDesignSystems);
+  const setDesignSystem = useStudioStore((s) => s.setDesignSystem);
   const [studioMode] = useStudioMode();
   const guided = studioMode === 'guided';
   const gc = GUIDED_COPY[phase];
@@ -184,6 +192,30 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     // Run only on (project, phase) change — NOT on every state.status flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, phase]);
+
+  // S4: load the catalog for the Frontend picker (debounced on query).
+  // Only fetches while the picker is on screen (frontend + guided + no doc).
+  const showPicker = !isPast && guided && phase === 'frontend';
+  useEffect(() => {
+    if (!showPicker) return;
+    let cancelled = false;
+    setDsLoading(true);
+    const timer = setTimeout(() => {
+      searchDesignSystems(dsQuery.trim() || undefined)
+        .then((rows) => { if (!cancelled) setDsResults(rows.slice(0, 12)); })
+        .catch(() => { if (!cancelled) setDsResults([]); })
+        .finally(() => { if (!cancelled) setDsLoading(false); });
+    }, dsQuery ? 250 : 0);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [showPicker, dsQuery, searchDesignSystems]);
+
+  async function pickSystem(slug: string | null) {
+    try {
+      await setDesignSystem(project.id, slug);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No pude guardar el diseño base');
+    }
+  }
 
   const isStreaming = state.status === 'starting' || state.status === 'streaming';
   const docFromProject = (project[docKey] ?? '') as string;
@@ -382,6 +414,70 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                       fontFamily: 'var(--font-sans)',
                     }}
                   />
+
+                  {/* "…or start from a known design" — catalog picker (S4). */}
+                  <div style={{ marginTop: 16, fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Palette size={14} style={{ color: 'var(--text-muted)' }} />
+                    …o parte de un diseño que ya te guste
+                  </div>
+                  <div style={{ position: 'relative', marginTop: 8 }}>
+                    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      value={dsQuery}
+                      onChange={(e) => setDsQuery(e.target.value)}
+                      placeholder="Buscar: stripe, notion, material…"
+                      style={{
+                        width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 32px',
+                        fontSize: '0.8rem', background: 'var(--surface)', color: 'var(--text)',
+                        border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
+                    {dsResults.map((ds) => {
+                      const sel = selectedSystem === ds.slug;
+                      return (
+                        <button
+                          key={ds.slug}
+                          type="button"
+                          onClick={() => pickSystem(sel ? null : ds.slug)}
+                          title={ds.has_brand ? `${ds.name} (inspirado en — solo tokens)` : ds.name}
+                          style={{
+                            display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', textAlign: 'left',
+                            background: sel ? 'color-mix(in srgb, var(--amber) 12%, var(--card))' : 'var(--card)',
+                            border: `1.5px solid ${sel ? 'var(--amber)' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                            color: 'var(--text)', minWidth: 0,
+                          }}
+                        >
+                          <span style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ds.name}</span>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            {ds.has_brand ? 'inspirado en' : ds.category}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {dsLoading && dsResults.length === 0 && (
+                    <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Buscando…</div>
+                  )}
+                  {selectedSystem && (
+                    <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                      Diseño base: <strong style={{ color: 'var(--text)' }}>{selectedSystem}</strong>
+                      {' · '}
+                      <button
+                        type="button"
+                        onClick={() => pickSystem(null)}
+                        style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                      >
+                        quitar
+                      </button>
+                    </div>
+                  )}
+                  <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Siempre incluyo accesibilidad, responsive, buenos nombres y patrones de componentes.
+                  </div>
                 </div>
               )}
 

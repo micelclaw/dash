@@ -110,11 +110,23 @@ export interface StudioProject {
    *  create wizard, applies to every phase (Concept / Frontend /
    *  Foundation / Build). */
   model: string | null;
+  /** S4: catalog design system the user picked as a base for the
+   *  Frontend phase (slug, e.g. "material", "stripe"). null = none. */
+  design_system: string | null;
   created_at: string;
   updated_at: string;
   last_activity_at: string;
   archived_at: string | null;
   frozen_at: string | null;
+}
+
+/** S4: a catalog design system as returned by GET /studio/design-systems. */
+export interface StudioDesignSystem {
+  slug: string;
+  name: string;
+  category: string;
+  has_brand: boolean;
+  n_colors: number;
 }
 
 export interface CreateProjectInput {
@@ -197,6 +209,12 @@ interface StudioState {
   approvePhase: (projectId: string, phase: 'concept' | 'frontend' | 'foundation', comment?: string) => Promise<{ status: string }>;
   cancelGeneration: (projectId: string, phase: string) => Promise<void>;
   refetchProject: (projectId: string) => Promise<StudioProject | null>;
+
+  // S4 — design-system catalog (Frontend phase "start from a known design")
+  searchDesignSystems: (query?: string, category?: string) => Promise<StudioDesignSystem[]>;
+  /** Bind a catalog system as the project's base (or null to clear).
+   *  Persists server-side + updates the project row in the store. */
+  setDesignSystem: (projectId: string, slug: string | null) => Promise<void>;
 
   // Phase 8: preview pane
   fetchSandboxRoutes: (projectId: string) => Promise<StudioMountedRoute[]>;
@@ -607,6 +625,28 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
       };
     });
     return p;
+  },
+
+  async searchDesignSystems(query, category) {
+    const params = new URLSearchParams();
+    if (query) params.set('query', query);
+    if (category) params.set('category', category);
+    const qs = params.toString();
+    const res = await api.get<ApiEnvelope<{ systems: StudioDesignSystem[] }>>(
+      `/studio/design-systems${qs ? `?${qs}` : ''}`,
+    );
+    return res.data.systems;
+  },
+
+  async setDesignSystem(projectId, slug) {
+    const res = await api.post<ApiEnvelope<StudioProject>>(
+      `/studio/projects/${projectId}/design-system`,
+      { slug },
+    );
+    const p = res.data;
+    set((state) => ({
+      projects: state.projects.map((x) => (x.id === projectId ? p : x)),
+    }));
   },
 
   // ─── Phase 8: preview pane ──────────────────────────────────────
