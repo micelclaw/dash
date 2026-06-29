@@ -79,7 +79,13 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
       try {
         const res = await fetchOpencodeEmbed(projectId);
         if (cancelled) return;
-        setEmbedUrl(res.embed_url);
+        // S5: when the dash itself is being accessed REMOTELY (a non-loopback
+        // host — e.g. a `.claw` domain over WireGuard), the local
+        // `http://127.0.0.1:<port>` iframe is unreachable; use the TLS
+        // subdomain URL if the backend offered one. Local-first otherwise.
+        const host = window.location.hostname;
+        const isRemoteClient = host !== 'localhost' && host !== '127.0.0.1' && host !== '[::1]';
+        setEmbedUrl(isRemoteClient && res.embed_url_remote ? res.embed_url_remote : res.embed_url);
         setPhase('ready');
       } catch (err) {
         if (cancelled) return;
