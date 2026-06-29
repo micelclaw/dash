@@ -16,11 +16,11 @@
 // y saldos → abre su Libro Mayor.
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock } from 'lucide-react';
+import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock, FolderKanban } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
-type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'years';
+type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'projects' | 'years';
 
 interface TrialRow { account_id: string; code: string | null; group_code: string | null; name: string; type: string; debit: string; credit: string; balance: string; }
 interface TrialBalance { rows: TrialRow[]; total_debit: string; total_credit: string; from: string; to: string; }
@@ -50,6 +50,7 @@ const SUBTABS: { id: SubTab; label: string; icon: React.ComponentType<{ size?: n
   { id: 'balance', label: 'Balance de situación', icon: BookOpen },
   { id: 'pl', label: 'Resultados', icon: TrendingUp },
   { id: 'ledger', label: 'Mayor', icon: Library },
+  { id: 'projects', label: 'Proyectos', icon: FolderKanban },
   { id: 'years', label: 'Ejercicios', icon: CalendarRange },
 ];
 
@@ -207,9 +208,45 @@ export function ContabilidadLens() {
           )
         )}
 
+        {/* ── Rentabilidad por proyecto ── */}
+        {sub === 'projects' && <ProjectsPanel />}
+
         {/* ── Ejercicios (cierre) ── */}
         {sub === 'years' && <YearsPanel />}
       </div>
+    </div>
+  );
+}
+
+interface ProjectRow { project_id: string; title: string | null; income: string; expense: string; result: string; }
+
+function ProjectsPanel() {
+  const [rows, setRows] = useState<ProjectRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.get<{ data: ProjectRow[] }>('/finance/reports/projects')
+      .then((r) => { if (alive) { setRows(r.data ?? []); setLoaded(true); } })
+      .catch(() => { if (alive) setLoaded(true); });
+    return () => { alive = false; };
+  }, []);
+  return (
+    <div style={card}>
+      <div style={sectionTitle}>RENTABILIDAD POR PROYECTO</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead><tr><th style={th}>Proyecto</th><th style={thR}>Ingresos</th><th style={thR}>Gastos / coste</th><th style={thR}>Resultado</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.project_id}>
+              <td style={td}>{r.title ?? '(proyecto sin nombre)'}</td>
+              <td style={tdR}>{fmt(r.income)}</td>
+              <td style={tdR}>{fmt(r.expense)}</td>
+              <td style={{ ...tdR, fontWeight: 600, color: Number(r.result) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.result)}</td>
+            </tr>
+          ))}
+          {loaded && rows.length === 0 && <tr><td style={{ ...td, color: 'var(--text-dim)' }} colSpan={4}>Aún no hay movimientos imputados a un proyecto. Asigna un proyecto a una factura para verlo aquí.</td></tr>}
+        </tbody>
+      </table>
     </div>
   );
 }

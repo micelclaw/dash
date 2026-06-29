@@ -95,6 +95,8 @@ export function FacturaEditorDialog({
   const [discountValue, setDiscountValue] = useState('');
   const [discountKind, setDiscountKind] = useState<DiscountKind>('percent');
   const [categoryId, setCategoryId] = useState(''); // categoría de ingreso de la venta (#4); '' = sin categoría
+  const [projectId, setProjectId] = useState(''); // F4: imputa el documento a un proyecto; '' = sin proyecto
+  const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
   const [supplierNumber, setSupplierNumber] = useState(''); // nº del proveedor (solo bills)
   const [terms, setTerms] = useState('');
   const [notes, setNotes] = useState('');
@@ -114,6 +116,7 @@ export function FacturaEditorDialog({
     void fetchFinanceContacts();
     void fetchTaxRates();
     void fetchCategories(); // categorías de gasto para facturas recibidas
+    void api.get<{ data: Array<{ id: string; title: string }> }>('/projects/boards').then((r) => setProjects(r.data ?? [])).catch(() => {}); // F4: proyectos para imputar
     setRemovedIds([]);
     setPreviewHtml(null);
     if (documentId) {
@@ -129,6 +132,7 @@ export function FacturaEditorDialog({
           setDiscountValue(doc.discount_value != null && Number(doc.discount_value) > 0 ? String(Number(doc.discount_value)) : '');
           setDiscountKind(doc.discount_kind ?? 'percent');
           setCategoryId(doc.category_id ?? '');
+          setProjectId(doc.lines.find((l) => l.project_id)?.project_id ?? '');
           setTerms(doc.terms ?? '');
           setNotes(doc.notes ?? '');
           setLines(
@@ -158,6 +162,7 @@ export function FacturaEditorDialog({
       setDiscountValue('');
       setDiscountKind('percent');
       setCategoryId('');
+      setProjectId('');
       setTerms('');
       setNotes('');
       setLines([emptyLine()]);
@@ -273,6 +278,7 @@ export function FacturaEditorDialog({
       tax_rate_id: l.tax_rate_id || null,
       category_id: l.category_id || null,
       inventory_item_id: l.inventory_item_id || null,
+      project_id: projectId || null, // F4: imputa todas las líneas al proyecto del documento
       is_capital: l.is_capital,
       ...(hasDisc ? { discount_value: dv, discount_kind: l.discount_kind } : { discount_value: 0 }),
     };
@@ -339,6 +345,7 @@ export function FacturaEditorDialog({
           || (o.discount_kind ?? null) !== (inp.discount_kind ?? null)
           || (o.category_id ?? null) !== (inp.category_id ?? null)
           || (o.inventory_item_id ?? null) !== (inp.inventory_item_id ?? null)
+          || (o.project_id ?? null) !== (inp.project_id ?? null)
           || Boolean(o.is_capital) !== Boolean(inp.is_capital);
         if (changed) await updateLine(savedDoc.id, l.id, inp);
       } else if (valid) {
@@ -575,6 +582,20 @@ export function FacturaEditorDialog({
                 </select>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                   Clasifica el ingreso de esta venta en el desglose de Finanzas (Resumen → Ingreso por categoría).
+                </div>
+              </div>
+            )}
+
+            {/* Proyecto (F4): imputa el documento a un proyecto → rentabilidad por proyecto. */}
+            {projects.length > 0 && (
+              <div>
+                <label style={labelStyle}>Proyecto</label>
+                <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
+                  <option value="">— sin proyecto —</option>
+                  {projects.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Imputa ingresos y coste de esta factura a un proyecto (Contabilidad → Proyectos).
                 </div>
               </div>
             )}

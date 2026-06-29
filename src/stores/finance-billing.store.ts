@@ -120,6 +120,8 @@ export interface DocLine {
   // Artículo de inventario vinculado a la línea (cruce con Inventory): al emitir,
   // dispara purchase_in (bill) / sale_out (invoice) + enlace purchased_item/sold_item.
   inventory_item_id: string | null;
+  // Dimensión analítica (F4): proyecto al que se imputa la línea (rentabilidad por proyecto).
+  project_id?: string | null;
   // Bien de inversión (inmovilizado): al emitir un bill, la línea carga a
   // Inmovilizado material en vez de a Gastos (C-N2 capitalizar).
   is_capital?: boolean;
@@ -212,6 +214,8 @@ export interface DocLineInput {
   // Artículo de inventario vinculado (opcional): habilita el cruce con Inventory
   // al emitir (purchase_in/sale_out + enlace). El backend ya mapea inventory_item_id.
   inventory_item_id?: string | null;
+  // Dimensión analítica (F4): imputa la línea a un proyecto (kanban_board) → rentabilidad por proyecto.
+  project_id?: string | null;
   // Bien de inversión: capitaliza la línea (Inmovilizado) en vez de gasto (C-N2).
   is_capital?: boolean;
   // Descuento por línea (opcional). El backend lo resta de la base bruta de la
