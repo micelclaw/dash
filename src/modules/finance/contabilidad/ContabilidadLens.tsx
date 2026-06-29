@@ -16,11 +16,12 @@
 // y saldos → abre su Libro Mayor.
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock, FolderKanban, SlidersHorizontal } from 'lucide-react';
+import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock, FolderKanban, SlidersHorizontal, Landmark } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { ConciliacionPanel } from './ConciliacionPanel';
 
-type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'projects' | 'years' | 'rules';
+type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'projects' | 'reconcile' | 'years' | 'rules';
 
 interface TrialRow { account_id: string; code: string | null; group_code: string | null; name: string; type: string; debit: string; credit: string; balance: string; }
 interface TrialBalance { rows: TrialRow[]; total_debit: string; total_credit: string; from: string; to: string; }
@@ -51,6 +52,7 @@ const SUBTABS: { id: SubTab; label: string; icon: React.ComponentType<{ size?: n
   { id: 'pl', label: 'Resultados', icon: TrendingUp },
   { id: 'ledger', label: 'Mayor', icon: Library },
   { id: 'projects', label: 'Proyectos', icon: FolderKanban },
+  { id: 'reconcile', label: 'Conciliación', icon: Landmark },
   { id: 'years', label: 'Ejercicios', icon: CalendarRange },
   { id: 'rules', label: 'Reglas contables', icon: SlidersHorizontal },
 ];
@@ -211,6 +213,9 @@ export function ContabilidadLens() {
 
         {/* ── Rentabilidad por proyecto ── */}
         {sub === 'projects' && <ProjectsPanel />}
+
+        {/* ── Conciliación bancaria ── */}
+        {sub === 'reconcile' && <ConciliacionPanel />}
 
         {/* ── Ejercicios (cierre) ── */}
         {sub === 'years' && <YearsPanel />}
