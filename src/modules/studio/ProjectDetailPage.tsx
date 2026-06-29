@@ -26,6 +26,7 @@ import { BuildPhase } from './phases/v2/BuildPhase';
 import { TestingPhase } from './phases/TestingPhase';
 import { PackagingPhase } from './phases/PackagingPhase';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
+import { useStudioMode } from './hooks/useStudioMode';
 
 // Mirror of `core/src/studio/services/phase-advancement.ts::STATUS_ORDER`.
 // Used here to clamp viewedPhase ≤ project.status so the user can never
@@ -46,6 +47,8 @@ export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
   const projects = useStudioStore((s) => s.projects);
   const fetchProjects = useStudioStore((s) => s.fetchProjects);
+  const [studioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
 
   useEffect(() => {
     if (projects.length === 0) fetchProjects();
@@ -129,7 +132,7 @@ export function Component() {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <ChevronLeft size={14} /> Projects
+          <ChevronLeft size={14} /> {guided ? 'Mis apps' : 'Projects'}
         </button>
         <Hammer size={18} style={{ color: 'var(--amber)' }} />
         <h1 style={{
@@ -137,6 +140,9 @@ export function Component() {
         }}>
           {project.name}
         </h1>
+        {/* Technical badges (status/level/model/sandbox) leak jargon —
+            hidden in Guided; the phase rail already conveys progress. */}
+        {!guided && (
         <span style={{
           fontSize: '0.6875rem',
           background: 'var(--surface)', color: 'var(--text-dim)',
@@ -145,7 +151,8 @@ export function Component() {
         }}>
           {project.status}
         </span>
-        {project.app_level && (
+        )}
+        {!guided && project.app_level && (
           <span style={{
             fontSize: '0.6875rem',
             background: 'var(--amber)', color: '#000',
@@ -155,7 +162,7 @@ export function Component() {
             {project.app_level}
           </span>
         )}
-        {project.model && (
+        {!guided && project.model && (
           <span
             title="LLM model used by every phase of this project"
             style={{
@@ -170,7 +177,7 @@ export function Component() {
             {project.model}
           </span>
         )}
-        {(project.status === 'build' || project.status === 'testing' || project.status === 'packaging') && (
+        {!guided && (project.status === 'build' || project.status === 'testing' || project.status === 'packaging') && (
           <SandboxStatusBadge projectId={project.id} />
         )}
       </header>
@@ -205,8 +212,10 @@ export function Component() {
         }}>
           <Eye size={12} style={{ color: 'var(--amber)' }} />
           <span style={{ color: 'var(--text)' }}>
-            You are viewing the <strong>{viewedPhase}</strong> phase in read-only mode.
-            The project's current phase is <strong>{project.status}</strong>.
+            {guided
+              ? 'Estás mirando un paso anterior (solo lectura).'
+              : <>You are viewing the <strong>{viewedPhase}</strong> phase in read-only mode.
+                  The project's current phase is <strong>{project.status}</strong>.</>}
           </span>
           <div style={{ flex: 1 }} />
           <button
@@ -219,7 +228,7 @@ export function Component() {
               cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            Back to current phase
+            {guided ? 'Volver a donde estaba' : 'Back to current phase'}
           </button>
         </div>
       )}
