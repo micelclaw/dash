@@ -120,6 +120,16 @@ export interface StudioProject {
   frozen_at: string | null;
 }
 
+/** S6: a real change event in the living-app history (GET /events). */
+export interface StudioProjectEvent {
+  id: string;
+  kind: string;
+  label: string;
+  phase: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
 /** S4: a catalog design system as returned by GET /studio/design-systems. */
 export interface StudioDesignSystem {
   slug: string;
@@ -218,6 +228,8 @@ interface StudioState {
   /** S4 Fase C: derived `:root`+@theme CSS for a catalog system, used by
    *  the visual preview (swatch + sample component in an isolated iframe). */
   fetchDesignSystemTokens: (slug: string) => Promise<string>;
+  /** S6: the living-app change history (real events only). */
+  fetchProjectEvents: (projectId: string) => Promise<StudioProjectEvent[]>;
 
   // Phase 8: preview pane
   fetchSandboxRoutes: (projectId: string) => Promise<StudioMountedRoute[]>;
@@ -657,6 +669,13 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
       `/studio/design-systems/${encodeURIComponent(slug)}/tokens`,
     );
     return res.data.tokens_css;
+  },
+
+  async fetchProjectEvents(projectId) {
+    const res = await api.get<ApiEnvelope<{ events: StudioProjectEvent[] }>>(
+      `/studio/projects/${projectId}/events`,
+    );
+    return res.data.events;
   },
 
   // ─── Phase 8: preview pane ──────────────────────────────────────

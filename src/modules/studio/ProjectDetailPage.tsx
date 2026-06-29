@@ -25,6 +25,7 @@ import { FoundationPhase } from './phases/FoundationPhase';
 import { BuildPhase } from './phases/v2/BuildPhase';
 import { TestingPhase } from './phases/TestingPhase';
 import { PackagingPhase } from './phases/PackagingPhase';
+import { LivingAppCard } from './components/LivingAppCard';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
 import { useStudioMode } from './hooks/useStudioMode';
 
@@ -258,6 +259,8 @@ export function Component() {
             <TestingPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : viewedPhase === 'packaging' || viewedPhase === 'packaged' ? (
             <PackagingPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
+          ) : viewedPhase === 'published' ? (
+            <LivingAppCard project={project} onSelectPhase={selectPhase} />
           ) : (
             <div style={{ height: '100%', overflowY: 'auto', padding: 24 }}>
               <div style={{
