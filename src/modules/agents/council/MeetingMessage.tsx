@@ -25,9 +25,14 @@ export function MeetingMessage({ message }: MeetingMessageProps) {
   return (
     <div style={{
       background: 'var(--card)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-lg)',
+      // Longhand por lado: no mezclar `border` shorthand + `borderLeft` (React avisa
+      // "Removing a style property during rerender (border)..." al cambiar agent_color).
+      // Mismo patrón que el fix de AgentTreeNode.
+      borderTop: '1px solid var(--border)',
+      borderRight: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
       borderLeft: `3px solid ${message.agent_color}`,
+      borderRadius: 'var(--radius-lg)',
       padding: '14px 18px',
     }}>
       {/* Header: avatar + name + role + time */}
