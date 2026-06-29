@@ -18,24 +18,26 @@
 // (Firefly III / SolidInvoice / Crypto) viven en el sidebar, no aquí.
 
 import { useSearchParams } from 'react-router';
-import { Wallet, Loader2, User, Receipt } from 'lucide-react';
+import { Wallet, Loader2, User, Receipt, Scale } from 'lucide-react';
 import { useFinanceStore } from '@/stores/finance.store';
 import { PersonalLens } from './personal/PersonalLens';
 import { FacturacionLens } from './facturacion/FacturacionLens';
+import { ContabilidadLens } from './contabilidad/ContabilidadLens';
 import { FinancePeriodProvider } from './period';
 
-type LensId = 'personal' | 'facturacion';
+type LensId = 'personal' | 'facturacion' | 'contabilidad';
 
 const LENSES: { id: LensId; label: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
   { id: 'personal', label: 'Personal', icon: User },
   { id: 'facturacion', label: 'Facturación', icon: Receipt },
+  { id: 'contabilidad', label: 'Contabilidad', icon: Scale },
 ];
 
 export function Component() {
   const [params, setParams] = useSearchParams();
   const { loading } = useFinanceStore();
   const rawTab = params.get('tab');
-  const lens: LensId = rawTab === 'facturacion' ? 'facturacion' : 'personal';
+  const lens: LensId = rawTab === 'facturacion' ? 'facturacion' : rawTab === 'contabilidad' ? 'contabilidad' : 'personal';
   const setLens = (id: LensId) => setParams((p) => { p.set('tab', id); return p; }, { replace: true });
 
   return (
@@ -101,6 +103,7 @@ export function Component() {
       <div style={{ flex: 1, overflow: 'auto' }}>
         {lens === 'personal' && <PersonalLens />}
         {lens === 'facturacion' && <FacturacionLens />}
+        {lens === 'contabilidad' && <ContabilidadLens />}
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
