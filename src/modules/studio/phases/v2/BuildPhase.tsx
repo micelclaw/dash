@@ -34,6 +34,7 @@ import { ActivityFeed } from '../../components/v2/ActivityFeed';
 import { BuildChat } from '../../components/v2/BuildChat';
 import { OpencodeEmbed } from '../../components/v2/OpencodeEmbed';
 import { GuidedBuildPanel } from '../../components/v2/GuidedBuildPanel';
+import { FriendlyError } from '../../components/v2/FriendlyError';
 import { PlanApprovalBanner } from '../../components/v2/PlanApprovalBanner';
 import { ResizeHandle } from '../../components/v2/ResizeHandle';
 import { useOpencodeStream } from '../../hooks/useOpencodeStream';
@@ -281,17 +282,38 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
         />
       )}
 
-      {/* Top error banners */}
-      {startError && (
+      {/* Top error surfaces. In Guided mode the empathetic template (§8):
+          what happened in plain words + reassurance + ways out (never a
+          dead end, never a stack trace up front). In Pro, the raw banner. */}
+      {startError && (guided ? (
+        <FriendlyError
+          title="No pude empezar a construir tu app"
+          message="Lo intenté pero algo lo impidió. Casi siempre se arregla al reintentar."
+          detail={startError}
+          actions={[
+            { label: 'Reintentar', onClick: () => { void handleStart(); }, primary: true },
+            { label: 'Descartar aviso', onClick: () => setStartError(null) },
+          ]}
+        />
+      ) : (
         <Banner kind="error" icon={<AlertCircle size={14} />}>
           {startError}
         </Banner>
-      )}
-      {stream.error && (
+      ))}
+      {stream.error && (guided ? (
+        <FriendlyError
+          title="El Builder se encontró un problema"
+          message="Puedo intentarlo otra vez. Si sigue fallando, vuelve al plan (abajo a la izquierda) y ajusta algo."
+          detail={stream.error}
+          actions={[
+            { label: 'Probar de nuevo', onClick: () => { void handleStart(); }, primary: true },
+          ]}
+        />
+      ) : (
         <Banner kind="error" icon={<AlertCircle size={14} />}>
           Build session error: {stream.error}
         </Banner>
-      )}
+      ))}
 
       {/* Body — resizable splits: workspace | chat (horizontal),
           inside workspace: code/api ↕ activity feed,
@@ -306,6 +328,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
           <Panel defaultSize={55} minSize={25}>
             {guided ? (
               <GuidedBuildPanel
+                projectId={project.id}
                 status={stream.status}
                 checklist={stream.checklist}
                 tokensUsed={stream.tokensUsed}

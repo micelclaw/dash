@@ -22,8 +22,10 @@
 import { Hammer, CheckCircle2, Circle, Loader2, Sparkles } from 'lucide-react';
 import type { StudioChecklistItem } from '@/stores/studio.store';
 import type { StreamStatus } from '../../hooks/useOpencodeStream';
+import { RewindButton } from '../RewindButton';
 
 interface Props {
+  projectId: string;
   status: StreamStatus;
   checklist: StudioChecklistItem[];
   tokensUsed: number;
@@ -32,7 +34,7 @@ interface Props {
   starting?: boolean;
 }
 
-export function GuidedBuildPanel({ status, checklist, tokensUsed, tokenCap, isStarted, starting }: Props) {
+export function GuidedBuildPanel({ projectId, status, checklist, tokensUsed, tokenCap, isStarted, starting }: Props) {
   const total = checklist.length;
   const done = checklist.filter((c) => c.status === 'done').length;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -106,6 +108,18 @@ export function GuidedBuildPanel({ status, checklist, tokensUsed, tokenCap, isSt
         <div style={{ fontSize: '0.64rem', color: 'var(--text-muted)', marginTop: 4 }}>
           Hay un tope para que nunca se dispare sin tu permiso.
         </div>
+      </div>
+
+      {/* Safety net (R-C): a "volver atrás" is always visible — it reduces
+          anxiety even if never pressed. Honest copy lives in RewindButton. */}
+      <div style={{
+        borderTop: '1px solid var(--border)', paddingTop: 10, flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <RewindButton projectId={projectId} target="foundation" guided />
+        <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>
+          Si algo no te gusta, vuelves al plan sin romper nada.
+        </span>
       </div>
     </div>
   );

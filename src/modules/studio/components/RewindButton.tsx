@@ -34,7 +34,21 @@ interface Props {
   target: StudioRewindTarget;
   /** Optional override label for the trigger button (default: "Rewind here to edit"). */
   label?: string;
+  /** Guided mode (D5): Spanish, reassuring copy framed as a safety net
+   *  (R-C). Honest about what's discarded (the build) AND about what's
+   *  kept (idea, design, data) — never claims "nothing is lost". */
+  guided?: boolean;
 }
+
+// Human-language summary of what survives a guided rewind (R-C copy).
+// Honest: the generated build is discarded; the idea/design/data are kept.
+const GUIDED_KEPT = 'Tu idea, tu diseño y tus datos se conservan.';
+const GUIDED_LOST: Record<StudioRewindTarget, string> = {
+  scoping: 'Se borra todo lo generado (diseño, plan y lo construido) y empiezas de nuevo desde tu idea.',
+  concept: 'Se descartan el diseño, el plan y lo construido hasta ahora.',
+  frontend: 'Se descartan el plan y lo construido hasta ahora.',
+  foundation: 'Se descarta lo que he construido hasta ahora — puedo reconstruirlo cuando quieras.',
+};
 
 // Mirror of the cleared-fields table in `core/src/studio/services/rewind.service.ts`.
 // Used purely for the dialog copy.
@@ -72,7 +86,7 @@ const CLEARED_BY_TARGET: Record<StudioRewindTarget, string[]> = {
   ],
 };
 
-export function RewindButton({ projectId, target, label }: Props) {
+export function RewindButton({ projectId, target, label, guided }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
@@ -83,7 +97,7 @@ export function RewindButton({ projectId, target, label }: Props) {
     setBusy(true);
     try {
       await rewindProject(projectId, target);
-      toast.success(`Project rewound to "${target}"`);
+      toast.success(guided ? 'Hecho — has vuelto atrás.' : `Project rewound to "${target}"`);
       // Drop the ?phase= query param so the page re-renders in edit
       // mode against the new (lower) status. Use replace so the back
       // button doesn't take the user to the now-invalid past view.
@@ -105,10 +119,10 @@ export function RewindButton({ projectId, target, label }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        style={triggerStyle}
-        title={`Rewind to ${target}`}
+        style={guided ? triggerGuided : triggerStyle}
+        title={guided ? 'Volver atrás sin romper nada' : `Rewind to ${target}`}
       >
-        <Rewind size={12} /> {label ?? 'Rewind here to edit'}
+        <Rewind size={12} /> {label ?? (guided ? 'Volver atrás' : 'Rewind here to edit')}
       </button>
 
       {open && (
@@ -117,7 +131,7 @@ export function RewindButton({ projectId, target, label }: Props) {
             <div style={dialogHeader}>
               <AlertTriangle size={16} style={{ color: 'var(--amber)' }} />
               <h3 style={{ fontSize: '0.9375rem', margin: 0, color: 'var(--text)', flex: 1 }}>
-                Rewind to "{target}"
+                {guided ? '¿Volver atrás?' : `Rewind to "${target}"`}
               </h3>
               <button
                 type="button"
@@ -128,23 +142,39 @@ export function RewindButton({ projectId, target, label }: Props) {
               </button>
             </div>
 
-            <p style={{ margin: '0 0 8px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              This action is <strong>destructive and irreversible</strong>. Rewinding to this phase will clear:
-            </p>
+            {guided ? (
+              <>
+                <p style={{ margin: '0 0 10px', fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.5 }}>
+                  {GUIDED_LOST[target]}
+                </p>
+                <p style={{
+                  margin: '0 0 16px', fontSize: '0.8125rem', lineHeight: 1.5,
+                  color: '#22c55e', display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <span aria-hidden>🔒</span> {GUIDED_KEPT}
+                </p>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 8px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                  This action is <strong>destructive and irreversible</strong>. Rewinding to this phase will clear:
+                </p>
 
-            <ul style={{
-              margin: '0 0 12px', paddingLeft: 18,
-              fontSize: '0.75rem', color: 'var(--text)', lineHeight: 1.6,
-            }}>
-              {CLEARED_BY_TARGET[target].map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+                <ul style={{
+                  margin: '0 0 12px', paddingLeft: 18,
+                  fontSize: '0.75rem', color: 'var(--text)', lineHeight: 1.6,
+                }}>
+                  {CLEARED_BY_TARGET[target].map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
 
-            <p style={{ margin: '0 0 16px', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Only the scope, the documents generated up to this phase and the project's data are kept.
-              After rewinding you can regenerate the following phases or accept them as they were.
-            </p>
+                <p style={{ margin: '0 0 16px', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Only the scope, the documents generated up to this phase and the project's data are kept.
+                  After rewinding you can regenerate the following phases or accept them as they were.
+                </p>
+              </>
+            )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
@@ -153,7 +183,7 @@ export function RewindButton({ projectId, target, label }: Props) {
                 disabled={busy}
                 style={cancelBtn}
               >
-                Cancel
+                {guided ? 'Ahora no' : 'Cancel'}
               </button>
               <button
                 type="button"
@@ -162,8 +192,8 @@ export function RewindButton({ projectId, target, label }: Props) {
                 style={confirmBtn(busy)}
               >
                 {busy
-                  ? <><Loader2 size={12} className="animate-spin" /> Rewinding…</>
-                  : <><Rewind size={12} /> Yes, rewind</>
+                  ? <><Loader2 size={12} className="animate-spin" /> {guided ? 'Volviendo…' : 'Rewinding…'}</>
+                  : <><Rewind size={12} /> {guided ? 'Sí, volver atrás' : 'Yes, rewind'}</>
                 }
               </button>
             </div>
@@ -184,6 +214,17 @@ const triggerStyle: React.CSSProperties = {
   color: 'var(--amber)',
   borderRadius: 'var(--radius-md)',
   fontSize: '0.75rem', fontWeight: 600,
+  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+};
+// Guided trigger: discreet, reassuring (a safety net, not an alarm).
+const triggerGuided: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '5px 10px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  color: 'var(--text-dim)',
+  borderRadius: 'var(--radius-full)',
+  fontSize: '0.72rem', fontWeight: 500,
   cursor: 'pointer', fontFamily: 'var(--font-sans)',
 };
 const overlayStyle: React.CSSProperties = {
