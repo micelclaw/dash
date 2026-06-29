@@ -70,7 +70,8 @@ export function AgentBrainChips({ agent, onOpenTab }: Props) {
       <span style={{ fontSize: '0.625rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Agent Brain</span>
       {chip('🧠', 'Memory', memOk === null ? 'var(--text-muted)' : memOk ? 'var(--green, #10b981)' : 'var(--text-dim)', () => onOpenTab('memory'))}
       {chip('🔧', `Skills: ${learned} aprendida${learned === 1 ? '' : 's'}${proposals > 0 ? ` · ${proposals} propuesta${proposals === 1 ? '' : 's'}` : ''}`, proposals > 0 ? 'var(--amber)' : null, () => onOpenTab('overview'))}
-      {boardCards !== null && chip('📋', `Board: ${boardCards} tarea${boardCards === 1 ? '' : 's'}`, boardCards > 0 ? 'var(--blue, #3b82f6)' : null, undefined)}
+      {boardCards !== null && chip('📋', `Board: ${boardCards} tarea${boardCards === 1 ? '' : 's'}`, boardCards > 0 ? 'var(--blue, #3b82f6)' : null,
+        () => window.dispatchEvent(new CustomEvent('claw:open-agent-tab', { detail: 'workboard' })))}
     </div>
   );
 }

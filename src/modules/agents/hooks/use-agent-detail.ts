@@ -19,19 +19,21 @@ export function useAgentDetail(agentId: string | null) {
   const [agent, setAgent] = useState<ManagedAgent | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (id: string) => {
+  // `isCancelled` evita la race de StrictMode (doble-invoke): la carga del primer
+  // effect (ya cancelado) NO debe pisar el agente que el segundo effect cargó.
+  const load = useCallback(async (id: string, isCancelled?: () => boolean) => {
     setLoading(true);
     try {
       const res = await api.get<{ data: ManagedAgent }>(`/managed-agents/${id}`);
-      setAgent(res.data);
+      if (!isCancelled?.()) setAgent(res.data);
     } catch { /* ignore */ }
-    finally { setLoading(false); }
+    finally { if (!isCancelled?.()) setLoading(false); }
   }, []);
 
   useEffect(() => {
     if (!agentId) { setAgent(null); return; }
     let cancelled = false;
-    load(agentId).then(() => { if (cancelled) setAgent(null); });
+    void load(agentId, () => cancelled);
     return () => { cancelled = true; };
   }, [agentId, load]);
 
