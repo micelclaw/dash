@@ -32,6 +32,7 @@ import { RewindButton } from '../components/RewindButton';
 import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
 import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
+import { DesignPreview } from '../components/DesignPreview';
 import { useStudioMode } from '../hooks/useStudioMode';
 
 // Frontend "feel" moods (§3.4) — each maps to a short hint folded into
@@ -463,17 +464,20 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                     <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Buscando…</div>
                   )}
                   {selectedSystem && (
-                    <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      Diseño base: <strong style={{ color: 'var(--text)' }}>{selectedSystem}</strong>
-                      {' · '}
-                      <button
-                        type="button"
-                        onClick={() => pickSystem(null)}
-                        style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', padding: 0, font: 'inherit' }}
-                      >
-                        quitar
-                      </button>
-                    </div>
+                    <>
+                      <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Diseño base: <strong style={{ color: 'var(--text)' }}>{selectedSystem}</strong>
+                        {' · '}
+                        <button
+                          type="button"
+                          onClick={() => pickSystem(null)}
+                          style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                        >
+                          quitar
+                        </button>
+                      </div>
+                      <DesignPreview slug={selectedSystem} />
+                    </>
                   )}
                   <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                     Siempre incluyo accesibilidad, responsive, buenos nombres y patrones de componentes.

@@ -215,6 +215,9 @@ interface StudioState {
   /** Bind a catalog system as the project's base (or null to clear).
    *  Persists server-side + updates the project row in the store. */
   setDesignSystem: (projectId: string, slug: string | null) => Promise<void>;
+  /** S4 Fase C: derived `:root`+@theme CSS for a catalog system, used by
+   *  the visual preview (swatch + sample component in an isolated iframe). */
+  fetchDesignSystemTokens: (slug: string) => Promise<string>;
 
   // Phase 8: preview pane
   fetchSandboxRoutes: (projectId: string) => Promise<StudioMountedRoute[]>;
@@ -647,6 +650,13 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     set((state) => ({
       projects: state.projects.map((x) => (x.id === projectId ? p : x)),
     }));
+  },
+
+  async fetchDesignSystemTokens(slug) {
+    const res = await api.get<ApiEnvelope<{ tokens_css: string }>>(
+      `/studio/design-systems/${encodeURIComponent(slug)}/tokens`,
+    );
+    return res.data.tokens_css;
   },
 
   // ─── Phase 8: preview pane ──────────────────────────────────────
