@@ -31,6 +31,48 @@ import { QuestionCardsPanel } from '../components/QuestionCardsPanel';
 import { RewindButton } from '../components/RewindButton';
 import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
 import { PhaseSidebar } from '../components/PhaseSidebar';
+import { FriendlyError } from '../components/v2/FriendlyError';
+import { useStudioMode } from '../hooks/useStudioMode';
+
+// Human, Spanish chrome for each doc phase in Guided mode (§3.3–3.5).
+// Only the surrounding copy changes — the generated document body is
+// the same. The deeper "ficha" (qué hará / incluye / no incluye, hitos
+// de obra) would need structured sections from the backend prompt.
+const GUIDED_COPY: Record<'concept' | 'frontend' | 'foundation', {
+  title: string; empty: string; approve: string; approveHeader: string; approveBody: string;
+  contextLabel: string; placeholder: string; generate: string; regenerate: string; thinking: string;
+}> = {
+  concept: {
+    title: 'Esto es lo que entendí',
+    empty: 'Voy a resumir tu idea en una ficha clara para que la confirmes.',
+    approve: 'Sí, es esto · Continuar',
+    approveHeader: '¿Es esto lo que tenías en mente?',
+    approveBody: 'Si te cuadra, seguimos. Si algo no encaja, dímelo y lo ajusto.',
+    contextLabel: '¿Quieres añadir algo sobre tu idea?',
+    placeholder: 'Ej.: para quién es, qué es lo más importante, algo que ya tengas claro…',
+    generate: 'Preparar mi ficha', regenerate: 'Volver a intentarlo', thinking: 'Entendiendo tu idea…',
+  },
+  frontend: {
+    title: 'Cómo se va a ver',
+    empty: 'Vamos a darle aspecto a tu app.',
+    approve: 'Me gusta · Continuar',
+    approveHeader: '¿Te gusta cómo se verá?',
+    approveBody: 'Si te convence, seguimos. Puedes pedirme cambios cuando quieras.',
+    contextLabel: '¿Cómo te imaginas que se vea?',
+    placeholder: 'Ej.: elegante y sobria, fresca y colorida, tus colores o tu logo…',
+    generate: 'Proponer un diseño', regenerate: 'Probar otro', thinking: 'Diseñando…',
+  },
+  foundation: {
+    title: 'El plan de construcción',
+    empty: 'Voy a preparar el plan para construir tu app.',
+    approve: 'Empezar a construir →',
+    approveHeader: '¿Empezamos con este plan?',
+    approveBody: 'Nada se construye hasta que tú lo apruebes. Puedes pedir cambios antes.',
+    contextLabel: '¿Algo que ya tengas decidido o prefieras?',
+    placeholder: 'Ej.: algo que ya tengas decidido, una preferencia, un dato importante…',
+    generate: 'Preparar el plan', regenerate: 'Rehacer el plan', thinking: 'Preparando el plan…',
+  },
+};
 
 export interface DocPhaseLayoutProps {
   project: StudioProject;
@@ -89,6 +131,9 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
+  const [studioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
+  const gc = GUIDED_COPY[phase];
 
   const { state, reset, debug } = useStudioStream(project.id, phase);
   const [submitting, setSubmitting] = useState(false);
@@ -163,7 +208,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // tab-navigation cases (it loses races against this path).
       await refetchProject(project.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Generation failed');
+      toast.error(err instanceof Error ? err.message : (guided ? 'No pude prepararlo' : 'Generation failed'));
     } finally {
       setSubmitting(false);
     }
@@ -172,7 +217,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   async function handleCancel() {
     try {
       await cancelGeneration(project.id, phase);
-      toast('Generation cancelled');
+      toast(guided ? 'Cancelado' : 'Generation cancelled');
     } catch { /* non-fatal */ }
   }
 
@@ -183,9 +228,9 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // Refetch so the new status (and the new phase component) takes
       // over without requiring a page refresh.
       await refetchProject(project.id);
-      toast.success('Phase approved');
+      toast.success(guided ? '¡Listo! Pasamos a lo siguiente' : 'Phase approved');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Approval failed');
+      toast.error(err instanceof Error ? err.message : (guided ? 'No se pudo continuar' : 'Approval failed'));
     } finally {
       setSubmitting(false);
     }
@@ -203,10 +248,10 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <Sparkles size={14} style={{ color: 'var(--amber)' }} />
-          {title}
+          {guided ? gc.title : title}
         </h2>
         <div style={{ flex: 1 }} />
-        {state.tokensUsed > 0 && !isPast && (
+        {state.tokensUsed > 0 && !isPast && !guided && (
           <span style={{
             fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
           }}>
@@ -221,7 +266,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             onClick={handleCancel}
             style={toolbarBtnSecondary}
           >
-            <Loader2 size={12} className="animate-spin" /> Cancel
+            <Loader2 size={12} className="animate-spin" /> {guided ? 'Detener' : 'Cancel'}
           </button>
         ) : (
           <button
@@ -230,13 +275,15 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             disabled={submitting}
             style={toolbarBtnPrimary(submitting)}
           >
-            {hasDoc ? <><RefreshCw size={12} /> Regenerate</> : <><Sparkles size={12} /> Generate</>}
+            {hasDoc
+              ? <><RefreshCw size={12} /> {guided ? gc.regenerate : 'Regenerate'}</>
+              : <><Sparkles size={12} /> {guided ? gc.generate : 'Generate'}</>}
           </button>
         )}
       </div>
 
       {/* Pipeline strip (horizontal navigator across all phases) */}
-      <PhaseSidebar project={project} viewedPhase={phase} onSelect={onSelectPhase} />
+      <PhaseSidebar project={project} viewedPhase={phase} onSelect={onSelectPhase} guided={guided} />
 
       {/* Body — split: doc viewer (left) + questions/approve (right).
           In past view we collapse to a single column (read-only). */}
@@ -247,7 +294,14 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       }}>
         {/* Doc viewer */}
         <div style={{ overflowY: 'auto', padding: '24px 32px' }}>
-          {state.status === 'error' && (
+          {state.status === 'error' && (guided ? (
+            <FriendlyError
+              title="No pude prepararlo esta vez"
+              message="Casi siempre se arregla al reintentar."
+              detail={state.error}
+              actions={[{ label: 'Reintentar', onClick: () => { void handleGenerate(); }, primary: true }]}
+            />
+          ) : (
             <div style={errorBanner}>
               <AlertCircle size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 1 }} />
               <div>
@@ -255,13 +309,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: '0.75rem' }}>{state.error}</div>
               </div>
             </div>
-          )}
+          ))}
 
           {!hasDoc && state.status === 'idle' && (
             <div style={emptyState}>
               <Sparkles size={24} style={{ color: 'var(--amber)', marginBottom: 8 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>
-                {emptyHint}
+                {guided ? gc.empty : emptyHint}
               </div>
 
               {/* First-turn context input — phase-specific copy */}
@@ -273,12 +327,12 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                   <label style={{
                     fontSize: '0.75rem', color: 'var(--text)', fontWeight: 500,
                   }}>
-                    {initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+                    {guided ? gc.contextLabel : initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>{guided ? '(opcional)' : '(optional)'}</span>
                   </label>
                   <textarea
                     value={initialContext}
                     onChange={(e) => setInitialContext(e.target.value)}
-                    placeholder={initialContextPlaceholder ?? ''}
+                    placeholder={guided ? gc.placeholder : (initialContextPlaceholder ?? '')}
                     rows={5}
                     style={{
                       padding: 10, fontSize: '0.8125rem',
@@ -309,13 +363,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                     }}
                   >
                     <Sparkles size={14} />
-                    Generate
+                    {guided ? gc.generate : 'Generate'}
                   </button>
                   <div style={{
                     fontSize: '0.6875rem', color: 'var(--text-muted)',
                     marginTop: 4,
                   }}>
-                    If you leave it blank, only the scope info will be used.
+                    {guided ? 'Si lo dejas en blanco, uso lo que ya me contaste.' : 'If you leave it blank, only the scope info will be used.'}
                   </div>
                 </div>
               )}
@@ -343,7 +397,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 letterSpacing: '0.05em', color: 'var(--text-muted)',
                 fontWeight: 600, marginBottom: 4,
               }}>
-                Builder reasoning {isStreaming && '· streaming…'}
+                {guided ? 'Cómo lo está pensando' : 'Builder reasoning'} {isStreaming && (guided ? '· en directo…' : '· streaming…')}
               </summary>
               <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 6 }}>
                 {state.reasoning}
@@ -355,7 +409,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
 
           {isStreaming && state.text.length === 0 && state.reasoning.length === 0 && (
             <div style={loadingHint}>
-              <Loader2 size={14} className="animate-spin" /> Studio Builder is thinking…
+              <Loader2 size={14} className="animate-spin" /> {guided ? gc.thinking : 'Studio Builder is thinking…'}
             </div>
           )}
         </div>
@@ -389,11 +443,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 fontSize: '0.875rem', fontWeight: 600, margin: 0, color: 'var(--text)',
                 display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                <CheckCircle2 size={14} style={{ color: '#22c55e' }} /> Approve
+                <CheckCircle2 size={14} style={{ color: '#22c55e' }} /> {guided ? gc.approveHeader : 'Approve'}
               </h3>
               <p style={{ fontSize: '0.75rem', margin: 0, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                If the document reflects what you wanted, approve it to move on to the next phase.
-                {questions.length > 0 && ' You can answer the pending questions first to refine the document.'}
+                {guided
+                  ? gc.approveBody
+                  : <>If the document reflects what you wanted, approve it to move on to the next phase.
+                      {questions.length > 0 && ' You can answer the pending questions first to refine the document.'}</>}
               </p>
 
               {withApprovalComment && (
@@ -409,7 +465,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                         textDecoration: 'underline',
                       }}
                     >
-                      + Add a comment before approving
+                      {guided ? '+ Quiero comentar algo antes' : '+ Add a comment before approving'}
                     </button>
                   ) : (
                     <textarea
@@ -443,7 +499,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 }}
               >
                 {submitting ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                {approveLabel}
+                {guided ? gc.approve : approveLabel}
               </button>
             </div>
           )}
