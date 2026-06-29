@@ -32,7 +32,21 @@ interface Props {
   viewedPhase?: StudioProjectStatus;
   /** Click handler. If omitted, sidebar entries are non-interactive. */
   onSelect?: (phase: StudioProjectStatus) => void;
+  /** Guided mode (D5): show human phase names in the user's language
+   *  instead of the technical pipeline labels. */
+  guided?: boolean;
 }
+
+// Human-language phase names for Guided mode (§3 journey mapping).
+const HUMAN_LABELS: Partial<Record<StudioProjectStatus, string>> = {
+  scoping: 'Tu idea',
+  concept: 'El acuerdo',
+  frontend: 'El diseño',
+  foundation: 'El plan',
+  build: 'Construcción',
+  testing: 'Probar',
+  packaging: 'Instalar',
+};
 
 interface PhaseEntry {
   id: StudioProjectStatus;
@@ -70,7 +84,7 @@ function statusIndex(status: StudioProjectStatus): number {
   return i >= 0 ? i : 0;
 }
 
-export function PhaseSidebar({ project, viewedPhase, onSelect }: Props) {
+export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) {
   const phases = buildPhases(project);
   const currentIdx = statusIndex(project.status);
   const effectiveViewed = viewedPhase ?? project.status;
@@ -109,7 +123,7 @@ export function PhaseSidebar({ project, viewedPhase, onSelect }: Props) {
     const content = (
       <>
         <Icon size={13} style={{ color: iconColor, flexShrink: 0 }} />
-        <span>{p.label}</span>
+        <span>{guided ? (HUMAN_LABELS[p.id] ?? p.label) : p.label}</span>
         {isCurrent && !isViewed && (
           <span style={{
             fontSize: '0.5625rem',
@@ -122,7 +136,7 @@ export function PhaseSidebar({ project, viewedPhase, onSelect }: Props) {
             letterSpacing: '0.04em',
             marginLeft: 2,
           }}>
-            current
+            {guided ? 'aquí' : 'current'}
           </span>
         )}
       </>

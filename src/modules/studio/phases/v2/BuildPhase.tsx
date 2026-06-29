@@ -223,7 +223,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
     }}>
       {/* PhaseSidebar — phase pill strip (already shows v2 'build' slot) */}
       <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-        <PhaseSidebar project={project} viewedPhase="build" onSelect={onSelectPhase} />
+        <PhaseSidebar project={project} viewedPhase="build" onSelect={onSelectPhase} guided={guided} />
       </div>
 
       {/* Header strip */}
