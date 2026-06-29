@@ -28,7 +28,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, Square, Loader2, AlertCircle, RefreshCw, Eye, ChevronLeft } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
 import type { StreamStatus } from '../../hooks/useOpencodeStream';
-import { useStudioMode } from '../../hooks/useStudioMode';
+import type { StudioMode } from '../../hooks/useStudioMode';
 
 interface Props {
   projectId: string;
@@ -41,6 +41,10 @@ interface Props {
   starting?: boolean;
   /** Build checklist — drives the human "milestones" count in Guided mode. */
   checklist?: { status: string }[];
+  /** Guided/Pro view mode — owned by BuildPhase so it governs the WHOLE
+   *  screen (left pane + this embed), not just this panel. Controlled. */
+  studioMode: StudioMode;
+  onStudioModeChange: (m: StudioMode) => void;
   /** Re-issue start when there's no active session yet. */
   onAutoStart?: () => void;
   /** Classic dash chat, rendered if the embed can't be reached. */
@@ -49,11 +53,11 @@ interface Props {
 
 type Phase = 'loading' | 'ready' | 'error';
 
-export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, checklist, onAutoStart, fallback }: Props) {
+export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, checklist, studioMode, onStudioModeChange, onAutoStart, fallback }: Props) {
   const fetchOpencodeEmbed = useStudioStore((s) => s.fetchOpencodeEmbed);
   const sendBuildMessage = useStudioStore((s) => s.sendBuildMessage);
   const abortBuild = useStudioStore((s) => s.abortBuild);
-  const [studioMode, setStudioMode] = useStudioMode();
+  const setStudioMode = onStudioModeChange;
 
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');

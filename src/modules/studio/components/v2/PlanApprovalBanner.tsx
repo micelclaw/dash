@@ -35,11 +35,14 @@ interface Props {
   /** Number of items in the project's build checklist. >0 means the
    *  agent has already emitted a `BUILD_CHECKLIST` sentinel block. */
   checklistCount: number;
+  /** Guided mode (D5): reframe the plan-approval as a plain-language
+   *  "Propuesta: ¿lo hago?" instead of "approve the plan / Build". */
+  guided?: boolean;
 }
 
 type BannerState = 'writing' | 'updating' | 'ready';
 
-export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCount }: Props) {
+export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCount, guided }: Props) {
   const approveBuildPlan = useStudioStore((s) => s.approveBuildPlan);
   const [approving, setApproving] = useState(false);
 
@@ -47,15 +50,21 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
     ? (checklistCount > 0 ? 'updating' : 'writing')
     : (checklistCount > 0 ? 'ready' : 'writing');
 
-  const title =
-    state === 'writing'  ? 'El Builder está escribiendo el plan…'
-    : state === 'updating' ? 'El Builder está actualizando el plan…'
-    : 'El Builder ha propuesto un plan';
+  const title = guided
+    ? (state === 'writing'  ? 'Estoy pensando una propuesta…'
+      : state === 'updating' ? 'Estoy afinando la propuesta…'
+      : 'Tengo una propuesta para ti')
+    : (state === 'writing'  ? 'El Builder está escribiendo el plan…'
+      : state === 'updating' ? 'El Builder está actualizando el plan…'
+      : 'El Builder ha propuesto un plan');
 
-  const subtitle =
-    state === 'writing'  ? 'Verás los pasos en el chat según los redacta. Podrás aprobar cuando termine.'
-    : state === 'updating' ? 'Lee los cambios en el chat. Podrás aprobar cuando termine.'
-    : 'Revisa la checklist arriba y el plan en el chat. Pide ajustes o aprueba para empezar la ejecución.';
+  const subtitle = guided
+    ? (state === 'writing'  ? 'En un momento te cuento qué pienso hacer.'
+      : state === 'updating' ? 'Estoy ajustando los pasos con lo que me has dicho.'
+      : 'Te propongo construir tu app con los pasos de la izquierda. ¿La empiezo?')
+    : (state === 'writing'  ? 'Verás los pasos en el chat según los redacta. Podrás aprobar cuando termine.'
+      : state === 'updating' ? 'Lee los cambios en el chat. Podrás aprobar cuando termine.'
+      : 'Revisa la checklist arriba y el plan en el chat. Pide ajustes o aprueba para empezar la ejecución.');
 
   const buttonDisabled = approving || state !== 'ready';
 
@@ -123,7 +132,7 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
         }}
       >
         {approving ? <Loader2 size={12} className="spin" /> : <Check size={12} />}
-        Aprobar plan y empezar Build
+        {guided ? 'Sí, adelante' : 'Aprobar plan y empezar Build'}
       </button>
     </div>
   );

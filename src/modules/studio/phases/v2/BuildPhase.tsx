@@ -33,9 +33,11 @@ import { WorkspaceFileTree } from '../../components/v2/WorkspaceFileTree';
 import { ActivityFeed } from '../../components/v2/ActivityFeed';
 import { BuildChat } from '../../components/v2/BuildChat';
 import { OpencodeEmbed } from '../../components/v2/OpencodeEmbed';
+import { GuidedBuildPanel } from '../../components/v2/GuidedBuildPanel';
 import { PlanApprovalBanner } from '../../components/v2/PlanApprovalBanner';
 import { ResizeHandle } from '../../components/v2/ResizeHandle';
 import { useOpencodeStream } from '../../hooks/useOpencodeStream';
+import { useStudioMode } from '../../hooks/useStudioMode';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 
 interface Props {
@@ -53,6 +55,11 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
   const fetchSandboxRoutes = useStudioStore((s) => s.fetchSandboxRoutes);
 
   const stream = useOpencodeStream(project.id, project.status === 'build' ? 'idle' : 'idle');
+
+  // Guided/Pro lens for the WHOLE build screen (D5 progressive disclosure).
+  // Owned here so it governs both the left technical pane and the embed.
+  const [studioMode, setStudioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
 
   const [tab, setTab] = useState<'code' | 'api'>('code');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -243,11 +250,14 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
         starting={starting}
         onStart={() => { void handleStart(); }}
         projectId={project.id}
+        guided={guided}
       />
 
       {/* Build checklist panel — collapsible. Hidden when no items
-          yet (project just entered Build, generation in flight). */}
-      <BuildChecklist projectId={project.id} items={stream.checklist} />
+          yet (project just entered Build, generation in flight). In
+          Guided mode the human milestone list (GuidedBuildPanel) shows
+          this same data, so we hide the raw technical checklist here. */}
+      {!guided && <BuildChecklist projectId={project.id} items={stream.checklist} />}
 
       {/* Plan-mode approval CTA. Visible whenever the session is NOT
           yet in build-mode — covers `mode === 'plan'` AND `mode === null`
@@ -259,6 +269,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
           projectId={project.id}
           streamingInProgress={stream.status === 'running'}
           checklistCount={stream.checklist.length}
+          guided={guided}
         />
       )}
 
@@ -288,8 +299,21 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
           via autoSaveId so user-resized layouts survive page reloads. */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <PanelGroup direction="horizontal" autoSaveId="studio-build-h-main">
-          {/* Left: workspace */}
+          {/* Left: in Guided mode a human milestone panel (curtain over the
+              engine); in Pro mode the full technical workspace. The outer
+              2-panel layout is identical in both modes so react-resizable
+              -panels keeps a stable autoSaveId. */}
           <Panel defaultSize={55} minSize={25}>
+            {guided ? (
+              <GuidedBuildPanel
+                status={stream.status}
+                checklist={stream.checklist}
+                tokensUsed={stream.tokensUsed}
+                tokenCap={project.build_token_cap}
+                isStarted={isStarted}
+                starting={starting}
+              />
+            ) : (
             <PanelGroup direction="vertical" autoSaveId="studio-build-v-ws">
               {/* Top: tabs + (filetree | code) split */}
               <Panel defaultSize={70} minSize={30}>
@@ -354,6 +378,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
                 </div>
               </Panel>
             </PanelGroup>
+            )}
           </Panel>
 
           <ResizeHandle direction="horizontal" ariaLabel="Resize chat" />
@@ -372,6 +397,8 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
                 isStarted={isStarted}
                 starting={starting}
                 checklist={stream.checklist}
+                studioMode={studioMode}
+                onStudioModeChange={setStudioMode}
                 onAutoStart={handleStart}
                 fallback={
                   <BuildChat

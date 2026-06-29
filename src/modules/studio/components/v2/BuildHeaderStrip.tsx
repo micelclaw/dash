@@ -61,6 +61,10 @@ interface Props {
   /** The project id is needed by the clickable mode chip so it can
    *  POST to /build/approve-plan or /build/revert-to-plan. */
   projectId: string;
+  /** Guided mode (D5): hide the technical stat cluster (mode badge,
+   *  turn/time/token counters, checklist %) and humanize the action
+   *  labels. The same controls stay, just without jargon. */
+  guided?: boolean;
 }
 
 const FINISH_THRESHOLD = 0.8;
@@ -70,7 +74,7 @@ export function BuildHeaderStrip({
   status, tokensUsed, tokenCap, turnsUsed, turnCap,
   startedAt, onStop, onFinish, onOpenSettings, onChecklistClick,
   checklist, turnsHaveStarted, mode, forcePlanMode,
-  isStarted, starting, onStart, projectId,
+  isStarted, starting, onStart, projectId, guided,
 }: Props) {
   const elapsed = startedAt ? formatDuration(Date.now() - startedAt) : '—';
   const dot =
@@ -127,43 +131,53 @@ export function BuildHeaderStrip({
     <div style={{
       display: 'flex', alignItems: 'center', gap: 16,
       padding: '8px 16px', borderBottom: '1px solid var(--border)',
-      flexShrink: 0, fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-      background: mode === 'plan'
+      flexShrink: 0, fontFamily: guided ? 'var(--font-sans)' : 'var(--font-mono)', fontSize: '0.75rem',
+      background: (mode === 'plan' && !guided)
         ? 'color-mix(in srgb, var(--amber) 6%, var(--card))'
         : 'var(--card)',
-      borderTop: mode === 'plan' ? '2px solid var(--amber)' : '2px solid transparent',
+      borderTop: (mode === 'plan' && !guided) ? '2px solid var(--amber)' : '2px solid transparent',
       transition: 'background 200ms ease, border-color 200ms ease',
     }}>
-      {mode && <ModeBadge mode={mode} forcePlanMode={!!forcePlanMode} projectId={projectId} canToggle={isStarted} />}
-      <Stat label="Turn" value={`${turnsUsed} / ${turnCap}`} />
-      <Stat label="Time" value={elapsed} />
-      <Stat label="Tokens" value={`${formatNum(tokensUsed)} / ${formatNum(tokenCap)}`} valueColor={tokensColor} />
-      {checklistTotal > 0 && (
-        <button
-          type="button"
-          onClick={onChecklistClick}
-          style={{
+      {guided ? (
+        // Guided: a single human status pill — no jargon counters.
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontWeight: 600 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
+          {guidedStatusLabel(status, isStarted)}
+        </span>
+      ) : (
+        <>
+          {mode && <ModeBadge mode={mode} forcePlanMode={!!forcePlanMode} projectId={projectId} canToggle={isStarted} />}
+          <Stat label="Turn" value={`${turnsUsed} / ${turnCap}`} />
+          <Stat label="Time" value={elapsed} />
+          <Stat label="Tokens" value={`${formatNum(tokensUsed)} / ${formatNum(tokenCap)}`} valueColor={tokensColor} />
+          {checklistTotal > 0 && (
+            <button
+              type="button"
+              onClick={onChecklistClick}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                background: 'transparent', border: 'none', cursor: onChecklistClick ? 'pointer' : 'default',
+                padding: 0, fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                color: 'var(--text)',
+              }}
+              title={onChecklistClick ? 'Open checklist' : undefined}
+            >
+              <CheckSquare size={11} style={{ color: checklistColor }} />
+              <span style={{ color: checklistColor }}>{checklistDone}/{checklistTotal}</span>
+              <span style={{ color: 'var(--text-muted)' }}>
+                ({Math.round(checklistRatio * 100)}%)
+              </span>
+            </button>
+          )}
+          <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
-            background: 'transparent', border: 'none', cursor: onChecklistClick ? 'pointer' : 'default',
-            padding: 0, fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-            color: 'var(--text)',
-          }}
-          title={onChecklistClick ? 'Open checklist' : undefined}
-        >
-          <CheckSquare size={11} style={{ color: checklistColor }} />
-          <span style={{ color: checklistColor }}>{checklistDone}/{checklistTotal}</span>
-          <span style={{ color: 'var(--text-muted)' }}>
-            ({Math.round(checklistRatio * 100)}%)
+            color: 'var(--text-dim)',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot }} />
+            {statusText}
           </span>
-        </button>
+        </>
       )}
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: 4,
-        color: 'var(--text-dim)',
-      }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot }} />
-        {statusText}
-      </span>
       <span style={{ flex: 1 }} />
       {/* Lifecycle slot: Start (no session yet) | Stop (running) | hidden */}
       {!isStarted && (
@@ -173,12 +187,12 @@ export function BuildHeaderStrip({
           style={starting ? { ...btnPrimary, opacity: 0.6, cursor: 'wait' } : btnPrimary}
           aria-label="Start build"
         >
-          <Play size={11} fill="currentColor" /> {starting ? 'Starting…' : 'Start build'}
+          <Play size={11} fill="currentColor" /> {starting ? (guided ? 'Preparando…' : 'Starting…') : (guided ? 'Empezar' : 'Start build')}
         </button>
       )}
       {isStarted && status === 'running' && (
         <button onClick={onStop} style={btnDanger} aria-label="Stop">
-          <Square size={11} fill="currentColor" /> Stop
+          <Square size={11} fill="currentColor" /> {guided ? 'Pausar' : 'Stop'}
         </button>
       )}
       {finishVisible && (
@@ -197,10 +211,10 @@ export function BuildHeaderStrip({
           style={finishStyle}
           title={finishTitle}
         >
-          Continuar a Testing <ArrowRight size={11} />
+          {guided ? 'Probar mi app' : 'Continuar a Testing'} <ArrowRight size={11} />
         </button>
       )}
-      {!finishVisible && finishBlockedReason && isStarted && (
+      {!finishVisible && finishBlockedReason && isStarted && !guided && (
         <span
           title={finishBlockedReason}
           style={{
@@ -211,11 +225,20 @@ export function BuildHeaderStrip({
           Testing locked
         </span>
       )}
-      <button onClick={onOpenSettings} style={btnGhost} aria-label="Settings">
-        <Settings size={13} />
-      </button>
+      {!guided && (
+        <button onClick={onOpenSettings} style={btnGhost} aria-label="Settings">
+          <Settings size={13} />
+        </button>
+      )}
     </div>
   );
+}
+
+function guidedStatusLabel(status: StreamStatus, isStarted: boolean): string {
+  if (status === 'running') return 'Construyendo tu app…';
+  if (status === 'failed') return 'Hubo un problema';
+  if (!isStarted) return 'Lista para empezar';
+  return 'En pausa';
 }
 
 function ModeBadge({
