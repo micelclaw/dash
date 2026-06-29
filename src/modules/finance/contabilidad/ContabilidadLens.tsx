@@ -16,10 +16,11 @@
 // y saldos → abre su Libro Mayor.
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Scale, BookOpen, TrendingUp, Library, Loader2 } from 'lucide-react';
+import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 
-type SubTab = 'trial' | 'balance' | 'pl' | 'ledger';
+type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'years';
 
 interface TrialRow { account_id: string; code: string | null; group_code: string | null; name: string; type: string; debit: string; credit: string; balance: string; }
 interface TrialBalance { rows: TrialRow[]; total_debit: string; total_credit: string; from: string; to: string; }
@@ -49,6 +50,7 @@ const SUBTABS: { id: SubTab; label: string; icon: React.ComponentType<{ size?: n
   { id: 'balance', label: 'Balance de situación', icon: BookOpen },
   { id: 'pl', label: 'Resultados', icon: TrendingUp },
   { id: 'ledger', label: 'Mayor', icon: Library },
+  { id: 'years', label: 'Ejercicios', icon: CalendarRange },
 ];
 
 export function ContabilidadLens() {
@@ -204,6 +206,95 @@ export function ContabilidadLens() {
             </div>
           )
         )}
+
+        {/* ── Ejercicios (cierre) ── */}
+        {sub === 'years' && <YearsPanel />}
+      </div>
+    </div>
+  );
+}
+
+interface FiscalYear { id: string; year: number; status: 'open' | 'closed'; closed_at: string | null; }
+interface ClosePreview { year: number; status: string; income_total: string; expense_total: string; result: string; }
+
+function YearsPanel() {
+  const [years, setYears] = useState<FiscalYear[]>([]);
+  const [yearInput, setYearInput] = useState<string>(String(new Date().getFullYear() - 1));
+  const [preview, setPreview] = useState<ClosePreview | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => { try { setYears((await api.get<{ data: FiscalYear[] }>('/finance/fiscal-years')).data ?? []); } catch { /* */ } };
+  useEffect(() => { void load(); }, []);
+
+  const doPreview = async () => {
+    const y = Number(yearInput); if (!Number.isInteger(y)) return;
+    setBusy(true);
+    try { setPreview((await api.get<{ data: ClosePreview }>(`/finance/fiscal-years/${y}/preview-close`)).data); }
+    catch { toast.error('No se pudo previsualizar el cierre'); } finally { setBusy(false); }
+  };
+  const doClose = async (y: number) => {
+    if (!window.confirm(`Cerrar el ejercicio ${y}? Se generarán los asientos de regularización, cierre y apertura, y se bloqueará postear con fecha de ${y}.`)) return;
+    setBusy(true);
+    try { await api.post(`/finance/fiscal-years/${y}/close`, {}); toast.success(`Ejercicio ${y} cerrado`); setPreview(null); await load(); }
+    catch { toast.error('No se pudo cerrar el ejercicio'); } finally { setBusy(false); }
+  };
+  const doReopen = async (y: number) => {
+    if (!window.confirm(`Reabrir el ejercicio ${y}? Se revertirán los asientos de cierre.`)) return;
+    setBusy(true);
+    try { await api.post(`/finance/fiscal-years/${y}/reopen`, {}); toast.success(`Ejercicio ${y} reabierto`); await load(); }
+    catch { toast.error('No se pudo reabrir el ejercicio'); } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 720 }}>
+      {/* Cerrar un ejercicio */}
+      <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Cerrar ejercicio</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="number" value={yearInput} onChange={(e) => setYearInput(e.target.value)} style={{ width: 110, padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--text)', fontSize: 13 }} />
+          <button type="button" onClick={() => void doPreview()} disabled={busy}
+            style={{ padding: '6px 14px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-sm, 4px)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', cursor: busy ? 'default' : 'pointer' }}>
+            {busy ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : 'Vista previa'}
+          </button>
+        </div>
+        {preview && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, color: 'var(--text)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-dim)' }}>Ingresos</span><span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{fmt(preview.income_total)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-dim)' }}>Gastos</span><span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{fmt(preview.expense_total)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}><span>Resultado ({Number(preview.result) >= 0 ? 'beneficio' : 'pérdida'})</span><span style={{ fontFamily: 'var(--font-mono, monospace)', color: Number(preview.result) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(preview.result)} €</span></div>
+            {preview.status === 'closed'
+              ? <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Este ejercicio ya está cerrado.</div>
+              : <button type="button" onClick={() => void doClose(preview.year)} disabled={busy}
+                  style={{ alignSelf: 'flex-start', marginTop: 4, padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-sm, 4px)', border: 'none', background: 'var(--mod-finance)', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Lock size={14} /> Cerrar ejercicio {preview.year}
+                </button>}
+          </div>
+        )}
+      </div>
+
+      {/* Lista de ejercicios */}
+      <div style={card}>
+        <div style={sectionTitle}>EJERCICIOS</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={th}>Año</th><th style={th}>Estado</th><th style={{ ...th, textAlign: 'right' }}>Acciones</th></tr></thead>
+          <tbody>
+            {years.map((y) => (
+              <tr key={y.id}>
+                <td style={{ ...td, fontFamily: 'var(--font-mono, monospace)' }}>{y.year}</td>
+                <td style={td}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: y.status === 'closed' ? 'var(--amber)' : 'var(--green)' }}>
+                    {y.status === 'closed' ? <><Lock size={12} /> Cerrado</> : <><Unlock size={12} /> Abierto</>}
+                  </span>
+                </td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {y.status === 'closed' && <button type="button" onClick={() => void doReopen(y.year)} disabled={busy}
+                    style={{ padding: '4px 12px', fontSize: 12, borderRadius: 'var(--radius-sm, 4px)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}>Reabrir</button>}
+                </td>
+              </tr>
+            ))}
+            {years.length === 0 && <tr><td style={td} colSpan={3}>Aún no hay ejercicios cerrados.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   );
