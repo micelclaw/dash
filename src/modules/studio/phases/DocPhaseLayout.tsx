@@ -149,6 +149,10 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   const [dsQuery, setDsQuery] = useState('');
   const [dsResults, setDsResults] = useState<StudioDesignSystem[]>([]);
   const [dsLoading, setDsLoading] = useState(false);
+  // S4 Fase C: live color tweaks on the chosen system ({ primary: "#…" }).
+  // Folded into the Frontend generation context (no persistence — the
+  // emitted DESIGN.md bakes them in). Reset when the base system changes.
+  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({});
   // The bound base system is project state (persisted server-side).
   const selectedSystem = project.design_system;
 
@@ -214,6 +218,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
 
   async function pickSystem(slug: string | null) {
     try {
+      setColorOverrides({}); // tweaks belong to a system; reset on change
       await setDesignSystem(project.id, slug);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No pude guardar el diseño base');
@@ -256,10 +261,17 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
         // Guided mode, fold the chosen "feel" + brand colors in front of
         // any free text so the emitted DESIGN.md is on-brand (§3.4).
         const parts: string[] = [];
-        if (guided && phase === 'frontend' && feel) {
-          const f = FEELS.find((x) => x.id === feel);
-          if (f) parts.push(`Sensación deseada: ${f.label} — ${f.hint}.`);
+        if (guided && phase === 'frontend') {
+          if (feel) {
+            const f = FEELS.find((x) => x.id === feel);
+            if (f) parts.push(`Sensación deseada: ${f.label} — ${f.hint}.`);
+          }
           if (brandColors.trim()) parts.push(`Colores/marca: ${brandColors.trim()}.`);
+          // S4 Fase C — fold the user's color tweaks so the DESIGN.md bakes them in.
+          const ov = Object.entries(colorOverrides);
+          if (ov.length > 0) {
+            parts.push(`Ajusta estos colores exactos en el DESIGN.md: ${ov.map(([k, v]) => `${k} ${v}`).join(', ')}.`);
+          }
         }
         if (initialContext.trim()) parts.push(initialContext.trim());
         if (parts.length > 0) effectiveAnswers = { _user_comment: parts.join(' ') };
@@ -483,7 +495,12 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                           quitar
                         </button>
                       </div>
-                      <DesignPreview slug={selectedSystem} />
+                      <DesignPreview
+                        slug={selectedSystem}
+                        overrides={colorOverrides}
+                        onOverride={(name, value) => setColorOverrides((prev) => ({ ...prev, [name]: value }))}
+                        onResetOverrides={() => setColorOverrides({})}
+                      />
                     </>
                   )}
                   <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>

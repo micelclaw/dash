@@ -23,12 +23,24 @@
 // surface. Closes pending-debt V3-1b(a).
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
 
 interface DesignPreviewProps {
   slug: string;
+  /** S4 Fase C — user color overrides ({ "primary": "#ff0000", … }). The
+   *  preview re-renders live with these; the parent folds them into the
+   *  Frontend generation context so the emitted DESIGN.md honors them. */
+  overrides?: Record<string, string>;
+  onOverride?: (name: string, value: string) => void;
+  onResetOverrides?: () => void;
 }
+
+// The handful of tokens worth exposing as editable (the ones the sample +
+// most UIs lean on). Only those PRESENT in the system + a 6-digit hex (what
+// <input type="color"> can represent) become editable.
+const KEY_COLOR_NAMES = ['primary', 'bg', 'background', 'surface', 'text', 'on-primary', 'border', 'accent'];
+const HEX6 = /^#[0-9a-f]{6}$/i;
 
 /** Pull `--color-<name>: <value>;` pairs out of the derived CSS so we can
  *  label the palette swatches without a second API call. */
@@ -43,10 +55,17 @@ function extractColors(tokensCss: string): Array<{ name: string; value: string }
 }
 
 /** Build the sandboxed document. Uses var() with sensible fallbacks so the
- *  sample renders regardless of which exact tokens a system declares. */
-function buildSrcDoc(tokensCss: string): string {
+ *  sample renders regardless of which exact tokens a system declares. The
+ *  override block comes LAST so the user's tweaks win the cascade. */
+function buildSrcDoc(tokensCss: string, overrides: Record<string, string>): string {
+  const ov = Object.entries(overrides)
+    .filter(([, v]) => HEX6.test(v))
+    .map(([k, v]) => `  --color-${k}: ${v};`)
+    .join('\n');
+  const overrideCss = ov ? `:root {\n${ov}\n}` : '';
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 ${tokensCss}
+${overrideCss}
 html,body{margin:0;padding:0}
 body{
   font-family: var(--font-body, system-ui, sans-serif);
@@ -100,7 +119,7 @@ body{
 </body></html>`;
 }
 
-export function DesignPreview({ slug }: DesignPreviewProps) {
+export function DesignPreview({ slug, overrides = {}, onOverride, onResetOverrides }: DesignPreviewProps) {
   const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
   const [tokensCss, setTokensCss] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -116,7 +135,9 @@ export function DesignPreview({ slug }: DesignPreviewProps) {
   }, [slug, fetchDesignSystemTokens]);
 
   const colors = useMemo(() => (tokensCss ? extractColors(tokensCss) : []), [tokensCss]);
-  const srcDoc = useMemo(() => (tokensCss ? buildSrcDoc(tokensCss) : ''), [tokensCss]);
+  const srcDoc = useMemo(() => (tokensCss ? buildSrcDoc(tokensCss, overrides) : ''), [tokensCss, overrides]);
+  const hasOverrides = Object.keys(overrides).length > 0;
+  const canEdit = Boolean(onOverride);
 
   if (error) {
     return (
@@ -135,17 +156,40 @@ export function DesignPreview({ slug }: DesignPreviewProps) {
 
   return (
     <div style={{ marginTop: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'var(--card)' }}>
-      <div style={{ padding: '8px 12px', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)', borderBottom: '1px solid var(--border)' }}>
-        Así se verá tu marca
+      <div style={{ padding: '8px 12px', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Así se verá tu marca {canEdit && <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>· ajusta los colores</span>}</span>
+        {canEdit && hasOverrides && (
+          <button
+            type="button"
+            onClick={() => onResetOverrides?.()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, padding: 0, fontFamily: 'inherit' }}
+          >
+            <RotateCcw size={12} /> Restablecer
+          </button>
+        )}
       </div>
-      {/* Palette swatches (dash-rendered — color values are inert strings). */}
+      {/* Palette swatches — KEY hex colors become editable color inputs. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: 12 }}>
-        {colors.slice(0, 12).map((c) => (
-          <div key={c.name} title={`${c.name}: ${c.value}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 52 }}>
-            <span style={{ width: 28, height: 28, borderRadius: 6, background: c.value, border: '1px solid var(--border)', boxSizing: 'border-box' }} />
-            <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', maxWidth: 52, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
-          </div>
-        ))}
+        {colors.slice(0, 12).map((c) => {
+          const value = overrides[c.name] ?? c.value;
+          const editable = canEdit && KEY_COLOR_NAMES.includes(c.name) && HEX6.test(c.value);
+          return (
+            <div key={c.name} title={`${c.name}: ${value}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 52 }}>
+              {editable ? (
+                <input
+                  type="color"
+                  aria-label={`Color ${c.name}`}
+                  value={HEX6.test(value) ? value : c.value}
+                  onChange={(e) => onOverride?.(c.name, e.target.value)}
+                  style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${overrides[c.name] ? 'var(--amber)' : 'var(--border)'}`, padding: 0, cursor: 'pointer', background: 'none' }}
+                />
+              ) : (
+                <span style={{ width: 28, height: 28, borderRadius: 6, background: value, border: '1px solid var(--border)', boxSizing: 'border-box' }} />
+              )}
+              <span style={{ fontSize: '0.6rem', color: overrides[c.name] ? 'var(--text)' : 'var(--text-muted)', maxWidth: 52, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+            </div>
+          );
+        })}
       </div>
       {/* Sample component — isolated iframe (no allow-scripts). */}
       <iframe
