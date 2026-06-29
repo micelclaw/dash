@@ -37,6 +37,7 @@ import { FacturaEditorDialog } from './FacturaEditorDialog';
 import { ClienteDialog } from './ClienteDialog';
 import { ClienteDetalle } from './ClienteDetalle';
 import { FacturacionNavProvider } from './navigation';
+import { PeriodControl } from '../period';
 
 const SECTIONS = [
   { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
@@ -119,7 +120,9 @@ export function FacturacionLens() {
               primitiva Tabs sin editarla (font más pequeña, alto menor, subrayado
               fino, inactivos más atenuados). */}
           <Tabs className="fact-subtabs" tabs={SECTIONS} activeTab={section} onChange={setSection} variant="underline" />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* Selector de periodo (solo en Resumen): conduce TODO el resumen. */}
+            {section === 'resumen' && <PeriodControl />}
             {section === 'clientes' && (
               <button onClick={openNewCustomer} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                 <Plus size={15} /> Contacto

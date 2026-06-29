@@ -31,6 +31,7 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { LabelModal } from '@/modules/inventory/components/LabelModal';
 import { fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
 
@@ -91,7 +92,10 @@ function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
-export function LocationsTab() {
+export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
+  deepLinkLocationId?: string | null;
+  onLocationConsumed?: () => void;
+} = {}) {
   const locations = useInventoryStore(s => s.locations);
   const createLocation = useInventoryStore(s => s.createLocation);
   const updateLocation = useInventoryStore(s => s.updateLocation);
@@ -99,6 +103,16 @@ export function LocationsTab() {
 
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Deep-link (?location_id=, QR de ubicación): selecciona la ubicación y limpia
+  // el param. Guarda por valor presente; al limpiarse no re-dispara.
+  useEffect(() => {
+    if (deepLinkLocationId) {
+      setSelectedId(deepLinkLocationId);
+      onLocationConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkLocationId]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // -- New location form --
@@ -112,8 +126,10 @@ export function LocationsTab() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState('');
   const [editKind, setEditKind] = useState<LocationKind>('room');
+  const [editParent, setEditParent] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showLabel, setShowLabel] = useState(false);
 
   // -- Items of selected location (local state, do NOT clobber Catalog filters) --
   const [locItems, setLocItems] = useState<InventoryItem[]>([]);
@@ -166,7 +182,41 @@ export function LocationsTab() {
     return out;
   }, [childrenMap]);
 
+  // Totales ROLLUP: cada nodo agrega su conteo/valor DIRECTO + el de todos sus
+  // descendientes (una habitación "vale" lo que hay en ella y en sus contenedores).
+  const rollup = useMemo(() => {
+    const m = new Map<string, { count: number; value: number }>();
+    const compute = (loc: InventoryLocation): { count: number; value: number } => {
+      const cached = m.get(loc.id);
+      if (cached) return cached;
+      let count = loc.item_count ?? 0;
+      let value = parseFloat(loc.total_value) || 0;
+      for (const kid of childrenMap.get(loc.id) ?? []) {
+        const r = compute(kid);
+        count += r.count;
+        value += r.value;
+      }
+      const res = { count, value };
+      m.set(loc.id, res);
+      return res;
+    };
+    for (const root of childrenMap.get('') ?? []) compute(root);
+    return m;
+  }, [childrenMap]);
+
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
+
+  // self + descendientes del seleccionado: no pueden ser su propio padre (ciclo).
+  const selfAndDescendants = useMemo(() => {
+    const s = new Set<string>();
+    if (!selected) return s;
+    const visit = (loc: InventoryLocation) => {
+      s.add(loc.id);
+      for (const kid of childrenMap.get(loc.id) ?? []) visit(kid);
+    };
+    visit(selected);
+    return s;
+  }, [selected, childrenMap]);
 
   const ancestors = useMemo(() => {
     if (!selected) return [];
@@ -251,7 +301,7 @@ export function LocationsTab() {
     }
     setSaving(true);
     try {
-      await updateLocation(selected.id, { name, kind: editKind });
+      await updateLocation(selected.id, { name, kind: editKind, parent_id: editParent || null });
       toast.success('Location updated');
       setEditing(false);
     } catch (err) {
@@ -279,7 +329,7 @@ export function LocationsTab() {
     const isCollapsed = !visibleIds && collapsed.has(loc.id); // search expands everything
     const isSelected = loc.id === selectedId;
     const KindIcon = KIND_ICONS[loc.kind];
-    const totalNum = parseFloat(loc.total_value);
+    const r = rollup.get(loc.id) ?? { count: loc.item_count ?? 0, value: parseFloat(loc.total_value) || 0 };
 
     return (
       <div key={loc.id}>
@@ -317,8 +367,8 @@ export function LocationsTab() {
             {loc.name}
           </span>
           <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem', flexShrink: 0 }}>
-            {loc.item_count}
-            {Number.isFinite(totalNum) && totalNum > 0 ? ` · ${fmtMoney(loc.total_value)}` : ''}
+            {r.count}
+            {r.value > 0 ? ` · ${fmtMoney(r.value)}` : ''}
           </span>
         </div>
         {hasChildren && !isCollapsed && kids.map(kid => renderNode(kid, depth + 1))}
@@ -465,6 +515,23 @@ export function LocationsTab() {
                           </option>
                         ))}
                       </select>
+                      <select
+                        value={editParent}
+                        onChange={e => setEditParent(e.target.value)}
+                        style={{ ...inputStyle, width: 150 }}
+                        aria-label="Parent location"
+                        title="Move under another location"
+                      >
+                        <option value="">No parent (top level)</option>
+                        {flatTree
+                          .filter(({ loc }) => !selfAndDescendants.has(loc.id))
+                          .map(({ loc, depth }) => (
+                            <option key={loc.id} value={loc.id}>
+                              {' '.repeat(depth * 2)}
+                              {loc.name}
+                            </option>
+                          ))}
+                      </select>
                       <button onClick={handleSaveEdit} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>
                         {saving ? 'Saving…' : 'Save'}
                       </button>
@@ -479,21 +546,47 @@ export function LocationsTab() {
                   )}
                 </div>
                 <div style={{ marginTop: 4, fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-                  {selected.item_count} items · {fmtMoney(selected.total_value)}
+                  {selected.item_count} items here · {fmtMoney(selected.total_value)}
+                  {subLocations.length > 0 && (() => {
+                    const r = rollup.get(selected.id);
+                    if (!r || r.count === selected.item_count) return null;
+                    return (
+                      <span style={{ marginLeft: 8, color: 'var(--mod-inventory)' }}>
+                        · {r.count} incl. sub-locations · {fmtMoney(r.value)}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
               {!editing && (
                 <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                   <button
                     onClick={() => {
+                      setShowForm(true);
+                      setFormParent(selected.id);
+                      setFormName('');
+                      setFormKind('container');
+                    }}
+                    style={secondaryBtn}
+                    title="Add a sub-location inside this one"
+                  >
+                    <Plus size={13} />
+                    Sub-location
+                  </button>
+                  <button
+                    onClick={() => {
                       setEditName(selected.name);
                       setEditKind(selected.kind);
+                      setEditParent(selected.parent_id ?? '');
                       setEditing(true);
                     }}
                     style={secondaryBtn}
                   >
                     <Pencil size={13} />
                     Edit
+                  </button>
+                  <button onClick={() => setShowLabel(true)} style={secondaryBtn} title="Print a QR label for this location">
+                    🏷 Label
                   </button>
                   <button onClick={() => setConfirmingDelete(true)} style={secondaryBtn}>
                     <Trash2 size={13} />
@@ -621,6 +714,10 @@ export function LocationsTab() {
         cancelLabel="Cancel"
         variant="danger"
       />
+
+      {showLabel && selected && (
+        <LabelModal target="locations" ids={[selected.id]} onClose={() => setShowLabel(false)} />
+      )}
     </div>
   );
 }

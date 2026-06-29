@@ -48,10 +48,11 @@ interface DraftLine {
   discount_kind: 'percent' | 'fixed'; // default 'percent'
   category_id: string; // '' = sin categoría (solo facturas recibidas / compras)
   inventory_item_id: string; // '' = sin artículo vinculado (cruce con Inventory)
+  is_capital: boolean; // bien de inversión → capitaliza (Inmovilizado) en vez de gasto
 }
 
 function emptyLine(): DraftLine {
-  return { description: '', quantity: '1', unit_price: '', tax_rate_id: '', discount_value: '', discount_kind: 'percent', category_id: '', inventory_item_id: '' };
+  return { description: '', quantity: '1', unit_price: '', tax_rate_id: '', discount_value: '', discount_kind: 'percent', category_id: '', inventory_item_id: '', is_capital: false };
 }
 
 export function FacturaEditorDialog({
@@ -142,6 +143,7 @@ export function FacturaEditorDialog({
                   discount_kind: l.discount_kind ?? 'percent',
                   category_id: l.category_id ?? '',
                   inventory_item_id: l.inventory_item_id ?? '',
+                  is_capital: l.is_capital ?? false,
                 }))
               : [emptyLine()],
           );
@@ -271,6 +273,7 @@ export function FacturaEditorDialog({
       tax_rate_id: l.tax_rate_id || null,
       category_id: l.category_id || null,
       inventory_item_id: l.inventory_item_id || null,
+      is_capital: l.is_capital,
       ...(hasDisc ? { discount_value: dv, discount_kind: l.discount_kind } : { discount_value: 0 }),
     };
   };
@@ -335,7 +338,8 @@ export function FacturaEditorDialog({
           || Number(o.discount_value ?? 0) !== (inp.discount_value ?? 0)
           || (o.discount_kind ?? null) !== (inp.discount_kind ?? null)
           || (o.category_id ?? null) !== (inp.category_id ?? null)
-          || (o.inventory_item_id ?? null) !== (inp.inventory_item_id ?? null);
+          || (o.inventory_item_id ?? null) !== (inp.inventory_item_id ?? null)
+          || Boolean(o.is_capital) !== Boolean(inp.is_capital);
         if (changed) await updateLine(savedDoc.id, l.id, inp);
       } else if (valid) {
         await addLine(savedDoc.id, toLineInput(l));
@@ -630,7 +634,20 @@ export function FacturaEditorDialog({
                             {showItemLink && (
                               <InventoryItemSelect
                                 value={l.inventory_item_id}
-                                onChange={(id) => setLine(i, { inventory_item_id: id })}
+                                onChange={(id, _name, it) => {
+                                  // Autocompleta desde el producto SIN pisar lo que el usuario ya escribió:
+                                  // concepto si está vacío + precio (venta→PVP, compra→precio de compra) si es 0.
+                                  const patch: Partial<DraftLine> = { inventory_item_id: id };
+                                  if (it) {
+                                    if (!l.description.trim()) patch.description = it.name;
+                                    const cur = Number(String(l.unit_price).replace(',', '.')) || 0;
+                                    if (cur === 0) {
+                                      const src = isBill ? it.purchase_price : it.sale_price;
+                                      if (src != null && String(src) !== '') patch.unit_price = String(src);
+                                    }
+                                  }
+                                  setLine(i, patch);
+                                }}
                                 disabled={isEmitted}
                               />
                             )}
@@ -663,12 +680,18 @@ export function FacturaEditorDialog({
                         </td>
                         {isBill && (
                           <td style={{ padding: '3px 4px' }}>
-                            <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted} title="Categoría de gasto" style={cellInput}>
-                              <option value="">— sin categoría —</option>
-                              {categories.filter((c) => c.kind === 'expense').map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted || l.is_capital} title={l.is_capital ? 'Los bienes de inversión van a Inmovilizado, no a una categoría de gasto' : 'Categoría de gasto'} style={{ ...cellInput, flex: 1, minWidth: 0, opacity: l.is_capital ? 0.5 : 1 }}>
+                                <option value="">— sin categoría —</option>
+                                {categories.filter((c) => c.kind === 'expense').map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                              <label title="Bien de inversión (inmovilizado): se capitaliza y luego se deprecia, en vez de imputarse como gasto" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 14, cursor: isEmitted ? 'default' : 'pointer', flexShrink: 0, color: l.is_capital ? 'var(--mod-inventory, var(--amber))' : 'var(--text-dim)' }}>
+                                <input type="checkbox" checked={l.is_capital} disabled={isEmitted} onChange={(e) => setLine(i, { is_capital: e.target.checked })} aria-label="Bien de inversión" style={{ cursor: isEmitted ? 'default' : 'pointer' }} />
+                                <span aria-hidden>🏭</span>
+                              </label>
+                            </div>
                           </td>
                         )}
                         <td style={{ padding: '3px 4px', textAlign: 'right', fontSize: 13, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)' }}>

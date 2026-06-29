@@ -84,7 +84,7 @@ function ValueByCategory({ valuation }: { valuation: InventoryValuation | null }
         key: g.key,
         name: prettyCategory(g.key),
         emoji: emojiFor(g.key),
-        color: PALETTE[i % PALETTE.length],
+        color: PALETTE[i % PALETTE.length] ?? PALETTE[0]!,
         value: g.value,
         count: g.item_count,
       }))

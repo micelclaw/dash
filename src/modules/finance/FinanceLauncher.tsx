@@ -22,6 +22,7 @@ import { Wallet, Loader2, User, Receipt } from 'lucide-react';
 import { useFinanceStore } from '@/stores/finance.store';
 import { PersonalLens } from './personal/PersonalLens';
 import { FacturacionLens } from './facturacion/FacturacionLens';
+import { FinancePeriodProvider } from './period';
 
 type LensId = 'personal' | 'facturacion';
 
@@ -38,6 +39,7 @@ export function Component() {
   const setLens = (id: LensId) => setParams((p) => { p.set('tab', id); return p; }, { replace: true });
 
   return (
+    <FinancePeriodProvider>
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -102,5 +104,6 @@ export function Component() {
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
+    </FinancePeriodProvider>
   );
 }

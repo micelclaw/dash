@@ -64,6 +64,7 @@ interface InventoryState {
 
   createItem: (body: Record<string, unknown>) => Promise<InventoryItem>;
   updateItem: (id: string, body: Record<string, unknown>) => Promise<InventoryItem>;
+  generateAssetTag: (id: string) => Promise<InventoryItem>;
   deleteItem: (id: string) => Promise<void>;
   bulkMoveItems: (ids: string[], locationId: string | null) => Promise<void>;
   bulkSetStatusItems: (ids: string[], status: string) => Promise<void>;
@@ -192,6 +193,12 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
 
   updateItem: async (id, body) => {
     const res = await api.patch<{ data: InventoryItem }>(`/inventory/items/${id}`, body);
+    set({ items: get().items.map(i => (i.id === id ? res.data : i)) });
+    return res.data;
+  },
+
+  generateAssetTag: async (id) => {
+    const res = await api.post<{ data: InventoryItem }>(`/inventory/items/${id}/asset-tag`);
     set({ items: get().items.map(i => (i.id === id ? res.data : i)) });
     return res.data;
   },

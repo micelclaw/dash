@@ -26,11 +26,11 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { useFinancePersonalStore, type FinanceSeriesPoint, type FinanceCategoryTotal } from '@/stores/finance-personal.store';
-import { fmtMoney, movementFace, categoryVisual, tintBackground, CATEGORY_FALLBACK_COLOR, todayISO } from './lib';
+import { useFinancePersonalStore, type FinanceSeriesPoint, type FinanceCategoryTotal, type FinanceSummary, type FinanceTransaction } from '@/stores/finance-personal.store';
+import { fmtMoney, movementFace, categoryVisual, tintBackground, CATEGORY_FALLBACK_COLOR } from './lib';
 import { usePersonalNav } from './navigation';
 import { RecurrenceBadge } from './RecurrenceBadge';
-import { PeriodSelector, CustomRangeInputs, rangeFor, fmtRangeLabel, toISODate, type PeriodId, PERIODS } from '../period';
+import { useFinancePeriod } from '../period';
 
 function Kpi({ label, value, hint, accent, emoji }: { label: string; value: string; hint?: string; accent?: string; emoji?: string }) {
   return (
@@ -253,22 +253,37 @@ function SpendByCategoryChart({ rows }: { rows: FinanceCategoryTotal[] }) {
 }
 
 export function ResumenTab() {
-  const { summary, accounts, transactions, categories, fetchSeries, fetchSpendByCategory } = useFinancePersonalStore();
+  const { summary: storeSummary, accounts, categories, fetchSeries, fetchSpendByCategory, fetchSummaryRange, fetchRecentTransactions } = useFinancePersonalStore();
   const catById = new Map(categories.map((c) => [c.id, c]));
   const userAccounts = accounts.filter((a) => a.type === 'asset' || a.type === 'liability');
-  const recent = transactions.slice(0, 8);
 
   const nav = usePersonalNav();
+  // Periodo compartido (selector en el header de la lente) — conduce KPIs, gráficas y recientes.
+  const { range, title } = useFinancePeriod();
   const [series, setSeries] = useState<FinanceSeriesPoint[]>([]);
   const [spend, setSpend] = useState<FinanceCategoryTotal[]>([]);
-  const [period, setPeriod] = useState<PeriodId>('90d');
   const [spendKind, setSpendKind] = useState<'expense' | 'income'>('expense');
-  // Periodo personalizado: rango a medida con dos calendarios (desde/hasta).
-  const [customFrom, setCustomFrom] = useState(() => { const n = new Date(); return toISODate(new Date(n.getFullYear(), n.getMonth(), 1)); });
-  const [customTo, setCustomTo] = useState(() => todayISO());
-  // Rango efectivo que conduce AMBAS gráficas (custom → inputs; resto → rangeFor).
-  const range = period === 'custom' ? { from: customFrom, to: customTo } : rangeFor(period);
-  const periodTitle = period === 'custom' ? fmtRangeLabel(customFrom, customTo) : (PERIODS.find((p) => p.id === period)?.label ?? '');
+  // Resumen y movimientos recientes ACOTADOS al periodo. net_worth/available siguen
+  // siendo all-time (el backend los devuelve fijos); solo expenses_period/income_period
+  // dependen del rango.
+  const [periodSummary, setPeriodSummary] = useState<FinanceSummary | null>(null);
+  const [recent, setRecent] = useState<FinanceTransaction[]>([]);
+
+  // Resumen del periodo (KPIs). Se re-dispara al cambiar el rango y cuando el resumen
+  // global del store cambia (proxy de "ha habido un movimiento" → refresco en vivo WS).
+  useEffect(() => {
+    let alive = true;
+    void fetchSummaryRange({ from: range.from, to: range.to }).then((d) => { if (alive) setPeriodSummary(d); }).catch(() => { if (alive) setPeriodSummary(null); });
+    return () => { alive = false; };
+  }, [fetchSummaryRange, range.from, range.to, storeSummary?.net_worth]);
+
+  // Movimientos recientes DEL PERIODO (orden date desc, máx 8). Si el periodo termina
+  // en fecha pasada, muestra los de ese periodo (no los últimos absolutos).
+  useEffect(() => {
+    let alive = true;
+    void fetchRecentTransactions({ from: range.from, to: range.to, limit: 8 }).then((d) => { if (alive) setRecent(d); }).catch(() => { if (alive) setRecent([]); });
+    return () => { alive = false; };
+  }, [fetchRecentTransactions, range.from, range.to, storeSummary?.net_worth]);
 
   // Carga la serie de patrimonio según el periodo elegido. Se re-dispara al
   // cambiar el periodo y cuando cambia el patrimonio del resumen (proxy de "ha
@@ -277,7 +292,7 @@ export function ResumenTab() {
     let alive = true;
     void fetchSeries({ from: range.from, to: range.to }).then((d) => { if (alive) setSeries(d); }).catch(() => { if (alive) setSeries([]); });
     return () => { alive = false; };
-  }, [fetchSeries, range.from, range.to, summary?.net_worth]);
+  }, [fetchSeries, range.from, range.to, storeSummary?.net_worth]);
 
   // Carga el reparto por categoría del donut. Depende además de spendKind (gasto
   // vs ingreso), así cambiar el toggle recarga solo el donut, no la serie.
@@ -285,36 +300,25 @@ export function ResumenTab() {
     let alive = true;
     void fetchSpendByCategory({ from: range.from, to: range.to, kind: spendKind }).then((d) => { if (alive) setSpend(d); }).catch(() => { if (alive) setSpend([]); });
     return () => { alive = false; };
-  }, [fetchSpendByCategory, range.from, range.to, spendKind, summary?.net_worth, summary?.expenses_period]);
+  }, [fetchSpendByCategory, range.from, range.to, spendKind, storeSummary?.net_worth, storeSummary?.expenses_period]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Patrimonio" emoji="💎" value={fmtMoney(summary?.net_worth)} hint="activo − pasivo" accent={Number(summary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
-        <Kpi label="Gastado (mes)" emoji="💸" value={fmtMoney(summary?.expenses_period)} accent="var(--error)" />
-        <Kpi label="Ingresos (mes)" emoji="💰" value={fmtMoney(summary?.income_period)} accent="var(--mod-finance)" />
-        <Kpi label="Saldo disponible" emoji="🏦" value={fmtMoney(summary?.available)} hint="cuentas de activo" />
+        <Kpi label="Patrimonio" emoji="💎" value={fmtMoney(periodSummary?.net_worth)} hint="activo − pasivo" accent={Number(periodSummary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
+        <Kpi label="Gastado" emoji="💸" value={fmtMoney(periodSummary?.expenses_period)} hint={title} accent="var(--error)" />
+        <Kpi label="Ingresos" emoji="💰" value={fmtMoney(periodSummary?.income_period)} hint={title} accent="var(--mod-finance)" />
+        <Kpi label="Saldo disponible" emoji="🏦" value={fmtMoney(periodSummary?.available)} hint="cuentas de activo" />
       </div>
 
-      {/* Cabecera de gráficas: título de zona + selector de periodo (conduce ambas).
-          Con "Personalizado" aparece una 2ª fila con dos calendarios (desde/hasta). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Gráficas</div>
-          <PeriodSelector value={period} onChange={setPeriod} />
-        </div>
-        {period === 'custom' && (
-          <CustomRangeInputs from={customFrom} to={customTo} onFrom={setCustomFrom} onTo={setCustomTo} />
-        )}
-      </div>
-
-      {/* Gráficas: evolución del patrimonio + gasto por categoría */}
+      {/* Gráficas: evolución del patrimonio + gasto por categoría (el selector de
+          periodo vive en el header de la lente). */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <ChartCard title={`Evolución del patrimonio · ${periodTitle}`} flex="2 1 360px">
+        <ChartCard title={`Evolución del patrimonio · ${title}`} flex="2 1 360px">
           <NetWorthChart series={series} />
         </ChartCard>
         <ChartCard
-          title={`${spendKind === 'income' ? 'Ingreso' : 'Gasto'} por categoría · ${periodTitle}`}
+          title={`${spendKind === 'income' ? 'Ingreso' : 'Gasto'} por categoría · ${title}`}
           flex="1 1 320px"
           action={<SpendKindToggle value={spendKind} onChange={setSpendKind} />}
         >

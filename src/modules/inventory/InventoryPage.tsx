@@ -23,13 +23,16 @@ import { StockTab } from './tabs/StockTab';
 import { LendingTab } from './tabs/LendingTab';
 import { MaintenanceTab } from './tabs/MaintenanceTab';
 import { ReportsTab } from './tabs/ReportsTab';
+import { ScanFab } from './components/ScanFab';
 import { ItemDrawer } from './components/ItemDrawer';
 
 type InventoryTab = 'panel' | 'catalog' | 'locations' | 'stock' | 'lending' | 'maintenance' | 'reports';
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as InventoryTab) || 'panel';
+  // Deep-link a ubicación (QR de bin/estante): fuerza la tab Locations y pasa el id.
+  const locationParam = searchParams.get('location_id');
+  const activeTab = locationParam ? 'locations' : ((searchParams.get('tab') as InventoryTab) || 'panel');
 
   const { items, moves, alerts, fetchItems, fetchLocations, fetchAlerts, fetchMeta, fetchProposals, selectedItemId, selectItem } = useInventoryStore();
 
@@ -103,7 +106,7 @@ export function Component() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)' }}>
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setTab} variant="underline" />
       </div>
@@ -111,7 +114,17 @@ export function Component() {
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
           {activeTab === 'panel' && <PanelTab onNavigate={setTab} />}
           {activeTab === 'catalog' && <CatalogTab />}
-          {activeTab === 'locations' && <LocationsTab />}
+          {activeTab === 'locations' && (
+            <LocationsTab
+              deepLinkLocationId={locationParam}
+              onLocationConsumed={() => setSearchParams(prev => {
+                const n = new URLSearchParams(prev);
+                n.delete('location_id');
+                n.set('tab', 'locations');
+                return n;
+              }, { replace: true })}
+            />
+          )}
           {activeTab === 'stock' && showStock && <StockTab />}
           {activeTab === 'lending' && <LendingTab />}
           {activeTab === 'maintenance' && <MaintenanceTab />}
@@ -119,6 +132,8 @@ export function Component() {
         </div>
         {selectedItemId && <ItemDrawer itemId={selectedItemId} />}
       </div>
+      {/* A5: escáner global con intención (localizar/recuento/mover/check-in-out) */}
+      <ScanFab />
     </div>
   );
 }

@@ -11,13 +11,14 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { Boxes, ChevronDown, ChevronUp, ChevronsUpDown, MapPin, Search, Tag as TagIcon, Trash2, X } from 'lucide-react';
+import { Boxes, ChevronDown, ChevronUp, ChevronsUpDown, Search, Tag as TagIcon, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { StatusPill } from '@/modules/gateway/components/StatusPill';
 import { TagChip } from '@/components/shared/TagChip';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { LabelModal } from '@/modules/inventory/components/LabelModal';
 import { useInventoryStore, type ItemFilters } from '@/stores/inventory.store';
 import { CustomFieldsEditor, CATEGORY_FIELD_TEMPLATES } from '@/modules/inventory/components/CustomFieldsEditor';
 import {
@@ -26,6 +27,7 @@ import {
   thumbUrl,
   fmtMoney,
   daysUntil,
+  isAsset,
   type InventoryItem,
 } from '@/modules/inventory/types';
 
@@ -596,6 +598,8 @@ export function CatalogTab() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bulkTag, setBulkTag] = useState('');
+  const [assetsOnly, setAssetsOnly] = useState(false);
+  const [showLabels, setShowLabels] = useState(false);
 
   const filtersRef = useRef<ItemFilters>(filters);
   filtersRef.current = filters;
@@ -621,6 +625,14 @@ export function CatalogTab() {
   const sortedItems = useMemo(
     () => sortItems(items, sortKey, sortDir, locationNames),
     [items, sortKey, sortDir, locationNames],
+  );
+
+  // Lente "Activos": filtro cliente sobre lo cargado (no hay filtro server-side
+  // de is_asset; es una propiedad derivada). Distingue activos fijos de stock.
+  const hasAssets = useMemo(() => items.some(isAsset), [items]);
+  const displayItems = useMemo(
+    () => (assetsOnly ? sortedItems.filter(isAsset) : sortedItems),
+    [sortedItems, assetsOnly],
   );
 
   // La selección se limita a los items actualmente cargados: si cambian los
@@ -773,10 +785,29 @@ export function CatalogTab() {
           </label>
         )}
 
+        {hasAssets && (
+          <button
+            type="button"
+            onClick={() => setAssetsOnly(a => !a)}
+            title="Show only fixed assets (machines, vehicles, equipment)"
+            style={{
+              ...secondaryBtnStyle,
+              padding: '5px 10px',
+              ...(assetsOnly
+                ? { background: 'color-mix(in srgb, var(--mod-inventory) 16%, transparent)', borderColor: 'var(--mod-inventory)', color: 'var(--mod-inventory)', fontWeight: 600 }
+                : {}),
+            }}
+          >
+            🏭 Assets
+          </button>
+        )}
+
         <span style={{ marginLeft: 'auto', fontSize: '0.75rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
-          {!loading && (items.length === itemsTotal
-            ? `${itemsTotal} ${itemsTotal === 1 ? 'item' : 'items'}`
-            : `${items.length} of ${itemsTotal}`)}
+          {!loading && (assetsOnly
+            ? `${displayItems.length} ${displayItems.length === 1 ? 'asset' : 'assets'}`
+            : items.length === itemsTotal
+              ? `${itemsTotal} ${itemsTotal === 1 ? 'item' : 'items'}`
+              : `${items.length} of ${itemsTotal}`)}
         </span>
         <button style={primaryBtnStyle} onClick={() => setShowModal(true)}>
           + New item
@@ -841,6 +872,16 @@ export function CatalogTab() {
             />
           </div>
 
+          {/* Etiquetas QR */}
+          <button
+            style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            disabled={bulkBusy}
+            onClick={() => setShowLabels(true)}
+            title="Print QR labels for the selected items"
+          >
+            🏷 Labels
+          </button>
+
           {/* Borrar en lote */}
           <button
             style={{ ...secondaryBtnStyle, color: 'var(--error)', borderColor: 'var(--error)', display: 'inline-flex', alignItems: 'center', gap: 5 }}
@@ -900,7 +941,7 @@ export function CatalogTab() {
               </tr>
             </thead>
             <tbody>
-              {sortedItems.map(item => {
+              {displayItems.map(item => {
                 const isSel = selected.has(item.id);
                 const baseBg = isSel ? 'color-mix(in srgb, var(--mod-inventory) 10%, transparent)' : 'transparent';
                 return (
@@ -954,7 +995,7 @@ export function CatalogTab() {
               padding: '12px 16px',
             }}
           >
-            {sortedItems.map(item => {
+            {displayItems.map(item => {
               const isSel = selected.has(item.id);
               return (
               <div
@@ -1014,6 +1055,10 @@ export function CatalogTab() {
       </div>
 
       {showModal && <NewItemModal onClose={() => setShowModal(false)} />}
+
+      {showLabels && selectedCount > 0 && (
+        <LabelModal target="items" ids={[...selected]} onClose={() => setShowLabels(false)} />
+      )}
 
       <ConfirmDialog
         open={confirmDelete}

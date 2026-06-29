@@ -28,8 +28,9 @@ export function InventoryItemSelect({
 }: {
   /** id del artículo vinculado ('' = sin vincular). */
   value: string;
-  /** Notifica el id elegido ('' al desvincular) + el nombre para mostrar. */
-  onChange: (id: string, name: string) => void;
+  /** Notifica el id elegido ('' al desvincular) + el nombre + el artículo completo
+   *  (para autocompletar precio/descripción en el editor de factura). */
+  onChange: (id: string, name: string, item?: InventoryItem) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -157,7 +158,7 @@ export function InventoryItemSelect({
                 <button
                   key={it.id}
                   type="button"
-                  onClick={() => { onChange(it.id, it.name); setLabel(it.name); setOpen(false); setQ(''); }}
+                  onClick={() => { onChange(it.id, it.name, it); setLabel(it.name); setOpen(false); setQ(''); }}
                   style={{
                     display: 'block',
                     width: '100%',

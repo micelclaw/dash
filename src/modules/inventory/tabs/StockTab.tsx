@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { ArrowRightLeft, Undo2, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowRightLeft, ArrowUpToLine, Download, Undo2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -118,6 +118,39 @@ const tdStyle: CSSProperties = {
   verticalAlign: 'middle',
 };
 
+/** Fecha + hora compacta para una fila del ledger (DD MMM · HH:MM). */
+function fmtMoveDateTime(iso: string): { date: string; time: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: iso, time: '' };
+  return {
+    date: d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }),
+    time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+/** Construye y descarga un CSV del ledger filtrado (read-only, no toca el ledger). */
+function exportMovesCsv(moves: InventoryMove[], itemName: (id: string) => string): void {
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ['datetime', 'type', 'item', 'qty_delta', 'uom', 'running_balance', 'unit_cost', 'currency', 'created_by', 'notes'];
+  const rows = moves.map(m => [
+    m.occurred_at, m.type, itemName(m.item_id), m.qty_delta, m.uom,
+    m.running_balance ?? '', m.unit_cost ?? '', m.currency, m.created_by, m.notes ?? '',
+  ].map(esc).join(','));
+  const csv = [header.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `inventory-ledger-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
@@ -187,8 +220,8 @@ function TypeChip({ type }: { type: string }) {
         fontSize: '0.6875rem',
         padding: '1px 6px',
         borderRadius: 4,
-        background: reversal ? 'rgba(244,63,94,.12)' : 'var(--surface)',
-        color: reversal ? 'rgba(244,63,94,.8)' : 'var(--text-dim)',
+        background: reversal ? 'color-mix(in srgb, var(--error) 12%, transparent)' : 'var(--surface)',
+        color: reversal ? 'var(--error)' : 'var(--text-dim)',
         whiteSpace: 'nowrap',
       }}
     >
@@ -203,9 +236,9 @@ function DeltaCell({ move }: { move: InventoryMove }) {
   const color = isTransfer
     ? 'var(--text-dim)'
     : Number.isFinite(n) && n > 0
-      ? '#22c55e'
+      ? 'var(--success)'
       : Number.isFinite(n) && n < 0
-        ? '#f43f5e'
+        ? 'var(--error)'
         : 'var(--text-dim)';
   const sign = Number.isFinite(n) && n > 0 ? '+' : '';
   return (
@@ -464,7 +497,7 @@ export function StockTab() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkType, setBulkType] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingReverse, setConfirmingReverse] = useState(false);
 
   useEffect(() => {
     void fetchMoves({ limit: 100 });
@@ -485,9 +518,24 @@ export function StockTab() {
     return map;
   }, [items]);
 
+  // Resumen del ledger mostrado (read-only): conteo + entradas/salidas/neto.
+  // Suma de los qty_delta positivos (in) y |negativos| (out) de lo cargado.
+  const summary = useMemo(() => {
+    let inSum = 0;
+    let outSum = 0;
+    for (const m of moves) {
+      const n = parseFloat(m.qty_delta);
+      if (!Number.isFinite(n) || m.type === 'transfer') continue;
+      if (n > 0) inSum += n;
+      else if (n < 0) outSum += -n;
+    }
+    const fmt = (x: number) => Number.isInteger(x) ? String(x) : x.toFixed(2);
+    return { count: moves.length, inSum, outSum, net: inSum - outSum, fmt };
+  }, [moves]);
+
   const clearSelection = () => {
     setSelected(new Set());
-    setConfirmingDelete(false);
+    setConfirmingReverse(false);
   };
 
   const handleItemFilter = (value: string) => {
@@ -509,14 +557,14 @@ export function StockTab() {
       else next.add(id);
       return next;
     });
-    setConfirmingDelete(false);
+    setConfirmingReverse(false);
   };
 
   const allSelected = moves.length > 0 && moves.every(m => selected.has(m.id));
 
   const toggleAll = () => {
     setSelected(allSelected ? new Set() : new Set(moves.map(m => m.id)));
-    setConfirmingDelete(false);
+    setConfirmingReverse(false);
   };
 
   const refreshAfterBulk = () => Promise.all([load(itemFilter, typeFilter), fetchItems()]);
@@ -548,27 +596,31 @@ export function StockTab() {
     setBulkType('');
   };
 
-  const handleBulkDelete = async () => {
+  // Reversión en lote: NO borra el ledger (es INMUTABLE) — registra un
+  // contra-asiento por cada movimiento seleccionado reversible. Los movimientos
+  // que ya son reversal (o ya están revertidos) se omiten.
+  const handleBulkReverse = async () => {
     if (bulkBusy || selected.size === 0) return;
-    if (!confirmingDelete) {
-      setConfirmingDelete(true);
+    if (!confirmingReverse) {
+      setConfirmingReverse(true);
       return;
     }
+    const selectedMoves = moves.filter(m => selected.has(m.id));
+    const targets = selectedMoves.filter(m => m.type !== 'reversal' && m.ref_type !== 'reversal');
+    const skipped = selectedMoves.length - targets.length;
     setBulkBusy(true);
-    let ok = 0;
-    let failed = 0;
-    for (const id of selected) {
-      try {
-        await api.delete(`/inventory/moves/${id}`);
-        ok++;
-      } catch {
-        failed++;
-      }
-    }
+    const results = await Promise.allSettled(
+      targets.map(m => api.post(`/inventory/moves/${m.id}/reverse`)),
+    );
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.length - ok;
     await refreshAfterBulk();
     setBulkBusy(false);
-    if (failed > 0) toast.warning(`${ok} moves deleted — ${failed} failed`);
-    else toast.success(`${ok} moves deleted`);
+    const parts = [`${ok} reversed`];
+    if (skipped > 0) parts.push(`${skipped} skipped (already reversal)`);
+    if (failed > 0) parts.push(`${failed} failed`);
+    if (failed > 0) toast.warning(parts.join(' — '));
+    else toast.success(parts.join(' — '));
     clearSelection();
   };
 
@@ -618,12 +670,47 @@ export function StockTab() {
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button
+            style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', gap: 5, opacity: moves.length === 0 ? 0.5 : 1 }}
+            disabled={moves.length === 0}
+            onClick={() => exportMovesCsv(moves, id => itemNames.get(id) ?? id)}
+            title="Export the filtered ledger to CSV"
+          >
+            <Download size={13} /> Export CSV
+          </button>
           <button style={secondaryBtnStyle} onClick={() => setModal('in')}>Stock in</button>
           <button style={secondaryBtnStyle} onClick={() => setModal('out')}>Stock out</button>
           <button style={secondaryBtnStyle} onClick={() => setModal('transfer')}>Transfer</button>
           <button style={primaryBtnStyle} onClick={() => setModal('receipt')}>Receive document</button>
         </div>
       </div>
+
+      {/* Resumen del ledger mostrado */}
+      {moves.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 16,
+            padding: '7px 16px',
+            borderBottom: '1px solid var(--border)',
+            fontSize: '0.75rem',
+            color: 'var(--text-dim)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span><span style={{ color: 'var(--text)', fontWeight: 600 }}>{summary.count}</span> movements{itemFilter || typeFilter ? ' (filtered)' : ''}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <ArrowDownToLine size={12} style={{ color: 'var(--success)' }} />
+            in <span style={{ color: 'var(--success)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>+{summary.fmt(summary.inSum)}</span>
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <ArrowUpToLine size={12} style={{ color: 'var(--error)' }} />
+            out <span style={{ color: 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>-{summary.fmt(summary.outSum)}</span>
+          </span>
+          <span>net <span style={{ color: summary.net >= 0 ? 'var(--success)' : 'var(--error)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{summary.net >= 0 ? '+' : ''}{summary.fmt(summary.net)}</span></span>
+        </div>
+      )}
 
       {/* Bulk actions bar */}
       {selected.size > 0 && (
@@ -663,17 +750,19 @@ export function StockTab() {
           </button>
 
           <button
+            title="Record a counter-entry for each selected move — the ledger is never deleted"
             style={{
               ...secondaryBtnStyle,
-              ...(confirmingDelete
-                ? { background: '#f43f5e', border: '1px solid #f43f5e', color: '#fff', fontWeight: 600 }
-                : { color: '#f43f5e', border: '1px solid rgba(244,63,94,.4)' }),
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              ...(confirmingReverse
+                ? { background: 'var(--warning)', border: '1px solid var(--warning)', color: '#06060a', fontWeight: 600 }
+                : { color: 'var(--warning)', border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)' }),
               opacity: bulkBusy ? 0.6 : 1,
             }}
             disabled={bulkBusy}
-            onClick={() => void handleBulkDelete()}
+            onClick={() => void handleBulkReverse()}
           >
-            {confirmingDelete ? `Confirm delete ${selected.size}` : 'Delete'}
+            <Undo2 size={13} /> {confirmingReverse ? `Confirm reverse ${selected.size}` : 'Reverse'}
           </button>
 
           <button
@@ -746,7 +835,17 @@ export function StockTab() {
                       style={{ accentColor: 'var(--amber)', cursor: 'pointer' }}
                     />
                   </td>
-                  <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>{new Date(move.occurred_at).toLocaleDateString()}</td>
+                  <td style={{ ...tdStyle, whiteSpace: 'nowrap' }}>
+                    {(() => {
+                      const dt = fmtMoveDateTime(move.occurred_at);
+                      return (
+                        <span style={{ display: 'inline-flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                          <span>{dt.date}</span>
+                          {dt.time && <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{dt.time}</span>}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td style={tdStyle}><TypeChip type={move.type} /></td>
                   <td style={tdStyle}>
                     {itemNames.get(move.item_id) ?? (

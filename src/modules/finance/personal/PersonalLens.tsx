@@ -25,6 +25,7 @@ import { PresupuestosTab } from './PresupuestosTab';
 import { NuevoMovimientoDialog } from './NuevoMovimientoDialog';
 import { PersonalNavProvider } from './navigation';
 import { MovimientoDetalle } from './MovimientoDetalle';
+import { PeriodControl } from '../period';
 
 const SECTIONS = [
   { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
@@ -54,9 +55,13 @@ export function PersonalLens() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="fin-personal-subtabs" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', borderBottom: '1px solid var(--border)' }}>
         <Tabs tabs={SECTIONS} activeTab={section} onChange={setSection} variant="underline" />
-        <button onClick={() => setDialogOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-          <Plus size={15} /> Nuevo movimiento
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* Selector de periodo (solo en Resumen): conduce TODO el resumen. */}
+          {section === 'resumen' && <PeriodControl />}
+          <button onClick={() => setDialogOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            <Plus size={15} /> Nuevo movimiento
+          </button>
+        </div>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>

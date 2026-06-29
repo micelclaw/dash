@@ -29,7 +29,7 @@ import {
 import { useFinanceBillingStore, type FinanceDoc, type DocStatus, type InvoicingSummary, type InvoicingTopClient, type InvoicingSeriesPoint, type ApAging, type VatReport } from '@/stores/finance-billing.store';
 import { STATUS_META, tintedPillStyle } from './statusMeta';
 import { useFacturacionNav } from './navigation';
-import { PeriodSelector, CustomRangeInputs, usePeriodRange } from '../period';
+import { useFinancePeriod } from '../period';
 
 // ─── Helpers locales (self-contained, sin tocar la fundación) ─────────────
 
@@ -380,8 +380,8 @@ export function FacturacionResumenTab() {
   useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
   const { openInvoice, openContact } = useFacturacionNav();
 
-  // Selector de periodo (conduce la gráfica de facturación; compartido con Personal).
-  const { period, setPeriod, customFrom, setCustomFrom, customTo, setCustomTo, range, title } = usePeriodRange('12m');
+  // Periodo compartido (selector en el header de la lente) — conduce TODO el resumen.
+  const { range, title } = useFinancePeriod();
 
   // Resumen de gráficas (carga al montar; estado local con guard alive).
   const [invoicing, setInvoicing] = useState<InvoicingSummary | null>(null);
@@ -395,20 +395,20 @@ export function FacturacionResumenTab() {
   useEffect(() => {
     let alive = true;
     setInvoicingError(false);
-    void fetchInvoicingSummary(6)
+    void fetchInvoicingSummary({ from: range.from, to: range.to })
       .then((d) => { if (alive) setInvoicing(d); })
       .catch(() => { if (alive) { setInvoicing(null); setInvoicingError(true); } });
     return () => { alive = false; };
-  }, [fetchInvoicingSummary]);
+  }, [fetchInvoicingSummary, range.from, range.to]);
 
   // Antigüedad de pagos a proveedores (espejo del aging de cobros).
   useEffect(() => {
     let alive = true;
-    void fetchApAging()
+    void fetchApAging({ from: range.from, to: range.to })
       .then((d) => { if (alive) setApAging(d); })
       .catch(() => { if (alive) setApAging(null); });
     return () => { alive = false; };
-  }, [fetchApAging]);
+  }, [fetchApAging, range.from, range.to]);
 
   // IVA a liquidar (Modelo 303): repercutido − soportado, en el periodo elegido
   // (con "Personalizado" puedes acotar el trimestre fiscal real).
@@ -440,9 +440,13 @@ export function FacturacionResumenTab() {
     onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent'; },
   });
 
+  // Todo el resumen se acota al periodo elegido: filtramos los documentos por
+  // fecha de emisión (issue_date) y derivamos KPIs / listas sobre ese subconjunto.
+  const docsEnRango = documents.filter((d) => d.issue_date >= range.from && d.issue_date <= range.to);
+
   // KPIs sobre facturas (invoice); los borradores no cuentan como facturado
   // (aún no emitidos).
-  const invoices = documents.filter((d) => d.type === 'invoice');
+  const invoices = docsEnRango.filter((d) => d.type === 'invoice');
   const facturado = invoices.filter((d) => d.status !== 'draft').reduce((s, d) => s + Number(d.total), 0);
   const cobrado = invoices.filter((d) => d.status === 'paid').reduce((s, d) => s + Number(d.total), 0);
   const pendienteStatuses: DocStatus[] = ['sent', 'partial', 'overdue'];
@@ -450,7 +454,7 @@ export function FacturacionResumenTab() {
   const vencido = invoices.filter((d) => d.status === 'overdue').reduce((s, d) => s + Number(d.total), 0);
 
   // KPIs de COMPRAS (facturas recibidas type='bill'); los borradores no cuentan.
-  const bills = documents.filter((d) => d.type === 'bill');
+  const bills = docsEnRango.filter((d) => d.type === 'bill');
   const gastos = bills.filter((d) => d.status !== 'draft').reduce((s, d) => s + Number(d.total), 0);
   const pagado = bills.filter((d) => d.status === 'paid').reduce((s, d) => s + Number(d.total), 0);
   const porPagar = bills.filter((d) => pendienteStatuses.includes(d.status)).reduce((s, d) => s + Number(d.total), 0);
@@ -472,7 +476,7 @@ export function FacturacionResumenTab() {
 
   // "Facturas recientes": documentos de VENTA (excluye facturas recibidas, que
   // tienen su pestaña Recibidas), por fecha de emisión desc.
-  const recientes = documents
+  const recientes = docsEnRango
     .filter((d) => d.type !== 'bill')
     .sort((a, b) => (b.issue_date ?? '').localeCompare(a.issue_date ?? ''))
     .slice(0, 8);
@@ -527,17 +531,8 @@ export function FacturacionResumenTab() {
         </div>
       </div>
 
-      {/* Cabecera de gráficas: título + selector de periodo (conduce la de facturación).
-          Con "Personalizado" aparece una 2ª fila con dos calendarios (desde/hasta). */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Gráficas</div>
-          <PeriodSelector value={period} onChange={setPeriod} />
-        </div>
-        {period === 'custom' && (
-          <CustomRangeInputs from={customFrom} to={customTo} onFrom={setCustomFrom} onTo={setCustomTo} />
-        )}
-      </div>
+      {/* Rótulo de la zona de gráficas (el selector de periodo vive en el header). */}
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Gráficas · {title}</div>
 
       {/* Gráficas: facturación unificada (líneas+barras) + aging + top clientes */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>

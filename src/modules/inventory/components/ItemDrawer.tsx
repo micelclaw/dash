@@ -33,6 +33,10 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
+import { LabelModal } from '@/modules/inventory/components/LabelModal';
+import { MaintenancePlansSection } from '@/modules/inventory/components/MaintenancePlansSection';
+import { DepreciationSection } from '@/modules/inventory/components/DepreciationSection';
+import { ProductSettingsCard } from '@/modules/inventory/components/ProductSettingsCard';
 import { useInventoryLinks } from '@/modules/inventory/hooks/use-inventory-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
@@ -49,6 +53,7 @@ import {
   daysUntil,
   daysSince,
   thumbUrl,
+  isAsset,
   SYSTEM_STATUS_LABELS,
   STATUS_PILL_MAP,
 } from '@/modules/inventory/types';
@@ -145,13 +150,14 @@ interface EditCoreForm {
   brand: string;
   model: string;
   serial_number: string;
+  asset_tag: string;
   purchase_date: string;
   purchase_price: string;
   warranty_until: string;
 }
 
 const EMPTY_EDIT_FORM: EditCoreForm = {
-  name: '', category: '', brand: '', model: '', serial_number: '', purchase_date: '', purchase_price: '', warranty_until: '',
+  name: '', category: '', brand: '', model: '', serial_number: '', asset_tag: '', purchase_date: '', purchase_price: '', warranty_until: '',
 };
 
 /** Una fecha ISO del backend → valor para <input type="date"> (YYYY-MM-DD). */
@@ -169,6 +175,7 @@ function buildEditForm(item: InventoryItem): EditCoreForm {
     brand: item.brand ?? '',
     model: item.model ?? '',
     serial_number: item.serial_number ?? '',
+    asset_tag: item.asset_tag ?? '',
     purchase_date: toDateInput(item.purchase_date),
     purchase_price: item.purchase_price != null ? String(parseFloat(item.purchase_price)) : '',
     warranty_until: toDateInput(item.warranty_until),
@@ -229,6 +236,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     uploadItemFile,
     fetchItemEvents,
     updateMeter,
+    generateAssetTag,
   } = useInventoryStore();
 
   const storeItem = items.find(i => i.id === itemId);
@@ -250,6 +258,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
   const [editMode, setEditMode] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editForm, setEditForm] = useState<EditCoreForm>(EMPTY_EDIT_FORM);
+  const [showLabel, setShowLabel] = useState(false);
   const [qtyDraft, setQtyDraft] = useState('');
   const [fieldsDraft, setFieldsDraft] = useState<Record<string, unknown>>({});
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -399,6 +408,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
       brand: editForm.brand.trim() || null,
       model: editForm.model.trim() || null,
       serial_number: editForm.serial_number.trim() || null,
+      asset_tag: editForm.asset_tag.trim() || null,
       purchase_date: editForm.purchase_date || null,
       warranty_until: editForm.warranty_until || null,
     };
@@ -559,6 +569,18 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     const slug = newStatusDraft.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
     if (!slug.replace(/_/g, '')) return;
     await handleStatus(slug);
+  };
+
+  const handleGenerateAssetTag = async () => {
+    if (!item) return;
+    try {
+      const updated = await generateAssetTag(itemId);
+      if (!storeItem) setFetched(updated);
+      setEditForm(f => ({ ...f, asset_tag: updated.asset_tag ?? '' }));
+      toast.success(`Asset tag ${updated.asset_tag}`);
+    } catch {
+      toast.error('Failed to generate asset tag');
+    }
   };
 
   const handleSaveFields = async () => {
@@ -772,6 +794,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
               {[
+                item.asset_tag ? `🏷 ${item.asset_tag}` : null,
                 item.category,
                 [item.brand, item.model].filter(Boolean).join(' ') || null,
                 item.serial_number ? `SN ${item.serial_number}` : null,
@@ -805,6 +828,21 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                 <div>
                   <label style={editLabelStyle}>Serial number</label>
                   <input style={inputStyle} value={editForm.serial_number} onChange={e => setEditForm(f => ({ ...f, serial_number: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={editLabelStyle}>Asset tag</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      style={inputStyle}
+                      placeholder="INV-2026-00042"
+                      value={editForm.asset_tag}
+                      onChange={e => setEditForm(f => ({ ...f, asset_tag: e.target.value }))}
+                      aria-label="Asset tag"
+                    />
+                    <button type="button" style={{ ...btnSecondary, padding: '6px 10px', flexShrink: 0 }} onClick={() => void handleGenerateAssetTag()} title="Auto-generate the next asset tag">
+                      Gen
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={editLabelStyle}>Brand</label>
@@ -1031,6 +1069,15 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
             </div>
           )}
 
+          {/* 3c. Maintenance plans (asset-aware: solo activos fijos) */}
+          {!readOnly && isAsset(item) && <MaintenancePlansSection item={item} />}
+
+          {/* 3d. Value / Depreciation (asset-aware) */}
+          {!readOnly && isAsset(item) && <DepreciationSection item={item} />}
+
+          {/* 3e. Producto / Comercial (F1: artículos no-activo → vendibles con stock/COGS) */}
+          {!readOnly && !isAsset(item) && <ProductSettingsCard item={item} onSaved={refreshLocal} />}
+
           {/* 4. Tags */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <span style={sectionLabel}>Tags</span>
@@ -1087,6 +1134,9 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
                   }}
                 />
               </label>
+              <button style={btnSecondary} onClick={() => setShowLabel(true)} title="Print a QR label for this item">
+                🏷 Label
+              </button>
               <button
                 style={{
                   ...btnSecondary,
@@ -1568,6 +1618,8 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
           </div>
         </div>
       )}
+
+      {showLabel && <LabelModal target="items" ids={[itemId]} onClose={() => setShowLabel(false)} />}
     </div>
   );
 }

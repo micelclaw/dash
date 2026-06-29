@@ -120,6 +120,9 @@ export interface DocLine {
   // Artículo de inventario vinculado a la línea (cruce con Inventory): al emitir,
   // dispara purchase_in (bill) / sale_out (invoice) + enlace purchased_item/sold_item.
   inventory_item_id: string | null;
+  // Bien de inversión (inmovilizado): al emitir un bill, la línea carga a
+  // Inmovilizado material en vez de a Gastos (C-N2 capitalizar).
+  is_capital?: boolean;
   // Descuento por línea: importe o porcentaje según discount_kind (lo devuelve el backend en cada línea).
   discount_value: string | null;
   discount_kind: 'percent' | 'fixed' | null;
@@ -209,6 +212,8 @@ export interface DocLineInput {
   // Artículo de inventario vinculado (opcional): habilita el cruce con Inventory
   // al emitir (purchase_in/sale_out + enlace). El backend ya mapea inventory_item_id.
   inventory_item_id?: string | null;
+  // Bien de inversión: capitaliza la línea (Inmovilizado) en vez de gasto (C-N2).
+  is_capital?: boolean;
   // Descuento por línea (opcional). El backend lo resta de la base bruta de la
   // línea antes del descuento de documento y antes del IVA.
   discount_value?: string | number;
@@ -422,9 +427,9 @@ interface FinanceBillingState {
   fetchCrossDomainSettings: () => Promise<{ bill_propose_items: boolean }>;
   saveCrossDomainSettings: (s: { bill_propose_items: boolean }) => Promise<{ bill_propose_items: boolean }>;
 
-  fetchInvoicingSummary: (months?: number) => Promise<InvoicingSummary>;
+  fetchInvoicingSummary: (opts?: { months?: number; from?: string; to?: string }) => Promise<InvoicingSummary>;
   fetchInvoicingSeries: (opts: { from?: string; to?: string }) => Promise<InvoicingSeriesPoint[]>;
-  fetchApAging: () => Promise<ApAging>;
+  fetchApAging: (opts?: { from?: string; to?: string }) => Promise<ApAging>;
   fetchVatReport: (opts?: { from?: string; to?: string }) => Promise<VatReport>;
   fetchDocumentRelated: (id: string) => Promise<DocRelated>;
   attachDocument: (id: string, file: { file_id: string; filename?: string }) => Promise<void>;
@@ -583,10 +588,10 @@ export const useFinanceBillingStore = create<FinanceBillingState>((set, get) => 
     return r.data;
   },
 
-  fetchInvoicingSummary: async (months) => {
+  fetchInvoicingSummary: async (opts) => {
     const r = await api.get<{ data: InvoicingSummary }>(
       '/finance/summary/invoicing',
-      months != null ? { months } : undefined,
+      opts as Record<string, string | number | undefined> | undefined,
     );
     return r.data;
   },
@@ -597,8 +602,11 @@ export const useFinanceBillingStore = create<FinanceBillingState>((set, get) => 
     );
     return r.data;
   },
-  fetchApAging: async () => {
-    const r = await api.get<{ data: ApAging }>('/finance/summary/ap-aging');
+  fetchApAging: async (opts) => {
+    const r = await api.get<{ data: ApAging }>(
+      '/finance/summary/ap-aging',
+      opts as Record<string, string | undefined> | undefined,
+    );
     return r.data;
   },
   fetchVatReport: async (opts) => {

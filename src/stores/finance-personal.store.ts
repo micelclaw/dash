@@ -171,6 +171,10 @@ interface FinancePersonalState {
   fetchCategories: () => Promise<void>;
   fetchTransactions: (filters?: TxFilters) => Promise<void>;
   fetchSummary: () => Promise<void>;
+  /** Resumen acotado a un periodo (net_worth/available siguen siendo all-time). Devuelve; no muta el store. */
+  fetchSummaryRange: (opts?: { from?: string; to?: string }) => Promise<FinanceSummary>;
+  /** Movimientos recientes del periodo (ordenados date desc). Devuelve la lista; no muta el store. */
+  fetchRecentTransactions: (opts?: { from?: string; to?: string; limit?: number }) => Promise<FinanceTransaction[]>;
   /** Serie de evolución (patrimonio/disponible acumulados). Devuelve los puntos; no muta el store. */
   fetchSeries: (opts?: FinanceSeriesOpts) => Promise<FinanceSeriesPoint[]>;
   /** Total por categoría del periodo (gasto por defecto). Devuelve la lista; no muta el store. */
@@ -226,6 +230,18 @@ export const useFinancePersonalStore = create<FinancePersonalState>((set, get) =
   fetchSummary: async () => {
     const r = await api.get<{ data: FinanceSummary }>('/finance/summary');
     set({ summary: r.data });
+  },
+  fetchSummaryRange: async (opts) => {
+    // El backend acepta date_from/date_to; net_worth/available los devuelve all-time
+    // (no dependen del rango), solo expenses_period/income_period se acotan al periodo.
+    const params = opts ? { date_from: opts.from, date_to: opts.to } : undefined;
+    const r = await api.get<{ data: FinanceSummary }>('/finance/summary', params);
+    return r.data;
+  },
+  fetchRecentTransactions: async (opts) => {
+    const params: Record<string, string | number | undefined> = { date_from: opts?.from, date_to: opts?.to, limit: opts?.limit ?? 8 };
+    const r = await api.get<{ data: FinanceTransaction[] }>('/finance/transactions', params);
+    return r.data;
   },
   fetchSeries: async (opts) => {
     const r = await api.get<{ data: FinanceSeriesPoint[] }>('/finance/summary/series', opts as Record<string, string | undefined>);
