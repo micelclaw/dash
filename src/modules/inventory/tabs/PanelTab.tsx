@@ -606,7 +606,11 @@ export function PanelTab({ onNavigate }: { onNavigate: (tab: string) => void }) 
         <div
           style={{
             background: 'var(--card)',
-            border: '1px solid var(--border)',
+            // Longhand por lado: no mezclar `border` shorthand + `borderLeft`
+            // (React avisa al re-renderizar). Mismo patrón que el fix de #1167.
+            borderTop: '1px solid var(--border)',
+            borderRight: '1px solid var(--border)',
+            borderBottom: '1px solid var(--border)',
             borderLeft: '3px solid var(--mod-inventory)',
             borderRadius: 'var(--radius-md)',
             padding: '14px 16px',

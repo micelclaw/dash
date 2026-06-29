@@ -15,13 +15,21 @@ import { PieChart, TrendingUp, ShieldCheck, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
+import { AccountingSettingsCard } from '@/modules/inventory/components/AccountingSettingsCard';
+import { DepreciationReport } from '@/modules/inventory/components/DepreciationReport';
 import { fmtMoney } from '@/modules/inventory/types';
 
 type GroupBy = 'category' | 'location';
 
 const cardStyle: React.CSSProperties = {
   background: 'var(--card)',
-  border: '1px solid var(--border)',
+  // Longhand por lado: una de las tarjetas (línea ~139) hace `{...cardStyle,
+  // borderLeft: 3px}`; con `border` shorthand React avisa al re-renderizar
+  // ("...don't mix shorthand and longhand"). Mismo patrón que el fix de #1167.
+  borderTop: '1px solid var(--border)',
+  borderRight: '1px solid var(--border)',
+  borderBottom: '1px solid var(--border)',
+  borderLeft: '1px solid var(--border)',
   borderRadius: 'var(--radius-md)',
   padding: 16,
 };
@@ -130,6 +138,9 @@ export function ReportsTab() {
 
   return (
     <div style={{ maxWidth: 1100, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 0. Accounting toggle (C-N2: post depreciación/baja/capitalización a Finance) */}
+      <AccountingSettingsCard />
+
       {/* 1. Valuation card */}
       <div style={{ ...cardStyle, borderLeft: '3px solid var(--mod-inventory)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -206,6 +217,9 @@ export function ReportsTab() {
           ))}
         </div>
       </div>
+
+      {/* 1b. Depreciation (book value vs accumulated) — C-N1 con recharts */}
+      <DepreciationReport />
 
       {/* 2. Report cards grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
