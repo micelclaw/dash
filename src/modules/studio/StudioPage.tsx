@@ -23,6 +23,7 @@ import { useStudioStore } from '@/stores/studio.store';
 import { ProjectCard } from './components/ProjectCard';
 import { NewProjectModal } from './components/NewProjectModal';
 import { TemplateGallery } from './components/TemplateGallery';
+import { OnboardingWelcome } from './components/OnboardingWelcome';
 
 export function Component() {
   const navigate = useNavigate();
@@ -34,6 +35,9 @@ export function Component() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [tab, setTab] = useState<'projects' | 'templates'>('projects');
+  // 'onboarding' = the warm §3.1 welcome (free-text idea + example gallery).
+  // Shown on demand (header CTA) and always as the empty state.
+  const [view, setView] = useState<'list' | 'onboarding'>('list');
 
   useEffect(() => {
     fetchProjects();
@@ -93,7 +97,7 @@ export function Component() {
           </span>
         </div>
         <button
-          onClick={() => setModalOpen(true)}
+          onClick={() => { setTab('projects'); setView('onboarding'); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 'var(--radius-md)',
@@ -103,7 +107,7 @@ export function Component() {
           }}
         >
           <Plus size={14} />
-          New project
+          Nueva app
         </button>
       </header>
 
@@ -138,7 +142,7 @@ export function Component() {
           <div style={{
             color: 'var(--text-dim)', fontSize: '0.875rem', textAlign: 'center', padding: 40,
           }}>
-            Loading projects…
+            Cargando tus apps…
           </div>
         )}
 
@@ -153,41 +157,18 @@ export function Component() {
           </div>
         )}
 
-        {!loading && projects.length === 0 && !error && (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 16, padding: 40, textAlign: 'center',
-          }}>
-            <Hammer size={48} style={{ color: 'var(--amber)' }} />
-            <h2 style={{
-              fontSize: '1.25rem', fontWeight: 600, color: 'var(--text)', margin: 0,
-            }}>
-              Build your first app
-            </h2>
-            <p style={{
-              fontSize: '0.875rem', color: 'var(--text-dim)', margin: 0, maxWidth: 460,
-            }}>
-              Claw Studio guides you through six phases — scoping, concept, frontend,
-              foundation, implementation and packaging — to ship a real Micelclaw app
-              without writing code.
-            </p>
-            <button
-              onClick={() => setModalOpen(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '10px 20px', borderRadius: 'var(--radius-md)',
-                background: 'var(--amber)', color: '#000', border: 'none',
-                fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
-                cursor: 'pointer', marginTop: 8,
-              }}
-            >
-              <Plus size={16} />
-              New project
-            </button>
-          </div>
+        {/* Warm onboarding (§3.1): on demand via the CTA, and always as
+            the empty state. The back link only appears when there ARE
+            projects to return to. */}
+        {!error && (view === 'onboarding' || (!loading && projects.length === 0)) && (
+          <OnboardingWelcome
+            onCreated={handleCreated}
+            onProMode={() => setModalOpen(true)}
+            onBack={projects.length > 0 ? () => setView('list') : undefined}
+          />
         )}
 
-        {projects.length > 0 && (
+        {view === 'list' && projects.length > 0 && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
