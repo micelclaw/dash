@@ -16,11 +16,11 @@
 // y saldos → abre su Libro Mayor.
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock, FolderKanban } from 'lucide-react';
+import { Scale, BookOpen, TrendingUp, Library, Loader2, CalendarRange, Lock, Unlock, FolderKanban, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 
-type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'projects' | 'years';
+type SubTab = 'trial' | 'balance' | 'pl' | 'ledger' | 'projects' | 'years' | 'rules';
 
 interface TrialRow { account_id: string; code: string | null; group_code: string | null; name: string; type: string; debit: string; credit: string; balance: string; }
 interface TrialBalance { rows: TrialRow[]; total_debit: string; total_credit: string; from: string; to: string; }
@@ -52,6 +52,7 @@ const SUBTABS: { id: SubTab; label: string; icon: React.ComponentType<{ size?: n
   { id: 'ledger', label: 'Mayor', icon: Library },
   { id: 'projects', label: 'Proyectos', icon: FolderKanban },
   { id: 'years', label: 'Ejercicios', icon: CalendarRange },
+  { id: 'rules', label: 'Reglas contables', icon: SlidersHorizontal },
 ];
 
 export function ContabilidadLens() {
@@ -213,6 +214,70 @@ export function ContabilidadLens() {
 
         {/* ── Ejercicios (cierre) ── */}
         {sub === 'years' && <YearsPanel />}
+
+        {/* ── Reglas contables (mapa de cuentas configurable) ── */}
+        {sub === 'rules' && <AccountMapPanel />}
+      </div>
+    </div>
+  );
+}
+
+interface RoleRow { role: string; label: string; override_account_id: string | null; effective: { id: string; code: string | null; name: string } | null; }
+interface AccountOpt { id: string; code: string | null; name: string; type: string; }
+
+function AccountMapPanel() {
+  const [roles, setRoles] = useState<RoleRow[]>([]);
+  const [accounts, setAccounts] = useState<AccountOpt[]>([]);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    const r = (await api.get<{ data: { roles: RoleRow[]; accounts: AccountOpt[] } }>('/finance/account-map')).data;
+    setRoles(r.roles ?? []);
+    setAccounts(r.accounts ?? []);
+    setDraft(Object.fromEntries((r.roles ?? []).map((x) => [x.role, x.override_account_id ?? ''])));
+    setLoaded(true);
+  };
+  useEffect(() => { void load().catch(() => setLoaded(true)); }, []);
+
+  const dirty = roles.some((r) => (draft[r.role] ?? '') !== (r.override_account_id ?? ''));
+  const save = async () => {
+    setSaving(true);
+    try { await api.put('/finance/account-map', { account_map: draft }); toast.success('Reglas contables guardadas'); await load(); }
+    catch { toast.error('No se pudieron guardar las reglas'); } finally { setSaving(false); }
+  };
+
+  if (!loaded) return <div style={{ ...card, padding: 16, color: 'var(--text-dim)' }}>Cargando…</div>;
+  return (
+    <div style={{ ...card, padding: 0, maxWidth: 760 }}>
+      <div style={sectionTitle}>REGLAS CONTABLES · MAPA DE CUENTAS</div>
+      <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>
+        Elige qué cuenta del plan usa el motor contable para cada concepto. Vacío = la cuenta PGC por defecto.
+        Cambiarlo afecta a los asientos que se generen a partir de ahora (no a los ya contabilizados).
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead><tr><th style={th}>Concepto</th><th style={th}>Cuenta</th></tr></thead>
+        <tbody>
+          {roles.map((r) => (
+            <tr key={r.role}>
+              <td style={td}>{r.label}</td>
+              <td style={td}>
+                <select value={draft[r.role] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [r.role]: e.target.value }))}
+                  style={{ width: '100%', maxWidth: 360, padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--text)', fontSize: 13 }}>
+                  <option value="">— por defecto ({r.effective?.code ?? '—'}) —</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.code ? `${a.code} · ` : ''}{a.name}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div style={{ padding: 12 }}>
+        <button type="button" onClick={() => void save()} disabled={!dirty || saving}
+          style={{ padding: '7px 16px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: (!dirty || saving) ? 'default' : 'pointer', background: (!dirty || saving) ? 'var(--surface)' : 'var(--mod-finance)', color: (!dirty || saving) ? 'var(--text-dim)' : '#fff' }}>
+          {saving ? 'Guardando…' : 'Guardar'}
+        </button>
       </div>
     </div>
   );
