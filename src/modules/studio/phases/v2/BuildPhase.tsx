@@ -371,6 +371,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
                 mode={stream.mode}
                 isStarted={isStarted}
                 starting={starting}
+                checklist={stream.checklist}
                 onAutoStart={handleStart}
                 fallback={
                   <BuildChat

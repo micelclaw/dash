@@ -12,19 +12,23 @@
 
 // ─── Studio v3 — Build chat = embedded OpenCode native UI ───────────
 //
-// Hybrid-governed (D1): OpenCode's own web UI renders the build
-// conversation inside an iframe (its native composer is HIDDEN by the
-// per-project embed proxy), and Core owns the input — the box below the
-// iframe calls `sendBuildMessage` (POST /build/turn), so plan/build
-// gating + token caps stay enforced server-side. The iframe URL comes
-// from `GET /studio/projects/:id/opencode-embed` (same launcher pattern
-// as FinanceEmbed). If the embed can't be reached, we degrade to the
-// classic dash chat (`fallback`).
+// Hybrid-governed (D1) + progressive disclosure (D5). OpenCode's own web
+// UI renders the build conversation inside an iframe (its native composer
+// HIDDEN by the embed proxy); Core owns the input (the box below → POST
+// /build/turn) so plan/build gating + caps stay enforced server-side.
+//
+// MODO GUIADO (default, non-technical): the technical iframe stays behind
+// a curtain — the panel shows a plain-language narrative ("Lo estoy
+// construyendo…" + milestone count). "Ver cómo lo hace por dentro" pulls
+// the curtain (MODO PRO) to reveal the native OpenCode UI. The choice
+// persists (useStudioMode). If the embed can't be reached we degrade to
+// the classic dash chat (`fallback`).
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, Square, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Send, Square, Loader2, AlertCircle, RefreshCw, Eye, ChevronLeft } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
 import type { StreamStatus } from '../../hooks/useOpencodeStream';
+import { useStudioMode } from '../../hooks/useStudioMode';
 
 interface Props {
   projectId: string;
@@ -35,6 +39,8 @@ interface Props {
   isStarted: boolean;
   /** True while POST /build/start is in flight. */
   starting?: boolean;
+  /** Build checklist — drives the human "milestones" count in Guided mode. */
+  checklist?: { status: string }[];
   /** Re-issue start when there's no active session yet. */
   onAutoStart?: () => void;
   /** Classic dash chat, rendered if the embed can't be reached. */
@@ -43,10 +49,11 @@ interface Props {
 
 type Phase = 'loading' | 'ready' | 'error';
 
-export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, onAutoStart, fallback }: Props) {
+export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, checklist, onAutoStart, fallback }: Props) {
   const fetchOpencodeEmbed = useStudioStore((s) => s.fetchOpencodeEmbed);
   const sendBuildMessage = useStudioStore((s) => s.sendBuildMessage);
   const abortBuild = useStudioStore((s) => s.abortBuild);
+  const [studioMode, setStudioMode] = useStudioMode();
 
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
@@ -132,6 +139,8 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, on
   }
 
   const inputDisabled = status === 'running';
+  const guided = studioMode === 'guided';
+  const human = friendlyStatus(status, isStarted, !!starting, checklist);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -144,11 +153,15 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, on
       }}>
         <strong style={{ color: 'var(--text)' }}>Studio Builder</strong>
         <span aria-hidden>·</span>
-        <span style={{ color: 'var(--text-muted)' }}>OpenCode</span>
-        <span aria-hidden>·</span>
         <span style={{
           color: status === 'running' ? '#22c55e' : status === 'failed' ? 'var(--danger)' : 'var(--text-muted)',
         }}>{status}</span>
+        <div style={{ flex: 1 }} />
+        {/* Guiado / Pro toggle (progressive disclosure) */}
+        <div style={modeSwitch} role="group" aria-label="Modo de vista">
+          <button onClick={() => setStudioMode('guided')} style={modeBtn(guided)} aria-pressed={guided}>Guiado</button>
+          <button onClick={() => setStudioMode('pro')} style={modeBtn(!guided)} aria-pressed={!guided}>Pro</button>
+        </div>
       </div>
 
       {/* Native OpenCode UI (composer hidden by the embed proxy) */}
@@ -170,14 +183,42 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, on
             </button>
           </div>
         )}
-        {phase === 'ready' && embedUrl && (
-          <iframe
-            key={embedUrl}
-            src={embedUrl}
-            title="OpenCode"
-            allow="clipboard-read; clipboard-write"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-          />
+
+        {/* MODO GUIADO: la cortina — narrativa en lenguaje humano. El iframe
+            técnico vive detrás; "Ver cómo lo hace por dentro" lo descorre. */}
+        {phase === 'ready' && guided && (
+          <div style={guidedCard}>
+            <div style={{ fontSize: 40, lineHeight: 1 }}>{human.icon}</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>{human.title}</div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', maxWidth: 420, textAlign: 'center', lineHeight: 1.5 }}>
+              {human.sub}
+            </div>
+            {status === 'running' && (
+              <Loader2 size={16} className="spin" style={{ color: 'var(--amber)' }} />
+            )}
+            <button onClick={() => setStudioMode('pro')} style={seeDevBtn}>
+              <Eye size={13} /> Ver cómo lo hace por dentro
+            </button>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+              (detalle técnico — no necesitas entenderlo)
+            </div>
+          </div>
+        )}
+
+        {/* MODO PRO: la UI nativa de OpenCode (composer oculto). */}
+        {phase === 'ready' && !guided && embedUrl && (
+          <>
+            <iframe
+              key={embedUrl}
+              src={embedUrl}
+              title="OpenCode"
+              allow="clipboard-read; clipboard-write"
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+            />
+            <button onClick={() => setStudioMode('guided')} style={backToGuidedPill}>
+              <ChevronLeft size={12} /> Vista sencilla
+            </button>
+          </>
         )}
       </div>
 
@@ -235,10 +276,68 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, on
   );
 }
 
+/** Map the technical session status to a plain-language line (Guided mode). */
+function friendlyStatus(
+  status: StreamStatus,
+  isStarted: boolean,
+  starting: boolean,
+  checklist?: { status: string }[],
+): { icon: string; title: string; sub: string } {
+  const total = checklist?.length ?? 0;
+  const done = checklist?.filter((c) => c.status === 'done').length ?? 0;
+  const milestones = total > 0 ? `${done} de ${total} pasos listos` : '';
+  if (starting) {
+    return { icon: '🛠️', title: 'Preparando tu app…', sub: 'Estoy montando el espacio de trabajo y el plan. Tarda un momentito.' };
+  }
+  if (status === 'running') {
+    return { icon: '🛠️', title: 'Construyendo tu app…', sub: milestones || 'El Builder está trabajando — verás cómo avanza.' };
+  }
+  if (status === 'failed') {
+    return { icon: '⚠️', title: 'Me encontré un obstáculo', sub: 'Mira el detalle técnico para entender qué pasó, o pídeme que lo reintente abajo.' };
+  }
+  if (!isStarted) {
+    return { icon: '✨', title: 'Listo para empezar', sub: 'Escribe abajo lo que quieres, o aprueba el plan para que empiece a construir.' };
+  }
+  return {
+    icon: '✅',
+    title: 'En pausa, listo para ti',
+    sub: milestones ? `${milestones} · pídeme lo siguiente abajo.` : 'Pídeme un ajuste o lo siguiente abajo.',
+  };
+}
+
 const centerStyle: React.CSSProperties = {
   position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
   alignItems: 'center', justifyContent: 'center', gap: 10,
 };
+const guidedCard: React.CSSProperties = {
+  position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24,
+  background: 'var(--surface)', textAlign: 'center',
+};
+const seeDevBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '7px 14px', fontSize: '0.78rem', marginTop: 4,
+  background: 'var(--card)', color: 'var(--text-dim)',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', cursor: 'pointer',
+  fontFamily: 'var(--font-sans)',
+};
+const backToGuidedPill: React.CSSProperties = {
+  position: 'absolute', top: 8, right: 8, zIndex: 2,
+  display: 'inline-flex', alignItems: 'center', gap: 3,
+  padding: '4px 9px', fontSize: '0.68rem',
+  background: 'color-mix(in srgb, var(--card) 92%, transparent)', color: 'var(--text-dim)',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', cursor: 'pointer',
+  fontFamily: 'var(--font-sans)', backdropFilter: 'blur(2px)',
+};
+const modeSwitch: React.CSSProperties = {
+  display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', overflow: 'hidden',
+};
+const modeBtn = (active: boolean): React.CSSProperties => ({
+  padding: '3px 10px', fontSize: '0.68rem', fontWeight: active ? 700 : 500,
+  background: active ? 'var(--amber)' : 'transparent',
+  color: active ? '#000' : 'var(--text-dim)',
+  border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+});
 const retryBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 4,
   padding: '4px 10px', fontSize: '0.7rem',
