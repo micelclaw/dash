@@ -48,6 +48,7 @@ const DialogContent = React.forwardRef<
         'fixed left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-6',
         className,
       )}
+      {...props}
       style={{
         zIndex: 400,
         // Temada: en oscuro var(--card) === #1a1a24 (sin cambio), en claro/blush
@@ -57,8 +58,11 @@ const DialogContent = React.forwardRef<
         borderRadius: 'var(--radius-lg)',
         boxShadow: '0 0 0 1px rgba(255,255,255,0.05), 0 25px 50px -12px rgba(0,0,0,0.4)',
         opacity: 1,
+        // El style del caller (p.ej. maxWidth/width) se FUSIONA sobre los defaults,
+        // en vez de reemplazarlos: sin esto, pasar `style` borraba zIndex/fondo/borde
+        // y el modal quedaba sin chrome y por debajo del árbol de agentes (z-index).
+        ...props.style,
       }}
-      {...props}
     >
       {children}
       <DialogPrimitive.Close
