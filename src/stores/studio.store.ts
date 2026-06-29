@@ -311,6 +311,9 @@ export type StudioChecklistEvidence = 'auto' | 'agent' | 'manual';
 export interface StudioChecklistItem {
   id: string;
   text: string;
+  /** Short non-technical Spanish phrase for the Guided build view (D5).
+   *  Absent on older checklists → the UI falls back to `text`. */
+  human_label?: string;
   status: StudioChecklistStatus;
   evidence?: StudioChecklistEvidence;
   updated_at?: string;

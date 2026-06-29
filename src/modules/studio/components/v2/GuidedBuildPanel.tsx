@@ -82,8 +82,9 @@ export function GuidedBuildPanel({ status, checklist, tokensUsed, tokenCap, isSt
             <span style={{
               fontSize: '0.82rem', lineHeight: 1.35,
               color: item.status === 'pending' ? 'var(--text-muted)' : 'var(--text)',
-              textDecoration: item.status === 'done' ? 'none' : 'none',
-            }}>{item.text}</span>
+            }} title={item.human_label ? item.text : undefined}>
+              {item.human_label ?? item.text}
+            </span>
           </div>
         ))}
         {total === 0 && !starting && (
