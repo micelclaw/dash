@@ -29,9 +29,11 @@ import {
   type StudioProjectStatus,
 } from '@/stores/studio.store';
 import { QuestionCard } from '../components/QuestionCard';
+import { GuidedQuestionCard } from '../components/GuidedQuestionCard';
 import { ScopeSummary } from '../components/ScopeSummary';
 import { RewindButton } from '../components/RewindButton';
 import { PhaseSidebar } from '../components/PhaseSidebar';
+import { useStudioMode } from '../hooks/useStudioMode';
 
 interface Props {
   projectId: string;
@@ -53,6 +55,8 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
   const fetchScopingTree = useStudioStore((s) => s.fetchScopingTree);
   const previewScoping = useStudioStore((s) => s.previewScoping);
   const submitScoping = useStudioStore((s) => s.submitScoping);
+  const [studioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
 
   const [tree, setTree] = useState<ScopingTree | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,27 +122,56 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
     setAnswers(next);
   }
 
+  // Compute the classification preview for a given answer set, then show
+  // the summary. Takes explicit answers so the guided auto-advance path
+  // can pass the just-picked answer without waiting for state to settle.
+  async function doPreview(ans: ScopingAnswers) {
+    try {
+      setSubmitting(true);
+      const result = await previewScoping(projectId, ans);
+      setClassification(result);
+      setShowSummary(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (guided ? 'No pude preparar tu app' : 'Failed to compute scope'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function goNext() {
     if (!currentQuestion) return;
     if (!answers[currentQuestion.id]) {
-      toast.error('Pick an option to continue');
+      toast.error(guided ? 'Elige una opción para seguir' : 'Pick an option to continue');
       return;
     }
     if (isLastStep) {
-      // Compute preview
-      try {
-        setSubmitting(true);
-        const result = await previewScoping(projectId, answers);
-        setClassification(result);
-        setShowSummary(true);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to compute scope');
-      } finally {
-        setSubmitting(false);
-      }
+      await doPreview(answers);
       return;
     }
     setStepIndex((i) => Math.min(i + 1, totalSteps - 1));
+  }
+
+  // ─── Guided conversational pick (select + auto-advance) ───
+  // Mirrors selectOption's branch-reset, then advances using the NEW
+  // answers (the question list is dynamic: picking the intent grows it).
+  function pickGuided(optionId: string) {
+    if (!currentQuestion || !tree) return;
+    const next: ScopingAnswers = { ...answers, [currentQuestion.id]: optionId };
+    if (currentQuestion.id === 'b1_intent' && answers['b1_intent'] !== optionId) {
+      for (const k of Object.keys(next)) {
+        const isBattery1Or3 = tree.battery1.id === k || tree.battery3.some((q) => q.id === k);
+        if (!isBattery1Or3 && k !== 'b1_intent') delete next[k];
+      }
+    }
+    setAnswers(next);
+    const intent = next['b1_intent'];
+    const b2 = intent ? (tree.battery2[intent] ?? []) : [];
+    const nextQuestions = [tree.battery1, ...b2, ...tree.battery3];
+    if (stepIndex >= nextQuestions.length - 1) {
+      void doPreview(next);
+    } else {
+      setStepIndex((i) => i + 1);
+    }
   }
 
   function goBack() {
@@ -153,10 +186,10 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
     try {
       setSubmitting(true);
       await submitScoping(projectId, answers);
-      toast.success('Scope saved — moving on to concept phase');
+      toast.success(guided ? 'Listo — empiezo a darle forma a tu app' : 'Scope saved — moving on to concept phase');
       onComplete();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save scope');
+      toast.error(err instanceof Error ? err.message : (guided ? 'No pude guardar tu idea' : 'Failed to save scope'));
     } finally {
       setSubmitting(false);
     }
@@ -170,7 +203,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem',
       }}>
-        Loading questionnaire…
+        {guided ? 'Un momento…' : 'Loading questionnaire…'}
       </div>
     );
   }
@@ -201,8 +234,8 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
           color: 'var(--text-muted)',
         }}>
           {showSummary
-            ? 'Confirmation'
-            : `Question ${stepIndex + 1} of ${totalSteps}`}
+            ? (guided ? 'Casi listo' : 'Confirmation')
+            : (guided ? `Tu idea · paso ${stepIndex + 1} de ${totalSteps}` : `Question ${stepIndex + 1} of ${totalSteps}`)}
         </span>
         <div style={{
           flex: 1, height: 4, background: 'var(--surface)',
@@ -223,7 +256,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
           is also reachable BEFORE a project row exists; in that case
           there's nothing to navigate to). */}
       {project && (
-        <PhaseSidebar project={project} viewedPhase="scoping" onSelect={onSelectPhase} />
+        <PhaseSidebar project={project} viewedPhase="scoping" onSelect={onSelectPhase} guided={guided} />
       )}
 
       {/* Body */}
@@ -238,13 +271,23 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
               onBack={goBack}
               onConfirm={handleConfirm}
               submitting={submitting}
+              guided={guided}
             />
           ) : currentQuestion ? (
-            <QuestionCard
-              question={currentQuestion}
-              selectedOptionId={answers[currentQuestion.id] ?? null}
-              onSelect={selectOption}
-            />
+            guided ? (
+              <GuidedQuestionCard
+                question={currentQuestion}
+                selectedOptionId={answers[currentQuestion.id] ?? null}
+                onPick={pickGuided}
+                onDefer={() => { const d = currentQuestion.options[0]; if (d) pickGuided(d.id); }}
+              />
+            ) : (
+              <QuestionCard
+                question={currentQuestion}
+                selectedOptionId={answers[currentQuestion.id] ?? null}
+                onSelect={selectOption}
+              />
+            )
           ) : null}
         </div>
       </div>
@@ -271,27 +314,34 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
               fontFamily: 'var(--font-sans)',
             }}
           >
-            <ChevronLeft size={14} /> Back
+            <ChevronLeft size={14} /> {guided ? 'Atrás' : 'Back'}
           </button>
-          <button
-            type="button"
-            onClick={goNext}
-            disabled={submitting}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '8px 16px',
-              background: 'var(--amber)',
-              color: '#000',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              cursor: submitting ? 'wait' : 'pointer',
-              fontFamily: 'var(--font-sans)',
-            }}
-          >
-            {isLastStep ? 'See summary' : 'Next'} <ChevronRight size={14} />
-          </button>
+          {/* Guided auto-advances on pick, so no "Next" — a hint instead. */}
+          {guided ? (
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', alignSelf: 'center' }}>
+              Toca una respuesta para seguir
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={submitting}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                padding: '8px 16px',
+                background: 'var(--amber)',
+                color: '#000',
+                border: 'none',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                cursor: submitting ? 'wait' : 'pointer',
+                fontFamily: 'var(--font-sans)',
+              }}
+            >
+              {isLastStep ? 'See summary' : 'Next'} <ChevronRight size={14} />
+            </button>
+          )}
         </div>
       )}
     </div>

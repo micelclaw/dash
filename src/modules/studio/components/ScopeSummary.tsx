@@ -22,6 +22,8 @@ interface Props {
   onBack: () => void;
   onConfirm: () => void;
   submitting: boolean;
+  /** Guided mode (D5): Spanish, no L1/L2/L3 codes, friendly framing. */
+  guided?: boolean;
 }
 
 const LEVEL_COPY: Record<string, { label: string; description: string; color: string }> = {
@@ -42,7 +44,14 @@ const LEVEL_COPY: Record<string, { label: string; description: string; color: st
   },
 };
 
-export function ScopeSummary({ classification, onBack, onConfirm, submitting }: Props) {
+// Human, code-free descriptions for Guided mode.
+const LEVEL_HUMAN: Record<string, string> = {
+  L1: 'Una habilidad para tu asistente — sin pantalla propia.',
+  L2: 'Una app con su propia pantalla donde se guardan tus datos.',
+  L3: 'Una app que se conecta con otro servicio o herramienta.',
+};
+
+export function ScopeSummary({ classification, onBack, onConfirm, submitting, guided }: Props) {
   const { app_level, detected_components, credits_estimate } = classification;
   const lvl = LEVEL_COPY[app_level] ?? LEVEL_COPY.L2!;
 
@@ -52,13 +61,14 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
         <h2 style={{
           fontSize: '1.25rem', fontWeight: 600, margin: 0, color: 'var(--text)',
         }}>
-          Project summary
+          {guided ? 'Esto es lo que voy a preparar' : 'Project summary'}
         </h2>
         <p style={{
           margin: '6px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)',
         }}>
-          I've classified your idea using the information you provided. If
-          everything fits, we can move on to the exploration phase.
+          {guided
+            ? 'He entendido tu idea. Si te cuadra, empiezo a darle forma. Podrás cambiar cosas más adelante.'
+            : "I've classified your idea using the information you provided. If everything fits, we can move on to the exploration phase."}
         </p>
       </div>
 
@@ -74,17 +84,20 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 4,
         }}>
-          Level
+          {guided ? 'Qué será tu app' : 'Level'}
         </div>
+        {!guided && (
+          <div style={{
+            fontSize: '0.9375rem', fontWeight: 600, color: lvl.color,
+          }}>
+            {lvl.label}
+          </div>
+        )}
         <div style={{
-          fontSize: '0.9375rem', fontWeight: 600, color: lvl.color,
+          fontSize: guided ? '0.85rem' : '0.75rem', color: guided ? 'var(--text)' : 'var(--text-dim)',
+          marginTop: 4, lineHeight: 1.5,
         }}>
-          {lvl.label}
-        </div>
-        <div style={{
-          fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 4, lineHeight: 1.5,
-        }}>
-          {lvl.description}
+          {guided ? (LEVEL_HUMAN[app_level] ?? LEVEL_HUMAN.L2) : lvl.description}
         </div>
       </div>
 
@@ -99,11 +112,11 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 8,
         }}>
-          Detected components
+          {guided ? 'Lo que incluye' : 'Detected components'}
         </div>
         {detected_components.length === 0 ? (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            No additional components — just the base skill.
+            {guided ? 'Lo esencial, sin complicaciones de más.' : 'No additional components — just the base skill.'}
           </div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -140,10 +153,10 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
             color: 'var(--text-muted)',
           }}>
-            Estimated credits
+            {guided ? 'Coste estimado' : 'Estimated credits'}
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            ~{credits_estimate} credits
+            ~{credits_estimate} {guided ? 'créditos de IA' : 'credits'}
           </div>
         </div>
       </div>
@@ -162,7 +175,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <ChevronLeft size={14} /> Change answers
+          <ChevronLeft size={14} /> {guided ? 'Cambiar algo' : 'Change answers'}
         </button>
         <button
           type="button"
@@ -179,7 +192,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting }: 
             fontFamily: 'var(--font-sans)',
           }}
         >
-          {submitting ? 'Saving…' : 'Start exploration →'}
+          {submitting ? (guided ? 'Preparando…' : 'Saving…') : (guided ? 'Sí, es esto · Continuar →' : 'Start exploration →')}
         </button>
       </div>
     </div>
