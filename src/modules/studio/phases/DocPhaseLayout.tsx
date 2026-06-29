@@ -21,7 +21,7 @@
 // This component encapsulates that loop so each phase only has to
 // supply (a) the docKey, (b) the trigger callbacks, and (c) the copy.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2, Search, Palette } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioDesignSystem } from '@/stores/studio.store';
@@ -33,6 +33,8 @@ import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
 import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
 import { DesignPreview } from '../components/DesignPreview';
+import { FichaView } from '../components/FichaView';
+import { parseFicha, fichaHasContent } from '../lib/ficha';
 import { useStudioMode } from '../hooks/useStudioMode';
 
 // Frontend "feel" moods (§3.4) — each maps to a short hint folded into
@@ -229,6 +231,11 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     ? (state.displayBody || state.text)
     : docFromProject;
   const hasDoc = displayText.length > 0;
+  // V3-4: extract the structured "ficha" (Concept agreement card / Foundation
+  // build plan) the doc-phase emitted as a `<!-- claw-ficha … -->` comment, and
+  // strip it from the markdown. Absent/malformed → markdown fallback (no regression).
+  const { ficha, body: cleanDocText } = useMemo(() => parseFicha(displayText), [displayText]);
+  const showFicha = guided && fichaHasContent(phase, ficha);
   // Questions: prefer the LIVE-streamed ones (parsed incrementally
   // from the WS token stream as soon as the JSON block closes), fall
   // back to the persisted ones from the project row when not streaming.
@@ -572,7 +579,26 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             </details>
           )}
 
-          {hasDoc && <StreamingMarkdown text={displayText} streaming={isStreaming} />}
+          {hasDoc && showFicha && ficha && (
+            <>
+              <FichaView phase={phase} ficha={ficha} />
+              {cleanDocText.length > 0 && (
+                <details style={{ marginBottom: 8 }}>
+                  <summary style={{
+                    cursor: 'pointer', fontSize: '0.7rem', textTransform: 'uppercase',
+                    letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600,
+                    listStyle: 'none', userSelect: 'none',
+                  }}>
+                    Ver detalles
+                  </summary>
+                  <div style={{ marginTop: 8 }}>
+                    <StreamingMarkdown text={cleanDocText} streaming={false} />
+                  </div>
+                </details>
+              )}
+            </>
+          )}
+          {hasDoc && !showFicha && <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />}
 
           {isStreaming && state.text.length === 0 && state.reasoning.length === 0 && (
             <div style={loadingHint}>
