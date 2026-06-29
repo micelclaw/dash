@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Bot, Package } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useAgents } from './hooks/use-agents';
@@ -50,16 +50,6 @@ export function Component() {
   const [newBtnHover, setNewBtnHover] = useState(false);
   const [importBtnHover, setImportBtnHover] = useState(false);
   const [hoveredTab, setHoveredTab] = useState<AgentTab | null>(null);
-
-  // Deep-link desde el chip 📋 Board (AgentBrainChips) a la tab Workboard, sin prop-drilling.
-  useEffect(() => {
-    const open = (e: Event) => {
-      const tab = (e as CustomEvent).detail as AgentTab;
-      if (tab) setActiveTab(tab);
-    };
-    window.addEventListener('claw:open-agent-tab', open);
-    return () => window.removeEventListener('claw:open-agent-tab', open);
-  }, []);
 
   if (loading) {
     return (

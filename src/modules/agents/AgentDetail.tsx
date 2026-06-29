@@ -20,7 +20,6 @@ import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { PendingSkillProposals } from './PendingSkillProposals';
 import { LearnedSkills } from './LearnedSkills';
-import { AgentBrainChips } from './AgentBrainChips';
 import { AgentActivity } from './AgentActivity';
 import { AgentToolAccess } from './AgentToolAccess';
 import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
@@ -507,11 +506,6 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
             {' '} — last active {formatRelativeTime(agent.last_active_at)}
           </span>
         </div>
-      </div>
-
-      {/* Agent Brain: resumen memoria / skills aprendidas / workboard */}
-      <div style={{ marginBottom: 4 }}>
-        <AgentBrainChips agent={agent} onOpenTab={setActiveTab} />
       </div>
 
       {/* Tabs */}

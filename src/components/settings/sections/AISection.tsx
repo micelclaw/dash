@@ -22,7 +22,6 @@ import { SettingSelect } from '../SettingSelect';
 import { SettingToggle } from '../SettingToggle';
 import { SaveBar } from '../SaveBar';
 import { GraphHealthSection } from './GraphHealthSection';
-import { AgentBrainSummary } from './AgentBrainSummary';
 import { EntityExtractionConfig } from './EntityExtractionConfig';
 import { MultimodalModelSection } from './MultimodalModelSection';
 
@@ -68,9 +67,6 @@ export function AISection() {
 
   return (
     <>
-      {/* Agent Brain: resumen cross-agente (memoria / skills aprendidas / workboard) */}
-      <AgentBrainSummary />
-
       {/* Model Configuration */}
       <SettingSection title="Model Configuration">
         <SettingSelect

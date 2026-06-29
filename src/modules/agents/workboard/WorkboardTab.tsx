@@ -62,13 +62,13 @@ export function WorkboardTab({ agents }: Props) {
 
       <DiagnosticsBanner diagnostics={diagnostics} />
 
-      {cards.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+      {cards.length === 0 && (
+        <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--bg-subtle, rgba(127,127,127,0.06))', color: 'var(--text-dim)', fontSize: '0.75rem' }}>
           Sin tareas todavía. Crea una con <strong>Nueva tarea</strong>, o un council las generará al cerrar.
+          Las columnas de abajo muestran el flujo: por reclamar → en curso → en revisión → hecho.
         </div>
-      ) : (
-        <WorkboardBoard cards={cards} agents={agents} onChanged={loadCards} />
       )}
+      <WorkboardBoard cards={cards} agents={agents} onChanged={loadCards} />
 
       <NewCardModal agents={agents} open={showNew} onClose={() => setShowNew(false)} onCreated={loadCards} />
     </div>

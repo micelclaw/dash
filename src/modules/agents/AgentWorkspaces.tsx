@@ -44,6 +44,26 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
+// La carpeta compartida (/user/workspaces/shared) se sirve por el VFS, no por el endpoint de
+// workspace de agente. La listamos como un "agente especial" (selectedId === SHARED_ID).
+const SHARED_ID = '__shared__';
+const SHARED_VFS_ROOT = '/user/workspaces/shared';
+interface VfsNode { name: string; path: string; type: 'directory' | 'file'; size: number | null; mime_type?: string | null; modified_at: string; created_at?: string }
+function vfsToFileRecord(node: VfsNode, parentPath: string): FileRecord {
+  const filepath = parentPath ? `${parentPath}/${node.name}` : node.name;
+  return {
+    id: node.path,
+    filename: node.name,
+    filepath,
+    mime_type: node.mime_type ?? (node.type === 'directory' ? 'inode/directory' : ''),
+    size_bytes: node.size ?? 0,
+    is_directory: node.type === 'directory',
+    created_at: node.created_at ?? node.modified_at,
+    updated_at: node.modified_at,
+    source: 'workspace',
+  } as unknown as FileRecord;
+}
+
 export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorkspacesProps) {
   const [selectedId, setSelectedId] = useState<string>(initialAgentId ?? agents[0]?.id ?? '');
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
@@ -76,18 +96,25 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
   const [deleting, setDeleting] = useState(false);
 
   const selectedAgent = agents.find(a => a.id === selectedId);
+  const isShared = selectedId === SHARED_ID;
 
   const reloadFiles = useCallback(async () => {
-    if (!selectedAgent) return;
+    if (!selectedAgent && !isShared) return;
     setFilesLoading(true);
     try {
-      const pathParam = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
-      const res = await api.get<{ data: FileRecord[] }>(
-        `/managed-agents/${selectedAgent.id}/workspace${pathParam}`,
-      );
-      setFiles(res.data);
+      if (isShared) {
+        const vfsPath = currentPath ? `${SHARED_VFS_ROOT}/${currentPath}` : SHARED_VFS_ROOT;
+        const res = await api.get<{ data: VfsNode[] }>(`/vfs/list?path=${encodeURIComponent(vfsPath)}`);
+        setFiles(res.data.map(n => vfsToFileRecord(n, currentPath)));
+      } else {
+        const pathParam = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+        const res = await api.get<{ data: FileRecord[] }>(
+          `/managed-agents/${selectedAgent!.id}/workspace${pathParam}`,
+        );
+        setFiles(res.data);
+      }
     } catch { /* keep stale list */ } finally { setFilesLoading(false); }
-  }, [selectedAgent, currentPath]);
+  }, [selectedAgent, isShared, currentPath]);
 
   const handleCreateFile = useCallback(async () => {
     if (!selectedAgent) return;
@@ -149,7 +176,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
 
   // Fetch workspace files when selected agent or path changes
   useEffect(() => {
-    if (!selectedAgent) {
+    if (!selectedAgent && !isShared) {
       setFiles([]);
       return;
     }
@@ -157,11 +184,17 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
     async function loadFiles() {
       setFilesLoading(true);
       try {
-        const pathParam = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
-        const res = await api.get<{ data: FileRecord[] }>(
-          `/managed-agents/${selectedAgent!.id}/workspace${pathParam}`
-        );
-        if (!cancelled) setFiles(res.data);
+        if (isShared) {
+          const vfsPath = currentPath ? `${SHARED_VFS_ROOT}/${currentPath}` : SHARED_VFS_ROOT;
+          const res = await api.get<{ data: VfsNode[] }>(`/vfs/list?path=${encodeURIComponent(vfsPath)}`);
+          if (!cancelled) setFiles(res.data.map(n => vfsToFileRecord(n, currentPath)));
+        } else {
+          const pathParam = currentPath ? `?path=${encodeURIComponent(currentPath)}` : '';
+          const res = await api.get<{ data: FileRecord[] }>(
+            `/managed-agents/${selectedAgent!.id}/workspace${pathParam}`
+          );
+          if (!cancelled) setFiles(res.data);
+        }
       } catch {
         if (!cancelled) setFiles([]);
       } finally {
@@ -170,7 +203,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
     }
     loadFiles();
     return () => { cancelled = true; };
-  }, [selectedAgent, currentPath]);
+  }, [selectedAgent, isShared, currentPath]);
 
   // Navigate into a directory
   const handleDirClick = useCallback((file: FileRecord) => {
@@ -203,14 +236,16 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
     }
   }, [selectedAgent]);
 
-  // Handle file click: directory → navigate, text file → open panel
+  // Handle file click: directory → navigate; file → editor (agente) o File Explorer (shared, read-only)
   const handleFileClick = useCallback((file: FileRecord) => {
     if (file.is_directory) {
       handleDirClick(file);
+    } else if (isShared) {
+      window.open(`/explorer?path=${encodeURIComponent(`${SHARED_VFS_ROOT}/${file.filepath}`)}`, '_blank');
     } else {
       handleFileOpen(file);
     }
-  }, [handleDirClick, handleFileOpen]);
+  }, [handleDirClick, handleFileOpen, isShared]);
 
   // Toggle edit mode
   const handleToggleEdit = useCallback(() => {
@@ -307,6 +342,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                 {agent.avatar ?? '\u{1F916}'} {agent.display_name}
               </option>
             ))}
+            <option value={SHARED_ID}>{'\u{1F4C1}'} Shared (compartida)</option>
           </select>
         </div>
       ) : (
@@ -358,6 +394,24 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
               </div>
             );
           })}
+          {/* Carpeta compartida entre agentes (VFS /user/workspaces/shared), read-only aquí. */}
+          <div
+            onClick={() => setSelectedId(SHARED_ID)}
+            onMouseEnter={() => setHoveredAgentId(SHARED_ID)}
+            onMouseLeave={() => setHoveredAgentId(null)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer',
+              borderTop: '1px solid var(--border)', marginTop: 4,
+              background: isShared ? 'var(--surface-hover)' : hoveredAgentId === SHARED_ID ? 'var(--surface)' : 'transparent',
+              borderLeft: isShared ? '3px solid var(--amber)' : '3px solid transparent',
+              transition: 'var(--transition-fast)',
+            }}
+          >
+            <span style={{ fontSize: '1.125rem', flexShrink: 0 }}>{'\u{1F4C1}'}</span>
+            <span style={{ fontSize: '0.8125rem', color: isShared ? 'var(--text)' : 'var(--text-dim)', fontWeight: isShared ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Shared
+            </span>
+          </div>
         </div>
       )}
 
@@ -377,7 +431,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
         overflow: 'hidden',
       }}>
         {/* Path header with breadcrumbs + back arrow */}
-        {selectedAgent && (
+        {(selectedAgent || isShared) && (
           <div style={{
             padding: '8px 12px',
             borderBottom: '1px solid var(--border)',
@@ -420,7 +474,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--amber)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; }}
               >
-                ~/workspace
+                {isShared ? '\u{1F4C1} shared' : '~/workspace'}
               </span>
               {pathSegments.map((seg, i) => (
                 <span key={i} style={{ display: 'flex', alignItems: 'center' }}>
@@ -480,7 +534,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
 
           {!filesLoading && files.length === 0 && (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.875rem' }}>
-              No files found in workspace.
+              {isShared ? 'La carpeta compartida está vacía.' : 'No files found in workspace.'}
             </div>
           )}
 
@@ -565,8 +619,8 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                     {formatRelativeTime(file.updated_at)}
                   </span>
                 )}
-                {/* Delete icon \u2014 visible on hover, hidden for reserved files & directories */}
-                {!file.is_directory && !isReserved(file.filename) && (
+                {/* Delete icon \u2014 visible on hover, hidden for reserved files, directories & shared (read-only) */}
+                {!file.is_directory && !isReserved(file.filename) && !isShared && (
                   <button
                     onClick={e => { e.stopPropagation(); setPendingDelete(file); }}
                     title={`Delete ${file.filename}`}
