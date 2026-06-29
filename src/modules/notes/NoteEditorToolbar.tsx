@@ -159,7 +159,17 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
         return (
           <button
             key={`${btn.label}-${i}`}
-            onClick={() => btn.action(editor)}
+            // Esta barra es compartida (notes + diary). Si el editor no registra la
+            // extensión del botón (el diary no tiene highlight/subscript/superscript/
+            // details/table/…), `editor.chain().focus().toggleX()` no existe y reventaba
+            // con pageerror. Guardamos la acción: comando no disponible → no-op, no crash.
+            onClick={() => {
+              try {
+                btn.action(editor);
+              } catch (err) {
+                console.warn(`[note-toolbar] "${btn.label}" no disponible en este editor`, err);
+              }
+            }}
             title={btn.label}
             style={{
               display: 'flex',

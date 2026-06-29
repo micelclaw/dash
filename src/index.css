@@ -262,6 +262,9 @@ pre code.hljs {
 .ProseMirror {
   outline: none;
   min-height: 200px;
+  /* ProseMirror exige white-space pre/pre-wrap; sin esto avisa por consola y
+     colapsa espacios consecutivos. pre-wrap preserva espacios y envuelve líneas. */
+  white-space: pre-wrap;
 }
 
 .ProseMirror h1 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text); }
