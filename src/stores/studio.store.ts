@@ -232,6 +232,8 @@ interface StudioState {
   startBuild: (projectId: string) => Promise<StudioBuildStartResult>;
   sendBuildMessage: (projectId: string, message: string) => Promise<{ opencode_session_id: string }>;
   abortBuild: (projectId: string) => Promise<{ aborted: boolean }>;
+  /** V3 S2: ensure the OpenCode runtime + embed proxy and get the iframe URL. */
+  fetchOpencodeEmbed: (projectId: string) => Promise<{ embed_url: string; ready: boolean }>;
   finishBuild: (projectId: string, force?: boolean) => Promise<{ transitioned_to: 'testing'; checklist_done: number; checklist_total: number }>;
   fetchBuildSettings: (projectId: string) => Promise<StudioBuildSettings>;
   saveBuildSettings: (projectId: string, settings: StudioBuildSettingsInput) => Promise<StudioBuildSettings>;
@@ -808,6 +810,16 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const res = await api.post<ApiEnvelope<{ aborted: boolean }>>(
       `/studio/projects/${projectId}/build/abort`,
       {},
+    );
+    return res.data;
+  },
+
+  async fetchOpencodeEmbed(projectId) {
+    // The endpoint may lazy-spawn the project's OpenCode runtime → allow time.
+    const res = await api.get<ApiEnvelope<{ embed_url: string; ready: boolean }>>(
+      `/studio/projects/${projectId}/opencode-embed`,
+      undefined,
+      { timeout: 60_000 },
     );
     return res.data;
   },

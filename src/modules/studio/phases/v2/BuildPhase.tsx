@@ -32,6 +32,7 @@ import { BuildChecklist } from '../../components/v2/BuildChecklist';
 import { WorkspaceFileTree } from '../../components/v2/WorkspaceFileTree';
 import { ActivityFeed } from '../../components/v2/ActivityFeed';
 import { BuildChat } from '../../components/v2/BuildChat';
+import { OpencodeEmbed } from '../../components/v2/OpencodeEmbed';
 import { PlanApprovalBanner } from '../../components/v2/PlanApprovalBanner';
 import { ResizeHandle } from '../../components/v2/ResizeHandle';
 import { useOpencodeStream } from '../../hooks/useOpencodeStream';
@@ -357,20 +358,34 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
 
           <ResizeHandle direction="horizontal" ariaLabel="Resize chat" />
 
-          {/* Right: chat */}
+          {/* Right: native OpenCode UI embedded in an iframe (its composer
+              hidden by the embed proxy) + a Core-owned input — Core keeps
+              ownership of the prompt so plan/build gating + caps stay
+              enforced (hybrid-governed, D1). Degrades to the classic
+              BuildChat if the embed can't be reached. */}
           <Panel defaultSize={45} minSize={20}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <BuildChat
+              <OpencodeEmbed
                 projectId={project.id}
                 status={stream.status}
-                messages={stream.messages}
-                activitySummary={stream.activitySummary}
-                silentForMs={stream.silentForMs}
+                mode={stream.mode}
                 isStarted={isStarted}
                 starting={starting}
-                mode={stream.mode}
                 onAutoStart={handleStart}
-                pushUserMessage={stream.pushUserMessage}
+                fallback={
+                  <BuildChat
+                    projectId={project.id}
+                    status={stream.status}
+                    messages={stream.messages}
+                    activitySummary={stream.activitySummary}
+                    silentForMs={stream.silentForMs}
+                    isStarted={isStarted}
+                    starting={starting}
+                    mode={stream.mode}
+                    onAutoStart={handleStart}
+                    pushUserMessage={stream.pushUserMessage}
+                  />
+                }
               />
             </div>
           </Panel>
