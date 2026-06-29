@@ -32,6 +32,7 @@ import {
 import { SafetyScannerReport } from '../components/SafetyScannerReport';
 import { RewindButton } from '../components/RewindButton';
 import { PhaseSidebar } from '../components/PhaseSidebar';
+import { useStudioMode } from '../hooks/useStudioMode';
 
 interface Props {
   project: StudioProject;
@@ -48,6 +49,8 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
 
   const [busy, setBusy] = useState<'build' | 'install' | null>(null);
   const [latest, setLatest] = useState<StudioPackageResult | null>(null);
+  const [studioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
 
   const isPackaged = project.status === 'packaged' && project.package_path;
 
@@ -57,9 +60,9 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
       const result = await packageProject(project.id);
       setLatest(result);
       await refetchProject(project.id);
-      toast.success(`Built ${result.manifest_name} v${result.package_version}`);
+      toast.success(guided ? '¡Tu app está preparada!' : `Built ${result.manifest_name} v${result.package_version}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Build failed');
+      toast.error(err instanceof Error ? err.message : (guided ? 'No pude prepararla' : 'Build failed'));
     } finally {
       setBusy(null);
     }
@@ -70,9 +73,9 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
     try {
       const result = await installPackagedProject(project.id);
       await refetchProject(project.id);
-      toast.success(`Installed ${result.manifest_name}`);
+      toast.success(guided ? '¡Instalada! Ya puedes usarla.' : `Installed ${result.manifest_name}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Install failed');
+      toast.error(err instanceof Error ? err.message : (guided ? 'No se pudo instalar' : 'Install failed'));
     } finally {
       setBusy(null);
     }
@@ -84,10 +87,10 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
       <div style={toolbarStyle}>
         <h2 style={titleStyle}>
           <Package size={14} style={{ color: 'var(--amber)' }} />
-          Empaquetado
+          {guided ? 'Tu app está lista' : 'Empaquetado'}
         </h2>
         <div style={{ flex: 1 }} />
-        {isPackaged && (
+        {isPackaged && !guided && (
           <span style={{
             fontSize: '0.625rem', fontFamily: 'var(--font-mono)',
             color: 'var(--text-muted)',
@@ -97,25 +100,29 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
         )}
       </div>
 
-      <PhaseSidebar project={project} viewedPhase="packaging" onSelect={onSelectPhase} />
+      <PhaseSidebar project={project} viewedPhase="packaging" onSelect={onSelectPhase} guided={guided} />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', justifyContent: 'center' }}>
         <div style={{ maxWidth: 720, width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Checklist + build CTA */}
           <div style={cardStyle}>
             <h3 style={cardTitle}>
-              <Shield size={14} style={{ color: 'var(--amber)' }} /> Build the .claw
+              <Shield size={14} style={{ color: 'var(--amber)' }} /> {guided ? 'Dejar tu app lista' : 'Build the .claw'}
             </h3>
             <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              Studio will package the workspace + manifest + applied migrations into a single signed
-              <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>.claw</code>
-              file. Before packaging, the Safety Scanner inspects the code and blocks any dangerous
-              patterns (credential access, prompt injection, destructive SQL, etc).
+              {guided ? (
+                'Reviso que todo esté correcto y preparo tu app para usarla. Tardo solo un momento.'
+              ) : (
+                <>Studio will package the workspace + manifest + applied migrations into a single signed
+                <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>.claw</code>
+                file. Before packaging, the Safety Scanner inspects the code and blocks any dangerous
+                patterns (credential access, prompt injection, destructive SQL, etc).</>
+              )}
             </p>
 
             <div style={{ display: 'flex', gap: 8 }}>
               {isPast ? (
-                <RewindButton projectId={project.id} target="foundation" label="Rewind to foundation" />
+                <RewindButton projectId={project.id} target="foundation" label={guided ? undefined : 'Rewind to foundation'} guided={guided} />
               ) : (
                 <button
                   type="button"
@@ -124,40 +131,46 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
                   style={primaryBtn(busy === 'build')}
                 >
                   {busy === 'build'
-                    ? <><Loader2 size={14} className="animate-spin" /> Building…</>
+                    ? <><Loader2 size={14} className="animate-spin" /> {guided ? 'Preparando…' : 'Building…'}</>
                     : (isPackaged
-                        ? <><RefreshCw size={14} /> Rebuild</>
-                        : <><Package size={14} /> Build .claw</>)
+                        ? <><RefreshCw size={14} /> {guided ? 'Volver a preparar' : 'Rebuild'}</>
+                        : <><Package size={14} /> {guided ? 'Preparar mi app' : 'Build .claw'}</>)
                   }
                 </button>
               )}
             </div>
           </div>
 
-          {/* Scan results from latest build */}
-          {latest && <SafetyScannerReport result={latest.scan_result} />}
+          {/* Scan results from latest build — technical, Pro only */}
+          {latest && !guided && <SafetyScannerReport result={latest.scan_result} />}
 
           {/* Downloaded / install CTAs */}
           {isPackaged && (
             <div style={cardStyle}>
               <h3 style={cardTitle}>
-                <Rocket size={14} style={{ color: '#22c55e' }} /> Ready to use
+                <Rocket size={14} style={{ color: '#22c55e' }} /> {guided ? '¡Tu app está lista!' : 'Ready to use'}
               </h3>
               <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                Your app is packaged at
-                <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
-                  {project.package_path}
-                </code>
+                {guided ? (
+                  'Ya está empaquetada y revisada. Instálala en tu MicelclawOS y aparecerá como una app más.'
+                ) : (
+                  <>Your app is packaged at
+                  <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                    {project.package_path}
+                  </code></>
+                )}
               </p>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <a
-                  href={packageDownloadUrl(project.id)}
-                  download
-                  style={secondaryLink}
-                >
-                  <Download size={14} /> Download .claw
-                </a>
+                {!guided && (
+                  <a
+                    href={packageDownloadUrl(project.id)}
+                    download
+                    style={secondaryLink}
+                  >
+                    <Download size={14} /> Download .claw
+                  </a>
+                )}
                 {!isPast && (
                   <button
                     type="button"
@@ -166,15 +179,17 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
                     style={primaryBtn(busy === 'install')}
                   >
                     {busy === 'install'
-                      ? <><Loader2 size={14} className="animate-spin" /> Installing…</>
-                      : <><Rocket size={14} /> Install locally</>
+                      ? <><Loader2 size={14} className="animate-spin" /> {guided ? 'Instalando…' : 'Installing…'}</>
+                      : <><Rocket size={14} /> {guided ? 'Instalar en mi MicelclawOS' : 'Install locally'}</>
                     }
                   </button>
                 )}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Installing locally copies the package to <code>core/apps/</code> and the app will appear
-                in your sidebar after restarting Core.
+                {guided
+                  ? 'Aparecerá en tu menú como una app más en cuanto se reinicie el sistema.'
+                  : <>Installing locally copies the package to <code>core/apps/</code> and the app will appear
+                    in your sidebar after restarting Core.</>}
               </p>
             </div>
           )}

@@ -30,6 +30,7 @@ import { useStudioStore, type StudioProject, type StudioProjectStatus, type Stud
 import { useAuthStore } from '@/stores/auth.store';
 import { TesterChat } from '../components/TesterChat';
 import { PhaseSidebar } from '../components/PhaseSidebar';
+import { useStudioMode } from '../hooks/useStudioMode';
 
 interface Props {
   project: StudioProject;
@@ -43,6 +44,8 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
   const backToBuild = useStudioStore((s) => s.backToBuild);
   const signOffTesting = useStudioStore((s) => s.signOffTesting);
   const navigate = useNavigate();
+  const [studioMode] = useStudioMode();
+  const guided = studioMode === 'guided';
 
   const [busy, setBusy] = useState<'tests' | 'back' | 'signoff' | null>(null);
   const [results, setResults] = useState<StudioTestResults | null>(
@@ -112,13 +115,13 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={toolbarStyle}>
-        <h2 style={titleStyle}><FlaskConical size={14} style={{ color: 'var(--amber)' }} /> Testing</h2>
+        <h2 style={titleStyle}><FlaskConical size={14} style={{ color: 'var(--amber)' }} /> {guided ? 'Pruébala tú misma' : 'Testing'}</h2>
 
         {/* Test results summary */}
         {results && (
           <span style={resultsBadge(failingTests ?? false)}>
             {failingTests ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
-            {results.passed} / {results.total} passing
+            {guided ? `${results.passed} de ${results.total} comprobaciones OK` : `${results.passed} / ${results.total} passing`}
           </span>
         )}
 
@@ -133,7 +136,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
               style={secondaryBtn(busy === 'tests')}
             >
               {busy === 'tests' ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              Run all tests
+              {guided ? 'Comprobar que funciona' : 'Run all tests'}
             </button>
             <button
               type="button"
@@ -142,7 +145,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
               style={secondaryBtn(busy === 'back')}
             >
               {busy === 'back' ? <Loader2 size={12} className="animate-spin" /> : <ArrowLeft size={12} />}
-              Back to fix
+              {guided ? 'Esto no va bien' : 'Back to fix'}
             </button>
             <button
               type="button"
@@ -151,13 +154,21 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
               style={primaryBtn(busy === 'signoff')}
             >
               {busy === 'signoff' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-              Sign off → Package
+              {guided ? 'Todo bien · Instalar' : 'Sign off → Package'}
             </button>
           </>
         )}
       </div>
 
-      <PhaseSidebar project={project} viewedPhase="testing" onSelect={onSelectPhase} />
+      {/* Sandbox reassurance (§3.7): it's a test, nothing is sent for real */}
+      {guided && !isPast && (
+        <div style={sandboxBanner}>
+          <span aria-hidden>🟢</span>
+          Es una <strong>prueba</strong>: haz como si fueras tu clienta. Nada se envía a nadie de verdad.
+        </div>
+      )}
+
+      <PhaseSidebar project={project} viewedPhase="testing" onSelect={onSelectPhase} guided={guided} />
 
       {/* Main: iframe + chat sidebar */}
       <div style={{
@@ -177,9 +188,11 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
             <div style={emptyPreviewStyle}>
               <Eye size={28} style={{ color: 'var(--amber)', marginBottom: 12 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--text)', marginBottom: 6 }}>
-                No hay archivos UI todavía
+                {guided ? 'Tu app todavía no tiene pantallas' : 'No hay archivos UI todavía'}
               </div>
-              <div>Vuelve a Implementation y genera al menos una sesión que produzca archivos en <code>ui/</code>.</div>
+              <div>{guided
+                ? 'Pulsa "Esto no va bien" para volver y pedirme que le añada una pantalla.'
+                : <>Vuelve a Implementation y genera al menos una sesión que produzca archivos en <code>ui/</code>.</>}</div>
             </div>
           )}
         </div>
@@ -191,10 +204,12 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
         <div style={modalBackdrop} onClick={() => !busy && setConfirmSignoff(false)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-              ¿Firmar y pasar a Packaging?
+              {guided ? '¿Tu app está lista?' : '¿Firmar y pasar a Packaging?'}
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-              La app se moverá a la fase de empaquetado. Podrás volver atrás más tarde si descubres problemas.
+              {guided
+                ? 'La dejaré lista para instalar. Si más adelante ves algo, puedes volver atrás sin problema.'
+                : 'La app se moverá a la fase de empaquetado. Podrás volver atrás más tarde si descubres problemas.'}
             </p>
             {failingTests && (
               <div style={warningBox}>
@@ -221,7 +236,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
                 style={primaryBtn(busy === 'signoff')}
               >
                 {busy === 'signoff' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                Sí, firmar
+                {guided ? 'Sí, está lista' : 'Sí, firmar'}
               </button>
             </div>
           </div>
@@ -270,6 +285,13 @@ const resultsBadge = (failing: boolean): React.CSSProperties => ({
   borderRadius: 'var(--radius-full)',
   fontSize: '0.6875rem', fontWeight: 600,
 });
+const sandboxBanner: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0,
+  padding: '8px 24px', fontSize: '0.78rem', color: 'var(--text)',
+  background: 'color-mix(in srgb, #22c55e 8%, var(--card))',
+  borderBottom: '1px solid color-mix(in srgb, #22c55e 25%, var(--border))',
+  fontFamily: 'var(--font-sans)',
+};
 const emptyPreviewStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
   height: '100%', padding: 32, textAlign: 'center',
