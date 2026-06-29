@@ -34,6 +34,15 @@ import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
 import { useStudioMode } from '../hooks/useStudioMode';
 
+// Frontend "feel" moods (§3.4) — each maps to a short hint folded into
+// the generation context so the DESIGN.md comes out in that character.
+const FEELS: { id: string; emoji: string; label: string; hint: string }[] = [
+  { id: 'elegant', emoji: '🖤', label: 'Elegante y sobria', hint: 'tonos neutros, mucho espacio, tipografía fina' },
+  { id: 'fresh', emoji: '🌈', label: 'Fresca y colorida', hint: 'colores vivos, alegre, con energía' },
+  { id: 'warm', emoji: '🧡', label: 'Cálida y cercana', hint: 'tonos cálidos, redondeada, amable' },
+  { id: 'minimal', emoji: '⚪', label: 'Minimal y limpia', hint: 'blanco, esencial, sin adornos' },
+];
+
 // Human, Spanish chrome for each doc phase in Guided mode (§3.3–3.5).
 // Only the surrounding copy changes — the generated document body is
 // the same. The deeper "ficha" (qué hará / incluye / no incluye, hitos
@@ -128,6 +137,11 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // `_user_comment` so the backend `concept.service` extracts it and
   // passes it as `userContext` to the initial prompt.
   const [initialContext, setInitialContext] = useState('');
+  // Frontend "feel" pre-step (Guided, §3.4): a mood + brand colors that
+  // steer the DESIGN.md the Frontend phase emits. Folded into the
+  // first-turn user context. Only shown for phase==='frontend' + guided.
+  const [feel, setFeel] = useState<string | null>(null);
+  const [brandColors, setBrandColors] = useState('');
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
@@ -197,8 +211,18 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // it into a synthetic answers map under the FREE_COMMENT_ID key
       // so the backend prompt receives it as `userContext`.
       let effectiveAnswers = answers;
-      if (!hasDoc && !answers && initialContext.trim()) {
-        effectiveAnswers = { _user_comment: initialContext.trim() };
+      if (!hasDoc && !answers) {
+        // Compose the first-turn context. For the Frontend phase in
+        // Guided mode, fold the chosen "feel" + brand colors in front of
+        // any free text so the emitted DESIGN.md is on-brand (§3.4).
+        const parts: string[] = [];
+        if (guided && phase === 'frontend' && feel) {
+          const f = FEELS.find((x) => x.id === feel);
+          if (f) parts.push(`Sensación deseada: ${f.label} — ${f.hint}.`);
+          if (brandColors.trim()) parts.push(`Colores/marca: ${brandColors.trim()}.`);
+        }
+        if (initialContext.trim()) parts.push(initialContext.trim());
+        if (parts.length > 0) effectiveAnswers = { _user_comment: parts.join(' ') };
       }
       await onGenerate(effectiveAnswers);
       // Primary refetch: the HTTP POST only returns AFTER the calling
@@ -317,6 +341,49 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
               <div style={{ fontSize: '0.875rem', color: 'var(--text)', fontWeight: 600, marginBottom: 4 }}>
                 {guided ? gc.empty : emptyHint}
               </div>
+
+              {/* "Feel" pre-step (Frontend, Guided, §3.4): mood + brand
+                  colors steer the DESIGN.md the phase emits. */}
+              {!isPast && guided && phase === 'frontend' && (
+                <div style={{ marginTop: 16, width: '100%', maxWidth: 520, textAlign: 'left' }}>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600, marginBottom: 8 }}>
+                    ¿Cómo quieres que se sienta tu app?
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                    {FEELS.map((f) => {
+                      const sel = feel === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setFeel(sel ? null : f.id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', textAlign: 'left',
+                            background: sel ? 'color-mix(in srgb, var(--amber) 12%, var(--card))' : 'var(--card)',
+                            border: `1.5px solid ${sel ? 'var(--amber)' : 'var(--border)'}`,
+                            borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                            color: 'var(--text)',
+                          }}
+                        >
+                          <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{f.emoji}</span>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{f.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <input
+                    value={brandColors}
+                    onChange={(e) => setBrandColors(e.target.value)}
+                    placeholder="Tus colores o tu logo (opcional): ej. 'rosa y dorado'"
+                    style={{
+                      marginTop: 10, width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                      fontSize: '0.8rem', background: 'var(--surface)', color: 'var(--text)',
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  />
+                </div>
+              )}
 
               {/* First-turn context input — phase-specific copy */}
               {!isPast && initialContextLabel && (
