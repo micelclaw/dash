@@ -11,10 +11,11 @@
  */
 
 import { useState, useCallback } from 'react';
-import { X, Pencil, Eye, Save, Loader2, Fingerprint, Heart, User, Wrench, Network, HeartPulse, FileText, type LucideIcon } from 'lucide-react';
+import { X, Pencil, Eye, Save, Loader2, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAgentFile } from './hooks/use-agent-detail';
+import { getAgentFileMeta } from './agent-file-meta';
 
 interface AgentIdentityProps {
   agentId: string;
@@ -25,17 +26,6 @@ interface FileRowProps {
   agentId: string;
 }
 
-// Icono + color por tipo de fichero de identidad (SOUL/MEMORY/USER especiales
-// frente a los genéricos). Da identidad visual y agrupa de un vistazo.
-const FILE_META: Record<string, { icon: LucideIcon; color: string; label: string }> = {
-  'IDENTITY.md': { icon: Fingerprint, color: '#a855f7', label: 'Identidad' },
-  'SOUL.md': { icon: Heart, color: '#ec4899', label: 'Personalidad' },
-  'USER.md': { icon: User, color: '#3b82f6', label: 'Perfil del usuario' },
-  'TOOLS.md': { icon: Wrench, color: '#14b8a6', label: 'Herramientas' },
-  'AGENTS.md': { icon: Network, color: '#f97316', label: 'Jerarquía' },
-  'HEARTBEAT.md': { icon: HeartPulse, color: '#22c55e', label: 'Latido' },
-};
-
 function FileCard({ filename, agentId }: FileRowProps) {
   const { content, loading, save } = useAgentFile(agentId, filename);
   const [showModal, setShowModal] = useState(false);
@@ -44,7 +34,8 @@ function FileCard({ filename, agentId }: FileRowProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [hover, setHover] = useState(false);
 
-  const meta = FILE_META[filename] ?? { icon: FileText, color: 'var(--text-muted)', label: filename };
+  // Meta compartida (icono+color+label por tipo de fichero); ver agent-file-meta.
+  const meta = getAgentFileMeta(filename) ?? { icon: FileText, color: 'var(--text-muted)', label: filename };
   const Icon = meta.icon;
 
   const handleOpen = useCallback((edit: boolean) => {

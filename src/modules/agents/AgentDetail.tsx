@@ -18,6 +18,9 @@ import { downloadAgentarExport } from '@/services/agentar.service';
 import { useAgentDetail } from './hooks/use-agent-detail';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
+import { PendingSkillProposals } from './PendingSkillProposals';
+import { LearnedSkills } from './LearnedSkills';
+import { AgentBrainChips } from './AgentBrainChips';
 import { AgentActivity } from './AgentActivity';
 import { AgentToolAccess } from './AgentToolAccess';
 import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
@@ -25,10 +28,12 @@ import { useChatStore } from '@/stores/chat.store';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
 import { AgentSandboxConfig } from './AgentSandboxConfig';
 import { AgentBootstrapConfig } from './AgentBootstrapConfig';
+import { AgentDoctor } from './AgentDoctor';
+import { AgentActivityCenter } from './AgentActivityCenter';
+import { AgentMemory } from './AgentMemory';
+import { AgentSharedFolderAccess } from './AgentSharedFolderAccess';
 import { getAgentColor, AGENT_PALETTE, AGENT_COLOR_NAMES } from './agent-colors';
-import type { ManagedAgent } from './types';
-
-type AgentDetailTab = 'overview' | 'tools' | 'advanced';
+import type { ManagedAgent, AgentDetailTab } from './types';
 
 interface AgentDetailProps {
   agentId: string;
@@ -88,7 +93,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const [activeTab, setActiveTab] = useState<AgentDetailTab>(() => {
     if (typeof window === 'undefined') return 'overview';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'tools' || t === 'advanced') return t;
+    if (t === 'tools' || t === 'memory' || t === 'advanced' || t === 'activity' || t === 'health') return t;
     return 'overview';
   });
 
@@ -504,12 +509,20 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
         </div>
       </div>
 
+      {/* Agent Brain: resumen memoria / skills aprendidas / workboard */}
+      <div style={{ marginBottom: 4 }}>
+        <AgentBrainChips agent={agent} onOpenTab={setActiveTab} />
+      </div>
+
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
         {([
           { key: 'overview' as const, label: 'Overview' },
+          { key: 'activity' as const, label: 'Actividad' },
           { key: 'tools' as const, label: 'Tools' },
+          { key: 'memory' as const, label: 'Memory' },
           { key: 'advanced' as const, label: 'Advanced' },
+          { key: 'health' as const, label: 'Salud' },
         ]).map(tab => (
           <button
             key={tab.key}
@@ -540,8 +553,13 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
 
           <div style={{ height: 1, background: 'var(--border)' }} />
 
-          {/* Skills */}
+          {/* Skills (apps) */}
           <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} skillModes={agent.skill_modes} onSkillsChanged={refetch} />
+
+          {/* Skill Workshop: propuestas pendientes + skills aprendidas (concepto separado de las apps).
+              Ambos se auto-ocultan si no hay nada → no ensucian el Overview. */}
+          <PendingSkillProposals agentId={agent.id} agentName={agent.name} onGraduated={refetch} />
+          <LearnedSkills learnedSkills={agent.learned_skills ?? []} agentId={agent.id} onChanged={refetch} />
 
           <div style={{ height: 1, background: 'var(--border)' }} />
 
@@ -632,6 +650,10 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
         <AgentToolAccess agentId={agent.id} agentName={agent.display_name || agent.name} />
       )}
 
+      {activeTab === 'memory' && (
+        <AgentMemory agentId={agent.id} agentName={agent.display_name || agent.name} agentBareName={agent.name} />
+      )}
+
       {activeTab === 'advanced' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Per-agent overrides (sandbox + bootstrap; more sections
@@ -642,6 +664,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
             </h3>
             <AgentSandboxConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
             <AgentBootstrapConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
+            <AgentSharedFolderAccess agentId={agent.id} agentName={agent.display_name || agent.name} />
           </div>
 
           {/* Global defaults. Editing here affects every agent that
@@ -653,6 +676,19 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
             <AgentAdvancedConfig />
           </div>
         </div>
+      )}
+
+      {activeTab === 'activity' && (
+        <AgentActivityCenter agentId={agent.id} agents={agents} />
+      )}
+
+      {activeTab === 'health' && (
+        <AgentDoctor
+          agentId={agent.id}
+          agentName={agent.display_name || agent.name}
+          onAgentChanged={onAgentChanged}
+          onNavigateTab={setActiveTab}
+        />
       )}
     </div>
   );

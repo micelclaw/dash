@@ -4,9 +4,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, ChevronDown, ChevronRight } from 'lucide-react';
+import { Save, ChevronDown, ChevronRight, Info, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { AgentSelect } from './AgentSelect';
 
 interface AdvancedConfigResponse {
   data: {
@@ -43,45 +44,52 @@ const THINKING_LEVELS = [
 ];
 
 const VERBOSE_OPTIONS = [
-  { value: 'off', label: 'Off' },
-  { value: 'on', label: 'On (minimal)' },
-  { value: 'full', label: 'Full (all tool output)' },
+  { value: 'off', label: 'Off', desc: 'No muestra la salida de las herramientas' },
+  { value: 'on', label: 'On (minimal)', desc: 'Salida resumida de cada tool' },
+  { value: 'full', label: 'Full', desc: 'Salida completa de todas las tools' },
 ];
 
 const PRUNING_MODES = [
-  { value: 'off', label: 'Off' },
-  { value: 'cache-ttl', label: 'Cache TTL (auto-prune old tool results)' },
+  { value: 'off', label: 'Off', desc: 'Conserva todo el contexto (más tokens)' },
+  { value: 'cache-ttl', label: 'Cache TTL', desc: 'Poda resultados de tools antiguos pasado el TTL' },
 ];
 
 const COMPACTION_MODES = [
-  { value: 'default', label: 'Default' },
-  { value: 'safeguard', label: 'Safeguard (recommended)' },
+  { value: 'default', label: 'Default', desc: 'Compactación estándar al llenarse el contexto' },
+  { value: 'safeguard', label: 'Safeguard', desc: 'Recomendada: preserva el inicio de la tarea' },
 ];
 
-function SelectField({ label, value, options, onChange }: {
+const ELEVATED_OPTIONS = [
+  { value: 'off', label: 'Off', desc: 'Sin permisos elevados' },
+  { value: 'on', label: 'On', desc: 'Permisos elevados activos' },
+  { value: 'ask', label: 'Ask', desc: 'Pide confirmación en cada acción elevada' },
+  { value: 'full', label: 'Full', desc: 'Salta las aprobaciones de exec (peligroso)' },
+];
+
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8125rem', color: 'var(--text)', minWidth: 120 }}>
+      {label}
+      {hint && (
+        <span title={hint} style={{ display: 'inline-flex', color: 'var(--text-muted)', cursor: 'help' }}>
+          <Info size={12} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function SelectField({ label, value, options, onChange, hint }: {
   label: string;
   value: string;
   options: { value: string; label: string; desc?: string }[];
   onChange: (v: string) => void;
+  hint?: string;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--text)', minWidth: 120 }}>{label}</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          padding: '4px 8px', fontSize: '0.75rem',
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-          fontFamily: 'var(--font-sans)', cursor: 'pointer',
-          minWidth: 160,
-        }}
-      >
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <FieldLabel label={label} hint={hint} />
+      <AgentSelect value={value} options={options} onChange={onChange} minWidth={170} />
     </div>
   );
 }
@@ -146,6 +154,7 @@ export function AgentAdvancedConfig() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   const [thinkingLevel, setThinkingLevel] = useState('adaptive');
   const [verbose, setVerbose] = useState('off');
@@ -217,8 +226,10 @@ export function AgentAdvancedConfig() {
       });
       toast.success('Advanced config updated');
       setDirty(false);
-    } catch {
-      toast.error('Failed to update advanced config');
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2200);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update advanced config');
     } finally {
       setSaving(false);
     }
@@ -241,16 +252,17 @@ export function AgentAdvancedConfig() {
           style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '5px 12px', fontSize: '0.75rem', fontWeight: 600,
-            background: dirty ? 'var(--error)' : 'var(--surface)',
+            background: justSaved ? 'var(--success)' : dirty ? 'var(--error)' : 'var(--surface)',
             border: '1px solid transparent',
             borderRadius: 'var(--radius-sm)',
-            color: dirty ? '#fff' : 'var(--text-muted)',
+            color: justSaved || dirty ? '#fff' : 'var(--text-muted)',
             cursor: dirty ? 'pointer' : 'default',
             opacity: saving ? 0.7 : 1,
             fontFamily: 'var(--font-sans)',
+            transition: 'background 0.2s',
           }}
         >
-          <Save size={12} /> {dirty ? 'Save' : 'Saved'}
+          {justSaved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> {dirty ? 'Save' : 'Saved'}</>}
         </button>
       </div>
 
@@ -262,24 +274,18 @@ export function AgentAdvancedConfig() {
 
       {/* Thinking */}
       <Section title="Thinking & Reasoning" expanded={expandedSections.thinking!} onToggle={() => toggleSection('thinking')}>
-        <SelectField label="Thinking level" value={thinkingLevel} options={THINKING_LEVELS} onChange={markDirty(setThinkingLevel)} />
-        <SelectField label="Verbose mode" value={verbose} options={VERBOSE_OPTIONS} onChange={markDirty(setVerbose)} />
-        <SelectField
-          label="Elevated mode"
-          value={elevated}
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'on', label: 'On' },
-            { value: 'ask', label: 'Ask (confirm each time)' },
-            { value: 'full', label: 'Full (skip exec approvals)' },
-          ]}
-          onChange={markDirty(setElevated)}
-        />
+        <SelectField label="Thinking level" value={thinkingLevel} options={THINKING_LEVELS} onChange={markDirty(setThinkingLevel)}
+          hint="Cuánto razona el modelo antes de responder. 'Adaptive' deja que el modelo decida según la complejidad." />
+        <SelectField label="Verbose mode" value={verbose} options={VERBOSE_OPTIONS} onChange={markDirty(setVerbose)}
+          hint="Cuánta salida de las herramientas se muestra en el chat." />
+        <SelectField label="Elevated mode" value={elevated} options={ELEVATED_OPTIONS} onChange={markDirty(setElevated)}
+          hint="Nivel de permisos elevados. 'Full' salta las aprobaciones de comandos (úsalo con cuidado)." />
       </Section>
 
       {/* Context */}
       <Section title="Context Management" expanded={expandedSections.context!} onToggle={() => toggleSection('context')}>
-        <SelectField label="Pruning mode" value={pruningMode} options={PRUNING_MODES} onChange={markDirty(setPruningMode)} />
+        <SelectField label="Pruning mode" value={pruningMode} options={PRUNING_MODES} onChange={markDirty(setPruningMode)}
+          hint="Poda automática de resultados de tools antiguos para ahorrar tokens del contexto." />
         {pruningMode === 'cache-ttl' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <span style={{ fontSize: '0.8125rem', color: 'var(--text)', minWidth: 120 }}>Cache TTL</span>
@@ -297,7 +303,8 @@ export function AgentAdvancedConfig() {
             />
           </div>
         )}
-        <SelectField label="Compaction mode" value={compactionMode} options={COMPACTION_MODES} onChange={markDirty(setCompactionMode)} />
+        <SelectField label="Compaction mode" value={compactionMode} options={COMPACTION_MODES} onChange={markDirty(setCompactionMode)}
+          hint="Cómo se compacta el historial al llenarse el contexto. 'Safeguard' preserva el inicio de la tarea." />
       </Section>
 
       {/* Subagents */}

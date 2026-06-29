@@ -23,11 +23,15 @@ export interface ManagedAgent {
   skills: AgentSkill[];
   /** Modo por skill (tier núcleo/completo), keyed por skill id. Ausente = full. */
   skill_modes?: Record<string, 'core' | 'full'>;
+  /** Skills APRENDIDAS por el agente (graduadas del Skill Workshop). NO son apps. */
+  learned_skills?: LearnedSkill[];
   workspace_path: string;
   status: 'active' | 'idle' | 'error';
   last_active_at: string | null;
   sessions_today: number;
   tokens_today: number;
+  /** Nº de scopes del token vigente (agregado en la lista, evita N+1 en Fleet). */
+  scopes_count?: number;
   created_at: string;
 }
 
@@ -76,6 +80,37 @@ export interface AvailableSkill {
   icon: string;
   description: string;
   domain: string;
+}
+
+/**
+ * Skill APRENDIDA por un agente (graduada de una propuesta del Skill Workshop).
+ * Vive en `managed_agents.learned_skills`, separada de las apps (`skills`). NO aparece
+ * en MicelHub/available-skills. Carga vía el allowlist tras un reload del Gateway.
+ */
+export interface LearnedSkill {
+  name: string;
+  title: string;
+  icon: string;
+  graduated_at: string;
+  proposal_id: string;
+}
+
+/** Propuesta de skill (Skill Workshop) pendiente de revisión del usuario. */
+export interface SkillProposal {
+  id: string;
+  kind: string;
+  status: string;
+  title: string;
+  description: string;
+  skill_name: string;
+  agent_name: string;
+  scan_state?: string;
+  created_at: string;
+}
+
+/** Detalle de una propuesta, con el draft del SKILL.md a graduar. */
+export interface SkillProposalDetail extends SkillProposal {
+  draft: string;
 }
 
 export interface AgentConversation {
@@ -172,4 +207,118 @@ export interface Meeting {
   created_at: string;
 }
 
-export type AgentTab = 'tree' | 'council' | 'conversations' | 'workspaces';
+export type AgentTab = 'tree' | 'council' | 'workboard' | 'conversations' | 'workspaces' | 'fleet';
+
+/** Sub-pestañas del panel AgentDetail. Centralizado aquí (antes era local). */
+export type AgentDetailTab = 'overview' | 'tools' | 'memory' | 'advanced' | 'activity' | 'health';
+
+// ─── A) Centro de actividad ───────────────────────────────────────
+
+export interface AgentEventRow {
+  id: string;
+  type: string;
+  severity: 'debug' | 'info' | 'warn' | 'error' | 'critical';
+  source_agent_id: string | null;
+  target_agent_id: string | null;
+  direction: 'in' | 'out';
+  payload: Record<string, unknown> | null;
+  processed: boolean;
+  created_at: string;
+}
+
+export interface AgentEventsResponse {
+  events: AgentEventRow[];
+  count: number;
+  has_more: boolean;
+}
+
+export interface AgentDelegation {
+  id: string;
+  session_id: string | null;
+  direction: 'outgoing' | 'incoming';
+  counterpart: string | null; // nombre minúscula de la contraparte
+  from_agent: string;
+  to_agent: string | null;
+  preview: string;
+  briefing: boolean;
+  tokens_used: number | null;
+  model_used: string | null;
+  cost_usd: number | string | null;
+  tool_calls: { tool: string; params?: Record<string, unknown>; result?: string }[];
+  created_at: string;
+}
+
+export interface DelegationSession {
+  session_id: string | null;
+  root_agent: string;
+  count: number;
+  started_at: string;
+}
+
+export interface AgentDelegationsResponse {
+  delegations: AgentDelegation[];
+  by_session: DelegationSession[];
+  count: number;
+  has_more: boolean;
+}
+
+// ─── B) Fleet / Analytics ─────────────────────────────────────────
+
+export interface AnalyticsDailyPoint {
+  date: string; // YYYY-MM-DD
+  messages: number;
+  tokens: number;
+  cost_usd: number;
+}
+
+export interface AnalyticsAgentSeries {
+  agent: string;
+  display_name: string;
+  total_tokens: number;
+  total_cost_usd: number;
+  total_messages: number;
+  daily: AnalyticsDailyPoint[];
+}
+
+export interface AnalyticsModelSeries {
+  model: string;
+  total_tokens: number;
+  total_cost_usd: number;
+  total_messages: number;
+  daily: AnalyticsDailyPoint[];
+}
+
+export interface AgentAnalytics {
+  period: string;
+  range: { from: string; to: string };
+  series: AnalyticsDailyPoint[];
+  by_agent: AnalyticsAgentSeries[];
+  by_model: AnalyticsModelSeries[];
+}
+
+// ─── D) Agent Doctor / salud ──────────────────────────────────────
+
+export type HealthFixAction =
+  | 'regenerate_tools'
+  | 'resume_stuck_yield'
+  | 'regenerate_skill_files'
+  | 'assign_skills'
+  | 'set_model'
+  | null;
+
+export interface AgentHealthCheck {
+  check: string;
+  label: string;
+  status: 'ok' | 'warn' | 'error';
+  detail: string;
+  fixable: boolean;
+  fix_action: HealthFixAction;
+  fix_scope: 'agent' | 'bulk' | null;
+}
+
+export interface AgentHealth {
+  agent_id: string;
+  checked_at: string;
+  summary: { ok: number; warn: number; error: number };
+  checks: AgentHealthCheck[];
+}

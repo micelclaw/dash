@@ -10,8 +10,19 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { Search, X } from 'lucide-react';
+import { AgentSelect } from '../AgentSelect';
 import type { Meeting } from '../types';
+
+const STATUS_FILTER_OPTIONS = [
+  { value: 'active', label: 'Activas' },
+  { value: 'scheduled', label: 'Programadas' },
+  { value: 'in_progress', label: 'En progreso' },
+  { value: 'completed', label: 'Completadas' },
+  { value: 'archived', label: 'Archivadas' },
+  { value: 'all', label: 'Todas' },
+];
 
 interface MeetingArchiveProps {
   meetings: Meeting[];
@@ -61,10 +72,24 @@ function statusBg(status: Meeting['status']): string {
 
 export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('active');
+  const [query, setQuery] = useState('');
 
-  const archivedCount = meetings.filter(m => m.status === 'archived').length;
-  const visible = showArchived ? meetings : meetings.filter(m => m.status !== 'archived');
+  // Filtrado por estado + búsqueda (título o nombre de participante).
+  const visible = useMemo(() => {
+    let list = meetings;
+    if (statusFilter === 'active') list = list.filter(m => m.status !== 'archived');
+    else if (statusFilter !== 'all') list = list.filter(m => m.status === statusFilter);
+    const q = query.trim().toLowerCase();
+    if (q) {
+      list = list.filter(m =>
+        m.title.toLowerCase().includes(q) ||
+        (m.description ?? '').toLowerCase().includes(q) ||
+        m.participants.some(p => p.display_name.toLowerCase().includes(q)),
+      );
+    }
+    return list;
+  }, [meetings, statusFilter, query]);
 
   if (meetings.length === 0) {
     return (
@@ -98,33 +123,42 @@ export function MeetingArchive({ meetings, onSelect }: MeetingArchiveProps) {
       height: '100%',
       padding: '16px 20px',
     }}>
-      {/* Toggle archived */}
-      {archivedCount > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-          <button
-            onClick={() => setShowArchived(s => !s)}
+      {/* Barra de filtros: búsqueda + estado */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por título o participante…"
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              background: showArchived ? 'var(--surface-hover)' : 'transparent',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-dim)',
-              fontSize: '0.75rem', fontWeight: 500, padding: '4px 10px',
-              cursor: 'pointer', fontFamily: 'var(--font-sans)',
-              transition: 'var(--transition-fast)',
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text)',
+              fontSize: '0.8125rem', padding: '7px 28px 7px 30px', fontFamily: 'var(--font-sans)',
             }}
-          >
-            {showArchived ? 'Hide' : 'Show'} archived ({archivedCount})
-          </button>
+          />
+          {query && (
+            <button
+              onClick={() => setQuery('')}
+              style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 2 }}
+              title="Limpiar"
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
-      )}
+        <AgentSelect value={statusFilter} options={STATUS_FILTER_OPTIONS} onChange={setStatusFilter} minWidth={150} />
+      </div>
 
       {sorted.length === 0 ? (
         <div style={{
           padding: 32, textAlign: 'center',
           color: 'var(--text-muted)', fontSize: '0.8125rem',
         }}>
-          All visible meetings are archived. Click &ldquo;Show archived&rdquo; to view them.
+          {query.trim()
+            ? `Sin reuniones que coincidan con "${query.trim()}".`
+            : 'No hay reuniones con este filtro.'}
         </div>
       ) : (
       <div style={{

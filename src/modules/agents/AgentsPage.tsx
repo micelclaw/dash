@@ -16,8 +16,10 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { useAgents } from './hooks/use-agents';
 import { AgentTree } from './AgentTree';
 import { CouncilTab } from './council/CouncilTab';
+import { WorkboardTab } from './workboard/WorkboardTab';
 import { AgentConversations } from './AgentConversations';
 import { AgentWorkspaces } from './AgentWorkspaces';
+import { FleetTab } from './fleet/FleetTab';
 import { CreateAgentWizard } from './CreateAgentWizard';
 import { ImportAgentModal } from './ImportAgentModal';
 import { useChatStore } from '@/stores/chat.store';
@@ -26,8 +28,10 @@ import type { AgentTab } from './types';
 const TABS: { key: AgentTab; label: string }[] = [
   { key: 'tree', label: 'Tree' },
   { key: 'council', label: 'Council' },
+  { key: 'workboard', label: 'Workboard' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'workspaces', label: 'Workspaces' },
+  { key: 'fleet', label: 'Fleet' },
 ];
 
 export function Component() {
@@ -243,8 +247,15 @@ export function Component() {
           />
         )}
         {activeTab === 'council' && <CouncilTab agents={agents} />}
+        {activeTab === 'workboard' && <WorkboardTab agents={agents} />}
         {activeTab === 'conversations' && <AgentConversations agents={agents} />}
         {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} initialAgentId={selectedAgentId} />}
+        {activeTab === 'fleet' && (
+          <FleetTab
+            agents={agents}
+            onSelectAgent={(agentId) => { setSelectedAgentId(agentId); setActiveTab('tree'); }}
+          />
+        )}
       </div>
 
       {/* Import modal */}

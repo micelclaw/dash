@@ -11,10 +11,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, RotateCcw, Shield, AlertTriangle } from 'lucide-react';
+import { Save, RotateCcw, Shield, AlertTriangle, Info, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { describeError } from '@/lib/api-errors';
+import { AgentSelect } from './AgentSelect';
 
 interface AgentSandboxConfigProps {
   agentId: string;
@@ -65,36 +66,37 @@ const WORKSPACE_ACCESS = [
 
 const INHERIT = '__inherit__';
 
-function FieldRow({ label, options, current, globalValue, onChange }: {
+function FieldRow({ label, options, current, globalValue, onChange, hint }: {
   label: string;
   options: { value: string; label: string; desc?: string }[];
   current: SandboxField;     // null = inherit, string = override
   globalValue: string;
   onChange: (v: SandboxField) => void;
+  hint?: string;
 }) {
   const inheriting = current === null;
-  const value = inheriting ? INHERIT : current;
   const inheritedLabel = options.find(o => o.value === globalValue)?.label ?? globalValue;
+  // La opción "heredar" se modela como una entrada más del AgentSelect.
+  const selOptions = [
+    { value: INHERIT, label: `Usar global (${inheritedLabel})`, desc: 'Hereda de Settings → Sandbox' },
+    ...options,
+  ];
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--text)', minWidth: 130 }}>{label}</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value === INHERIT ? null : e.target.value)}
-        style={{
-          padding: '4px 8px', fontSize: '0.75rem', minWidth: 240,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          color: inheriting ? 'var(--text-dim)' : 'var(--text)',
-          fontStyle: inheriting ? 'italic' : 'normal',
-          fontFamily: 'var(--font-sans)', cursor: 'pointer',
-        }}
-      >
-        <option value={INHERIT}>Use global default ({inheritedLabel})</option>
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
-        ))}
-      </select>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8125rem', color: 'var(--text)', minWidth: 130 }}>
+        {label}
+        {hint && (
+          <span title={hint} style={{ display: 'inline-flex', color: 'var(--text-muted)', cursor: 'help' }}>
+            <Info size={12} />
+          </span>
+        )}
+      </span>
+      <AgentSelect
+        value={inheriting ? INHERIT : (current as string)}
+        options={selOptions}
+        onChange={v => onChange(v === INHERIT ? null : v)}
+        minWidth={240}
+      />
     </div>
   );
 }
@@ -103,6 +105,7 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   const [globalMode, setGlobalMode] = useState('off');
   const [globalScope, setGlobalScope] = useState('session');
@@ -155,6 +158,8 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
       });
       toast.success(`Sandbox saved for ${agentName}`);
       setDirty(false);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2200);
       await fetchConfig();
     } catch (err) {
       toast.error(describeError(err, 'Failed to save sandbox config'));
@@ -210,17 +215,17 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
             disabled={!dirty || saving}
             style={{
               padding: '4px 10px', fontSize: '0.75rem',
-              background: dirty ? 'var(--amber)' : 'var(--surface)',
-              color: dirty ? '#000' : 'var(--text-dim)',
-              border: '1px solid var(--border)',
+              background: justSaved ? 'var(--success)' : dirty ? 'var(--amber)' : 'var(--surface)',
+              color: justSaved ? '#fff' : dirty ? '#000' : 'var(--text-dim)',
+              border: '1px solid transparent',
               borderRadius: 'var(--radius-sm)',
               cursor: dirty && !saving ? 'pointer' : 'not-allowed',
               fontFamily: 'var(--font-sans)', fontWeight: 500,
               display: 'inline-flex', alignItems: 'center', gap: 4,
+              transition: 'background 0.2s',
             }}
           >
-            <Save size={12} />
-            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            {justSaved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}</>}
           </button>
         </div>
       </div>
@@ -260,9 +265,12 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
 
       {/* Fields */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 4 }}>
-        <FieldRow label="Sandbox mode"     options={MODES}            current={mode}            globalValue={globalMode}  onChange={markDirty(setMode)} />
-        <FieldRow label="Container scope"  options={SCOPES}           current={scope}           globalValue={globalScope} onChange={markDirty(setScope)} />
-        <FieldRow label="Workspace access" options={WORKSPACE_ACCESS} current={workspaceAccess} globalValue={globalWs}    onChange={markDirty(setWorkspaceAccess)} />
+        <FieldRow label="Sandbox mode"     options={MODES}            current={mode}            globalValue={globalMode}  onChange={markDirty(setMode)}
+          hint="off = corre en el host (sin aislamiento); non-main = aísla sesiones de grupo/canal; all = cada sesión en un contenedor Docker." />
+        <FieldRow label="Container scope"  options={SCOPES}           current={scope}           globalValue={globalScope} onChange={markDirty(setScope)}
+          hint="Cuántas sesiones comparten contenedor: por sesión, por agente, o uno compartido para todo." />
+        <FieldRow label="Workspace access" options={WORKSPACE_ACCESS} current={workspaceAccess} globalValue={globalWs}    onChange={markDirty(setWorkspaceAccess)}
+          hint="rw = el agente puede actualizar su memoria/ficheros; ro = solo lectura. El host sigue inalcanzable salvo el propio workspace." />
       </div>
 
       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', paddingTop: 4, borderTop: '1px dashed var(--border)' }}>

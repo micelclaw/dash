@@ -11,8 +11,10 @@
  */
 
 import { useState, useMemo } from 'react';
+import { BarChart3 } from 'lucide-react';
 import { useAgentConversations } from './hooks/use-agent-conversations';
 import { ConversationMessage } from './ConversationMessage';
+import { ConversationCharts } from './ConversationCharts';
 import type { ManagedAgent } from './types';
 
 interface AgentConversationsProps {
@@ -24,6 +26,7 @@ const PERIOD_OPTIONS = [
   { label: 'Yesterday', value: 'yesterday' },
   { label: 'This week', value: 'week' },
   { label: 'This month', value: 'month' },
+  { label: 'All time', value: 'all' },
 ] as const;
 
 function formatTokens(tokens: number | null | undefined): string {
@@ -40,8 +43,9 @@ function formatPeriodLabel(period: string): string {
 }
 
 export function AgentConversations({ agents }: AgentConversationsProps) {
-  const [period, setPeriod] = useState('today');
+  const [period, setPeriod] = useState('month');
   const [agentFilter, setAgentFilter] = useState('');
+  const [showCharts, setShowCharts] = useState(true);
 
   const { conversations, stats, loading } = useAgentConversations({
     period,
@@ -101,6 +105,19 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
           Conversations
         </h3>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            onClick={() => setShowCharts(v => !v)}
+            title={showCharts ? 'Ocultar gráficas' : 'Mostrar gráficas'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: showCharts ? 'var(--surface-hover)' : 'var(--surface)',
+              border: showCharts ? '1px solid var(--amber)' : '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', color: showCharts ? 'var(--amber)' : 'var(--text-dim)',
+              fontSize: '0.75rem', padding: '4px 8px', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <BarChart3 size={13} /> Gráficas
+          </button>
           <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
             Period:
           </label>
@@ -128,6 +145,13 @@ export function AgentConversations({ agents }: AgentConversationsProps) {
           </select>
         </div>
       </div>
+
+      {/* Charts panel (recharts) */}
+      {showCharts && stats && (
+        <div style={{ flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
+          <ConversationCharts stats={stats} agents={agents} />
+        </div>
+      )}
 
       {/* Messages area */}
       <div style={{

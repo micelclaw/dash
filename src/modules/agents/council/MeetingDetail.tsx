@@ -11,10 +11,11 @@
  */
 
 import { useState } from 'react';
-import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2, ArrowDown } from 'lucide-react';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
 import { NewMeetingModal } from './NewMeetingModal';
+import { useStickToBottom } from './hooks/use-stick-to-bottom';
 import type { Meeting, ManagedAgent } from '../types';
 
 interface MeetingDetailProps {
@@ -56,6 +57,15 @@ export function MeetingDetail({
   const [confirmReset, setConfirmReset] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  // Auto-scroll inteligente: pega al fondo en vivo si el usuario está abajo;
+  // si lee arriba, muestra "N nuevos". Señal de streaming = longitud del último.
+  const lastMsg = meeting.messages[meeting.messages.length - 1];
+  const { scrollRef, sentinelRef, newCount, isAtBottom, scrollToBottom } = useStickToBottom({
+    messageCount: meeting.messages.length,
+    contentSignal: lastMsg?.content?.length ?? 0,
+    enabled: meeting.status === 'in_progress',
+  });
+
   const runAction = async (kind: ControlAction, fn?: () => Promise<unknown>) => {
     if (!fn) return;
     setBusyAction(kind);
@@ -91,9 +101,10 @@ export function MeetingDetail({
       flexDirection: 'column',
       height: '100%',
       overflow: 'hidden',
+      position: 'relative',
     }}>
       {/* Scrollable content area */}
-      <div style={{
+      <div ref={scrollRef} style={{
         flex: 1,
         overflowY: 'auto',
         padding: '16px 20px',
@@ -250,7 +261,28 @@ export function MeetingDetail({
             onCycleStatus={onCycleItemStatus}
           />
         )}
+
+        {/* Sentinel del auto-scroll (fin del contenido) */}
+        <div ref={sentinelRef} />
       </div>
+
+      {/* Botón flotante "N nuevos mensajes" (solo cuando el usuario lee arriba) */}
+      {!isAtBottom && (newCount > 0 || meeting.status === 'in_progress') && (
+        <button
+          onClick={() => scrollToBottom('smooth')}
+          style={{
+            position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)',
+            display: 'inline-flex', alignItems: 'center', gap: 6, zIndex: 20,
+            background: 'var(--amber)', color: '#000', border: 'none',
+            borderRadius: 'var(--radius-full)', padding: '6px 14px',
+            fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'var(--font-sans)', boxShadow: 'var(--shadow-lg)',
+          }}
+        >
+          <ArrowDown size={14} />
+          {newCount > 0 ? `${newCount} mensaje${newCount !== 1 ? 's' : ''} nuevo${newCount !== 1 ? 's' : ''}` : 'Ir al final'}
+        </button>
+      )}
 
       {editOpen && (
         <NewMeetingModal

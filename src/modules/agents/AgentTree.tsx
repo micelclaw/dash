@@ -247,6 +247,33 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(0.85);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Drag-to-pan: arrastrar el FONDO del lienzo mueve el scroll. Se ignora si el
+  // mousedown cae sobre una card ([data-agent-card]) para no romper su click.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+
+  const handlePanDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('[data-agent-card]')) return; // click de card, no pan
+    const container = containerRef.current;
+    if (!container) return;
+    panRef.current = { x: e.clientX, y: e.clientY, left: container.scrollLeft, top: container.scrollTop };
+    setPanning(true);
+  }, []);
+
+  const handlePanMove = useCallback((e: React.MouseEvent) => {
+    const p = panRef.current;
+    const container = containerRef.current;
+    if (!p || !container) return;
+    container.scrollLeft = p.left - (e.clientX - p.x);
+    container.scrollTop = p.top - (e.clientY - p.y);
+  }, []);
+
+  const endPan = useCallback(() => {
+    if (!panRef.current) return;
+    panRef.current = null;
+    setPanning(false);
+  }, []);
 
   const toggleExpand = useCallback((agentId: string) => {
     setCollapsed(prev => {
@@ -399,11 +426,17 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
       <div
         ref={containerRef}
         onWheel={handleWheel}
+        onMouseDown={handlePanDown}
+        onMouseMove={panning ? handlePanMove : undefined}
+        onMouseUp={endPan}
+        onMouseLeave={endPan}
         style={{
           flex: 1,
           overflow: 'auto',
           padding: isMobile ? 16 : 32,
           position: 'relative',
+          cursor: panning ? 'grabbing' : 'grab',
+          userSelect: panning ? 'none' : undefined,
         }}
       >
         {/* Controles de zoom + hint de interacción */}
@@ -464,7 +497,7 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
             pointerEvents: 'auto', userSelect: 'none',
           }}>
             <MousePointer2 size={11} />
-            Rueda para zoom · arrastra las barras para moverte
+            Rueda para zoom · arrastra el fondo para mover
           </span>
         </div>
 

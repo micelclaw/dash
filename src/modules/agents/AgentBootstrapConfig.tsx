@@ -17,10 +17,11 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Save, RotateCcw, FileText } from 'lucide-react';
+import { Save, RotateCcw, FileText, Info, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { describeError } from '@/lib/api-errors';
+import { AgentSelect } from './AgentSelect';
 
 interface AgentBootstrapConfigProps {
   agentId: string;
@@ -75,34 +76,25 @@ function InjectionRow({
   onChange: (v: ContextInjection | null) => void;
 }) {
   const inheriting = current === null;
-  const value = inheriting ? INHERIT : current;
   const inheritedLabel = INJECTION_OPTIONS.find((o) => o.value === globalValue)?.label ?? globalValue;
+  const selOptions = [
+    { value: INHERIT, label: `Usar global (${inheritedLabel})`, desc: 'Hereda del valor por defecto' },
+    ...INJECTION_OPTIONS,
+  ];
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--text)', minWidth: 150 }}>Context injection</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value === INHERIT ? null : (e.target.value as ContextInjection))}
-        style={{
-          padding: '4px 8px',
-          fontSize: '0.75rem',
-          minWidth: 280,
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-sm)',
-          color: inheriting ? 'var(--text-dim)' : 'var(--text)',
-          fontStyle: inheriting ? 'italic' : 'normal',
-          fontFamily: 'var(--font-sans)',
-          cursor: 'pointer',
-        }}
-      >
-        <option value={INHERIT}>Use global default ({inheritedLabel})</option>
-        {INJECTION_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label} — {o.desc}
-          </option>
-        ))}
-      </select>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8125rem', color: 'var(--text)', minWidth: 150 }}>
+        Context injection
+        <span title="Cuándo se inyectan SOUL/USER/TOOLS/MEMORY en el prompt: siempre, una vez por sesión (skip en continuación), o nunca." style={{ display: 'inline-flex', color: 'var(--text-muted)', cursor: 'help' }}>
+          <Info size={12} />
+        </span>
+      </span>
+      <AgentSelect
+        value={inheriting ? INHERIT : (current as string)}
+        options={selOptions}
+        onChange={(v) => onChange(v === INHERIT ? null : (v as ContextInjection))}
+        minWidth={280}
+      />
     </div>
   );
 }
@@ -168,6 +160,7 @@ export function AgentBootstrapConfig({ agentId, agentName }: AgentBootstrapConfi
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
 
   const [globalCi, setGlobalCi] = useState<ContextInjection>('always');
   const [globalMax, setGlobalMax] = useState<number | null>(null);
@@ -227,6 +220,8 @@ export function AgentBootstrapConfig({ agentId, agentName }: AgentBootstrapConfi
       });
       toast.success(`Bootstrap saved for ${agentName}`);
       setDirty(false);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2200);
       await fetchConfig();
     } catch (err) {
       toast.error(describeError(err, 'Failed to save bootstrap config'));
@@ -291,9 +286,9 @@ export function AgentBootstrapConfig({ agentId, agentName }: AgentBootstrapConfi
             style={{
               padding: '4px 10px',
               fontSize: '0.75rem',
-              background: dirty ? 'var(--amber)' : 'var(--surface)',
-              color: dirty ? '#000' : 'var(--text-dim)',
-              border: '1px solid var(--border)',
+              background: justSaved ? 'var(--success)' : dirty ? 'var(--amber)' : 'var(--surface)',
+              color: justSaved ? '#fff' : dirty ? '#000' : 'var(--text-dim)',
+              border: '1px solid transparent',
               borderRadius: 'var(--radius-sm)',
               cursor: dirty && !saving ? 'pointer' : 'not-allowed',
               fontFamily: 'var(--font-sans)',
@@ -301,10 +296,10 @@ export function AgentBootstrapConfig({ agentId, agentName }: AgentBootstrapConfi
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
+              transition: 'background 0.2s',
             }}
           >
-            <Save size={12} />
-            {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
+            {justSaved ? <><Check size={12} /> Guardado</> : <><Save size={12} /> {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}</>}
           </button>
         </div>
       </div>

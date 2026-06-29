@@ -18,6 +18,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/services/api';
 import { FileIcon } from '@/components/shared/FileIcon';
+import { getAgentFileMeta } from './agent-file-meta';
 import { formatFileSize } from '@/lib/file-utils';
 import type { FileRecord } from '@/types/files';
 import type { ManagedAgent } from './types';
@@ -364,13 +365,16 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
       <div ref={splitContainerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
       {/* ── File browser panel ─────────────────────────────── */}
+      {/* Longhand flex props (no `flex` shorthand) para no mezclar shorthand
+          + flexShrink en el mismo objeto (React avisa en rerender). */}
       <div style={{
-        flex: openFile ? undefined : 1,
+        flexGrow: openFile ? 0 : 1,
+        flexShrink: openFile ? 0 : 1,
+        flexBasis: openFile ? 'auto' : '0%',
         width: openFile && !isMobile ? `${splitPct}%` : undefined,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        flexShrink: 0,
       }}>
         {/* Path header with breadcrumbs + back arrow */}
         {selectedAgent && (
@@ -505,20 +509,41 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                   transition: 'var(--transition-fast)',
                 }}
               >
-                <FileIcon
-                  mime={file.mime_type}
-                  isDirectory={file.is_directory}
-                  size="sm"
-                />
+                {(() => {
+                  const meta = file.is_directory ? null : getAgentFileMeta(file.filename);
+                  if (!meta) {
+                    return <FileIcon mime={file.mime_type} isDirectory={file.is_directory} size="sm" />;
+                  }
+                  const Icon = meta.icon;
+                  return (
+                    <span style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 22, height: 22, flexShrink: 0, borderRadius: 'var(--radius-sm)',
+                      background: `color-mix(in srgb, ${meta.color} 15%, transparent)`, color: meta.color,
+                    }}>
+                      <Icon size={13} />
+                    </span>
+                  );
+                })()}
                 <span style={{
-                  flex: 1,
-                  fontSize: '0.8125rem',
-                  color: 'var(--text)',
+                  flexGrow: 1, flexShrink: 1, flexBasis: '0%', minWidth: 0,
+                  display: 'flex', alignItems: 'baseline', gap: 8,
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
                 }}>
-                  {file.filename}
+                  <span style={{
+                    fontSize: '0.8125rem', color: 'var(--text)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {file.filename}
+                  </span>
+                  {(() => {
+                    const meta = file.is_directory ? null : getAgentFileMeta(file.filename);
+                    return meta ? (
+                      <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        {meta.label}
+                      </span>
+                    ) : null;
+                  })()}
                 </span>
                 <span style={{
                   fontSize: '0.75rem',

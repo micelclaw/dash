@@ -67,13 +67,18 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
   if (isOwner) {
     return (
       <div
+        data-agent-card
         onClick={onClick}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
           width: 340,
           background: bgColor,
-          border: `1px solid ${borderColor}`,
+          // Longhand por lado: no mezclar `border` shorthand + `borderLeft`
+          // (React avisa en rerender; mismo patrón que el fix flex de iter 6).
+          borderTop: `1px solid ${borderColor}`,
+          borderRight: `1px solid ${borderColor}`,
+          borderBottom: `1px solid ${borderColor}`,
           borderLeft: `3px solid #d4a017`,
           borderRadius: 'var(--radius-md)',
           padding: '18px 20px',
@@ -122,13 +127,16 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
 
   return (
     <div
+      data-agent-card
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         width: 340,
         background: bgColor,
-        border: `1px solid ${borderColor}`,
+        borderTop: `1px solid ${borderColor}`,
+        borderRight: `1px solid ${borderColor}`,
+        borderBottom: `1px solid ${borderColor}`,
         borderLeft: `3px solid ${accentColor}`,
         borderRadius: 'var(--radius-md)',
         padding: '18px 20px',

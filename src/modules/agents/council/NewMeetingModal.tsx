@@ -13,6 +13,7 @@
 import { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { useMeetings } from './hooks/use-meetings';
+import { ParticipantPreview } from './ParticipantPreview';
 import type { ManagedAgent, Meeting } from '../types';
 
 interface NewMeetingModalProps {
@@ -264,6 +265,12 @@ export function NewMeetingModal({
         {/* Participants */}
         <div>
           <label style={labelStyle}>Participants</label>
+          {/* Preview visual de quién asistirá (avatares con color del agente) */}
+          <ParticipantPreview
+            agents={agents}
+            selectedIds={selectedParticipants}
+            userParticipates={userParticipates}
+          />
           <div style={{
             display: 'flex',
             flexDirection: 'column',
