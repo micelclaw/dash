@@ -15,11 +15,13 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { X, ArrowRight, Undo2 } from 'lucide-react';
+import { X, ArrowRight, Undo2, Pencil } from 'lucide-react';
 import { useFinancePersonalStore, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { fmtMoney, movementFace, categoryVisual, tintBackground } from './lib';
 import { RecurrenceBadge } from './RecurrenceBadge';
 import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
+import { MovimientoRelatedPanel } from './MovimientoRelatedPanel';
+import { NuevoMovimientoDialog } from './NuevoMovimientoDialog';
 import { useEscapeClose } from '../use-escape-close';
 
 const KIND_LABEL = (isTransfer: boolean, signed: number) =>
@@ -28,7 +30,8 @@ const KIND_LABEL = (isTransfer: boolean, signed: number) =>
 export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | null; onClose: () => void }) {
   const { accounts, categories, reverseTransaction } = useFinancePersonalStore();
   const [busy, setBusy] = useState(false);
-  useEscapeClose(!!tx, onClose);
+  const [editing, setEditing] = useState(false);
+  useEscapeClose(!!tx && !editing, onClose);
 
   if (!tx) return null;
 
@@ -80,6 +83,9 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
         </div>
 
         <div>
+          {row('Concepto', tx.description
+            ? <span style={{ color: 'var(--text)' }}>{tx.description}</span>
+            : <span style={{ color: 'var(--text-muted)' }}>(sin concepto)</span>)}
           {row('Tipo', <span>{f.glyph} {KIND_LABEL(f.isTransfer, f.signed)}</span>)}
           {f.isTransfer && f.transferFrom && f.transferTo ? (
             row('Cuentas', (
@@ -98,18 +104,32 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
           {recurring && row('Recurrencia', <RecurrenceBadge />)}
         </div>
 
+        {/* Relaciones DERIVADAS del ledger: cuenta(s) + factura + contacto (siempre ≥1). */}
+        <div style={{ marginTop: 14 }}>
+          <MovimientoRelatedPanel entryId={tx.id} onNavigate={onClose} />
+        </div>
+
         {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
         <div style={{ marginTop: 14 }}>
           <RelationIntelligence sourceType="finance_journal_entry" sourceId={tx.id} />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 18 }}>
-          <button onClick={reverse} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--error)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Undo2 size={14} /> Revertir
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={reverse} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--error)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <Undo2 size={14} /> Revertir
+            </button>
+            <button onClick={() => setEditing(true)} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+              <Pencil size={14} /> Editar
+            </button>
+          </div>
           <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cerrar</button>
         </div>
       </div>
+
+      {/* Editar: reabre el formulario prerrellenado; al guardar, concepto/categoría in situ
+          o importe/cuenta/fecha vía reversar+recrear (lo decide editMovement en el store). */}
+      <NuevoMovimientoDialog open={editing} editTx={tx} onClose={() => { setEditing(false); onClose(); }} />
     </div>
   );
 }

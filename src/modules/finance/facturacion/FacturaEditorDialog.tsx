@@ -37,6 +37,7 @@ import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
 import { EnviarFacturaDialog } from './EnviarFacturaDialog';
 import { openInvoicePdf } from './invoicePdf';
 import { useFacturacionNav } from './navigation';
+import { DocumentRelatedPanel } from './DocumentRelatedPanel';
 
 interface DraftLine {
   id?: string; // id de la línea persistida (undefined = nueva, aún no guardada)
@@ -87,7 +88,7 @@ export function FacturaEditorDialog({
     removeAttachment,
   } = useFinanceBillingStore();
   const { categories, fetchCategories } = useFinancePersonalStore();
-  const { openInvoice } = useFacturacionNav();
+  const { openInvoice, openContact } = useFacturacionNav();
 
   const [contactId, setContactId] = useState('');
   const [issueDate, setIssueDate] = useState(todayISO());
@@ -95,6 +96,7 @@ export function FacturaEditorDialog({
   const [discountValue, setDiscountValue] = useState('');
   const [discountKind, setDiscountKind] = useState<DiscountKind>('percent');
   const [categoryId, setCategoryId] = useState(''); // categoría de ingreso de la venta (#4); '' = sin categoría
+  const [retentionRateId, setRetentionRateId] = useState(''); // retención IRPF a nivel documento (0263); '' = sin retención
   const [projectId, setProjectId] = useState(''); // F4: imputa el documento a un proyecto; '' = sin proyecto
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
   const [supplierNumber, setSupplierNumber] = useState(''); // nº del proveedor (solo bills)
@@ -132,6 +134,7 @@ export function FacturaEditorDialog({
           setDiscountValue(doc.discount_value != null && Number(doc.discount_value) > 0 ? String(Number(doc.discount_value)) : '');
           setDiscountKind(doc.discount_kind ?? 'percent');
           setCategoryId(doc.category_id ?? '');
+          setRetentionRateId(doc.retention_rate_id ?? '');
           setProjectId(doc.lines.find((l) => l.project_id)?.project_id ?? '');
           setTerms(doc.terms ?? '');
           setNotes(doc.notes ?? '');
@@ -162,6 +165,7 @@ export function FacturaEditorDialog({
       setDiscountValue('');
       setDiscountKind('percent');
       setCategoryId('');
+      setRetentionRateId('');
       setProjectId('');
       setTerms('');
       setNotes('');
@@ -181,47 +185,44 @@ export function FacturaEditorDialog({
   if (!open) return null;
 
   const taxById = new Map(taxRates.map((t) => [t.id, t]));
+  // Tasas de retención IRPF (tax_type='irpf_retention'), separadas del IVA por línea.
+  const retentionRates = taxRates.filter((t) => t.tax_type === 'irpf_retention');
+  const retentionRate = retentionRateId ? Number(taxById.get(retentionRateId)?.rate ?? 0) : 0;
 
   // ─── Cálculo de totales en vivo ────────────────────────────────────────
-  // Si ya hay doc guardado (con líneas reales), los totales vienen del backend
-  // (autoridad: taxable_base/tax_amount/total). Si aún es borrador local sin
-  // persistir, se estiman client-side con el mismo criterio (inclusive/exclusive).
+  // Si ya hay doc guardado (con líneas reales), base/IVA vienen del backend
+  // (autoridad). Si aún es borrador local sin persistir, se estiman client-side.
+  // La retención SIEMPRE se recalcula del tipo elegido sobre la base → el panel
+  // reacciona al cambiar el selector incluso sobre un borrador ya guardado
+  // (el backend la confirma al guardar/emitir: total = base + IVA − retención).
   const liveTotals = (() => {
-    if (savedDoc && savedDoc.lines.length > 0) {
-      return {
-        subtotal: Number(savedDoc.subtotal),
-        tax: Number(savedDoc.tax_total),
-        total: Number(savedDoc.total),
-        fromServer: true,
-      };
-    }
-    let base = 0;
+    let subtotal = 0;
     let tax = 0;
-    for (const l of lines) {
-      const qty = Number(String(l.quantity).replace(',', '.')) || 0;
-      const price = Number(String(l.unit_price).replace(',', '.')) || 0;
-      const gross = qty * price;
-      const rate = l.tax_rate_id ? Number(taxById.get(l.tax_rate_id)?.rate ?? 0) : 0;
-      const mode = l.tax_rate_id ? taxById.get(l.tax_rate_id)?.mode : undefined;
-      // Descuento de línea: se resta de la BASE BRUTA (ya ajustada por IVA
-      // inclusive) antes de separar base/IVA — igual que recomputeDocumentTotals.
-      const dv = Number(String(l.discount_value).replace(',', '.'));
-      const dvPos = l.discount_value.trim() && !isNaN(dv) && dv > 0 ? dv : 0;
-      if (rate > 0 && mode === 'inclusive') {
-        const baseBruta = gross / (1 + rate); // neto antes de descuento
+    let fromServer = false;
+    if (savedDoc && savedDoc.lines.length > 0) {
+      subtotal = Number(savedDoc.subtotal);
+      tax = Number(savedDoc.tax_total);
+      fromServer = true;
+    } else {
+      for (const l of lines) {
+        const qty = Number(String(l.quantity).replace(',', '.')) || 0;
+        const price = Number(String(l.unit_price).replace(',', '.')) || 0;
+        const gross = qty * price;
+        const rate = l.tax_rate_id ? Number(taxById.get(l.tax_rate_id)?.rate ?? 0) : 0;
+        const mode = l.tax_rate_id ? taxById.get(l.tax_rate_id)?.mode : undefined;
+        // Descuento de línea: se resta de la BASE BRUTA (ya ajustada por IVA
+        // inclusive) antes de separar base/IVA — igual que recomputeDocumentTotals.
+        const dv = Number(String(l.discount_value).replace(',', '.'));
+        const dvPos = l.discount_value.trim() && !isNaN(dv) && dv > 0 ? dv : 0;
+        const baseBruta = rate > 0 && mode === 'inclusive' ? gross / (1 + rate) : gross;
         const lineDisc = dvPos ? (l.discount_kind === 'percent' ? (baseBruta * dvPos) / 100 : Math.min(dvPos, baseBruta)) : 0;
         const baseNeta = baseBruta - lineDisc;
-        base += baseNeta;
-        tax += baseNeta * rate;
-      } else {
-        const baseBruta = gross;
-        const lineDisc = dvPos ? (l.discount_kind === 'percent' ? (baseBruta * dvPos) / 100 : Math.min(dvPos, baseBruta)) : 0;
-        const baseNeta = baseBruta - lineDisc;
-        base += baseNeta;
+        subtotal += baseNeta;
         tax += baseNeta * rate;
       }
     }
-    return { subtotal: base, tax, total: base + tax, fromServer: false };
+    const retention = retentionRate > 0 ? Math.round(subtotal * retentionRate * 100) / 100 : 0;
+    return { subtotal, tax, retention, total: subtotal + tax - retention, fromServer };
   })();
 
   const currency = savedDoc?.currency
@@ -307,6 +308,7 @@ export function FacturaEditorDialog({
         discount_value: discountNum,
         discount_kind: discountNum != null ? discountKind : undefined,
         ...(isBill ? {} : { category_id: categoryId || null }),
+        retention_rate_id: retentionRateId || null,
         notes: notes.trim() || undefined,
         terms: terms.trim() || undefined,
         lines: validLines.map(toLineInput),
@@ -320,6 +322,7 @@ export function FacturaEditorDialog({
     await updateDocument(savedDoc.id, {
       ...(isBill ? { number: supplierNumber.trim() } : {}),
       ...(isBill ? {} : { category_id: categoryId || null }),
+      retention_rate_id: retentionRateId || null,
       notes: notes.trim(),
       terms: terms.trim(),
       discount_value: discountNum ?? 0,
@@ -629,6 +632,24 @@ export function FacturaEditorDialog({
               )}
             </div>
 
+            {/* Retención IRPF (a nivel documento, 0263): separada del IVA por línea. */}
+            {retentionRates.length > 0 && (
+              <div>
+                <label style={labelStyle}>Retención IRPF</label>
+                <select value={retentionRateId} onChange={(e) => setRetentionRateId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
+                  <option value="">— sin retención —</option>
+                  {retentionRates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({(Number(t.rate) * 100).toFixed(0)}%)</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {isBill
+                    ? 'Retienes este % al proveedor (profesional/alquiler) y lo ingresas tú a Hacienda. Baja el total a pagar.'
+                    : 'Tu cliente te retiene este % y lo ingresa él a Hacienda. Baja el total a cobrar; lo recuperas en tu declaración.'}
+                </div>
+              </div>
+            )}
+
             {/* Líneas */}
             <div>
               <label style={labelStyle}>Líneas</label>
@@ -692,7 +713,7 @@ export function FacturaEditorDialog({
                         <td style={{ padding: '3px 4px' }}>
                           <select value={l.tax_rate_id} onChange={(e) => setLine(i, { tax_rate_id: e.target.value })} disabled={isEmitted} style={cellInput}>
                             <option value="">Sin IVA</option>
-                            {taxRates.map((t) => (
+                            {taxRates.filter((t) => t.tax_type !== 'irpf_retention').map((t) => (
                               <option key={t.id} value={t.id}>
                                 {t.name} ({(Number(t.rate) * 100).toFixed(0)}% {t.mode === 'inclusive' ? 'inc' : 'exc'})
                               </option>
@@ -820,13 +841,21 @@ export function FacturaEditorDialog({
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>IVA</span><span>{fmtMoney(liveTotals.tax, currency)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', fontSize: 17, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 6 }}><span>TOTAL</span><span>{fmtMoney(liveTotals.total, currency)}</span></div>
+              {liveTotals.retention > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--warning)' }}><span>− Retención IRPF</span><span>−{fmtMoney(liveTotals.retention, currency)}</span></div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', fontSize: 17, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 6 }}>
+                <span style={{ fontSize: liveTotals.retention > 0 ? 13 : 17 }}>{liveTotals.retention > 0 ? (isBill ? 'Total a pagar' : 'Total a cobrar') : 'TOTAL'}</span>
+                <span>{fmtMoney(liveTotals.total, currency)}</span>
+              </div>
               {!liveTotals.fromServer && (
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'var(--font-sans, inherit)' }}>Estimado. Se confirma al guardar.</div>
               )}
             </div>
           </div>
           </div>
+          {/* Relacionado con esta factura: contacto + correspondencia (emails) + productos + pagos. */}
+          {savedDoc?.id && <DocumentRelatedPanel documentId={savedDoc.id} onOpenContact={openContact} />}
           {/* Inteligencia de relaciones: Related Entities + Similar Semantic + Graph Proximity */}
           {savedDoc?.id && <RelationIntelligence sourceType="finance_document" sourceId={savedDoc.id} />}
         </div>

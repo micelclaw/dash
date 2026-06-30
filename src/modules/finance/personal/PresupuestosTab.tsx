@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Check, X, PiggyBank, ChevronLeft, ChevronRight, CalendarClock, AlertTriangle } from 'lucide-react';
 import { useFinancePersonalStore, type Budget } from '@/stores/finance-personal.store';
 import { fmtMoney, categoryVisual, tintBackground } from './lib';
+import { ObjetivosAhorroSection } from './ObjetivosAhorroSection';
 
 // ── Utilidades de mes ('YYYY-MM') ──────────────────────────────────
 /** Mes en curso en formato 'YYYY-MM' a partir de la fecha local. */
@@ -324,6 +325,11 @@ export function PresupuestosTab() {
         )}
 
         <AddBudget takenCategoryIds={taken} />
+      </div>
+
+      {/* Objetivos de ahorro (Personal pro) — separados de los presupuestos del mes. */}
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <ObjetivosAhorroSection />
       </div>
     </div>
   );

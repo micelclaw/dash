@@ -15,9 +15,10 @@
 // crear movimiento desde una línea sin apunte, y resumen libros vs extracto.
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2, FileUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { ImportWizard } from '../ImportWizard';
 
 interface Account { id: string; code: string | null; name: string; type: string; subtype: string | null; }
 interface StatementLine { id: string; date: string; amount: string; description: string | null; status: 'unmatched' | 'reconciled'; reconciled_posting_id: string | null; }
@@ -40,6 +41,7 @@ export function ConciliacionPanel() {
   const [lines, setLines] = useState<StatementLine[]>([]);
   const [postings, setPostings] = useState<LedgerPosting[]>([]);
   const [busy, setBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [nl, setNl] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', description: '' });
 
   useEffect(() => {
@@ -84,6 +86,9 @@ export function ConciliacionPanel() {
           </select>
           <button type="button" disabled={busy || !accountId} onClick={() => void run(() => api.post(`/finance/reconciliation/${accountId}/auto-match`, {}), 'Auto-conciliación aplicada')} style={{ ...btn(), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {busy ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Wand2 size={13} />} Auto-conciliar
+          </button>
+          <button type="button" disabled={!accountId} onClick={() => setImporting(true)} style={{ ...btn(), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <FileUp size={13} /> Importar extracto (CSV/OFX)
           </button>
         </div>
         {summary && (
@@ -134,6 +139,8 @@ export function ConciliacionPanel() {
           </tbody>
         </table>
       </div>
+
+      <ImportWizard open={importing} onClose={() => setImporting(false)} fixedType="bank-statement" fixedAccountId={accountId} onDone={() => void reload()} />
     </div>
   );
 }

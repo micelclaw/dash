@@ -179,6 +179,65 @@ function NetWorthChart({ series }: { series: FinanceSeriesPoint[] }) {
   );
 }
 
+// ── Flujo de caja mensual (ingresos vs gastos + ahorro) ────────────
+// 'YYYY-MM' → 'jun' (mes corto) para el eje X.
+function shortMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  if (!y || !m) return ym;
+  const d = new Date(y, m - 1, 1);
+  if (Number.isNaN(d.getTime())) return ym;
+  return new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(d).replace('.', '');
+}
+
+function CashflowTooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey?: string; value?: number }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const get = (k: string) => Number(payload.find((p) => p.dataKey === k)?.value ?? 0);
+  const inc = get('income'), exp = get('expense'), net = inc - exp;
+  const row = (color: string, name: string, value: number) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', marginTop: 2 }}>
+      <span style={{ width: 9, height: 9, borderRadius: 2, background: color, display: 'inline-block' }} />{name}
+      <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono, monospace)' }}>{fmtMoney(value)}</span>
+    </div>
+  );
+  return (
+    <div style={{ padding: '8px 12px', background: 'var(--surface, #1a1a24)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', fontSize: 12, minWidth: 150 }}>
+      <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>{label ? shortMonth(String(label)) : ''}</div>
+      {row(INCOME_BAR_COLOR, 'Ingresos', inc)}
+      {row(EXPENSE_BAR_COLOR, 'Gastos', exp)}
+      {row(NET_WORTH_COLOR, 'Ahorro', net)}
+    </div>
+  );
+}
+
+// Agrupa la serie diaria por mes → barras ingresos/gastos + línea de ahorro neto.
+function CashflowChart({ series }: { series: FinanceSeriesPoint[] }) {
+  const data = useMemo(() => {
+    const m = new Map<string, { bucket: string; income: number; expense: number }>();
+    for (const p of series) {
+      const k = p.date.slice(0, 7);
+      const cur = m.get(k) ?? { bucket: k, income: 0, expense: 0 };
+      cur.income += Number(p.income); cur.expense += Number(p.expense);
+      m.set(k, cur);
+    }
+    return [...m.values()].map((d) => ({ ...d, net: Math.round((d.income - d.expense) * 100) / 100 }));
+  }, [series]);
+  const hasData = data.some((d) => d.income > 0 || d.expense > 0);
+  if (!hasData) return <EmptyChart height={200} />;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 0 }} barGap={2} barCategoryGap="28%">
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="bucket" tickFormatter={shortMonth} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} minTickGap={16} />
+        <YAxis tickFormatter={moneyAxisShort} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={64} />
+        <Tooltip content={<CashflowTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
+        <Bar dataKey="income" name="Ingresos" fill={INCOME_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
+        <Bar dataKey="expense" name="Gastos" fill={EXPENSE_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
+        <Line type="monotone" dataKey="net" name="Ahorro" stroke={NET_WORTH_COLOR} strokeWidth={2} dot={{ r: 2 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
+
 // ── Tooltip del donut de gasto por categoría ───────────────────────
 function CategoryTooltip({ active, payload }: { active?: boolean; payload?: { payload?: CatSlice }[] }) {
   if (!active || !payload?.[0]?.payload) return null;
@@ -302,12 +361,21 @@ export function ResumenTab() {
     return () => { alive = false; };
   }, [fetchSpendByCategory, range.from, range.to, spendKind, storeSummary?.net_worth, storeSummary?.expenses_period]);
 
+  // Derivados pro: tasa de ahorro (ingresos−gastos)/ingresos y variación del
+  // patrimonio en el periodo (último − primer punto de la serie).
+  const incomeP = Number(periodSummary?.income_period ?? 0);
+  const expenseP = Number(periodSummary?.expenses_period ?? 0);
+  const netSaved = incomeP - expenseP;
+  const savingsRate = incomeP > 0.005 ? Math.max(0, Math.round(((incomeP - expenseP) / incomeP) * 100)) : 0;
+  const nwDelta = series.length >= 2 ? Number(series[series.length - 1].net_worth) - Number(series[0].net_worth) : 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Patrimonio" emoji="💎" value={fmtMoney(periodSummary?.net_worth)} hint="activo − pasivo" accent={Number(periodSummary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
+        <Kpi label="Patrimonio" emoji="💎" value={fmtMoney(periodSummary?.net_worth)} hint={series.length >= 2 ? `${nwDelta >= 0 ? '▲ +' : '▼ −'}${fmtMoney(Math.abs(nwDelta))} · ${title.toLowerCase()}` : 'activo − pasivo'} accent={Number(periodSummary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
         <Kpi label="Gastado" emoji="💸" value={fmtMoney(periodSummary?.expenses_period)} hint={title} accent="var(--error)" />
         <Kpi label="Ingresos" emoji="💰" value={fmtMoney(periodSummary?.income_period)} hint={title} accent="var(--mod-finance)" />
+        <Kpi label="Tasa de ahorro" emoji="🐷" value={`${savingsRate} %`} hint={netSaved >= 0 ? `ahorras ${fmtMoney(netSaved)}` : `gastas ${fmtMoney(-netSaved)} de más`} accent={netSaved >= 0 ? 'var(--mod-finance)' : 'var(--error)'} />
         <Kpi label="Saldo disponible" emoji="🏦" value={fmtMoney(periodSummary?.available)} hint="cuentas de activo" />
       </div>
 
@@ -325,6 +393,11 @@ export function ResumenTab() {
           <SpendByCategoryChart rows={spend} />
         </ChartCard>
       </div>
+
+      {/* Flujo de caja mensual: ingresos vs gastos + ahorro neto (línea). */}
+      <ChartCard title={`Flujo de caja · ${title}`} flex="1 1 100%">
+        <CashflowChart series={series} />
+      </ChartCard>
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* Cuentas */}

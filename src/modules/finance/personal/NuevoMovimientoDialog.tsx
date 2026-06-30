@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
-import { useFinancePersonalStore, type MovementKind, type RecurrenceInterval } from '@/stores/finance-personal.store';
+import { useFinancePersonalStore, reconstructMovement, type MovementKind, type RecurrenceInterval, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { todayISO } from './lib';
 import { useEscapeClose } from '../use-escape-close';
 
@@ -34,8 +34,8 @@ const RECURRENCE_OPTIONS: { id: RecurrenceInterval; label: string }[] = [
   { id: 'annual', label: 'Anual' },
 ];
 
-export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { accounts, categories, createMovement, createCategory } = useFinancePersonalStore();
+export function NuevoMovimientoDialog({ open, onClose, editTx }: { open: boolean; onClose: () => void; editTx?: FinanceTransaction | null }) {
+  const { accounts, categories, createMovement, editMovement, updateMovementMetadata, createCategory } = useFinancePersonalStore();
   const [kind, setKind] = useState<MovementKind>('expense');
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState('');
@@ -46,37 +46,62 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
   const [recurrente, setRecurrente] = useState(false);
   const [recInterval, setRecInterval] = useState<RecurrenceInterval>('monthly');
   const [saving, setSaving] = useState(false);
+  // Editar: si el movimiento NO es simple (cobro/asiento multi-pata), solo se editan
+  // los campos blandos (concepto/categoría); importe/cuenta/tipo/fecha quedan bloqueados.
+  const [editSimple, setEditSimple] = useState(true);
   const amountRef = useRef<HTMLInputElement>(null);
+  const editing = !!editTx;
+  const lockStructural = editing && !editSimple;
 
   const assetAccounts = accounts.filter((a) => a.type === 'asset' || a.type === 'liability');
   const kindCategories = categories.filter((c) => c.kind === (kind === 'income' ? 'income' : 'expense'));
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => amountRef.current?.focus(), 50);
+    if (!open) return;
+    if (editTx) {
+      // Prerrellena desde el asiento existente.
+      const m = reconstructMovement(editTx, accounts);
+      setKind(m.kind); setAmount(m.amount); setAccountId(m.accountId); setToAccountId(m.toAccountId ?? '');
+      setCategoryId(m.categoryId ?? ''); setDescription(m.description ?? ''); setDate(m.date);
+      setRecurrente(false); setEditSimple(m.simple);
+    } else {
+      setEditSimple(true);
       if (!accountId && assetAccounts[0]) setAccountId(assetAccounts[0].id);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    setTimeout(() => amountRef.current?.focus(), 50);
+  }, [open, editTx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEscapeClose(open, onClose);
 
   if (!open) return null;
 
   const submit = async () => {
-    const amt = amount.replace(',', '.').trim();
-    if (!amt || Number(amt) <= 0) { toast.error('Indica un importe'); return; }
-    if (!accountId) { toast.error('Elige una cuenta'); return; }
-    if (kind === 'transfer' && !toAccountId) { toast.error('Elige la cuenta de destino'); return; }
     setSaving(true);
     try {
-      await createMovement({
-        kind, account_id: accountId, amount: Number(amt).toFixed(2), date,
-        category_id: kind === 'transfer' ? null : (categoryId || null),
-        to_account_id: kind === 'transfer' ? toAccountId : null,
-        description: description || null,
-        ...(recurrente ? { recurrence: { interval: recInterval } } : {}),
-      });
-      toast.success(recurrente ? 'Movimiento recurrente creado' : 'Movimiento guardado');
+      if (editTx && lockStructural) {
+        // Movimiento complejo (cobro/asiento de sistema): solo concepto + categoría.
+        await updateMovementMetadata(editTx.id, { description: description || null, categoryId: kind === 'transfer' ? null : (categoryId || null) });
+        toast.success('Movimiento actualizado');
+      } else {
+        const amt = amount.replace(',', '.').trim();
+        if (!amt || Number(amt) <= 0) { toast.error('Indica un importe'); setSaving(false); return; }
+        if (!accountId) { toast.error('Elige una cuenta'); setSaving(false); return; }
+        if (kind === 'transfer' && !toAccountId) { toast.error('Elige la cuenta de destino'); setSaving(false); return; }
+        const input = {
+          kind, account_id: accountId, amount: Number(amt).toFixed(2), date,
+          category_id: kind === 'transfer' ? null : (categoryId || null),
+          to_account_id: kind === 'transfer' ? toAccountId : null,
+          description: description || null,
+          ...(recurrente && !editing ? { recurrence: { interval: recInterval } } : {}),
+        };
+        if (editTx) {
+          await editMovement(editTx, input);
+          toast.success('Movimiento actualizado');
+        } else {
+          await createMovement(input);
+          toast.success(recurrente ? 'Movimiento recurrente creado' : 'Movimiento guardado');
+        }
+      }
       setAmount(''); setDescription(''); setCategoryId(''); setRecurrente(false);
       onClose();
     } catch (e) {
@@ -103,14 +128,20 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '8vh' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: '92vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Nuevo movimiento</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{editing ? 'Editar movimiento' : 'Nuevo movimiento'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
 
+        {lockStructural && (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: '8px 10px', marginBottom: 14 }}>
+            Este movimiento procede de una factura o asiento: solo puedes editar el concepto y la categoría. Para cambiar el importe o la cuenta, usa “Revertir” y crea uno nuevo.
+          </div>
+        )}
+
         {/* Segmented control */}
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)', marginBottom: 16, opacity: lockStructural ? 0.5 : 1, pointerEvents: lockStructural ? 'none' : 'auto' }}>
           {KINDS.map((k) => (
-            <button key={k.id} onClick={() => setKind(k.id)} style={{
+            <button key={k.id} onClick={() => setKind(k.id)} disabled={lockStructural} style={{
               flex: 1, padding: '7px 0', borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: 'pointer', fontSize: 13,
               background: kind === k.id ? 'var(--mod-finance)' : 'transparent',
               color: kind === k.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: kind === k.id ? 600 : 500,
@@ -121,12 +152,12 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <label style={labelStyle}>Importe</label>
-            <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00 €"
-              style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center' }} />
+            <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} disabled={lockStructural} inputMode="decimal" placeholder="0,00 €"
+              style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center', opacity: lockStructural ? 0.6 : 1 }} />
           </div>
           <div>
             <label style={labelStyle}>{kind === 'income' ? 'A la cuenta' : 'De la cuenta'}</label>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }}>
               <option value="">— elige cuenta —</option>
               {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
@@ -135,7 +166,7 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
           {kind === 'transfer' ? (
             <div>
               <label style={labelStyle}>A la cuenta</label>
-              <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)} style={fieldStyle}>
+              <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }}>
                 <option value="">— elige destino —</option>
                 {assetAccounts.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
@@ -159,10 +190,12 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
           </div>
           <div>
             <label style={labelStyle}>Fecha</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }} />
           </div>
 
-          {/* Recurrente: crea una regla y materializa las ocurrencias desde la fecha hasta hoy */}
+          {/* Recurrente: crea una regla y materializa las ocurrencias desde la fecha hasta hoy.
+              No aplica al EDITAR (se gestiona desde la regla, no desde el movimiento). */}
+          {!editing && (
           <div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>
               <input type="checkbox" checked={recurrente} onChange={(e) => setRecurrente(e.target.checked)} style={{ accentColor: 'var(--mod-finance)', cursor: 'pointer' }} />
@@ -179,12 +212,13 @@ export function NuevoMovimientoDialog({ open, onClose }: { open: boolean; onClos
               </>
             )}
           </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : 'Guardar movimiento'}
+            {saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Guardar movimiento'}
           </button>
         </div>
       </div>

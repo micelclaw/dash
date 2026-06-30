@@ -104,6 +104,11 @@ export interface TaxRate {
   rate: string; // numeric string, p.ej. "0.21"
   mode: TaxMode;
   account_id: string | null;
+  // Discriminador (0262): 'vat' (IVA) | 'irpf_retention' (retención IRPF) | …
+  // Sin este campo (datos viejos) se trata como 'vat'.
+  tax_type?: string;
+  // Subtipo de la retención: 'rent' (alquiler 19%) | 'professional' (profesional 15%) | 'labor'.
+  tax_subtype?: string | null;
 }
 
 export interface DocLine {
@@ -152,6 +157,11 @@ export interface FinanceDoc {
   subtotal: string;
   tax_total: string;
   total: string;
+  // Retención IRPF a nivel documento (0263). total = subtotal + IVA − retención.
+  // Null si el documento no lleva retención.
+  retention_rate_id?: string | null;
+  retention_base?: string | null;
+  retention_amount?: string | null;
   discount_value: string | null;
   // El backend usa percent|fixed para el descuento de documento.
   discount_kind: 'percent' | 'fixed' | null;
@@ -196,7 +206,9 @@ export interface SaveFinanceContactInput {
 /** Entidades relacionadas de un documento (cruce de dominios) → enlaces en la UI. */
 export interface DocRelatedItem { item_id: string; name: string; category: string | null; quantity: string; relation: 'purchased' | 'sold' | null }
 export interface DocRelatedPayment { id: string; amount: string; date: string; method: string | null; account_id: string | null; account_name: string | null }
-export interface DocRelated { type: string; inventory: DocRelatedItem[]; payments: DocRelatedPayment[] }
+export interface DocRelatedContact { id: string; name: string; email: string | null }
+export interface DocRelatedEmail { id: string; subject: string | null; from_address: string; direction: 'sent' | 'received'; received_at: string }
+export interface DocRelated { type: string; contact: DocRelatedContact | null; inventory: DocRelatedItem[]; payments: DocRelatedPayment[]; emails: DocRelatedEmail[] }
 
 export interface CreateTaxRateInput {
   name: string;
@@ -238,6 +250,9 @@ export interface CreateDocumentInput {
   discount_kind?: 'percent' | 'fixed';
   // Categoría de ingreso de la venta (#4). '' / null = sin categoría.
   category_id?: string | null;
+  // Retención IRPF a nivel documento (0263): id de una tasa tax_type='irpf_retention'.
+  // null = sin retención.
+  retention_rate_id?: string | null;
   notes?: string;
   terms?: string;
   lines?: DocLineInput[];
@@ -253,6 +268,7 @@ export interface UpdateDocumentInput {
   issue_date?: string;
   due_date?: string;
   category_id?: string | null; // categoría de ingreso (ventas) → desglose en Personal
+  retention_rate_id?: string | null; // retención IRPF a nivel documento (0263); null = sin retención
 }
 
 /** Datos de la empresa emisora del usuario (fila de finance_company). */

@@ -129,6 +129,15 @@ export interface CreateBudgetInput {
   period?: string;
 }
 
+/** Objetivo de ahorro (users.settings.finance_goals). Meta: importe + fecha + ahorrado. */
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target: number;   // importe objetivo
+  deadline: string | null; // 'YYYY-MM-DD' o null
+  saved: number;    // ahorrado hasta ahora → progreso = saved/target
+}
+
 export interface MovementInput {
   kind: MovementKind;
   account_id: string;
@@ -196,12 +205,53 @@ interface FinancePersonalState {
   /** Borra (soft-delete) una categoría. Refresca la lista. */
   deleteCategory: (id: string) => Promise<void>;
   reverseTransaction: (id: string) => Promise<void>;
+  /** Edición "blanda" de un movimiento (concepto/categoría) — no toca el ledger. */
+  updateMovementMetadata: (id: string, data: { description?: string | null; categoryId?: string | null }) => Promise<void>;
+  /** Edición completa: concepto/categoría in situ; importe/cuenta/fecha → reversar+recrear. */
+  editMovement: (oldTx: FinanceTransaction, input: MovementInput) => Promise<void>;
 
   /** Estado de los presupuestos del mes indicado ('YYYY-MM'; por defecto, mes en curso). */
   fetchBudgets: (month?: string) => Promise<void>;
   createBudget: (input: CreateBudgetInput) => Promise<Budget>;
   updateBudget: (id: string, data: { amount: string }) => Promise<void>;
   deleteBudget: (id: string) => Promise<void>;
+
+  /** Objetivos de ahorro (users.settings.finance_goals). Devuelven la lista; no mutan el store. */
+  fetchGoals: () => Promise<SavingsGoal[]>;
+  saveGoals: (goals: SavingsGoal[]) => Promise<SavingsGoal[]>;
+}
+
+/**
+ * Reconstruye los campos de un MOVIMIENTO (kind/cuenta/importe/categoría/concepto/fecha)
+ * a partir de su asiento, para prerrellenar el editor. `simple` = movimiento estándar
+ * (income/expense de 1 cuenta-monedero, o transferencia de 2) → se puede editar importe/
+ * cuenta; si es complejo (cobro/asiento multi-pata), solo concepto/categoría.
+ */
+export function reconstructMovement(tx: FinanceTransaction, accounts: FinanceAccount[]): {
+  kind: MovementKind; accountId: string; toAccountId: string | null; amount: string;
+  categoryId: string | null; description: string | null; date: string; simple: boolean;
+} {
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  const isWallet = (p: FinancePosting) => { const a = byId.get(p.account_id); return !!a && (a.type === 'asset' || a.type === 'liability'); };
+  const wallets = tx.postings.filter(isWallet);
+  const isTransfer = tx.postings.length === 2 && tx.postings.every(isWallet);
+  if (isTransfer) {
+    const from = tx.postings.find((p) => p.credit != null);
+    const to = tx.postings.find((p) => p.debit != null);
+    return { kind: 'transfer', accountId: from?.account_id ?? '', toAccountId: to?.account_id ?? null, amount: Number(from?.credit ?? 0).toFixed(2), categoryId: null, description: tx.description, date: tx.date, simple: true };
+  }
+  const wallet = wallets[0];
+  const other = tx.postings.find((p) => !isWallet(p));
+  const isIncome = wallet?.debit != null; // dinero ENTRA a la cuenta-monedero = ingreso
+  const amount = Number(wallet?.debit ?? wallet?.credit ?? 0);
+  const simple = wallets.length === 1 && tx.postings.length === 2;
+  return {
+    kind: isIncome ? 'income' : 'expense',
+    accountId: wallet?.account_id ?? '', toAccountId: null,
+    amount: amount.toFixed(2),
+    categoryId: other?.category_id ?? wallet?.category_id ?? null,
+    description: tx.description, date: tx.date, simple,
+  };
 }
 
 export const useFinancePersonalStore = create<FinancePersonalState>((set, get) => ({
@@ -306,6 +356,29 @@ export const useFinancePersonalStore = create<FinancePersonalState>((set, get) =
     await api.post(`/finance/transactions/${id}/reverse`);
     await get().refreshAll();
   },
+  updateMovementMetadata: async (id, data) => {
+    await api.patch(`/finance/transactions/${id}`, {
+      ...(data.description !== undefined ? { description: data.description } : {}),
+      ...(data.categoryId !== undefined ? { category_id: data.categoryId } : {}),
+    });
+    await get().refreshAll();
+  },
+  editMovement: async (oldTx, input) => {
+    const before = reconstructMovement(oldTx, get().accounts);
+    // ¿Cambió algo que toca el ledger (importe/cuenta/tipo/fecha/destino)? → reversar+recrear.
+    const structural =
+      before.kind !== input.kind ||
+      before.accountId !== input.account_id ||
+      (before.toAccountId ?? null) !== (input.to_account_id ?? null) ||
+      Math.abs(Number(before.amount) - Number(input.amount)) > 0.005 ||
+      before.date !== input.date;
+    if (structural) {
+      await get().reverseTransaction(oldTx.id);
+      await get().createMovement(input);
+    } else {
+      await get().updateMovementMetadata(oldTx.id, { description: input.description ?? null, categoryId: input.category_id ?? null });
+    }
+  },
 
   fetchBudgets: async (month) => {
     activeBudgetMonth = month;
@@ -324,5 +397,14 @@ export const useFinancePersonalStore = create<FinancePersonalState>((set, get) =
   deleteBudget: async (id) => {
     await api.delete(`/finance/budgets/${id}`);
     await get().fetchBudgets(activeBudgetMonth);
+  },
+
+  fetchGoals: async () => {
+    const r = await api.get<{ data: SavingsGoal[] }>('/finance/goals');
+    return r.data ?? [];
+  },
+  saveGoals: async (goals) => {
+    const r = await api.put<{ data: SavingsGoal[] }>('/finance/goals', { goals });
+    return r.data ?? [];
   },
 }));

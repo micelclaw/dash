@@ -23,12 +23,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { LayoutDashboard, Users, FileText, ScrollText, FileDown, Banknote, Settings, Plus, Loader2, X } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Users, FileText, ScrollText, FileDown, Banknote, Settings, Plus, Loader2, X } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
 import { useFinanceBillingStore, type FinanceRole } from '@/stores/finance-billing.store';
 import { useFinanceLiveRefresh } from '../use-finance-live-refresh';
 import { useEscapeClose } from '../use-escape-close';
 import { FacturacionResumenTab } from './FacturacionResumenTab';
+import { FacturacionRendimientoTab } from './FacturacionRendimientoTab';
 import { FacturacionClientesTab } from './FacturacionClientesTab';
 import { FacturacionFacturasTab } from './FacturacionFacturasTab';
 import { FacturacionPagosTab } from './FacturacionPagosTab';
@@ -41,6 +42,7 @@ import { PeriodControl } from '../period';
 
 const SECTIONS = [
   { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
+  { id: 'rendimiento', label: 'Rendimiento', icon: TrendingUp },
   { id: 'clientes', label: 'Contactos', icon: Users },
   { id: 'facturas', label: 'Facturas', icon: FileText },
   { id: 'presupuestos', label: 'Presupuestos', icon: ScrollText },
@@ -121,8 +123,8 @@ export function FacturacionLens() {
               fino, inactivos más atenuados). */}
           <Tabs className="fact-subtabs" tabs={SECTIONS} activeTab={section} onChange={setSection} variant="underline" />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* Selector de periodo (solo en Resumen): conduce TODO el resumen. */}
-            {section === 'resumen' && <PeriodControl />}
+            {/* Selector de periodo (Resumen y Rendimiento): conduce ambos cuadros. */}
+            {(section === 'resumen' || section === 'rendimiento') && <PeriodControl />}
             {section === 'clientes' && (
               <button onClick={openNewCustomer} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                 <Plus size={15} /> Contacto
@@ -155,6 +157,7 @@ export function FacturacionLens() {
             <div style={{ position: 'absolute', top: 10, right: 16, color: 'var(--text-muted)' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /></div>
           )}
           {section === 'resumen' && <FacturacionResumenTab />}
+          {section === 'rendimiento' && <FacturacionRendimientoTab />}
           {section === 'clientes' && <FacturacionClientesTab />}
           {section === 'facturas' && <FacturacionFacturasTab />}
           {section === 'presupuestos' && <FacturacionFacturasTab lockedType="quote" />}
