@@ -18,6 +18,7 @@ import {
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
   Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code, MemoryStick,
+  Puzzle,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -25,6 +26,7 @@ import { useSecurityStore } from '@/stores/security.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { GeneralSection } from '@/components/settings/sections/GeneralSection';
+import { CompanionsSection } from '@/components/settings/sections/CompanionsSection';
 import { AISection } from '@/components/settings/sections/AISection';
 import { SyncSection } from '@/components/settings/sections/SyncSection';
 import { MailSection } from '@/components/settings/sections/MailSection';
@@ -192,6 +194,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         { id: 'network', label: 'Network', icon: Network },
         { id: 'domains', label: 'Domains', icon: Globe2 },
         { id: 'gateway-auth', label: 'Gateway', icon: Radio },
+        { id: 'companions', label: 'Apps acompañantes', icon: Puzzle },
       ],
     },
     {
@@ -319,6 +322,7 @@ const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
   'browser-config':       () => <BrowserConfigSection />,
   'gateway-auth':         () => <GatewayAuthSection />,
   'devices':              () => <DevicesSection />,
+  'companions':           () => <CompanionsSection />,
   'approvals-forwarding': () => <ApprovalsForwardingSection />,
   'memory-search':        () => <MemorySearchSection />,
   'active-memory':        () => <ActiveMemorySection />,
