@@ -225,6 +225,20 @@ export function Component() {
     if (id) setSelectedEmailId(id);
   }, [searchParams, setSelectedEmailId]);
 
+  // Deep-link de compose (?compose=1&to=&subject=&body=) — usado por las companions
+  // (mailto: de MiniMicel, "Enviar por correo" de CrawlMicel).
+  useEffect(() => {
+    if (searchParams.get('compose') !== '1') return;
+    const to = searchParams.get('to') ?? '';
+    openComposer({
+      mode: 'new',
+      to: to ? [{ address: to }] : undefined,
+      subject: searchParams.get('subject') ?? undefined,
+      body_html: searchParams.get('body') ?? undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleToggleSelection = useCallback((id: string, shiftKey: boolean) => {
     toggleSelection(id, shiftKey, emails.map(e => e.id));
   }, [toggleSelection, emails]);
