@@ -24,9 +24,10 @@ import { EpisodeRow } from './EpisodeRow';
 export function SeasonList({ seasons }: { seasons: VideoItem[] }) {
   const episodesBySeason = useVideoStore((s) => s.episodesBySeason);
   const loadingEpisodes = useVideoStore((s) => s.loadingEpisodes);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
-    seasons.length > 0 ? { [seasons[0].id]: true } : {},
-  );
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    const first = seasons[0];
+    return first ? { [first.id]: true } : {};
+  });
 
   useEffect(() => {
     for (const season of seasons) {

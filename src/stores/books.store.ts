@@ -116,19 +116,18 @@ function trackToPlayable(
  */
 function startQueueAt(queue: PlayableItem[], globalSeconds: number): void {
   if (queue.length === 0) return;
-  let idx = queue.findIndex((q) => {
+  const found = queue.findIndex((q) => {
     const start = q.trackStartOffset ?? 0;
     const dur = q.durationSec ?? 0;
     return globalSeconds >= start && globalSeconds < start + dur;
   });
-  let offset = 0;
-  if (idx < 0) {
-    idx = 0; // position beyond the end (finished) or unknown — restart
-  } else {
-    offset = globalSeconds - (queue[idx].trackStartOffset ?? 0);
-  }
-  usePlayerStore.getState().playAudio(queue[idx], queue.slice(idx));
-  if (offset > 1) seekWhenReady(queue[idx].fileId, offset);
+  // found < 0 → position beyond the end (finished) or unknown — restart at 0.
+  const idx = found < 0 ? 0 : found;
+  const item = queue[idx];
+  if (!item) return; // unreachable: idx siempre está en [0, queue.length)
+  const offset = found < 0 ? 0 : globalSeconds - (item.trackStartOffset ?? 0);
+  usePlayerStore.getState().playAudio(item, queue.slice(idx));
+  if (offset > 1) seekWhenReady(item.fileId, offset);
 }
 
 /**

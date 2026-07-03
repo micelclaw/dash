@@ -119,7 +119,7 @@ function dateOf(rec: Rec, ...keys: string[]): string | null {
     const v = str(rec, k);
     if (v) {
       const d = new Date(v);
-      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0] ?? null;
     }
   }
   return null;

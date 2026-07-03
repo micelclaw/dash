@@ -176,7 +176,7 @@ export function MemorySearchSection() {
       // Parse s3://bucket/prefix → bucket + prefix
       const uriMatch = dbPath.match(/^(s3|r2|gs|az):\/\/([a-z0-9][a-z0-9.-]{1,61}[a-z0-9])(\/(.*))?$/);
       if (uriMatch) {
-        setS3Bucket(uriMatch[2]);
+        setS3Bucket(uriMatch[2] ?? '');
         setS3Prefix(uriMatch[4] ?? '');
       }
       setS3Endpoint((storage.endpoint ?? '') as string);
@@ -186,7 +186,7 @@ export function MemorySearchSection() {
       if (ep.includes('r2.cloudflarestorage.com')) {
         setStoragePreset('r2');
         const m = ep.match(/https?:\/\/([a-z0-9]+)\.r2\.cloudflarestorage\.com/);
-        if (m) setR2AccountId(m[1]);
+        if (m?.[1]) setR2AccountId(m[1]);
       } else if (ep.includes('backblazeb2.com')) setStoragePreset('b2');
       else if (ep && !ep.includes('amazonaws.com')) setStoragePreset('minio');
       else if (uriMatch) setStoragePreset('aws-s3');
@@ -194,13 +194,13 @@ export function MemorySearchSection() {
       const ak = (storage.access_key_id ?? '') as string;
       const sk = (storage.secret_access_key ?? '') as string;
       const refRe = /^\$\{([A-Za-z0-9_-]+)\}$/;
-      const akRef = ak.match(refRe);
-      const skRef = sk.match(refRe);
+      const akRef = ak.match(refRe)?.[1];
+      const skRef = sk.match(refRe)?.[1];
       setAccessKey(akRef
-        ? { mode: 'ref', source: 'env', provider: akRef[1], id: akRef[1] }
+        ? { mode: 'ref', source: 'env', provider: akRef, id: akRef }
         : { mode: 'plain', value: ak });
       setSecretKey(skRef
-        ? { mode: 'ref', source: 'env', provider: skRef[1], id: skRef[1] }
+        ? { mode: 'ref', source: 'env', provider: skRef, id: skRef }
         : { mode: 'plain', value: sk });
 
       // Load secret providers for the SecretInputField dropdown (best-effort)
@@ -220,7 +220,7 @@ export function MemorySearchSection() {
   const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
 
   // G7 helpers ----------------------------------------------------------------
-  const PRESET_DEFAULTS: Record<string, { endpoint: string; region: string }> = {
+  const PRESET_DEFAULTS: Record<typeof storagePreset, { endpoint: string; region: string }> = {
     'aws-s3': { endpoint: '', region: 'us-east-1' },
     r2: { endpoint: r2AccountId ? `https://${r2AccountId}.r2.cloudflarestorage.com` : '', region: 'auto' },
     b2: { endpoint: 'https://s3.us-west-002.backblazeb2.com', region: 'us-west-002' },

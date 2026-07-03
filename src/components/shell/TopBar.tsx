@@ -23,6 +23,8 @@ import { useDigestStore } from '@/stores/digest.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { MODULES } from '@/config/modules';
 import { useAuthStore } from '@/stores/auth.store';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
+import { lucideLookup } from '@/config/lucide-lookup';
 import { api } from '@/services/api';
 
 function PowerMenu() {
@@ -173,7 +175,18 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   }, [handleOpenGraph]);
 
   const currentModule = MODULES.find((m) => m.path && location.pathname.startsWith(m.path));
-  const ModIcon = currentModule?.icon;
+
+  // Los módulos L3 dinámicos (apps embebidas vía MicelHub) viven en /app/:appName
+  // y NO están en el registro estático MODULES → sin esto la barra mostraría
+  // "Micelclaw" sin icono. Los resolvemos contra el ui-modules store (label +
+  // icono Lucide + color de la propia app, ej. n8n).
+  const uiModules = useUiModulesStore((s) => s.modules);
+  const appName = location.pathname.match(/^\/app\/([^/]+)/)?.[1];
+  const appMod = appName ? uiModules.find((m) => m.app_name === decodeURIComponent(appName)) : undefined;
+
+  const moduleLabel = currentModule?.label ?? appMod?.label ?? 'Micelclaw';
+  const moduleColor = currentModule?.color ?? appMod?.color ?? undefined;
+  const ModIcon = currentModule?.icon ?? (appMod ? lucideLookup(appMod.icon) : undefined);
 
   return (
     <div
@@ -207,7 +220,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
           </button>
         )}
         {ModIcon && (
-          <ModIcon size={18} style={{ color: currentModule?.color, flexShrink: 0 }} />
+          <ModIcon size={18} style={{ color: moduleColor, flexShrink: 0 }} />
         )}
         <h2
           style={{
@@ -219,7 +232,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
             textOverflow: 'ellipsis',
           }}
         >
-          {currentModule?.label ?? 'Micelclaw'}
+          {moduleLabel}
         </h2>
       </div>
 

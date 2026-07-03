@@ -44,6 +44,23 @@ export async function getMyUiModules(): Promise<UiModule[]> {
   return res.data;
 }
 
+/** Tipo de entidad "chipeable"/mencionable aportado por una app (`ui.entities` del manifest). */
+export interface AppEntityType {
+  type: string;
+  icon: string;   // nombre Lucide → lucideLookup() lo resuelve a componente
+  color: string;
+  label: string;
+  route: string;  // plantilla con "{id}"
+  mention?: boolean;
+  app_name: string;
+}
+
+/** Tipos de entidad de apps instaladas+activas+concedidas al usuario. */
+export async function getMyEntityTypes(): Promise<AppEntityType[]> {
+  const res = await api.get<{ data: AppEntityType[] }>('/me/entity-types');
+  return res.data;
+}
+
 /** Estado por app opt_in de un usuario (admin) — para la matriz de permisos. */
 export async function getUserAppAccess(userId: string): Promise<UserAppAccessState> {
   const res = await api.get<{ data: UserAppAccessState }>(`/admin/users/${userId}/app-access`);
@@ -51,7 +68,7 @@ export async function getUserAppAccess(userId: string): Promise<UserAppAccessSta
 }
 
 /** Fija allow/deny por app opt_in de un usuario (admin). Devuelve el allowed efectivo. */
-export async function patchUserAppAccess(userId: string, apps: Record<string, boolean>): Promise<string[]> {
+export async function updateUserAppAccess(userId: string, apps: Record<string, boolean>): Promise<string[]> {
   const res = await api.patch<{ data: { allowed: string[] } }>(`/admin/users/${userId}/app-access`, { apps });
   return res.data.allowed;
 }

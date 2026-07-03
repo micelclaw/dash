@@ -24,7 +24,8 @@ export interface Lane {
   accent: string;
 }
 
-export const LANES: Lane[] = [
+// Tupla no vacía: garantiza al tipado que LANES[0] (carril por defecto) existe.
+export const LANES: [Lane, ...Lane[]] = [
   { key: 'pending', label: 'Por reclamar', statuses: ['triage', 'backlog', 'todo', 'scheduled', 'ready'], moveTo: 'todo', accent: 'var(--text-dim)' },
   { key: 'running', label: 'En curso', statuses: ['running'], moveTo: 'running', accent: 'var(--blue, #3b82f6)' },
   { key: 'review', label: 'En revisión', statuses: ['review'], moveTo: 'review', accent: 'var(--amber)' },

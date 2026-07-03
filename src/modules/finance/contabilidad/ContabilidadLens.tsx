@@ -66,7 +66,7 @@ interface Vat { to_settle: string; }
 interface WalletAccount { id: string; subtype: string | null; balance: string; }
 interface BalanceSheet { total_assets: string; total_liabilities_equity: string; result: string; equity: { amount: string }[]; balanced: boolean; }
 
-function ResumenArea({ onGo, onOpenLedger }: { onGo: (a: Area) => void; onOpenLedger: (id: string) => void }) {
+function ResumenArea({ onGo }: { onGo: (a: Area) => void; onOpenLedger: (id: string) => void }) {
   const { range, title } = useFinancePeriod();
   const [pl, setPl] = useState<PL | null>(null);
   const [vat, setVat] = useState<Vat | null>(null);
@@ -92,7 +92,6 @@ function ResumenArea({ onGo, onOpenLedger }: { onGo: (a: Area) => void; onOpenLe
 
   const result = pl ? Number(pl.result) : 0;
   const toSettle = vat ? Number(vat.to_settle) : 0;
-  const patrimonio = bs ? Number(bs.total_liabilities_equity) - (Number(bs.total_assets) - Number(bs.total_liabilities_equity)) : 0;
   const netWorth = bs ? bs.equity.reduce((s, e) => s + Number(e.amount), 0) + Number(bs.result) : 0;
 
   return (

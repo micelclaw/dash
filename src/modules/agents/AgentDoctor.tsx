@@ -33,7 +33,7 @@ const STATUS_META = {
   error: { icon: XCircle, color: 'var(--error)' },
 } as const;
 
-export function AgentDoctor({ agentId, agentName, onAgentChanged, onNavigateTab }: AgentDoctorProps) {
+export function AgentDoctor({ agentId, onAgentChanged, onNavigateTab }: AgentDoctorProps) {
   const { health, loading, error, refetch } = useAgentHealth(agentId);
   const [fixing, setFixing] = useState<string | null>(null);
 

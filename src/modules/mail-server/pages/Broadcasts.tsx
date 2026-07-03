@@ -39,6 +39,8 @@ export default function Broadcasts() {
 
     setSending(true);
     try {
+      // El provider del dash siempre implementa sendBroadcast (opcional en la interfaz upstream).
+      if (!api.sendBroadcast) throw new Error('sendBroadcast not available');
       const result = await api.sendBroadcast(subject, body);
       toast.success(`Comunicado enviado a ${result.sent_to} buzones`);
       setSubject('');

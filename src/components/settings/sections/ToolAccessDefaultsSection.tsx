@@ -44,17 +44,19 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 const ALL_TOOLS = Object.keys(TOOL_DESCRIPTIONS);
 
 // Native OpenClaw preset definitions (base, before allow/deny overrides)
+const CODING_PRESET = new Set([
+  'read', 'write', 'edit', 'apply_patch', 'exec', 'process',
+  'web_search', 'web_fetch', 'memory_search', 'memory_get',
+  'sessions_list', 'sessions_history', 'sessions_send',
+  'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
+  'cron', 'image',
+  // bundle-mcp: las claw_* se materializan en coding/messaging/full (no minimal).
+  'bundle-mcp',
+]);
+
 const PRESET_TOOLS: Record<string, Set<string>> = {
   minimal: new Set(['session_status']),
-  coding: new Set([
-    'read', 'write', 'edit', 'apply_patch', 'exec', 'process',
-    'web_search', 'web_fetch', 'memory_search', 'memory_get',
-    'sessions_list', 'sessions_history', 'sessions_send',
-    'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
-    'cron', 'image',
-    // bundle-mcp: las claw_* se materializan en coding/messaging/full (no minimal).
-    'bundle-mcp',
-  ]),
+  coding: CODING_PRESET,
   messaging: new Set([
     'sessions_list', 'sessions_history', 'sessions_send',
     'session_status', 'message',
@@ -118,12 +120,12 @@ export function ToolAccessDefaultsSection() {
   const isToolEnabled = (tool: string): boolean => {
     if (deny.has(tool)) return false;
     if (alsoAllow.has(tool)) return true;
-    const base = PRESET_TOOLS[profile] ?? PRESET_TOOLS.coding;
+    const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
     return base.has(tool);
   };
 
   const handleToolToggle = (tool: string) => {
-    const base = PRESET_TOOLS[profile] ?? PRESET_TOOLS.coding;
+    const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
     const currentlyEnabled = isToolEnabled(tool);
     const newAlsoAllow = new Set(alsoAllow);
     const newDeny = new Set(deny);
@@ -250,7 +252,7 @@ export function ToolAccessDefaultsSection() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {ALL_TOOLS.map(tool => {
             const enabled = isToolEnabled(tool);
-            const base = PRESET_TOOLS[profile] ?? PRESET_TOOLS.coding;
+            const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
             const isOverrideAdded = alsoAllow.has(tool); // added on top of preset
             const isOverrideRemoved = deny.has(tool) && base.has(tool); // removed from preset
             return (

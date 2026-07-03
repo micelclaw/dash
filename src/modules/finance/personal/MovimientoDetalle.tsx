@@ -27,6 +27,19 @@ import { useEscapeClose } from '../use-escape-close';
 const KIND_LABEL = (isTransfer: boolean, signed: number) =>
   isTransfer ? 'Transferencia' : signed >= 0 ? 'Ingreso' : 'Gasto';
 
+// Origen del movimiento (de dónde salió el asiento) → badge en la cabecera, para que
+// el usuario sepa si lo creó a mano, viene de una factura, de una regla, o del sistema.
+const SOURCE_META: Record<string, { label: string; glyph: string }> = {
+  manual: { label: 'Manual', glyph: '📝' },
+  document: { label: 'De factura', glyph: '🧾' },
+  payment: { label: 'Cobro / pago', glyph: '💸' },
+  reversal: { label: 'Reverso', glyph: '↩️' },
+  closing: { label: 'Cierre', glyph: '🔒' },
+  opening: { label: 'Apertura', glyph: '📂' },
+};
+const sourceMeta = (source: string, recurring: boolean) =>
+  recurring ? { label: 'Recurrente', glyph: '🔁' } : (SOURCE_META[source] ?? { label: 'Sistema', glyph: '⚙️' });
+
 export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | null; onClose: () => void }) {
   const { accounts, categories, reverseTransaction } = useFinancePersonalStore();
   const [busy, setBusy] = useState(false);
@@ -67,9 +80,16 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
             <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {tx.description || KIND_LABEL(f.isTransfer, f.signed)}
             </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tx.date}</span>
-              {recurring && <RecurrenceBadge />}
+              {(() => {
+                const sm = sourceMeta(tx.source, recurring);
+                return (
+                  <span title="De dónde salió este movimiento" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-dim)' }}>
+                    <span style={{ fontSize: 11, lineHeight: 1 }}>{sm.glyph}</span>{sm.label}
+                  </span>
+                );
+              })()}
             </div>
           </div>
           <button onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></button>

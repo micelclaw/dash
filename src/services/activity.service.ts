@@ -142,7 +142,7 @@ export async function getNotificationRules(): Promise<BuiltinRule[]> {
   return data.rules;
 }
 
-export async function patchNotificationRule(
+export async function updateNotificationRule(
   ruleKey: string,
   patch: { enabled?: boolean; threshold?: Record<string, unknown> },
 ): Promise<RuleOverride> {
@@ -161,7 +161,7 @@ export async function patchNotificationRule(
  * regardless).
  */
 export async function resetNotificationRule(ruleKey: string): Promise<RuleOverride> {
-  return patchNotificationRule(ruleKey, { enabled: true, threshold: {} });
+  return updateNotificationRule(ruleKey, { enabled: true, threshold: {} });
 }
 
 // ─── Events feed ────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useMailServerApi } from '@micelclaw/mail-admin-ui';
 import type { MailuUser, MailuFetchedAccount, MailuToken } from '@micelclaw/mail-admin-ui';
-import { ArrowLeft, RefreshCw, Trash2, Save, X, Plus, Shield, Mail, Clock, Forward, Download, Key } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Save, X, Plus, Shield, Clock, Forward, Download, Key } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TABS = ['General', 'Spam', 'Auto-respuesta', 'Reenvío', 'Cuentas externas', 'Tokens'] as const;

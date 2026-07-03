@@ -37,6 +37,7 @@ import {
   type DocType,
 } from '@/stores/finance-billing.store';
 import { STATUS_META, tintedPillStyle, statusLabel } from './statusMeta';
+import { fmtMoney } from '../lib/format';
 
 const ROLE_LABEL: Record<FinanceRole, string> = {
   customer: 'Cliente',
@@ -52,16 +53,6 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
 };
 
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
-
-function fmtMoney(value: string | number | null | undefined, currency?: string | null): string {
-  const n = Number(value ?? 0);
-  const cur = currency || 'EUR'; // un contacto del CRM etiquetado puede no tener divisa → EUR
-  try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: cur }).format(n);
-  } catch {
-    return `${n.toFixed(2)} ${cur}`;
-  }
-}
 
 function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType }) {
   const m = STATUS_META[status];

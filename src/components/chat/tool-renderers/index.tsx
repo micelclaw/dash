@@ -10,8 +10,10 @@
  * https://micelclaw.com
  */
 
+import type { ComponentType } from 'react';
 import type { ToolCallRecord } from '@/types/chat';
 import { classify } from '@/config/tool-rendering';
+import type { RendererKind } from '@/config/tool-rendering';
 import { SpawnToolBlock } from './SpawnToolBlock';
 import { BashToolBlock } from './BashToolBlock';
 import { ReadToolBlock } from './ReadToolBlock';
@@ -24,6 +26,22 @@ import { GenericToolBlock } from './GenericToolBlock';
 import { EntityRefChips } from './EntityRefChips';
 
 interface Props { tool: ToolCallRecord }
+
+/**
+ * Registry renderer-kind → component. Adding a new renderer only needs the
+ * component plus its entry here (and the `RendererKind` member in
+ * `config/tool-rendering.ts`) — no dispatcher edits.
+ */
+const RENDERERS: Record<RendererKind, ComponentType<Props>> = {
+  spawn:   SpawnToolBlock,
+  bash:    BashToolBlock,
+  read:    ReadToolBlock,
+  edit:    EditToolBlock,
+  browse:  BrowseToolBlock,
+  search:  SearchToolBlock,
+  memory:  MemoryToolBlock,
+  generic: GenericToolBlock,
+};
 
 /**
  * Pick a renderer by classifying the tool name. Falls back to
@@ -39,17 +57,8 @@ function renderToolBlock(tool: ToolCallRecord) {
     return <PluginStatusToolBlock tool={tool} />;
   }
   const def = classify(tool.tool);
-  switch (def.renderer) {
-    case 'spawn':   return <SpawnToolBlock tool={tool} />;
-    case 'bash':    return <BashToolBlock tool={tool} />;
-    case 'read':    return <ReadToolBlock tool={tool} />;
-    case 'edit':    return <EditToolBlock tool={tool} />;
-    case 'browse':  return <BrowseToolBlock tool={tool} />;
-    case 'search':  return <SearchToolBlock tool={tool} />;
-    case 'memory':  return <MemoryToolBlock tool={tool} />;
-    case 'generic':
-    default:        return <GenericToolBlock tool={tool} />;
-  }
+  const Renderer = RENDERERS[def.renderer] ?? GenericToolBlock;
+  return <Renderer tool={tool} />;
 }
 
 /**

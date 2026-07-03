@@ -38,6 +38,7 @@ import { EnviarFacturaDialog } from './EnviarFacturaDialog';
 import { openInvoicePdf } from './invoicePdf';
 import { useFacturacionNav } from './navigation';
 import { DocumentRelatedPanel } from './DocumentRelatedPanel';
+import { Tip } from '../lib/glossary';
 
 interface DraftLine {
   id?: string; // id de la línea persistida (undefined = nueva, aún no guardada)
@@ -556,7 +557,7 @@ export function FacturaEditorDialog({
             {isBill && (
               <div>
                 <label style={labelStyle}>Nº de su factura</label>
-                <input value={supplierNumber} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder="el que viene en el papel del proveedor" style={fieldStyle} />
+                <input value={supplierNumber ?? ''} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder="el que viene en el papel del proveedor" style={fieldStyle} />
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Lo pone el proveedor; no lo numeramos nosotros.</div>
               </div>
             )}
@@ -635,7 +636,7 @@ export function FacturaEditorDialog({
             {/* Retención IRPF (a nivel documento, 0263): separada del IVA por línea. */}
             {retentionRates.length > 0 && (
               <div>
-                <label style={labelStyle}>Retención IRPF</label>
+                <label style={labelStyle}>Retención IRPF <Tip k="retencion" /></label>
                 <select value={retentionRateId} onChange={(e) => setRetentionRateId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
                   <option value="">— sin retención —</option>
                   {retentionRates.map((t) => (
@@ -769,7 +770,7 @@ export function FacturaEditorDialog({
             <div>
               <label style={labelStyle}>Condiciones de pago</label>
               <textarea
-                value={terms}
+                value={terms ?? ''}
                 onChange={(e) => setTerms(e.target.value)}
                 disabled={isEmitted}
                 rows={2}
@@ -780,7 +781,7 @@ export function FacturaEditorDialog({
             <div>
               <label style={labelStyle}>Notas</label>
               <textarea
-                value={notes}
+                value={notes ?? ''}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isEmitted}
                 rows={2}

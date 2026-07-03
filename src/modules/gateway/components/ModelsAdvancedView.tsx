@@ -7,10 +7,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Plus, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { isModelRefValid } from '../lib/refs';
-import type { AuthProfileEntry } from '../types';
 import { LocalOllamaBlock } from './LocalOllamaBlock';
 import { ProviderStatusBlock } from './ProviderStatusBlock';
 

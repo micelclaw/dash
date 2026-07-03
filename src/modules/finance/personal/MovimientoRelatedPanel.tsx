@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Wallet, Receipt, Users } from 'lucide-react';
 import { api } from '@/services/api';
+import { refChipBase as chipBase, refSectionTitle, clickable } from '../lib/refs';
 
 interface JeRelated {
   accounts: Array<{ account_id: string; code: string | null; name: string; side: 'debit' | 'credit'; amount: string }>;
@@ -29,8 +30,6 @@ const docLabel = (type: string, number: string | null) => {
   const base = type === 'bill' ? 'Factura recibida' : type === 'credit_note' ? 'Abono' : type === 'quote' ? 'Presupuesto' : 'Factura';
   return number ? `${base} ${number}` : base;
 };
-
-const chipBase: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 9px', borderRadius: 999, border: '1px solid var(--border)', fontSize: 12 };
 
 export function MovimientoRelatedPanel({ entryId, onNavigate }: { entryId: string; onNavigate?: () => void }) {
   const [data, setData] = useState<JeRelated | null>(null);
@@ -45,25 +44,21 @@ export function MovimientoRelatedPanel({ entryId, onNavigate }: { entryId: strin
 
   if (!data || (data.accounts.length === 0 && !data.document && !data.contact)) return null;
   const go = (url: string) => { navigate(url); onNavigate?.(); };
-  const clickable: React.CSSProperties = { cursor: 'pointer' };
+  const pointer: React.CSSProperties = { cursor: 'pointer' };
 
   return (
     <div>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 7 }}>Relacionado</div>
+      <div style={{ ...refSectionTitle, marginBottom: 7 }}>Relacionado</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {data.contact && (
-          <div role="button" tabIndex={0} title="Abrir contacto"
-            onClick={() => go(`/finance?tab=facturacion&contact=${data.contact!.id}`)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(`/finance?tab=facturacion&contact=${data.contact!.id}`); } }}
-            style={{ ...chipBase, ...clickable, color: 'var(--text)' }}>
+          <div {...clickable(() => go(`/finance?tab=facturacion&contact=${data.contact!.id}`))} title="Abrir contacto"
+            style={{ ...chipBase, ...pointer, color: 'var(--text)' }}>
             <Users size={12} style={{ color: 'var(--mod-contacts, #6366f1)' }} />{data.contact.name}
           </div>
         )}
         {data.document && (
-          <div role="button" tabIndex={0} title="Abrir factura"
-            onClick={() => go(`/finance?tab=facturacion&doc=${data.document!.id}`)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(`/finance?tab=facturacion&doc=${data.document!.id}`); } }}
-            style={{ ...chipBase, ...clickable, color: 'var(--text)' }}>
+          <div {...clickable(() => go(`/finance?tab=facturacion&doc=${data.document!.id}`))} title="Abrir factura"
+            style={{ ...chipBase, ...pointer, color: 'var(--text)' }}>
             <Receipt size={12} style={{ color: 'var(--mod-finance)' }} />{docLabel(data.document.type, data.document.number)}
           </div>
         )}

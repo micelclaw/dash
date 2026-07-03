@@ -30,26 +30,9 @@ import { useFinanceBillingStore, type FinanceDoc, type DocStatus, type Invoicing
 import { STATUS_META, tintedPillStyle } from './statusMeta';
 import { useFacturacionNav } from './navigation';
 import { useFinancePeriod } from '../period';
+import { fmtMoney, fmtDate } from '../lib/format';
 
-// ─── Helpers locales (self-contained, sin tocar la fundación) ─────────────
-
-function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): string {
-  const n = Number(value ?? 0);
-  try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(n);
-  } catch {
-    return `${n.toFixed(2)} ${currency}`;
-  }
-}
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  try {
-    return new Intl.DateTimeFormat('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
+// ─── Helpers locales (fmtMoney/fmtDate = SSOT en ../lib/format) ────────────
 
 function StatusBadge({ status }: { status: DocStatus }) {
   const m = STATUS_META[status];

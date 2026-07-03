@@ -12,9 +12,7 @@
 
 import { useCallback, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { Layout, FileText, Image as ImageIcon, File, Loader2, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
 import type { Message, MessageApproval, ChatAttachment, ToolCallRecord } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -82,9 +80,8 @@ function buildSegments(content: string, tools: ToolCallRecord[]): Segment[] {
  *  the same component set. */
 function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkClick: (href: string) => void }) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeHighlight]}
+    <MarkdownRenderer
+      content={content}
       components={{
         a: ({ href, children }) => {
           if (!href) return <>{children}</>;
@@ -155,9 +152,7 @@ function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkCl
         th: ({ children }) => <th style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)', textAlign: 'left', fontWeight: 600 }}>{children}</th>,
         td: ({ children }) => <td style={{ padding: '4px 8px', borderBottom: '1px solid var(--border)' }}>{children}</td>,
       }}
-    >
-      {content}
-    </ReactMarkdown>
+    />
   );
 }
 

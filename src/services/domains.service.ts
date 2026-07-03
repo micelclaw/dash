@@ -65,7 +65,7 @@ export async function addDomain(domain: string, kind: DomainKind, makePrimary?: 
   return res.data;
 }
 
-export async function patchDomain(id: string, body: { is_primary?: boolean; enabled?: boolean }): Promise<SystemDomain | null> {
+export async function updateDomain(id: string, body: { is_primary?: boolean; enabled?: boolean }): Promise<SystemDomain | null> {
   const res = await api.patch<{ data: SystemDomain | null }>(`/network/domains/${id}`, body);
   return res.data;
 }

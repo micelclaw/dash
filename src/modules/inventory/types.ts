@@ -240,6 +240,130 @@ export interface InventoryDepreciationResponse {
   snapshots: InventoryDepreciationSnapshot[];
 }
 
+// ── Formularios de item (compartidos por ItemDrawer y CatalogTab) ──────────
+// Un solo lugar define qué campos core se editan como texto en los formularios
+// de crear/editar item: añadir aquí un campo propaga el estado vacío, la
+// hidratación desde el item y los payloads de API — las vistas solo añaden su
+// <input> correspondiente.
+
+/** Campos de texto libre: se recortan; '' → null (update) / omitido (create). */
+const ITEM_FORM_TEXT_KEYS = [
+  'category',
+  'brand',
+  'model',
+  'serial_number',
+  'asset_tag',
+] as const satisfies readonly (keyof InventoryItem)[];
+
+/** Campos de <input type="date">: '' → null (update) / omitido (create). */
+const ITEM_FORM_DATE_KEYS = [
+  'purchase_date',
+  'warranty_until',
+] as const satisfies readonly (keyof InventoryItem)[];
+
+export const ITEM_FORM_FIELD_KEYS = [
+  'name',
+  ...ITEM_FORM_TEXT_KEYS,
+  ...ITEM_FORM_DATE_KEYS,
+  'purchase_price',
+] as const satisfies readonly (keyof InventoryItem)[];
+
+export type ItemFormFieldKey = (typeof ITEM_FORM_FIELD_KEYS)[number];
+
+/** Estado de formulario de los campos core: strings de input ('' = sin valor). */
+export type ItemFormFields = Record<ItemFormFieldKey, string>;
+
+export const EMPTY_ITEM_FORM: ItemFormFields = Object.fromEntries(
+  ITEM_FORM_FIELD_KEYS.map(key => [key, '']),
+) as ItemFormFields;
+
+/** Una fecha ISO del backend → valor para <input type="date"> (YYYY-MM-DD). */
+export function toDateInput(v: string | null | undefined): string {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return typeof v === 'string' ? v.slice(0, 10) : '';
+  return d.toISOString().slice(0, 10);
+}
+
+/** InventoryItem → estado inicial del formulario de edición. */
+export function itemToFormFields(item: InventoryItem): ItemFormFields {
+  const form: ItemFormFields = { ...EMPTY_ITEM_FORM, name: item.name ?? '' };
+  for (const key of ITEM_FORM_TEXT_KEYS) form[key] = item[key] ?? '';
+  for (const key of ITEM_FORM_DATE_KEYS) form[key] = toDateInput(item[key]);
+  form.purchase_price = item.purchase_price != null ? String(parseFloat(item.purchase_price)) : '';
+  return form;
+}
+
+// Los endpoints de escritura aceptan números en los campos numéricos aunque
+// InventoryItem los serialice como string (numeric de Postgres).
+export type UpdateItemPayload = Partial<
+  Pick<
+    InventoryItem,
+    | 'name'
+    | 'description'
+    | 'category'
+    | 'location_id'
+    | 'brand'
+    | 'model'
+    | 'serial_number'
+    | 'asset_tag'
+    | 'uom'
+    | 'purchase_date'
+    | 'currency'
+    | 'warranty_until'
+    | 'supplier_contact_id'
+    | 'supplier_sku'
+    | 'track_stock'
+    | 'item_kind'
+    | 'valuation_method'
+    | 'account_sales_id'
+    | 'account_cogs_id'
+    | 'account_stock_id'
+    | 'tags'
+    | 'custom_fields'
+  >
+> & {
+  quantity?: number;
+  purchase_price?: number | null;
+  min_qty?: number | null;
+  sale_price?: number | null;
+  lead_time_days?: number | null;
+};
+
+export type CreateItemPayload = UpdateItemPayload & { name: string };
+
+/** form → body de PATCH /inventory/items/:id — los campos vacíos limpian el valor (null). */
+export function itemFormToUpdatePayload(form: ItemFormFields): UpdateItemPayload {
+  const payload: UpdateItemPayload = { name: form.name.trim() };
+  for (const key of ITEM_FORM_TEXT_KEYS) payload[key] = form[key].trim() || null;
+  for (const key of ITEM_FORM_DATE_KEYS) payload[key] = form[key] || null;
+  if (form.purchase_price.trim() === '') {
+    payload.purchase_price = null;
+  } else {
+    const price = parseFloat(form.purchase_price);
+    // Un número no parseable se omite: no pisa el valor guardado.
+    if (Number.isFinite(price)) payload.purchase_price = price;
+  }
+  return payload;
+}
+
+/** form → body de POST /inventory/items — solo se incluyen los campos con valor. */
+export function itemFormToCreatePayload(form: ItemFormFields): CreateItemPayload {
+  const payload: CreateItemPayload = { name: form.name.trim() };
+  for (const key of ITEM_FORM_TEXT_KEYS) {
+    const v = form[key].trim();
+    if (v) payload[key] = v;
+  }
+  for (const key of ITEM_FORM_DATE_KEYS) {
+    if (form[key]) payload[key] = form[key];
+  }
+  if (form.purchase_price !== '') {
+    const price = parseFloat(form.purchase_price);
+    if (Number.isFinite(price)) payload.purchase_price = price;
+  }
+  return payload;
+}
+
 /** Estados de sistema con label/semántica para la UI. */
 export const SYSTEM_STATUS_LABELS: Record<string, string> = {
   owned: 'En uso',

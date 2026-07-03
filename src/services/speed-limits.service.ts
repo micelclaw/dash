@@ -29,7 +29,7 @@ export async function getUserSpeedLimits(userId: string): Promise<UserSpeedLimit
 }
 
 /** Modo "personalizar": fija el override del usuario. */
-export async function patchUserSpeedLimits(userId: string, upKbps: number, downKbps: number, mediaDownKbps: number): Promise<void> {
+export async function updateUserSpeedLimits(userId: string, upKbps: number, downKbps: number, mediaDownKbps: number): Promise<void> {
   await api.patch(`/admin/users/${userId}/speed-limits`, { mode: 'custom', up_kbps: upKbps, down_kbps: downKbps, media_down_kbps: mediaDownKbps });
 }
 

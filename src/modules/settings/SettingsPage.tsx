@@ -13,73 +13,19 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
-  Globe, Cpu, RefreshCw, Mail, Image, Palette, Shield, CreditCard,
-  Search as SearchIcon, Newspaper, HardDrive, FolderOpen, Users, Network, Zap,
-  Bell, Calendar, Keyboard, Rss, Server, Database,
-  Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
-  Container, Globe2, Terminal, Lock, Eye, AppWindow, Wrench, Code, MemoryStick,
-  Puzzle,
+  Globe, Palette, Shield, Search as SearchIcon, HardDrive, Network,
+  UserCircle, Brain, Terminal, Lock, AppWindow, Code,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useSecurityStore } from '@/stores/security.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useIsMobile } from '@/hooks/use-media-query';
-import { GeneralSection } from '@/components/settings/sections/GeneralSection';
-import { CompanionsSection } from '@/components/settings/sections/CompanionsSection';
-import { AISection } from '@/components/settings/sections/AISection';
-import { SyncSection } from '@/components/settings/sections/SyncSection';
-import { MailSection } from '@/components/settings/sections/MailSection';
-import { PhotosSection } from '@/components/settings/sections/PhotosSection';
-import { DashSection } from '@/components/settings/sections/DashSection';
-import { ChatToolsSection } from '@/components/settings/sections/ChatToolsSection';
-import { StorageSection } from '@/components/settings/sections/StorageSection';
-import { DriveSection } from '@/components/settings/sections/DriveSection';
-import { SecuritySection } from '@/components/settings/sections/SecuritySection';
-import { LicenseSection } from '@/components/settings/sections/LicenseSection';
-import { DigestSection } from '@/components/settings/sections/DigestSection';
-import { SearchSection } from '@/components/settings/sections/SearchSection';
-import { UsersAndGroupsSection } from '@/components/settings/sections/users-groups/UsersAndGroupsSection';
-import { SharedFoldersSection } from '@/components/settings/sections/SharedFoldersSection';
-import { FileServicesSection } from '@/components/settings/sections/FileServicesSection';
-import { NetworkSection } from '@/components/settings/sections/NetworkSection';
-import { DomainsSection } from '@/components/settings/sections/DomainsSection';
-import { EnergySection } from '@/components/settings/sections/EnergySection';
-import { NotificationsSection } from '@/components/settings/sections/NotificationsSection';
-import { CalendarSection } from '@/components/settings/sections/CalendarSection';
-import { ShortcutsSection } from '@/components/settings/sections/ShortcutsSection';
-import { FeedsSection } from '@/components/settings/sections/FeedsSection';
-import { ChannelObserversSection } from '@/components/settings/sections/ChannelObserversSection';
-import { ServicesSection } from '@/components/settings/sections/ServicesSection';
-import { DatabaseSection } from '@/components/settings/sections/DatabaseSection';
-import { VoiceSection } from '@/components/settings/sections/VoiceSection';
-import { PermissionsSection } from '@/components/settings/sections/PermissionsSection';
-import { AgentTokensSection } from '@/components/settings/sections/AgentTokensSection';
-import { AccountSection } from '@/components/settings/sections/AccountSection';
-import { DuplicatesSection } from '@/components/settings/sections/DuplicatesSection';
-import { PreferencesSection } from '@/components/settings/sections/PreferencesSection';
-import { ApprovalsHistorySection } from '@/components/settings/sections/ApprovalsHistorySection';
-import { MyApiKeysSection } from '@/components/settings/sections/MyApiKeysSection';
-import { ChannelBindingsSection } from '@/components/settings/sections/ChannelBindingsSection';
-import { ToolAccessDefaultsSection } from '@/components/settings/sections/ToolAccessDefaultsSection';
-import { SandboxSection } from '@/components/settings/sections/SandboxSection';
-import { BrowserConfigSection } from '@/components/settings/sections/BrowserConfigSection';
-import { GatewayAuthSection } from '@/components/settings/sections/GatewayAuthSection';
-import { DevicesSection } from '@/components/settings/sections/DevicesSection';
-import { ApprovalsForwardingSection } from '@/components/settings/sections/ApprovalsForwardingSection';
-import { MemorySearchSection } from '@/components/settings/sections/MemorySearchSection';
-import { ActiveMemorySection } from '@/components/settings/sections/ActiveMemorySection';
-import { SessionSection } from '@/components/settings/sections/SessionSection';
-import { GpuVramSection } from '@/components/settings/sections/GpuVramSection';
-import { CronConfigSection } from '@/components/settings/sections/CronConfigSection';
-import { HooksSection } from '@/components/settings/sections/HooksSection';
-import { CommandsSection } from '@/components/settings/sections/CommandsSection';
-import { LoggingSection } from '@/components/settings/sections/LoggingSection';
-import { TelemetrySection } from '@/components/settings/sections/TelemetrySection';
-import { EnvSection } from '@/components/settings/sections/EnvSection';
-import { SecretsSection } from '@/components/settings/sections/SecretsSection';
-import { AutomationSection } from '@/components/settings/sections/AutomationSection';
-import { ObservabilitySection } from '@/components/settings/sections/ObservabilitySection';
+import {
+  SECTION_REGISTRY,
+  KNOWN_SECTION_IDS,
+  type SettingsGroupId,
+} from '@/components/settings/sections';
 import { NotFoundSection } from '@/components/settings/sections/NotFoundSection';
 import { SettingsSidebarGroup } from '@/components/settings/SettingsSidebarGroup';
 import { SettingsSidebarSearch } from '@/components/settings/SettingsSidebarSearch';
@@ -120,6 +66,14 @@ const GROUP_COLORS = {
   dev: '#94a3b8',           // slate-400 — muted, not a user-facing group
 };
 
+// Items del sidebar de un grupo, derivados del registro de secciones
+// (el orden visible = orden de inserción en SECTION_REGISTRY).
+function sectionsForGroup(groupId: SettingsGroupId): SidebarItem[] {
+  return Object.entries(SECTION_REGISTRY)
+    .filter(([, entry]) => entry.meta.group === groupId)
+    .map(([id, entry]) => ({ id, label: entry.meta.label, icon: entry.meta.icon ?? SearchIcon }));
+}
+
 function buildGroups(isAdmin: boolean): SidebarGroup[] {
   const groups: SidebarGroup[] = [
     {
@@ -128,12 +82,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: UserCircle,
       color: GROUP_COLORS.account,
       description: 'Your profile, permissions, license and approvals history.',
-      sections: [
-        { id: 'account', label: 'Account', icon: UserCircle },
-        { id: 'permissions', label: 'Permissions', icon: Shield },
-        { id: 'license', label: 'License', icon: CreditCard },
-        { id: 'approvals-history', label: 'Approvals History', icon: History },
-      ],
+      sections: sectionsForGroup('account'),
     },
     {
       id: 'appearance',
@@ -141,12 +90,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: Palette,
       color: GROUP_COLORS.appearance,
       description: 'Theme, colors, language, keyboard shortcuts and dash notifications.',
-      sections: [
-        { id: 'dash', label: 'Dash', icon: Palette },
-        { id: 'general', label: 'General', icon: Globe },
-        { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
-        { id: 'notifications', label: 'Notifications', icon: Bell },
-      ],
+      sections: sectionsForGroup('appearance'),
     },
     {
       id: 'ai-agents',
@@ -154,18 +98,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: Brain,
       color: GROUP_COLORS.aiAgents,
       description: 'AI models, voice, tools, memory, sessions, learned preferences and channel behavior.',
-      sections: [
-        { id: 'ai', label: 'AI & Intelligence', icon: Cpu },
-        { id: 'gpu-vram', label: 'GPU & VRAM', icon: MemoryStick },
-        { id: 'voice', label: 'Voice', icon: Mic },
-        { id: 'tool-access-defaults', label: 'Tool Access', icon: Wrench },
-        { id: 'chat-tools', label: 'Chat Tools Display', icon: Wrench },
-        { id: 'memory-search', label: 'Memory', icon: Brain },
-        { id: 'active-memory', label: 'Memoria Activa', icon: Brain },
-        { id: 'preferences', label: 'Learned Preferences', icon: Brain },
-        { id: 'sessions', label: 'Sessions', icon: History },
-        { id: 'channel-bindings', label: 'Channel Bindings', icon: Link2 },
-      ],
+      sections: sectionsForGroup('ai-agents'),
     },
     {
       id: 'apps',
@@ -173,15 +106,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: AppWindow,
       color: GROUP_COLORS.apps,
       description: 'Mail, calendar, photos, feeds, search, digest and duplicates.',
-      sections: [
-        { id: 'mail', label: 'Mail', icon: Mail },
-        { id: 'calendar', label: 'Calendar', icon: Calendar },
-        { id: 'photos', label: 'Photos', icon: Image },
-        { id: 'feeds', label: 'Feeds', icon: Rss },
-        { id: 'search', label: 'Search', icon: SearchIcon },
-        { id: 'digest', label: 'Digest', icon: Newspaper },
-        { id: 'duplicates', label: 'Duplicates', icon: Copy },
-      ],
+      sections: sectionsForGroup('apps'),
     },
     {
       id: 'connectivity',
@@ -189,13 +114,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: Network,
       color: GROUP_COLORS.connectivity,
       description: 'Sync with external services, local network and OpenClaw Gateway configuration.',
-      sections: [
-        { id: 'sync', label: 'Sync', icon: RefreshCw },
-        { id: 'network', label: 'Network', icon: Network },
-        { id: 'domains', label: 'Domains', icon: Globe2 },
-        { id: 'gateway-auth', label: 'Gateway', icon: Radio },
-        { id: 'companions', label: 'Apps acompañantes', icon: Puzzle },
-      ],
+      sections: sectionsForGroup('connectivity'),
     },
     {
       id: 'system',
@@ -203,14 +122,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: HardDrive,
       color: GROUP_COLORS.system,
       description: 'Storage, database, energy, services, sensors and automation.',
-      sections: [
-        { id: 'storage', label: 'Storage', icon: HardDrive },
-        { id: 'drive', label: 'Drive', icon: FolderOpen },
-        { id: 'database', label: 'Database', icon: Database },
-        { id: 'energy', label: 'Energy', icon: Zap },
-        { id: 'services', label: 'Services', icon: Server },
-        { id: 'automation', label: 'Automation', icon: Zap },
-      ],
+      sections: sectionsForGroup('system'),
     },
     {
       id: 'security',
@@ -218,12 +130,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: Shield,
       color: GROUP_COLORS.security,
       description: 'PIN, approval levels, agent sandbox, browser and shell commands.',
-      sections: [
-        { id: 'security', label: 'Security', icon: Shield },
-        { id: 'sandbox', label: 'Sandbox', icon: Container },
-        { id: 'browser-config', label: 'Browser', icon: Globe2 },
-        { id: 'commands', label: 'Commands', icon: Terminal },
-      ],
+      sections: sectionsForGroup('security'),
     },
   ];
   if (isAdmin) {
@@ -234,11 +141,9 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       color: GROUP_COLORS.admin,
       description: 'Users, observability (logs/telemetry/env), secrets and raw JSON editor.',
       sections: [
-        { id: 'users-groups', label: 'Usuarios y grupos', icon: Users },
-        { id: 'shared-folders', label: 'Carpetas compartidas', icon: FolderOpen },
-        { id: 'file-services', label: 'Servicios de archivos', icon: HardDrive },
-        { id: 'observability', label: 'Observability', icon: Eye },
-        { id: 'secrets', label: 'Secrets', icon: Lock },
+        ...sectionsForGroup('admin'),
+        // 'raw' es la página standalone /settings/raw (no vive en el
+        // registro de secciones) — su item de sidebar se añade aquí.
         { id: 'raw', label: 'Raw JSON', icon: Terminal },
       ],
     });
@@ -254,9 +159,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       icon: Code,
       color: GROUP_COLORS.dev,
       description: 'Developer tools. Not visible in production builds.',
-      sections: [
-        { id: 'agent-tokens', label: 'Agent Tokens', icon: Key },
-      ],
+      sections: sectionsForGroup('dev'),
     });
   }
   return groups;
@@ -281,75 +184,13 @@ const SECTION_REDIRECTS: Record<string, string> = {
   // are easy to add if a section is truly removed (not just folded).
 };
 
-// Source of truth for valid section IDs. Used both by `renderSection`
-// (via a Map lookup) and by `NotFoundSection` to suggest near matches
-// when the URL doesn't resolve. Keep this list in sync when adding
-// or removing a section — that's the only registration step.
-const SECTION_REGISTRY: Record<string, () => React.ReactElement> = {
-  'account':              () => <AccountSection />,
-  'general':              () => <GeneralSection />,
-  'ai':                   () => <AISection />,
-  'gpu-vram':             () => <GpuVramSection />,
-  'voice':                () => <VoiceSection />,
-  'sync':                 () => <SyncSection />,
-  'mail':                 () => <MailSection />,
-  'photos':               () => <PhotosSection />,
-  'storage':              () => <StorageSection />,
-  'drive':                () => <DriveSection />,
-  'network':              () => <NetworkSection />,
-  'domains':              () => <DomainsSection />,
-  'energy':               () => <EnergySection />,
-  'dash':                 () => <DashSection />,
-  'chat-tools':           () => <ChatToolsSection />,
-  'users-groups':         () => <UsersAndGroupsSection />,
-  'users':                () => <UsersAndGroupsSection initialTab="users" />,
-  'groups':               () => <UsersAndGroupsSection initialTab="groups" />,
-  'shared-folders':       () => <SharedFoldersSection />,
-  'file-services':        () => <FileServicesSection />,
-  'database':             () => <DatabaseSection />,
-  'security':             () => <SecuritySection />,
-  'license':              () => <LicenseSection />,
-  'notifications':        () => <NotificationsSection />,
-  'calendar':             () => <CalendarSection />,
-  'shortcuts':            () => <ShortcutsSection />,
-  'search':               () => <SearchSection />,
-  'digest':               () => <DigestSection />,
-  'feeds':                () => <FeedsSection />,
-  'observers':            () => <ChannelObserversSection />,
-  'channel-bindings':     () => <ChannelBindingsSection />,
-  'tool-access-defaults': () => <ToolAccessDefaultsSection />,
-  'sandbox':              () => <SandboxSection />,
-  'browser-config':       () => <BrowserConfigSection />,
-  'gateway-auth':         () => <GatewayAuthSection />,
-  'devices':              () => <DevicesSection />,
-  'companions':           () => <CompanionsSection />,
-  'approvals-forwarding': () => <ApprovalsForwardingSection />,
-  'memory-search':        () => <MemorySearchSection />,
-  'active-memory':        () => <ActiveMemorySection />,
-  'sessions':             () => <SessionSection />,
-  'cron-config':          () => <CronConfigSection />,
-  'hooks':                () => <HooksSection />,
-  'commands':             () => <CommandsSection />,
-  'logging':              () => <LoggingSection />,
-  'telemetry':            () => <TelemetrySection />,
-  'env':                  () => <EnvSection />,
-  'secrets':              () => <SecretsSection />,
-  'services':             () => <ServicesSection />,
-  'permissions':          () => <PermissionsSection />,
-  'agent-tokens':         () => <AgentTokensSection />,
-  'duplicates':           () => <DuplicatesSection />,
-  'preferences':          () => <PreferencesSection />,
-  'approvals-history':    () => <ApprovalsHistorySection />,
-  'my-api-keys':          () => <MyApiKeysSection />,
-  'automation':           () => <AutomationSection />,
-  'observability':        () => <ObservabilitySection />,
-};
-
-const KNOWN_SECTION_IDS = Object.keys(SECTION_REGISTRY);
+// La fuente de verdad de los IDs de sección y sus componentes es el
+// registro `SECTION_REGISTRY` en components/settings/sections/index.ts —
+// añadir una sección = una entrada allí (component + meta).
 
 function renderSection(section: string) {
-  const entry = SECTION_REGISTRY[section];
-  if (entry) return entry();
+  const Entry = SECTION_REGISTRY[section]?.component;
+  if (Entry) return <Entry />;
   // Unknown ID → explicit NotFound with suggestions, instead of
   // silently rendering General (which used to mask URL typos).
   return <NotFoundSection requestedId={section} knownIds={KNOWN_SECTION_IDS} />;

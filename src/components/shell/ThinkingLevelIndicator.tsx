@@ -9,11 +9,13 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/services/api';
 
+const DEFAULT_LEVEL = { bars: 3, label: 'Thinking: Medium' };
+
 const LEVELS: Record<string, { bars: number; label: string }> = {
   off:      { bars: 0, label: 'Thinking: Off' },
   minimal:  { bars: 1, label: 'Thinking: Minimal' },
   low:      { bars: 2, label: 'Thinking: Low' },
-  medium:   { bars: 3, label: 'Thinking: Medium' },
+  medium:   DEFAULT_LEVEL,
   high:     { bars: 4, label: 'Thinking: High' },
   xhigh:    { bars: 5, label: 'Thinking: X-High' },
   adaptive: { bars: -1, label: 'Thinking: Adaptive (auto)' },
@@ -82,7 +84,7 @@ export function ThinkingLevelIndicator() {
 
   if (!level) return null;
 
-  const config = LEVELS[level] ?? LEVELS.medium;
+  const config = LEVELS[level] ?? DEFAULT_LEVEL;
   const isAdaptive = level === 'adaptive';
 
   return (

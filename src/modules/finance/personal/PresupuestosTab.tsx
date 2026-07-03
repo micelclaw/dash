@@ -30,7 +30,8 @@ function currentMonth(): string {
 
 /** Desplaza un mes 'YYYY-MM' en `delta` meses, normalizando el límite enero↔diciembre. */
 function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split('-').map(Number);
+  // El formato 'YYYY-MM' está garantizado; los defaults solo satisfacen el tipado.
+  const [y = 0, m = 1] = month.split('-').map(Number);
   // `new Date` normaliza meses fuera de 1-12 (mes 0 = diciembre del año anterior, etc.).
   const d = new Date(y, (m - 1) + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -38,7 +39,7 @@ function shiftMonth(month: string, delta: number): string {
 
 /** Etiqueta legible y capitalizada del mes, p.ej. "junio 2026". */
 function monthLabel(month: string): string {
-  const [y, m] = month.split('-').map(Number);
+  const [y = 0, m = 1] = month.split('-').map(Number);
   const raw = new Intl.DateTimeFormat('es-ES', { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }

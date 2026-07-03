@@ -23,6 +23,8 @@ import { useEffect, useState } from 'react';
 import { TrendingUp, Info } from 'lucide-react';
 import { api } from '@/services/api';
 import { useFinancePeriod } from '../period';
+import { fmtMoney } from '../lib/format';
+import { Tip } from '../lib/glossary';
 
 // ─── Tipo del backend (envelope { data }) ──────────────────────────────
 interface OperatingResult {
@@ -37,12 +39,7 @@ interface OperatingResult {
   optimization: { da_period: string; tax_shield: string; vat_to_settle: string; retentions_recoverable: string; deductible_expenses: string };
 }
 
-// ─── Helpers locales (self-contained) ──────────────────────────────────
-function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): string {
-  const n = Number(value ?? 0);
-  try { return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(n); }
-  catch { return `${n.toFixed(2)} ${currency}`; }
-}
+// ─── Helpers locales (fmtMoney = SSOT en ../lib/format) ─────────────────
 const num = (v: string | number | null | undefined) => Number(v ?? 0);
 
 // Paleta de la cascada por tipo de fila.
@@ -54,13 +51,14 @@ const C_NET_POS = 'var(--mod-finance)';
 const C_NET_NEG = 'var(--error)';
 
 // KPI grande (molde = Kpi de ResumenTab): barra superior tintada + cifra en color.
-function Kpi({ label, value, hint, accent, muted, emoji }: { label: string; value: string; hint?: string; accent?: string; muted?: boolean; emoji?: string }) {
+// `tip` = clave del glosario → icono de ayuda junto al label (jerga para no-contables).
+function Kpi({ label, value, hint, accent, muted, emoji, tip }: { label: string; value: string; hint?: string; accent?: string; muted?: boolean; emoji?: string; tip?: string }) {
   const c = !accent || muted ? 'var(--text)' : accent;
   const barColor = !accent || muted ? 'var(--border)' : accent;
   return (
     <div style={{ flex: 1, minWidth: 150, background: 'var(--card)', border: '1px solid var(--border)', borderTop: `3px solid ${barColor}`, borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-dim)' }}>
-        {emoji && <span style={{ fontSize: 13 }}>{emoji}</span>}{label}
+        {emoji && <span style={{ fontSize: 13 }}>{emoji}</span>}{label}{tip && <Tip k={tip} />}
       </div>
       <div style={{ fontSize: 24, fontWeight: 700, color: c, fontFamily: 'var(--font-mono, monospace)', marginTop: 4 }}>{value}</div>
       {hint && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>}
@@ -219,8 +217,8 @@ export function FacturacionRendimientoTab() {
 
       {/* Fila de KPIs grandes */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="EBITDA" emoji="⚙️" value={fmtMoney(ebitda)} hint="beneficio operativo" accent={C_EBITDA} muted={ebitda <= 0} />
-        <Kpi label="EBIT" emoji="🔧" value={fmtMoney(ebit)} hint="tras amortizaciones" accent={C_EBIT} muted={ebit <= 0} />
+        <Kpi label="EBITDA" emoji="⚙️" value={fmtMoney(ebitda)} hint="beneficio operativo" accent={C_EBITDA} muted={ebitda <= 0} tip="ebitda" />
+        <Kpi label="EBIT" emoji="🔧" value={fmtMoney(ebit)} hint="tras amortizaciones" accent={C_EBIT} muted={ebit <= 0} tip="ebit" />
         <Kpi label="Beneficio neto" emoji="💰" value={fmtMoney(net)} hint="tras impuestos" accent={net >= 0 ? C_NET_POS : C_NET_NEG} />
         <Kpi label="Margen EBITDA" emoji="📊" value={`${data.ebitda_margin} %`} hint="EBITDA / ingresos" accent="var(--amber)" muted={ebitda <= 0} />
       </div>

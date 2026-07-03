@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { X, UserPlus, Trash2, ChevronDown, Crown, ArrowRightLeft } from 'lucide-react';
+import { X, UserPlus, Trash2, Crown, ArrowRightLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useProjectsStore } from '@/stores/projects.store';

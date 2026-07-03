@@ -707,7 +707,6 @@ export function Component() {
     <>
     <MediaShell
       moduleVar="--mod-photos"
-      title="Photos"
       tabs={PHOTO_TABS}
       activeTab={view}
       onTabChange={(id) => handleViewChange(id as PhotosView)}

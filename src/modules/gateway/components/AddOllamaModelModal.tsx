@@ -33,7 +33,7 @@ function isWebUrl(v: string): boolean {
 /** Convierte https://huggingface.co/<repo>[/...] → hf.co/<repo> (si aplica). */
 function hfUrlToRef(v: string): string | null {
   const m = v.trim().match(/^https?:\/\/huggingface\.co\/([^?#]+)/i);
-  if (!m) return null;
+  if (!m?.[1]) return null;
   // quita /tree/main, /blob/..., barras finales
   const repo = m[1].replace(/\/(tree|blob|resolve)\/.*$/i, '').replace(/\/+$/, '');
   return repo ? `hf.co/${repo}` : null;

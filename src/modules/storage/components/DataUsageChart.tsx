@@ -192,7 +192,7 @@ function StatItem({ label, value, tip }: { label: string; value: string; tip?: s
 // Snapshots que pertenecen a un dataset (su nombre exacto o cualquier hijo).
 function snapshotsOfDataset(snapshots: { full_name: string; used_bytes: number | null }[], dsName: string) {
   return snapshots.filter((s) => {
-    const base = s.full_name.split('@')[0];
+    const base = s.full_name.split('@')[0] ?? '';
     return base === dsName || base.startsWith(`${dsName}/`);
   });
 }

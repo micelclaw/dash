@@ -89,8 +89,8 @@ export function GroupsListView() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <Button onClick={() => setCreating(true)} className="gap-1.5"><Plus className="h-4 w-4" /> Crear</Button>
-        <Button variant="outline" disabled={selectedGroups.length !== 1} onClick={() => setEditing(selectedGroups[0])} className="gap-1.5"><Pencil className="h-4 w-4" /> Editar</Button>
-        <Button variant="outline" disabled={selectedGroups.length !== 1 || selectedGroups[0]?.is_system} onClick={() => selectedGroups.length === 1 && setConfirm(selectedGroups[0])} className="gap-1.5"><Trash2 className="h-4 w-4" /> Eliminar</Button>
+        <Button variant="outline" disabled={selectedGroups.length !== 1} onClick={() => { const g = selectedGroups[0]; if (g) setEditing(g); }} className="gap-1.5"><Pencil className="h-4 w-4" /> Editar</Button>
+        <Button variant="outline" disabled={selectedGroups.length !== 1 || selectedGroups[0]?.is_system} onClick={() => { const g = selectedGroups[0]; if (selectedGroups.length === 1 && g) setConfirm(g); }} className="gap-1.5"><Trash2 className="h-4 w-4" /> Eliminar</Button>
         <div className="relative ml-auto">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-dim)]" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar…" className="h-8 w-56 pl-8" />

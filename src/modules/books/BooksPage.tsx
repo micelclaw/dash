@@ -75,7 +75,6 @@ export function BooksPage() {
     <>
       <MediaShell
         moduleVar="--mod-books"
-        title="Books"
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={(id) => useBooksStore.getState().setActiveTab(id as BooksTab)}

@@ -142,27 +142,30 @@ export function DatabasesLauncherView() {
         <>
           <h3 style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', marginBottom: 12 }}>Recientes</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            {ordered.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => openDb(d.id)}
-                style={{
-                  display: 'flex', flexDirection: 'column', gap: 4,
-                  padding: 16, background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <Database size={24} style={{ color: PURPLE, marginBottom: 2 }} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                  {d.name}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                  {d.table_count != null ? `${d.table_count} ${d.table_count === 1 ? 'tabla' : 'tablas'}` : 'Base de datos'}
-                  {recent[d.id] && ` · abierta ${new Date(recent[d.id]).toLocaleDateString()}`}
-                </span>
-              </button>
-            ))}
+            {ordered.map((d) => {
+              const openedAt = recent[d.id];
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => openDb(d.id)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 4,
+                    padding: 16, background: 'var(--surface)',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <Database size={24} style={{ color: PURPLE, marginBottom: 2 }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    {d.name}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {d.table_count != null ? `${d.table_count} ${d.table_count === 1 ? 'tabla' : 'tablas'}` : 'Base de datos'}
+                    {openedAt && ` · abierta ${new Date(openedAt).toLocaleDateString()}`}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </>
       )}

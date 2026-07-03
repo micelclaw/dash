@@ -19,7 +19,7 @@
  * (recharts can't draw a line from a single sample).
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Adapter, TimeRange } from './adapters/types';
 import { bucketColor } from './adapters/types';
@@ -233,7 +233,7 @@ export function ActivityHeader<Row>({
                 }}
                 labelStyle={{ color: 'var(--text)', fontWeight: 500 }}
                 itemStyle={{ color: 'var(--text)' }}
-                labelFormatter={(_label: string, payload) => {
+                labelFormatter={(_label: ReactNode, payload) => {
                   if (Array.isArray(payload) && payload.length > 0 && payload[0]?.payload) {
                     const t = (payload[0].payload as HistogramPoint).t as number;
                     if (typeof t === 'number') return formatTooltipLabel(t, granularity);

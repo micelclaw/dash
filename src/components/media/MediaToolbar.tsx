@@ -32,9 +32,12 @@ interface MediaToolbarProps {
 }
 
 /**
- * Toolbar row for media modules: left slot, spacer, debounced search input
- * (300ms, same pattern as PhotosToolbar) and right slot. The optional AI
- * toggle docks inside the search input's right edge.
+ * Inline toolbar cluster for media modules: optional left slot, a debounced
+ * search input (300ms, same pattern as PhotosToolbar) and an optional right
+ * slot. The optional AI toggle docks inside the search input's right edge.
+ *
+ * It renders as a compact, content-sized cluster (no border / full-width
+ * spacer) so it can live on the same row as the tabs inside MediaShell.
  */
 export function MediaToolbar({
   search = '',
@@ -77,14 +80,13 @@ export function MediaToolbar({
         // stack instead of overflowing — shared across all media modules.
         flexWrap: 'wrap',
         gap: 12,
-        padding: '10px 16px',
-        borderBottom: '1px solid var(--border)',
+        // Lift off the row's bottom border so the cluster sits nicely next to
+        // the tabs (DrivePage pattern for right-aligned chrome items).
+        marginBottom: 6,
         flexShrink: 0,
       }}
     >
       {left}
-
-      <div style={{ flex: 1, minWidth: 0 }} />
 
       {onSearchChange && (
         <div

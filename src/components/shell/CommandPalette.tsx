@@ -17,7 +17,7 @@ import {
   MessageSquare, StickyNote, Calendar, Mail, Users, BookOpen,
   FolderOpen, Image, Bot, Settings, Plus, PanelLeft, Moon,
   Search, ArrowRight, Type, Brain, Lock, Bookmark, Globe,
-  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Boxes, Container, FileText, Terminal,
+  Wrench, Calculator, ArrowLeftRight, Timer, Mic, PenTool, Waypoints, Kanban, Container, FileText, Terminal,
   Play, SkipForward, Download as DownloadIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';

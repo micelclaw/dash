@@ -16,7 +16,6 @@ import { Tabs } from '@/components/shared/Tabs';
 interface MediaShellProps {
   /** Module identity CSS var, e.g. '--mod-music'. Scopes the accent color. */
   moduleVar: string;
-  title: string;
   actions?: ReactNode;
   tabs?: { id: string; label: string }[];
   activeTab?: string;
@@ -27,9 +26,12 @@ interface MediaShellProps {
 }
 
 /**
- * Page shell for media modules (music / video / books): header with title +
- * actions, optional underline tab row, toolbar slot, scrollable content and
- * an optional right-side inspector panel (~320px).
+ * Page shell for media modules (music / video / books): a single chrome row
+ * (underline tabs on the left, toolbar/search + actions on the right),
+ * scrollable content and an optional right-side inspector panel (~320px).
+ *
+ * There is intentionally NO module title here — the app shell already shows
+ * it in the top bar, so a second in-page title was redundant.
  *
  * The root scopes `--amber` to the module identity color (same pattern as
  * DrivePage), so shared components (Tabs underline, accent buttons) pick up
@@ -37,7 +39,6 @@ interface MediaShellProps {
  */
 export function MediaShell({
   moduleVar,
-  title,
   actions,
   tabs,
   activeTab,
@@ -46,6 +47,8 @@ export function MediaShell({
   inspector,
   children,
 }: MediaShellProps) {
+  const hasTabs = !!tabs && tabs.length > 0;
+  const hasChrome = hasTabs || !!toolbar || !!actions;
   return (
     <div
       style={{
@@ -59,46 +62,39 @@ export function MediaShell({
         overflow: 'hidden',
       } as React.CSSProperties}
     >
-      {/* Header: title + actions */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '10px 16px',
-          flexShrink: 0,
-        }}
-      >
-        <span
+      {/* Single chrome row: underline tabs on the left, toolbar/search +
+          actions on the right. Mirrors DrivePage — `alignItems: flex-end`
+          with zero bottom padding makes the Tabs underline coincide with the
+          row's border, so there is one continuous separator line. */}
+      {hasChrome && (
+        <div
           style={{
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            color: 'var(--text)',
-            fontFamily: 'var(--font-sans)',
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 12,
+            padding: '8px 16px 0',
+            borderBottom: '1px solid var(--border)',
+            flexShrink: 0,
           }}
         >
-          {title}
-        </span>
-        <div style={{ flex: 1 }} />
-        {actions && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{actions}</div>
-        )}
-      </div>
-
-      {/* Tab row (underline style, mirrors Drive/Photos) */}
-      {tabs && tabs.length > 0 && (
-        <div style={{ padding: '0 16px', flexShrink: 0, overflowX: 'auto' }}>
-          <Tabs
-            tabs={tabs}
-            activeTab={activeTab ?? tabs[0].id}
-            onChange={(id) => onTabChange?.(id)}
-            variant="underline"
-          />
+          <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            {hasTabs && (
+              <Tabs
+                tabs={tabs}
+                activeTab={activeTab ?? tabs[0]?.id ?? ''}
+                onChange={(id) => onTabChange?.(id)}
+                variant="underline"
+              />
+            )}
+          </div>
+          {toolbar}
+          {actions && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexShrink: 0 }}>
+              {actions}
+            </div>
+          )}
         </div>
       )}
-
-      {/* Toolbar slot */}
-      {toolbar}
 
       {/* Content + inspector */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>

@@ -25,6 +25,6 @@ export async function getUserQuota(userId: string): Promise<UserQuota> {
   return res.data;
 }
 
-export async function patchUserQuota(userId: string, quotaBytes: number): Promise<void> {
+export async function updateUserQuota(userId: string, quotaBytes: number): Promise<void> {
   await api.patch(`/admin/users/${userId}/quota`, { quota_bytes: quotaBytes });
 }

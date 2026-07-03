@@ -342,7 +342,10 @@ export function ChannelBindingsSection() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await gwService.updateMessagesConfig({
+      // El PATCH de Core espera claves camelCase (las reenvía a configPatch);
+      // MessagesConfig tipa el GET (snake_case). Payload en variable intermedia
+      // para no disparar el excess-property check sobre groupChat.
+      const payload = {
         queue: {
           mode: queueMode,
           debounceMs: queueDebounce,
@@ -377,7 +380,8 @@ export function ChannelBindingsSection() {
           unmentionedInbound: unmentionedInbound === '' ? null : (unmentionedInbound as 'user_request' | 'room_event'),
           visibleReplies: visibleReplies === '' ? null : (visibleReplies as 'automatic' | 'message_tool'),
         },
-      });
+      };
+      await gwService.updateMessagesConfig(payload);
       toast.success('Channel Bindings saved');
       setDirty(false);
     } catch (err) {

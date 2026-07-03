@@ -367,7 +367,7 @@ export function ResumenTab() {
   const expenseP = Number(periodSummary?.expenses_period ?? 0);
   const netSaved = incomeP - expenseP;
   const savingsRate = incomeP > 0.005 ? Math.max(0, Math.round(((incomeP - expenseP) / incomeP) * 100)) : 0;
-  const nwDelta = series.length >= 2 ? Number(series[series.length - 1].net_worth) - Number(series[0].net_worth) : 0;
+  const nwDelta = series.length >= 2 ? Number(series[series.length - 1]?.net_worth ?? 0) - Number(series[0]?.net_worth ?? 0) : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>

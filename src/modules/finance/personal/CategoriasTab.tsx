@@ -23,7 +23,8 @@ import { categoryVisual, tintBackground, fmtMoney } from './lib';
 // Paleta sugerida para el selector de color (se puede teclear cualquier hex).
 const PALETTE = ['#ef4444', '#f97316', '#f59e0b', '#eab308', '#22c55e', '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#64748b'];
 // Emojis frecuentes por tipo para acelerar la elección.
-const EMOJI_SUGGEST: Record<'expense' | 'income', string[]> = {
+// Tupla no vacía: garantiza al tipado que siempre hay un emoji por defecto ([0]).
+const EMOJI_SUGGEST: Record<'expense' | 'income', [string, ...string[]]> = {
   expense: ['🛒', '🍔', '🏠', '🚗', '⛽', '💡', '📱', '🎬', '🏥', '👕', '✈️', '🎓'],
   income: ['💼', '💰', '📈', '🎁', '🏦', '💵', '🧾', '⭐'],
 };

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useMailServerApi } from '@micelclaw/mail-admin-ui';
 import type { MailuDomain, MailuUser, MailuAlias } from '@micelclaw/mail-admin-ui';
-import { ArrowLeft, Copy, RefreshCw, Trash2, Save, Shield, Globe, Key, Users, ArrowRightLeft, Settings, Layers } from 'lucide-react';
+import { ArrowLeft, Copy, RefreshCw, Trash2, Save, Shield, Globe, Key, Users, Settings, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TABS = ['General', 'DNS Records', 'DKIM', 'Usuarios', 'Aliases', 'Managers', 'Alternatives'] as const;
@@ -38,8 +38,8 @@ export default function DomainDetail() {
         api.getAliases(),
       ]);
       setDomain(d);
-      setUsers(u.filter(usr => usr.email.endsWith(`@${domainParam}`)));
-      setAliases(a.filter(al => al.email.endsWith(`@${domainParam}`)));
+      setUsers(u.filter((usr: MailuUser) => usr.email.endsWith(`@${domainParam}`)));
+      setAliases(a.filter((al: MailuAlias) => al.email.endsWith(`@${domainParam}`)));
       setEditMaxUsers(d.max_users);
       setEditMaxAliases(d.max_aliases);
       setEditMaxQuota(d.max_quota_bytes);

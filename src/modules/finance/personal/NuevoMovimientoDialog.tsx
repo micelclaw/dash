@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { X } from 'lucide-react';
+import { X, Lock } from 'lucide-react';
 import { useFinancePersonalStore, reconstructMovement, type MovementKind, type RecurrenceInterval, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { todayISO } from './lib';
 import { useEscapeClose } from '../use-escape-close';
@@ -61,8 +61,10 @@ export function NuevoMovimientoDialog({ open, onClose, editTx }: { open: boolean
     if (editTx) {
       // Prerrellena desde el asiento existente.
       const m = reconstructMovement(editTx, accounts);
-      setKind(m.kind); setAmount(m.amount); setAccountId(m.accountId); setToAccountId(m.toAccountId ?? '');
-      setCategoryId(m.categoryId ?? ''); setDescription(m.description ?? ''); setDate(m.date);
+      // Fallbacks a '' → los inputs controlados nunca reciben null/undefined (evita el
+      // warning de React "value should not be null" / controlado→no-controlado).
+      setKind(m.kind); setAmount(m.amount ?? ''); setAccountId(m.accountId ?? ''); setToAccountId(m.toAccountId ?? '');
+      setCategoryId(m.categoryId ?? ''); setDescription(m.description ?? ''); setDate(m.date || todayISO());
       setRecurrente(false); setEditSimple(m.simple);
     } else {
       setEditSimple(true);
@@ -133,45 +135,56 @@ export function NuevoMovimientoDialog({ open, onClose, editTx }: { open: boolean
         </div>
 
         {lockStructural && (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: '8px 10px', marginBottom: 14 }}>
-            Este movimiento procede de una factura o asiento: solo puedes editar el concepto y la categoría. Para cambiar el importe o la cuenta, usa “Revertir” y crea uno nuevo.
+          <div style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-dim)', background: 'color-mix(in srgb, var(--amber) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--amber) 45%, transparent)', borderRadius: 'var(--radius-md, 6px)', padding: '10px 12px', marginBottom: 14 }}>
+            <Lock size={15} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
+            <span>Este movimiento procede de una <strong style={{ color: 'var(--text)' }}>factura o asiento del sistema</strong>. Aquí solo cambias el <strong style={{ color: 'var(--text)' }}>concepto</strong> y la <strong style={{ color: 'var(--text)' }}>categoría</strong>. Para cambiar importe o cuenta, usa “Revertir” y crea uno nuevo.</span>
           </div>
         )}
 
-        {/* Segmented control */}
-        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)', marginBottom: 16, opacity: lockStructural ? 0.5 : 1, pointerEvents: lockStructural ? 'none' : 'auto' }}>
-          {KINDS.map((k) => (
-            <button key={k.id} onClick={() => setKind(k.id)} disabled={lockStructural} style={{
-              flex: 1, padding: '7px 0', borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: 'pointer', fontSize: 13,
-              background: kind === k.id ? 'var(--mod-finance)' : 'transparent',
-              color: kind === k.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: kind === k.id ? 600 : 500,
-            }}>{k.glyph} {k.label}</button>
-          ))}
-        </div>
+        {/* Tipo (segmented) — solo en alta o edición estructural; en un movimiento de
+            sistema no aplica (se oculta, no se deshabilita, para no confundir). */}
+        {!lockStructural && (
+          <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)', marginBottom: 16 }}>
+            {KINDS.map((k) => (
+              <button key={k.id} onClick={() => setKind(k.id)} style={{
+                flex: 1, padding: '7px 0', borderRadius: 'var(--radius-sm, 4px)', border: 'none', cursor: 'pointer', fontSize: 13,
+                background: kind === k.id ? 'var(--mod-finance)' : 'transparent',
+                color: kind === k.id ? '#0a0a0a' : 'var(--text-dim)', fontWeight: kind === k.id ? 600 : 500,
+              }}>{k.glyph} {k.label}</button>
+            ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={labelStyle}>Importe</label>
-            <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} disabled={lockStructural} inputMode="decimal" placeholder="0,00 €"
-              style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center', opacity: lockStructural ? 0.6 : 1 }} />
-          </div>
-          <div>
-            <label style={labelStyle}>{kind === 'income' ? 'A la cuenta' : 'De la cuenta'}</label>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }}>
-              <option value="">— elige cuenta —</option>
-              {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </div>
+          {/* Importe + cuenta(s): estructura del ledger → ocultas en edición bloqueada. */}
+          {!lockStructural && (
+            <>
+              <div>
+                <label style={labelStyle}>Importe</label>
+                <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00 €"
+                  style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center' }} />
+              </div>
+              <div>
+                <label style={labelStyle}>{kind === 'income' ? 'A la cuenta' : 'De la cuenta'}</label>
+                <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
+                  <option value="">— elige cuenta —</option>
+                  {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              {kind === 'transfer' && (
+                <div>
+                  <label style={labelStyle}>A la cuenta</label>
+                  <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)} style={fieldStyle}>
+                    <option value="">— elige destino —</option>
+                    {assetAccounts.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
 
-          {kind === 'transfer' ? (
-            <div>
-              <label style={labelStyle}>A la cuenta</label>
-              <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }}>
-                <option value="">— elige destino —</option>
-                {assetAccounts.filter((a) => a.id !== accountId).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-          ) : (
+          {/* Categoría: editable siempre (salvo transferencias). */}
+          {kind !== 'transfer' && (
             <div>
               <label style={labelStyle}>Categoría</label>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -184,14 +197,18 @@ export function NuevoMovimientoDialog({ open, onClose, editTx }: { open: boolean
             </div>
           )}
 
+          {/* Concepto: editable siempre. */}
           <div>
             <label style={labelStyle}>Concepto</label>
             <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="p.ej. Gasolina" style={fieldStyle} />
           </div>
-          <div>
-            <label style={labelStyle}>Fecha</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={lockStructural} style={{ ...fieldStyle, opacity: lockStructural ? 0.6 : 1 }} />
-          </div>
+
+          {!lockStructural && (
+            <div>
+              <label style={labelStyle}>Fecha</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
+            </div>
+          )}
 
           {/* Recurrente: crea una regla y materializa las ocurrencias desde la fecha hasta hoy.
               No aplica al EDITAR (se gestiona desde la regla, no desde el movimiento). */}

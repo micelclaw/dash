@@ -366,7 +366,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function Banner({ kind, title, children }: { kind: 'error' | 'warning' | 'info'; title: string; children: React.ReactNode }) {
-  const palette: Record<string, { bg: string; border: string; color: string; icon: React.ReactNode }> = {
+  const palette: Record<'error' | 'warning' | 'info', { bg: string; border: string; color: string; icon: React.ReactNode }> = {
     error: { bg: 'rgba(239,68,68,0.1)', border: 'var(--error)', color: 'var(--error)', icon: <AlertTriangle size={14} /> },
     warning: { bg: 'rgba(234,179,8,0.1)', border: 'var(--warning, #ca8a04)', color: 'var(--warning, #ca8a04)', icon: <AlertTriangle size={14} /> },
     info: { bg: 'var(--surface)', border: 'var(--border)', color: 'var(--text-dim)', icon: <Package size={14} /> },

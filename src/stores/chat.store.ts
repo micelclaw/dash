@@ -131,7 +131,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     // active stream, behaves as a regular send.
     const steerMatch = /^\s*\/steer\s+([\s\S]+)$/i.exec(text);
     const isSteer = !!steerMatch;
-    const messageToSend = isSteer ? steerMatch![1].trim() : text;
+    const messageToSend = steerMatch ? (steerMatch[1] ?? '').trim() : text;
     // Skip silently if /steer was sent without a body (chat input may have a
     // race where the user hits enter before typing).
     if (isSteer && !messageToSend) return;
@@ -302,9 +302,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       if (!current || current.conversationId !== conversationId) return {};
       const tools = [...current.tools];
       const existing = tools.findIndex(t => t.id === event.id);
-      if (existing >= 0) {
+      const prev = existing >= 0 ? tools[existing] : undefined;
+      if (prev) {
         // Preserve the offset captured when the tool first appeared.
-        tools[existing] = { ...tools[existing], ...event, text_offset: tools[existing].text_offset } as ToolExecution;
+        tools[existing] = { ...prev, ...event, text_offset: prev.text_offset } as ToolExecution;
       } else {
         // Stamp the position = length of text streamed so far → the pill
         // renders interleaved at that point, not lumped at the end.

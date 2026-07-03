@@ -51,6 +51,6 @@ export async function getUserFolderAccess(userId: string): Promise<UserFolderPer
   return res.data.folders;
 }
 
-export async function patchUserFolderAccess(userId: string, folders: Record<string, FolderPermission>): Promise<void> {
+export async function updateUserFolderAccess(userId: string, folders: Record<string, FolderPermission>): Promise<void> {
   await api.patch(`/admin/users/${userId}/folder-access`, { folders });
 }

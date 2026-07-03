@@ -10,13 +10,20 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Workflow, PlayCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, type LucideIcon } from 'lucide-react';
+import { lucideLookup } from './lucide-lookup';
+import type { AppEntityType } from '@/services/app-access.service';
 
 // Single source of truth de los tipos de entidad referenciables desde el chat
 // (chips cliqueables que navegan al registro). El backend marca cada tool_call
 // con `entity_refs: [{ type, id, title }]` y aquí mapeamos `type` → icono/color/
 // ruta. Piloto: solo notas. Al ampliar a otros dominios, añadir una fila
 // reusando el icono/color de config/modules.ts y el patrón de ruta `?id=`.
+//
+// Además del set base (de aquí abajo, dominios del core), las apps L3 pueden
+// aportar sus propios tipos vía `ui.entities` del manifest — ver
+// `registerAppEntityTypes()` al final del fichero, invocada por
+// `stores/entity-types.store.ts` al boot.
 
 export interface EntityRefDef {
   Icon: LucideIcon;
@@ -205,21 +212,7 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     label: 'Base de datos',
     route: () => `/office/databases`,
   },
-  // flows: el flow abre su editor (/flows/:id, que ya lee :flowId). El run no tiene
-  // página propia → abre el listado en la pestaña History resaltando ese run
-  // (FlowsPage lee ?run=). El id de la chip de run es el id del propio run.
-  flow: {
-    Icon: Workflow,
-    color: 'var(--mod-flows)',
-    label: 'Flow',
-    route: (id) => `/flows/${encodeURIComponent(id)}`,
-  },
-  flow_run: {
-    Icon: PlayCircle,
-    color: 'var(--mod-flows)',
-    label: 'Run',
-    route: (id) => `/flows?run=${encodeURIComponent(id)}`,
-  },
+  // flows/flow_run retirados 2026-06-30 (MicelFlow eliminado; la automatización es n8n).
   // Finance — Firefly III. Las chips navegan al embed del módulo (deep-link a un
   // registro concreto = futuro; el iframe es cross-origin). El id se ignora.
   firefly_transaction: {
@@ -305,4 +298,28 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
 };
 
 /** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
-export const MENTION_DOMAINS = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'] as const;
+export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'];
+
+// ─── Extensión dinámica por apps L3 (`ui.entities` del manifest) ────────────
+// Invocada una vez al boot (`stores/entity-types.store.ts`) tras fetchear
+// `/me/entity-types`. Solo AÑADE tipos nuevos — nunca pisa un dominio del core
+// (defensa: si una app declara un `type` ya existente, se ignora esa entrada y
+// se avisa por consola). Tipos con `mention !== false` se suman también a
+// MENTION_DOMAINS para que el editor `@` los ofrezca.
+export function registerAppEntityTypes(entries: AppEntityType[]): void {
+  for (const entry of entries) {
+    if (ENTITY_REF_MAP[entry.type]) {
+      console.warn(`[entity-refs] "${entry.type}" (app ${entry.app_name}) ya existe — ignorado`);
+      continue;
+    }
+    ENTITY_REF_MAP[entry.type] = {
+      Icon: lucideLookup(entry.icon),
+      color: entry.color,
+      label: entry.label,
+      route: (id: string) => entry.route.replace('{id}', encodeURIComponent(id)),
+    };
+    if (entry.mention !== false && !MENTION_DOMAINS.includes(entry.type)) {
+      MENTION_DOMAINS.push(entry.type);
+    }
+  }
+}

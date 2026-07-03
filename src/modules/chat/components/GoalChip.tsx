@@ -24,6 +24,20 @@ interface Goal { text: string; state: GoalState; }
 // `/goal <sub> <resto>` — sub y resto opcionales.
 const GOAL_RE = /^\s*\/goal(?:\s+(\S+))?(?:\s+([\s\S]*?))?\s*$/i;
 
+/** Aplica un subcomando `/goal` al estado actual (reducer puro). */
+function applyGoalCommand(goal: Goal | null, sub: string, rest: string): Goal | null {
+  switch (sub) {
+    case 'start': case 'set': case 'create':
+      return { text: rest || goal?.text || 'Objetivo', state: 'active' };
+    case 'pause':    return goal ? { ...goal, state: 'paused' } : goal;
+    case 'resume':   return goal ? { ...goal, state: 'active' } : goal;
+    case 'complete': case 'done':    return goal ? { ...goal, state: 'complete' } : goal;
+    case 'block':    case 'blocked': return goal ? { ...goal, state: 'blocked' } : goal;
+    case 'clear':    return null;
+    default:         return goal; // status / desconocido → sin cambio
+  }
+}
+
 /** Reduce los mensajes `/goal` del usuario (en orden) a un estado de goal. */
 export function deriveGoal(messages: Message[] | undefined): Goal | null {
   if (!messages?.length) return null;
@@ -34,17 +48,7 @@ export function deriveGoal(messages: Message[] | undefined): Goal | null {
     if (!match) continue;
     const sub = (match[1] ?? 'status').toLowerCase();
     const rest = (match[2] ?? '').trim();
-    switch (sub) {
-      case 'start': case 'set': case 'create':
-        goal = { text: rest || goal?.text || 'Objetivo', state: 'active' };
-        break;
-      case 'pause':    if (goal) goal = { ...goal, state: 'paused' }; break;
-      case 'resume':   if (goal) goal = { ...goal, state: 'active' }; break;
-      case 'complete': case 'done':    if (goal) goal = { ...goal, state: 'complete' }; break;
-      case 'block':    case 'blocked': if (goal) goal = { ...goal, state: 'blocked' }; break;
-      case 'clear':    goal = null; break;
-      default: break; // status / desconocido → sin cambio
-    }
+    goal = applyGoalCommand(goal, sub, rest);
   }
   return goal;
 }

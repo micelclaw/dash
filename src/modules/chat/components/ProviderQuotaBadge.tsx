@@ -111,10 +111,9 @@ export function ProviderQuotaBadge() {
   if (summary.totals.tokens_total === 0) return null;
 
   // Headline: tokens consumed by the active model (if matched) or the
-  // top-consuming model (when the agent's model hasn't fired yet).
-  const headlineRow = activeRow ?? summary.models[0];
+  // window totals (when the agent's model hasn't fired yet).
   const headlineLabel = activeRow
-    ? `${fmtTokens(headlineRow.tokens_total)} · ${headlineRow.requests}r`
+    ? `${fmtTokens(activeRow.tokens_total)} · ${activeRow.requests}r`
     : `${fmtTokens(summary.totals.tokens_total)} · ${summary.totals.requests}r`;
 
   return (
@@ -124,7 +123,7 @@ export function ProviderQuotaBadge() {
           aria-label={`Token usage ${window}`}
           title={
             activeRow
-              ? `${headlineRow.model}: ${headlineRow.tokens_total.toLocaleString()} tokens in last ${window}`
+              ? `${activeRow.model}: ${activeRow.tokens_total.toLocaleString()} tokens in last ${window}`
               : `Total ${window}: ${summary.totals.tokens_total.toLocaleString()} tokens`
           }
           style={{

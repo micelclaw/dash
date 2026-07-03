@@ -27,7 +27,8 @@ const TYPES: { id: WalletType; label: string }[] = [
   { id: 'liability', label: 'Tarjeta / Préstamo' },
 ];
 
-const SUBTYPES: Record<WalletType, { id: string; label: string }[]> = {
+// Tupla no vacía: garantiza al tipado que siempre hay un primer subtipo por defecto.
+const SUBTYPES: Record<WalletType, [{ id: string; label: string }, ...{ id: string; label: string }[]]> = {
   asset: [
     { id: 'bank', label: 'Cuenta bancaria' },
     { id: 'cash', label: 'Efectivo' },

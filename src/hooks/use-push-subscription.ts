@@ -178,7 +178,7 @@ export function usePushSubscription() {
         const local = await reg.pushManager.getSubscription();
         if (local) {
           // Find the backend row for this endpoint, delete it.
-          const match = subscriptions.find((s) => true); // best-effort — see refresh()
+          const match = subscriptions.find(() => true); // best-effort — see refresh()
           if (match) {
             await api.delete(`/push/subscribe/${match.id}`).catch(() => undefined);
           }

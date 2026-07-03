@@ -36,8 +36,9 @@ export function trackToPlayable(track: Track): PlayableItem {
  */
 export function playTracks(tracks: Track[], startIndex = 0): void {
   const queue = tracks.slice(startIndex).map(trackToPlayable);
-  if (queue.length === 0) return;
-  usePlayerStore.getState().playAudio(queue[0], queue);
+  const first = queue[0];
+  if (!first) return;
+  usePlayerStore.getState().playAudio(first, queue);
 }
 
 /** Fisher–Yates shuffle, then play. */
@@ -45,7 +46,11 @@ export function shufflePlayTracks(tracks: Track[]): void {
   const shuffled = [...tracks];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    const a = shuffled[i];
+    const b = shuffled[j];
+    if (a === undefined || b === undefined) continue; // i/j always in range — narrowing for indexed access
+    shuffled[i] = b;
+    shuffled[j] = a;
   }
   playTracks(shuffled);
 }

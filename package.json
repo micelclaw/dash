@@ -33,7 +33,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@excalidraw/excalidraw": "^0.18.0",
-    "@hello-pangea/dnd": "^18.0.1",
     "@lezer/highlight": "^1.2.3",
     "@lobehub/icons": "^5.10.0",
     "@micelclaw/mail-admin-ui": "link:../micel-mail/admin-ui",
@@ -93,6 +92,7 @@
     "elkjs": "^0.11.1",
     "hls.js": "^1.6.16",
     "html-to-image": "^1.11.13",
+    "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.469.0",
@@ -116,6 +116,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.0.0",
     "@types/d3": "^7.4.3",
@@ -125,8 +126,13 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "@vitejs/plugin-react": "^4.3.0",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
+    "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.7.0",
+    "typescript-eslint": "^8.62.1",
     "vite": "^6.1.0",
     "vite-plugin-pwa": "^1.2.0"
   }

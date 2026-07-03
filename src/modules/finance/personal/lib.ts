@@ -37,23 +37,18 @@ export function categoryVisual(cat: FinanceCategory | undefined | null): { emoji
  */
 export function tintBackground(color: string, alpha = 0.16): string {
   const c = color.trim();
-  const m = /^#([0-9a-f]{6})$/i.exec(c);
-  if (m) {
-    const int = parseInt(m[1], 16);
+  const hex = /^#([0-9a-f]{6})$/i.exec(c)?.[1];
+  if (hex) {
+    const int = parseInt(hex, 16);
     const r = (int >> 16) & 255, g = (int >> 8) & 255, b = int & 255;
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
   return `color-mix(in srgb, ${c} ${Math.round(alpha * 100)}%, transparent)`;
 }
 
-export function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): string {
-  const n = Number(value ?? 0);
-  try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(n);
-  } catch {
-    return `${n.toFixed(2)} ${currency}`;
-  }
-}
+// Formato de dinero/fecha: SSOT en ../lib/format. Se re-exporta para no tocar los
+// múltiples importadores que hacen `import { fmtMoney } from './lib'`.
+export { fmtMoney, fmtDate } from '../lib/format';
 
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);

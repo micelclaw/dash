@@ -81,7 +81,9 @@ export function ApprovalsForwardingSection() {
 
   const updateTarget = (idx: number, field: 'channel' | 'to', value: string) => {
     const updated = [...targets];
-    updated[idx] = { ...updated[idx], [field]: value };
+    const current = updated[idx];
+    if (!current) return;
+    updated[idx] = { ...current, [field]: value };
     setTargets(updated);
     setDirty(true);
   };

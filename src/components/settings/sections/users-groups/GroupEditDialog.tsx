@@ -24,9 +24,9 @@ import { listUsers } from '@/services/users.service';
 import type { AdminUser } from '@/types/users';
 import type { FolderPermission, UserFolderPerm } from '@/services/shared-folders.service';
 import {
-  updateGroup, getGroupMembers, patchGroupMembers, getGroupAppAccess, patchGroupAppAccess,
-  getGroupFolderAccess, patchGroupFolderAccess, getGroupQuota, patchGroupQuota,
-  getGroupSpeedLimits, patchGroupSpeedLimits, type Group,
+  updateGroup, getGroupMembers, updateGroupMembers, getGroupAppAccess, updateGroupAppAccess,
+  getGroupFolderAccess, updateGroupFolderAccess, getGroupQuota, updateGroupQuota,
+  getGroupSpeedLimits, updateGroupSpeedLimits, type Group,
 } from '@/services/groups.service';
 
 const FOLDER_PERMS: { v: FolderPermission; label: string }[] = [
@@ -83,11 +83,11 @@ export function GroupEditDialog({ group, open, onOpenChange, onSaved }: {
       }
       // Gatear cada patch por su precarga: si un aspecto no cargó, no lo
       // sobrescribimos con estado vacío (R-1).
-      if (!errs.members) ops.push(patchGroupMembers(group.id, member));
-      if (!errs.apps) ops.push(patchGroupAppAccess(group.id, appAllow));
-      if (!errs.permisos) ops.push(patchGroupFolderAccess(group.id, folderPerm));
-      if (!errs.cuota) ops.push(patchGroupQuota(group.id, Math.round(Number(quotaGb) * 1e9)));
-      if (!errs.velocidad) ops.push(patchGroupSpeedLimits(group.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
+      if (!errs.members) ops.push(updateGroupMembers(group.id, member));
+      if (!errs.apps) ops.push(updateGroupAppAccess(group.id, appAllow));
+      if (!errs.permisos) ops.push(updateGroupFolderAccess(group.id, folderPerm));
+      if (!errs.cuota) ops.push(updateGroupQuota(group.id, Math.round(Number(quotaGb) * 1e9)));
+      if (!errs.velocidad) ops.push(updateGroupSpeedLimits(group.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
       await Promise.all(ops);
       toast.success('Grupo actualizado');
       onSaved(); onOpenChange(false);

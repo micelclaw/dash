@@ -13,7 +13,7 @@
 import {
   MessageSquare, MessageCircle, Search, StickyNote, Calendar, Mail, Users,
   BookOpen, FolderOpen, Image, Bot, HardDrive, Database,
-  Settings, Puzzle, Activity, Wrench, Workflow, LineChart,
+  Settings, Puzzle, Activity, Wrench, LineChart,
   Shapes, Kanban, Rss, Container, FileText, Cable,
   Wallet, Receipt, Bitcoin, Antenna, Globe, Orbit,
   Terminal, Radio, Server, Hammer, Boxes, Bookmark, Music, Clapperboard, Library,
@@ -27,7 +27,8 @@ export const MODULES: ModuleConfig[] = [
   { id: 'micelhub', label: 'MicelHub',      icon: Puzzle,        color: 'var(--mod-micelhub)', path: '/micelhub', group: null },
   { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null },
   { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null, adminOnly: true },
-  { id: 'flows',    label: 'Flows',         icon: Workflow,      color: 'var(--mod-flows)',    path: '/flows',    group: null },
+  // MicelFlow retirado (2026-06-30): la automatización vive ahora en n8n (app `n8n-automation`,
+  // módulo dinámico que aparece al instalarla). Ver docs/integrations/n8n.md.
   // Productivity
   { id: 'notes',    label: 'Notes',         icon: StickyNote,    color: 'var(--mod-notes)',    path: '/notes',    group: 'Productivity' },
   { id: 'calendar', label: 'Calendar',      icon: Calendar,      color: 'var(--mod-calendar)', path: '/calendar', group: 'Productivity' },

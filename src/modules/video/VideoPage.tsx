@@ -77,7 +77,6 @@ export function VideoPage() {
     <>
       <MediaShell
         moduleVar="--mod-video"
-        title="Video"
         tabs={TABS}
         activeTab={activeTab}
         onTabChange={(id) => useVideoStore.getState().setActiveTab(id as VideoTab)}

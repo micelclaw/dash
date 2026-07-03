@@ -98,7 +98,6 @@ export function PreferencesSection() {
     // Poll every 3 seconds to show comments appearing progressively
     let polls = 0;
     const maxPolls = 20; // 60 seconds max
-    const previousComments = new Set(preferences.filter(p => p.ai_comment).map(p => p.id));
 
     const poll = setInterval(async () => {
       polls++;
@@ -106,9 +105,6 @@ export function PreferencesSection() {
         const updated = await preferencesSvc.listPreferences();
         setPreferences(updated);
 
-        // Count how many NEW comments appeared
-        const currentComments = new Set(updated.filter(p => p.ai_comment).map(p => p.id));
-        const newCount = [...currentComments].filter(id => !previousComments.has(id)).length;
         const total = updated.filter(p => p.confidence >= 0.6).length;
         const withComments = updated.filter(p => p.ai_comment).length;
 
@@ -176,7 +172,7 @@ export function PreferencesSection() {
           {categories.map(cat => {
             const meta = CATEGORY_META[cat] ?? DEFAULT_META;
             const CatIcon = meta.icon;
-            const items = grouped[cat];
+            const items = grouped[cat] ?? [];
 
             return (
               <div key={cat}>

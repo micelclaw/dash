@@ -7,8 +7,8 @@
 // (por cuenta) · Plan de cuentas (PGC, gestionable) · Conciliación bancaria.
 // Incluye crear asiento manual con cuadre en vivo, ver un asiento y su contra-asiento.
 
-import { useEffect, useMemo, useState } from 'react';
-import { BookText, Library, ListTree, Landmark, Plus, X, ArrowLeftRight, FileText, Trash2, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookText, Library, ListTree, Landmark, Plus, ArrowLeftRight, FileText, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '@/components/shared/Tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';

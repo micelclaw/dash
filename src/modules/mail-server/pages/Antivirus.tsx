@@ -12,10 +12,12 @@ export default function Antivirus() {
     const fetchStatus = async () => {
       setLoading(true);
       try {
+        // El provider del dash siempre implementa getStatus (opcional en la interfaz upstream).
+        if (!api.getStatus) throw new Error('getStatus not available');
         const data = await api.getStatus();
         setStatus(data);
         setError(null);
-      } catch (e) {
+      } catch {
         setError('No se pudo obtener el estado del antivirus');
       } finally {
         setLoading(false);

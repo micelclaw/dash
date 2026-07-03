@@ -533,29 +533,6 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
 
   const canSave = baseUrl.trim() && (!defaults.apiKeyRequired || apiKey.trim().length >= 1);
 
-  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
-  const [connectionError, setConnectionError] = useState('');
-
-  const testConnection = async () => {
-    setConnectionStatus('testing');
-    setConnectionError('');
-    try {
-      // Try discover endpoint — it probes the provider's URL server-side
-      await gwService.discoverProviderModels(defaults.providerId);
-      setConnectionStatus('ok');
-    } catch {
-      // Provider not saved yet, so discover will 404. Instead, just save and
-      // let discover run post-save. We validate the URL format only.
-      try {
-        new URL(baseUrl);
-        setConnectionStatus('idle');
-      } catch {
-        setConnectionStatus('error');
-        setConnectionError('Invalid URL format');
-      }
-    }
-  };
-
   const handleSave = async () => {
     if (!canSave) return;
 

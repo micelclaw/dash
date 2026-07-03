@@ -10,10 +10,9 @@
  * https://micelclaw.com
  */
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useLocation } from 'react-router';
 import { MODULES } from '@/config/modules';
-import { useDiagramsStore } from '@/stores/diagrams.store';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useOfficeStore } from '@/stores/office.store';
 import { useTerminalStore } from '@/stores/terminal.store';
@@ -24,6 +23,51 @@ interface ModuleContext {
   activeItem: { id: string; type: string; title: string } | null;
   editorContext: Record<string, unknown> | null;
 }
+
+// ─── Store de diagramas en diferido ─────────────────────────────────
+// El import estático de '@/stores/diagrams.store' arrastraba @xyflow/react
+// al chunk inicial del Shell (Shell → BottomBar/ChatInput → este hook). Se
+// carga con import() SOLO al pisar /sketches; en el resto de rutas el
+// contexto se devuelve sin resumen de diagrama, idéntico a antes (los tipos
+// `typeof import(...)` se borran en compilación y no crean el enlace).
+
+type DiagramsStoreModule = typeof import('@/stores/diagrams.store');
+type DiagramsState = ReturnType<DiagramsStoreModule['useDiagramsStore']['getState']>;
+
+interface DiagramsSlice {
+  nodes: DiagramsState['nodes'];
+  edges: DiagramsState['edges'];
+  selectedElement: DiagramsState['selectedElement'];
+  title: DiagramsState['title'];
+}
+
+let diagramsStoreModule: DiagramsStoreModule | null = null;
+let diagramsSliceCache: DiagramsSlice | null = null;
+
+/** Snapshot referencialmente estable (requisito de useSyncExternalStore):
+ *  solo se rehace el objeto cuando cambia alguno de los 4 campos usados. */
+function getDiagramsSlice(): DiagramsSlice | null {
+  if (!diagramsStoreModule) return null;
+  const s = diagramsStoreModule.useDiagramsStore.getState();
+  if (
+    !diagramsSliceCache
+    || diagramsSliceCache.nodes !== s.nodes
+    || diagramsSliceCache.edges !== s.edges
+    || diagramsSliceCache.selectedElement !== s.selectedElement
+    || diagramsSliceCache.title !== s.title
+  ) {
+    diagramsSliceCache = {
+      nodes: s.nodes,
+      edges: s.edges,
+      selectedElement: s.selectedElement,
+      title: s.title,
+    };
+  }
+  return diagramsSliceCache;
+}
+
+const EMPTY_NODES: DiagramsSlice['nodes'] = [];
+const EMPTY_EDGES: DiagramsSlice['edges'] = [];
 
 /** Walk edges from root nodes to build a readable summary, max ~200 chars */
 function generateDiagramSummary(
@@ -70,10 +114,31 @@ function generateDiagramSummary(
 
 export function useModuleContext(): ModuleContext {
   const location = useLocation();
-  const diagramNodes = useDiagramsStore((s) => s.nodes);
-  const diagramEdges = useDiagramsStore((s) => s.edges);
-  const selectedElement = useDiagramsStore((s) => s.selectedElement);
-  const diagramTitle = useDiagramsStore((s) => s.title);
+
+  const onSketchesRoute = location.pathname.startsWith('/sketches');
+  const [diagramsMod, setDiagramsMod] = useState<DiagramsStoreModule | null>(diagramsStoreModule);
+  useEffect(() => {
+    if (!onSketchesRoute || diagramsMod) return;
+    let cancelled = false;
+    void import('@/stores/diagrams.store').then((m) => {
+      diagramsStoreModule = m;
+      if (!cancelled) setDiagramsMod(m);
+    });
+    return () => { cancelled = true; };
+  }, [onSketchesRoute, diagramsMod]);
+
+  // Al cargar el módulo cambia la identidad de subscribe → useSyncExternalStore
+  // se resuscribe y relee el snapshot (null → slice), re-renderizando.
+  const subscribeDiagrams = useCallback(
+    (onChange: () => void) => (diagramsMod ? diagramsMod.useDiagramsStore.subscribe(onChange) : () => {}),
+    [diagramsMod],
+  );
+  const diagramsSlice = useSyncExternalStore(subscribeDiagrams, getDiagramsSlice);
+  const diagramNodes = diagramsSlice?.nodes ?? EMPTY_NODES;
+  const diagramEdges = diagramsSlice?.edges ?? EMPTY_EDGES;
+  const selectedElement = diagramsSlice?.selectedElement ?? null;
+  const diagramTitle = diagramsSlice?.title ?? '';
+
   const projectsColumns = useProjectsStore((s) => s.columns);
   const projectsCards = useProjectsStore((s) => s.cards);
   const projectsColumnCardIds = useProjectsStore((s) => s.columnCardIds);

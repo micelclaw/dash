@@ -92,7 +92,6 @@ export function MusicPage() {
   return (
     <MediaShell
       moduleVar="--mod-music"
-      title="Music"
       tabs={TABS}
       activeTab={activeTab}
       onTabChange={(id) => useMusicStore.getState().setActiveTab(id as MusicTab)}

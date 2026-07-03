@@ -6,7 +6,6 @@ const scoreColor = (score: number) =>
   score < 5 ? '#22c55e' : score <= 10 ? '#f97316' : '#ef4444';
 
 const formatDate = (ts: number) => new Date(ts * 1000).toLocaleString();
-const toDateStr = (ts: number) => new Date(ts * 1000).toISOString().slice(0, 10);
 
 export default function AuditLog() {
   const { available, history, loading, error, refetch } = useRspamdStats();

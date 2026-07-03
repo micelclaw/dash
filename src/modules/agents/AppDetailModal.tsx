@@ -13,9 +13,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { api } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { AgentSkill } from './types';
+
+/** Quita el bloque frontmatter YAML inicial (`---\n...\n---`) para mostrar solo el cuerpo legible. */
+function stripFrontmatter(md: string): string {
+  if (!md.startsWith('---')) return md;
+  const end = md.indexOf('\n---', 3);
+  if (end === -1) return md;
+  const after = md.indexOf('\n', end + 1);
+  return after === -1 ? '' : md.slice(after + 1).replace(/^\s+/, '');
+}
 
 interface SkillToolInfo { action: string; description: string; }
 interface SkillDetail {
@@ -142,12 +152,14 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
 
             {(() => {
               // Guía del modo activo: en núcleo, la recortada (sin la sección Avanzado).
+              // Sin el frontmatter YAML (ya parseado aparte en emoji/description) y con
+              // remark-gfm para que las tablas del SKILL.md (catálogo de acciones) rendericen.
               const guide = mode === 'core' ? (detail.skill_md_core || detail.skill_md) : detail.skill_md;
               return guide ? (
                 <div style={{ marginTop: 8 }}>
                   <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Guía</h4>
                   <div className="prose prose-invert prose-sm max-w-none" style={{ fontSize: '0.75rem' }}>
-                    <ReactMarkdown>{guide}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(guide)}</ReactMarkdown>
                   </div>
                 </div>
               ) : null;

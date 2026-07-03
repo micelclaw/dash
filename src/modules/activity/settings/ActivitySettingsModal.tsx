@@ -28,7 +28,7 @@ import {
   getActivitySettings,
   setActivityBudget,
   getNotificationRules,
-  patchNotificationRule,
+  updateNotificationRule,
   resetNotificationRule,
 } from '@/services/activity.service';
 import type { ActivityBudget, BuiltinRule } from '@/services/activity.service';
@@ -99,7 +99,7 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
 
   async function onToggleRule(rule: BuiltinRule, enabled: boolean) {
     try {
-      await patchNotificationRule(rule.key, { enabled, threshold: rule.threshold });
+      await updateNotificationRule(rule.key, { enabled, threshold: rule.threshold });
       setRules((prev) => prev.map((r) => (r.key === rule.key ? { ...r, enabled, overridden: true } : r)));
       toast.success(`${rule.key} ${enabled ? 'activada' : 'desactivada'}`);
     } catch (err) {
@@ -112,7 +112,7 @@ export function ActivitySettingsModal({ open, onClose }: Props) {
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     const nextThreshold = { ...rule.threshold, [key]: parsed };
     try {
-      await patchNotificationRule(rule.key, { enabled: rule.enabled, threshold: nextThreshold });
+      await updateNotificationRule(rule.key, { enabled: rule.enabled, threshold: nextThreshold });
       setRules((prev) => prev.map((r) => (r.key === rule.key ? { ...r, threshold: nextThreshold, overridden: true } : r)));
     } catch (err) {
       toast.error(`No se pudo guardar: ${(err as Error).message}`);

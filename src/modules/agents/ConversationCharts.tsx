@@ -81,7 +81,7 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
                 <Tooltip
                   cursor={{ fill: 'var(--surface-hover)' }}
                   contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.75rem' }}
-                  formatter={(v: number, _n, p) => [`${v.toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
+                  formatter={(v, _n, p) => [`${Number(v).toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
                 />
                 <Bar dataKey="tokens" radius={[3, 3, 0, 0]}>
                   {agentData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -98,7 +98,7 @@ export function ConversationCharts({ stats, agents }: ConversationChartsProps) {
                 <Tooltip
                   cursor={{ fill: 'var(--surface-hover)' }}
                   contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.75rem' }}
-                  formatter={(v: number, _n, p) => [`${v.toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
+                  formatter={(v, _n, p) => [`${Number(v).toLocaleString('es-ES')} tokens · ${p?.payload?.messages ?? 0} msgs`, p?.payload?.name]}
                 />
                 <Bar dataKey="tokens" radius={[0, 3, 3, 0]}>
                   {modelData.map((d, i) => <Cell key={i} fill={d.color} />)}

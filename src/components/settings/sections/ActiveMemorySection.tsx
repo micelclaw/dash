@@ -328,7 +328,8 @@ export function ActiveMemorySection() {
       )}
 
       {/* ── Estado general ────────────────────────────────────────── */}
-      <SettingsBlock title="Estado general" expanded>
+      {/* Bloque fijo: siempre expandido, el toggle del header es un no-op */}
+      <SettingsBlock title="Estado general" expanded onToggle={() => {}}>
 
         {/* Toggle enabled */}
         <div style={ROW}>

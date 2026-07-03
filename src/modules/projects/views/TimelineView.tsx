@@ -11,7 +11,7 @@
  */
 
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut, ArrowUp, ArrowDown } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { tagColor } from '@/lib/tag-color';
 import { PriorityDot } from '../components/PriorityDot';
@@ -662,7 +662,7 @@ export function TimelineView() {
           </div>
 
           {/* Card rows */}
-          {renderRows.map((row, idx) => {
+          {renderRows.map((row) => {
             if (row.type === 'group') {
               const g = row.group;
               const isCollapsed = collapsedGroups.has(g.key);

@@ -39,8 +39,9 @@ function unquote(s: string): string {
 /** Parsea el texto CSV a una matriz de celdas (split simple por delimitador). */
 function parseCsv(text: string): string[][] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-  if (lines.length === 0) return [];
-  const delim = detectDelimiter(lines[0]);
+  const firstLine = lines[0];
+  if (firstLine === undefined) return [];
+  const delim = detectDelimiter(firstLine);
   return lines.map((line) => line.split(delim).map(unquote));
 }
 
@@ -65,8 +66,8 @@ function parseDate(raw: string): string | null {
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const m = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(s); // DD/MM/YYYY o DD-MM-YYYY
   if (m) {
-    const d = m[1].padStart(2, '0');
-    const mo = m[2].padStart(2, '0');
+    const d = (m[1] ?? '').padStart(2, '0');
+    const mo = (m[2] ?? '').padStart(2, '0');
     return `${m[3]}-${mo}-${d}`;
   }
   return null;
@@ -85,7 +86,7 @@ const DESC_HINTS = ['concepto', 'descripcion', 'descripción', 'description', 'd
 
 function detectColumn(headers: string[], hints: string[]): number {
   for (let i = 0; i < headers.length; i++) {
-    const h = headers[i].trim().toLowerCase();
+    const h = (headers[i] ?? '').trim().toLowerCase();
     if (hints.some((hint) => h.includes(hint))) return i;
   }
   return -1;
@@ -108,7 +109,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
 
   // Matriz de celdas y cabecera derivada.
   const matrix = useMemo(() => parseCsv(text), [text]);
-  const headerRow = hasHeader && matrix.length > 0 ? matrix[0] : [];
+  const headerRow = (hasHeader ? matrix[0] : undefined) ?? [];
   const colCount = matrix.reduce((max, r) => Math.max(max, r.length), 0);
 
   // Auto-detección de columnas: solo si el usuario no las ha tocado.
@@ -207,7 +208,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
   const th: React.CSSProperties = { textAlign: 'left', padding: '6px 8px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' };
   const td: React.CSSProperties = { padding: '6px 8px', fontSize: 12, color: 'var(--text)', borderBottom: '1px solid var(--border)' };
 
-  const colLabel = (i: number) => (headerRow[i]?.trim() ? headerRow[i].trim() : `Columna ${i + 1}`);
+  const colLabel = (i: number) => headerRow[i]?.trim() || `Columna ${i + 1}`;
   const colOptions = Array.from({ length: colCount }, (_, i) => i);
 
   return (

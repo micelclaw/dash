@@ -27,7 +27,7 @@ import { useNavigate } from 'react-router';
 import { SettingSection } from '../SettingSection';
 import { InlineLoading } from '../shared/InlineLoading';
 import {
-  getDomains, addDomain, patchDomain, deleteDomain, setServiceExposure,
+  getDomains, addDomain, updateDomain, deleteDomain, setServiceExposure,
   resyncDomain, getLocalDomainSetup,
   type SystemDomain,
 } from '@/services/domains.service';
@@ -96,13 +96,13 @@ export function DomainsSection() {
   };
 
   const handleSetPrimary = (id: string) => withBusy(id, async () => {
-    await patchDomain(id, { is_primary: true });
+    await updateDomain(id, { is_primary: true });
     await refresh();
     reloadResolver();
   });
 
   const handleToggleEnabled = (d: SystemDomain) => withBusy(d.id, async () => {
-    await patchDomain(d.id, { enabled: !d.enabled });
+    await updateDomain(d.id, { enabled: !d.enabled });
     await refresh();
     reloadResolver();
   });

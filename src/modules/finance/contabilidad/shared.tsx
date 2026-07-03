@@ -8,19 +8,17 @@
 // de jerga (tooltips) y selector de cuenta con búsqueda.
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Download, HelpCircle, Search, ChevronsUpDown, FileSpreadsheet, FileText, Table2, Loader2 } from 'lucide-react';
+import { Download, Search, ChevronsUpDown, FileSpreadsheet, FileText, Table2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { DataTable, type DataColumn } from '@/components/ui/data-table';
 import { api } from '@/services/api';
 import { useFinancePeriod } from '../period';
 import { downloadExport, type ExportFormat } from '../lib/exportDownload';
+import { fmt } from '../lib/format';
 
-export const fmt = (v: string | number | null | undefined): string => {
-  if (v == null || v === '') return '—';
-  const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-};
+// `fmt` (número monetario sin símbolo) = SSOT en ../lib/format; se re-exporta para
+// los consumidores de shared que hacen `import { fmt } from './shared'`.
+export { fmt };
 
 /** Celda monetaria: monoespaciada, alineada a la derecha, roja si negativa. */
 export function Money({ v, color }: { v: string | number | null | undefined; color?: boolean }) {
@@ -43,40 +41,11 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ─── Glosario de jerga contable (tooltips para no-contables) ─────────────────
-export const GLOSSARY: Record<string, string> = {
-  asiento: 'Un apunte en el libro de contabilidad. Siempre tiene dos lados que suman lo mismo (Debe y Haber).',
-  debe: 'El lado izquierdo de un asiento. Sube el dinero que tienes o lo que gastas.',
-  haber: 'El lado derecho de un asiento. Sube lo que ingresas o lo que debes.',
-  mayor: 'El historial de movimientos de UNA cuenta concreta, con su saldo acumulado.',
-  diario: 'La lista de todos los asientos en orden de fecha (el "diario de a bordo" de la contabilidad).',
-  sumas_y_saldos: 'Un resumen con el total del Debe y del Haber de cada cuenta. El total del Debe debe ser igual al del Haber.',
-  balance: 'Foto del patrimonio en una fecha: lo que tienes (Activo) frente a lo que debes y tu capital (Pasivo + Patrimonio).',
-  resultados: 'Ingresos menos gastos del periodo. Si sale positivo, hay beneficio.',
-  cuadre: 'Que el Debe sea igual al Haber. Un asiento que no cuadra no se puede guardar.',
-  postable: 'Una cuenta "agrupadora" no admite apuntes directos; solo sirve para sumar sus subcuentas.',
-  retencion: 'Parte del importe que se adelanta a Hacienda a cuenta del IRPF (en facturas de profesionales o alquileres).',
-  ejercicio: 'El año contable. Al cerrarlo se calcula el resultado y se bloquea para no tocarlo.',
-  regularizacion: 'Asiento de cierre que lleva ingresos y gastos a la cuenta de Resultado del ejercicio (129).',
-};
-
-/** Icono de ayuda con tooltip de glosario. */
-export function Tip({ k }: { k: keyof typeof GLOSSARY | string }) {
-  const text = GLOSSARY[k as string];
-  if (!text) return null;
-  return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button type="button" tabIndex={-1} className="inline-flex align-middle text-[var(--text-dim)] hover:text-[var(--text)]" aria-label="¿Qué es esto?">
-            <HelpCircle size={13} />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs text-xs leading-snug">{text}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-}
+// Glosario de jerga + Tip: SSOT en ../lib/glossary (compartido por las 3 lentes).
+// Import (binding local para `typeof GLOSSARY` y `<Tip>` de ReportTable) + re-export
+// para no tocar los consumidores de contabilidad que los importan de './shared'.
+import { GLOSSARY, Tip } from '../lib/glossary';
+export { GLOSSARY, Tip };
 
 // ─── Tabla de informe (búsqueda + orden + exportar alrededor del DataTable) ───
 interface ReportTableProps<T> {

@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { GraduationCap, FolderOpen, Copy, Trash2 } from 'lucide-react';
 import { api } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -121,7 +122,7 @@ export function LearnedSkillDetailModal({ skill, agentId, open, onClose, onChang
           {loading ? (
             <span style={{ color: 'var(--text-dim)' }}>Cargando…</span>
           ) : detail?.skill_md ? (
-            <div className="prose-skill"><ReactMarkdown>{stripFrontmatter(detail.skill_md)}</ReactMarkdown></div>
+            <div className="prose-skill"><ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(detail.skill_md)}</ReactMarkdown></div>
           ) : (
             <span style={{ color: 'var(--text-dim)' }}>Sin contenido (no se encontró el SKILL.md).</span>
           )}

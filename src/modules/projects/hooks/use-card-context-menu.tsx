@@ -263,7 +263,7 @@ export function useCardContextMenu() {
             column_id: c.column_id,
             title: `${c.title} (copy)`,
             description: c.description,
-            priority: c.priority,
+            priority: c.priority ?? undefined,
             color: c.color,
             due_date: c.due_date?.split('T')[0] ?? null,
             start_date: c.start_date?.split('T')[0] ?? null,

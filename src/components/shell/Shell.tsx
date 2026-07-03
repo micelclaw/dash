@@ -52,6 +52,7 @@ import { useExtractionStore } from '@/stores/extraction.store';
 import { useOpenclawSchemaStore } from '@/stores/openclaw-schema.store';
 import { useAppAccessStore } from '@/stores/app-access.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
+import { useEntityTypesStore } from '@/stores/entity-types.store';
 import { AppAccessGate } from '@/components/shell/AppAccessGate';
 import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
@@ -89,6 +90,7 @@ export function Shell() {
   const loadConfigSchema = useOpenclawSchemaStore((s) => s.loadConfigSchema);
   const refreshAppAccess = useAppAccessStore((s) => s.refresh);
   const refreshUiModules = useUiModulesStore((s) => s.refresh);
+  const refreshEntityTypes = useEntityTypesStore((s) => s.refresh);
 
   useEffect(() => {
     fetchSnapshot();
@@ -99,6 +101,9 @@ export function Shell() {
     // Módulos dinámicos (apps L3 instaladas servidas por Core como iframe): el
     // backend (/me/ui-modules) ya los filtra por instalada+activa+cargada+concedida.
     void refreshUiModules();
+    // Tipos de entidad de apps L3 (chips de chat, p.ej. "workflow" de n8n) — se
+    // mergean en ENTITY_REF_MAP/MENTION_DOMAINS (config/entity-refs.ts).
+    void refreshEntityTypes();
     // Resolver de URLs de servicios por dominio (stirling.victor.claw en vez de
     // localhost:8081). Carga el catálogo una vez; failures silenciosos → respaldo.
     void useServiceUrlsStore.getState().load();
@@ -111,7 +116,7 @@ export function Shell() {
     // silently swallows errors (last-known value retained).
     const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
     return () => clearInterval(healthPoll);
-  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess, refreshUiModules]);
+  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess, refreshUiModules, refreshEntityTypes]);
 
   // G5: auto-resubscribe push idempotently. If permission is granted and
   // the browser still holds a sub but the backend has lost it (DB wipe,
@@ -293,7 +298,6 @@ export function Shell() {
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const changeEvent = useWebSocket('change.*');
   const mediaEvent = useWebSocket('media.download.*');
-  const workflowEvent = useWebSocket('workflow.*');
   const notificationEvent = useWebSocket('notification.new');
   const postYieldEvent = useWebSocket('chat.post_yield_message');
 
@@ -766,34 +770,7 @@ export function Shell() {
     });
   }, [notificationEvent, addNotification]);
 
-  // ── Workflow events ──
-  useEffect(() => {
-    if (!workflowEvent) return;
-    import('@/stores/flows.store').then(({ useFlowsStore }) => {
-      const flowsState = useFlowsStore.getState();
-
-      if (workflowEvent.event === 'workflow.completed') {
-        const name = workflowEvent.data.flow_name as string;
-        toast.success(`Flow "${name}" completed`);
-        flowsState.onWorkflowCompleted(workflowEvent.data as Record<string, unknown>);
-      } else if (workflowEvent.event === 'workflow.failed') {
-        const name = workflowEvent.data.flow_name as string;
-        const error = workflowEvent.data.error as string;
-        toast.error(`Flow "${name}" failed: ${error}`);
-        flowsState.onWorkflowFailed(workflowEvent.data as Record<string, unknown>);
-      } else if (workflowEvent.event === 'workflow.needs_approval') {
-        const name = workflowEvent.data.flow_name as string;
-        addNotification({
-          type: 'approval',
-          title: `Flow "${name}" needs approval`,
-          action: { label: 'Review', route: '/flows' },
-        });
-        flowsState.onWorkflowNeedsApproval(workflowEvent.data as Record<string, unknown>);
-      } else if (workflowEvent.event === 'workflow.started') {
-        flowsState.onWorkflowStarted(workflowEvent.data as Record<string, unknown>);
-      }
-    });
-  }, [workflowEvent, addNotification]);
+  // ── Workflow events (MicelFlow) retirados 2026-06-30 — la automatización es n8n. ──
 
   return (
     <TooltipProvider>

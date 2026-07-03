@@ -30,17 +30,9 @@ import { STATUS_META, tintedPillStyle } from './statusMeta';
 import { useSortable, SortableTh } from '@/modules/finance/sortable';
 import { useFacturacionNav } from './navigation';
 import { RegistrarPagoDialog } from './RegistrarPagoDialog';
+import { fmtMoney } from '../lib/format';
 
-// ─── Helpers locales ───────────────────────────────────────────────────────
-
-function fmtMoney(value: string | number | null | undefined, currency = 'EUR'): string {
-  const n = Number(value ?? 0);
-  try {
-    return new Intl.NumberFormat('es-ES', { style: 'currency', currency }).format(n);
-  } catch {
-    return `${n.toFixed(2)} ${currency}`;
-  }
-}
+// ─── Helpers locales (fmtMoney = SSOT en ../lib/format) ─────────────────────
 
 function StatusBadge({ status }: { status: DocStatus }) {
   const m = STATUS_META[status];

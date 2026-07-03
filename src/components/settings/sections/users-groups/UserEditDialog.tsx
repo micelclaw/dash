@@ -24,11 +24,11 @@ import { Badge } from '@/components/ui/badge';
 import { useUsersStore } from '@/stores/users.store';
 import type { AdminUser, UserRole, UpdateUserPayload } from '@/types/users';
 import { OPT_IN_APPS } from '@/config/app-catalog';
-import { getUserAppAccess, patchUserAppAccess } from '@/services/app-access.service';
-import { getUserFolderAccess, patchUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
-import { getUserGroups, patchUserGroups, type UserGroup } from '@/services/groups.service';
-import { getUserQuota, patchUserQuota, type UserQuota } from '@/services/quotas.service';
-import { getUserSpeedLimits, patchUserSpeedLimits, clearUserSpeedLimits, type UserSpeedLimit } from '@/services/speed-limits.service';
+import { getUserAppAccess, updateUserAppAccess } from '@/services/app-access.service';
+import { getUserFolderAccess, updateUserFolderAccess, type FolderPermission, type UserFolderPerm } from '@/services/shared-folders.service';
+import { getUserGroups, updateUserGroups, type UserGroup } from '@/services/groups.service';
+import { getUserQuota, updateUserQuota, type UserQuota } from '@/services/quotas.service';
+import { getUserSpeedLimits, updateUserSpeedLimits, clearUserSpeedLimits, type UserSpeedLimit } from '@/services/speed-limits.service';
 
 const gb = (b: number) => (b > 0 ? `${(b / 1e9).toFixed(2)} GB` : 'Sin límite');
 const kbps = (v: number) => (v > 0 ? `${v} KB/s` : '∞');
@@ -134,14 +134,14 @@ export function UserEditDialog({ user, open, onOpenChange, onSaved, isSelf }: {
 
       const ops: Promise<unknown>[] = [];
       if (Object.keys(infoPatch).length) ops.push(store.updateUser(user.id, infoPatch));
-      if (!errs.grupos) ops.push(patchUserGroups(user.id, groupMember));
-      if (!isAdminUser && !errs.apps) ops.push(patchUserAppAccess(user.id, appAllow));
-      if (!errs.permisos) ops.push(patchUserFolderAccess(user.id, folderPerm));
-      if (!errs.cuota) ops.push(patchUserQuota(user.id, Math.round(Number(quotaGb) * 1e9)));
+      if (!errs.grupos) ops.push(updateUserGroups(user.id, groupMember));
+      if (!isAdminUser && !errs.apps) ops.push(updateUserAppAccess(user.id, appAllow));
+      if (!errs.permisos) ops.push(updateUserFolderAccess(user.id, folderPerm));
+      if (!errs.cuota) ops.push(updateUserQuota(user.id, Math.round(Number(quotaGb) * 1e9)));
       if (!errs.velocidad) {
         ops.push(speedMode === 'group'
           ? clearUserSpeedLimits(user.id)
-          : patchUserSpeedLimits(user.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
+          : updateUserSpeedLimits(user.id, Math.round(Number(sUp)), Math.round(Number(sDown)), Math.round(Number(sMedia))));
       }
       await Promise.all(ops);
       toast.success('Usuario actualizado');

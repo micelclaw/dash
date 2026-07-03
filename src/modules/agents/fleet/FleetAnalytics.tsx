@@ -26,7 +26,7 @@ interface FleetAnalyticsProps {
 // Etiqueta de día compacta "28 jun" desde YYYY-MM-DD (sin Date para evitar TZ).
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 function dayLabel(date: string): string {
-  const [, m, d] = date.split('-');
+  const [, m = '', d = ''] = date.split('-');
   return `${parseInt(d, 10)} ${MONTHS[parseInt(m, 10) - 1] ?? ''}`;
 }
 
@@ -52,13 +52,13 @@ export function FleetAnalytics({ analytics, agents }: FleetAnalyticsProps) {
     if (stackBy === 'agent') {
       analytics.by_agent.filter((a) => a.total_tokens > 0).slice(0, 8).forEach((a) => {
         keys.push({ key: a.display_name, color: colorByName.get(a.agent) ?? getAgentColor(a.agent) });
-        a.daily.forEach((p) => { const i = idx.get(p.date); if (i != null) rows[i][a.display_name] = p.tokens; });
+        a.daily.forEach((p) => { const i = idx.get(p.date); const row = i != null ? rows[i] : undefined; if (row) row[a.display_name] = p.tokens; });
       });
     } else {
       analytics.by_model.filter((m) => m.total_tokens > 0).slice(0, 8).forEach((m, mi) => {
         const label = modelShort(m.model);
-        keys.push({ key: label, color: MODEL_PALETTE[mi % MODEL_PALETTE.length] });
-        m.daily.forEach((p) => { const i = idx.get(p.date); if (i != null) rows[i][label] = p.tokens; });
+        keys.push({ key: label, color: MODEL_PALETTE[mi % MODEL_PALETTE.length] ?? '#64748b' });
+        m.daily.forEach((p) => { const i = idx.get(p.date); const row = i != null ? rows[i] : undefined; if (row) row[label] = p.tokens; });
       });
     }
     return { stackData: rows, stackKeys: keys };
@@ -91,7 +91,7 @@ export function FleetAnalytics({ analytics, agents }: FleetAnalyticsProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} interval="preserveStartEnd" minTickGap={24} />
               <YAxis tickFormatter={formatTokens} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} width={38} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v: number, _n, p) => [`${v.toLocaleString('es-ES')} tok · ${p?.payload?.messages ?? 0} msgs`, 'Tokens']} labelFormatter={(l) => l} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v, _n, p) => [`${Number(v).toLocaleString('es-ES')} tok · ${p?.payload?.messages ?? 0} msgs`, 'Tokens']} labelFormatter={(l) => l} />
               <Area type="monotone" dataKey="tokens" stroke="var(--mod-agents, #d4a017)" strokeWidth={2} fill="url(#fleetTok)" />
             </AreaChart>
           </ResponsiveContainer>
@@ -110,7 +110,7 @@ export function FleetAnalytics({ analytics, agents }: FleetAnalyticsProps) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} interval="preserveStartEnd" minTickGap={24} />
                 <YAxis tickFormatter={(v) => `$${v}`} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} width={38} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`$${Number(v).toFixed(4)}`, 'Coste']} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`$${Number(v).toFixed(4)}`, 'Coste']} />
                 <Area type="monotone" dataKey="cost_usd" stroke="#22c55e" strokeWidth={2} fill="url(#fleetCost)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -148,7 +148,7 @@ export function FleetAnalytics({ analytics, agents }: FleetAnalyticsProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} interval="preserveStartEnd" minTickGap={24} />
             <YAxis tickFormatter={formatTokens} tick={{ fontSize: 9, fill: 'var(--text-muted)' }} width={38} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n) => [`${v.toLocaleString('es-ES')} tok`, n]} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${Number(v).toLocaleString('es-ES')} tok`, n]} />
             {stackKeys.map((k) => (
               <Bar key={k.key} dataKey={k.key} stackId="tok" fill={k.color} radius={[0, 0, 0, 0]} />
             ))}

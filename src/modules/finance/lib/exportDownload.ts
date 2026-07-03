@@ -37,7 +37,7 @@ export async function downloadExport(
   }
   const cd = res.headers.get('content-disposition') ?? '';
   const m = cd.match(/filename="?([^"]+)"?/);
-  const filename = m ? m[1] : `${report}.${opts.format === 'contaplus' ? 'txt' : opts.format}`;
+  const filename = m?.[1] ?? `${report}.${opts.format === 'contaplus' ? 'txt' : opts.format}`;
   const blob = await res.blob();
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -14,6 +14,7 @@ import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 import fs from 'fs';
 
@@ -64,6 +65,15 @@ export default defineConfig({
     privateNetworkAccess(),
     react(),
     tailwindcss(),
+    // Análisis de bundle bajo demanda: ANALYZE=1 [ANALYZE_OUT=<ruta.html>] npx vite build
+    ...(process.env.ANALYZE
+      ? [visualizer({
+          filename: process.env.ANALYZE_OUT || 'bundle-analysis.html',
+          gzipSize: true,
+          brotliSize: false,
+          template: 'treemap',
+        }) as PluginOption]
+      : []),
     VitePWA({
       registerType: 'autoUpdate',
       // G5: switched from `generateSW` to `injectManifest` so we can ship
@@ -139,5 +149,35 @@ export default defineConfig({
   },
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Chunking conservador de vendors pesados: agrupa cada familia en su
+        // propio chunk (se descarga solo cuando un módulo lazy la importa) y
+        // evita que un vendor grande se duplique entre chunks de módulos.
+        // Deliberadamente NO se chunkan react/react-dom (riesgo de romper el
+        // orden de inicialización). node_modules va con layout pnpm
+        // (.pnpm/<pkg>@<ver>/node_modules/<pkg>/…), por eso los matchers son
+        // por substring y el de d3 usa regex de segmento (d3 o d3-*).
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('@tiptap')) return 'tiptap';
+          if (id.includes('@xyflow')) return 'xyflow';
+          if (id.includes('@excalidraw')) return 'excalidraw';
+          if (id.includes('@codemirror') || id.includes('@uiw/react-codemirror') || id.includes('@lezer')) return 'codemirror';
+          if (id.includes('recharts')) return 'charts';
+          if (/[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?d3(?:-[^\\/]+)?[\\/]/.test(id)) return 'd3';
+          if (id.includes('@xterm')) return 'xterm';
+          // OJO: NO chunkar la familia markdown (react-markdown/remark/rehype/
+          // highlight.js) manualmente: crea un side-effect import estático del
+          // entry al chunk (rollup preserva orden de ejecución) y el arranque
+          // descargaría 335 KB. El React.lazy de MarkdownRenderer ya hace el
+          // split de forma natural, solo bajo demanda.
+          if (id.includes('jspdf')) return 'jspdf';
+          return undefined;
+        },
+      },
+    },
   },
 });

@@ -83,7 +83,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; desc: string }[] }[] 
 const ALL_TOOLS = TOOL_GROUPS.flatMap(g => g.tools.map(t => t.name));
 
 // Native OpenClaw preset definitions (source of truth)
-const PRESET_TOOLS: Record<string, Set<string>> = {
+const PRESET_TOOLS = {
   minimal: new Set(['session_status']),
   coding: new Set([
     'read', 'write', 'edit', 'apply_patch',
@@ -104,6 +104,9 @@ const PRESET_TOOLS: Record<string, Set<string>> = {
   ]),
   full: new Set([...ALL_TOOLS, 'bundle-mcp']),
 };
+
+// Vista indexable por string (para perfiles que llegan del backend sin tipar).
+const PRESET_LOOKUP: Record<string, Set<string> | undefined> = PRESET_TOOLS;
 
 const PRESETS: { label: string; value: ToolProfile; desc: string }[] = [
   { label: 'Inherit', value: 'inherit', desc: 'Use global defaults from Settings' },
@@ -129,13 +132,13 @@ function getActiveProfile(agent: { profile: string | null; allow: string[] | nul
 function getToolsForProfile(profile: ToolProfile, globalProfile: string | null): Set<string> {
   if (profile === 'inherit') {
     const gp = globalProfile ?? 'coding';
-    return PRESET_TOOLS[gp] ?? PRESET_TOOLS.coding;
+    return PRESET_LOOKUP[gp] ?? PRESET_TOOLS.coding;
   }
   if (profile === 'custom') return PRESET_TOOLS.full; // custom starts with all enabled
-  return PRESET_TOOLS[profile] ?? PRESET_TOOLS.coding;
+  return PRESET_LOOKUP[profile] ?? PRESET_TOOLS.coding;
 }
 
-export function AgentToolAccess({ agentId, agentName }: AgentToolAccessProps) {
+export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);

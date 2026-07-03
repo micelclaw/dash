@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ENTITY_REF_MAP } from '@/config/entity-refs';
+import { useEntityTypesStore } from '@/stores/entity-types.store';
 import { handleSpaAnchorClick } from '@/lib/nav';
 
 type EntityRef = { type: string; id: string; title: string | null };
@@ -82,6 +83,10 @@ function EntityChip({ refItem }: { refItem: EntityRef }) {
 
 export function EntityRefChips({ refs }: { refs: EntityRef[] }) {
   const [expanded, setExpanded] = useState(false);
+  // Fuerza un re-render cuando los tipos de entidad de apps L3 terminan de
+  // mergearse en ENTITY_REF_MAP (boot async) — sin esto una chip renderizada
+  // antes de que el merge llegue se queda pillada en el fallback "sin mapear".
+  useEntityTypesStore((s) => s.loaded);
   if (!Array.isArray(refs) || refs.length === 0) return null;
 
   const shown = expanded ? refs : refs.slice(0, MAX_VISIBLE);

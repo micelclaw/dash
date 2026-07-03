@@ -96,6 +96,8 @@ export default function ClientSetup() {
 
   const fetchSetup = useCallback(async () => {
     try {
+      // El provider del dash siempre implementa getClientSetup (opcional en la interfaz upstream).
+      if (!api.getClientSetup) throw new Error('getClientSetup not available');
       const data = await api.getClientSetup();
       setConfig(data);
     } catch {
