@@ -22,13 +22,13 @@
 // attacks fear #1 (am I going to break/leak something?).
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { ArrowRight, ChevronLeft, Loader2, Lock, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore, type StudioTemplateMeta } from '@/stores/studio.store';
+import { useStudioStore, type StudioTemplateMeta, type StudioEngineId } from '@/stores/studio.store';
 import { api } from '@/services/api';
+import { EnginePicker } from './EnginePicker';
 
-interface ModelEntry { id: string; status: string; is_default: boolean }
-interface ModelsResponse { models: ModelEntry[]; default_model?: string }
 
 interface Props {
   /** Navigate to the freshly-created project. */
@@ -41,17 +41,23 @@ interface Props {
 
 const TOUR_KEY = 'claw-studio-tour-seen';
 const TOUR_STEPS = [
-  'Cuéntame tu idea con tus palabras — no hace falta que seas técnico.',
-  'Yo la construyo paso a paso y la ves tomar forma en directo.',
-  'Cuando te guste, la instalas. Y si algo no te convence, vuelves atrás sin romper nada.',
+  'Tell me your idea in your own words — no need to be technical.',
+  'I build it step by step and you watch it take shape live.',
+  'When you like it, you install it. And if something\'s off, you go back without breaking anything.',
 ];
 
-// Derive a first project name from the idea — the Concept phase lets the
-// user rename it, so a rough first cut is fine.
+// Derive a SHORT first project name from the idea — the Concept phase lets the
+// user rename it, so a rough first cut is fine. UX-4: keep it distinct from the
+// full idea (which becomes the description) so gallery cards aren't title ==
+// subtitle. Cut at the first clause boundary, cap at ~6 words / 42 chars.
 function deriveName(idea: string): string {
   const first = idea.trim().split('\n')[0]!.trim();
-  if (!first) return 'Mi app';
-  return first.length > 60 ? first.slice(0, 60).trim() + '…' : first;
+  if (!first) return 'My app';
+  let name = first.split(/\s*[—:.;,]\s+/)[0]!.trim() || first;
+  const words = name.split(/\s+/);
+  if (words.length > 6) name = words.slice(0, 6).join(' ');
+  if (name.length > 42) name = name.slice(0, 42).trim() + '…';
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
@@ -63,6 +69,10 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   const [creating, setCreating] = useState(false);
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [templates, setTemplates] = useState<StudioTemplateMeta[]>([]);
+  const [models, setModels] = useState<Array<{ id: string; label?: string; recommended?: boolean }>>([]);
+  const [model, setModel] = useState<string>('');
+  const [engine, setEngine] = useState<StudioEngineId>('opencode');
+  const navigate = useNavigate();
   const [tourSeen, setTourSeen] = useState(() => {
     try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return true; }
   });
@@ -72,6 +82,17 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   useEffect(() => {
     let cancelled = false;
     fetchTemplates().then((t) => { if (!cancelled) setTemplates(t.slice(0, 6)); }).catch(() => {});
+    // Pull the models the build engine can actually reach + the recommended
+    // default. The guided user gets a sane default but CAN change the engine.
+    void (async () => {
+      try {
+        const res = await api.get<{ data: { models: Array<{ id: string; label?: string; recommended?: boolean }>; default_model?: string } }>('/studio/models');
+        if (cancelled) return;
+        const list = res.data.models ?? [];
+        setModels(list);
+        setModel(res.data.default_model ?? list[0]?.id ?? '');
+      } catch { /* fall back to server-side default at create time */ }
+    })();
     return () => { cancelled = true; };
   }, [fetchTemplates]);
 
@@ -82,28 +103,39 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
     try { localStorage.setItem(TOUR_KEY, '1'); } catch { /* private mode */ }
   }
 
-  async function continueFromIdea() {
+  async function continueFromIdea(opts?: { byo?: boolean }) {
     if (!idea.trim() || creating) return;
     setCreating(true);
     try {
-      // Auto-pick the system-default model — the guided user never sees
-      // a model picker. If none is authed, fall back to the Pro modal
-      // (which surfaces the model error properly).
-      const res = await api.get<{ data: ModelsResponse }>('/gateway/models');
-      const available = (res.data.models ?? []).filter((m) => m.status === 'available');
-      const model = (res.data.default_model && available.find((m) => m.id === res.data.default_model))
-        ? res.data.default_model
-        : available[0]?.id;
-      if (!model) {
-        toast.message('Primero necesitas configurar un modelo de IA.');
+      // OpenCode (built-in) needs a model; the ACP engines run with their
+      // own model, so a model is only required when engine === 'opencode'.
+      let chosen = model;
+      if (engine === 'opencode' && !chosen) {
+        try {
+          const res = await api.get<{ data: { models: Array<{ id: string }>; default_model?: string } }>('/studio/models');
+          chosen = res.data.default_model ?? res.data.models?.[0]?.id ?? '';
+        } catch { /* ignore */ }
+      }
+      if (engine === 'opencode' && !chosen) {
+        toast.message('You need to set up an AI model first.');
         setCreating(false);
         onProMode();
         return;
       }
-      const created = await createProject({ name: deriveName(idea), description: idea.trim(), model });
+      // BYO is orthogonal: create with the built-in engine, then the user
+      // opens it in their own tool from the build screen ("Open in my tool").
+      const created = await createProject({
+        name: deriveName(idea),
+        description: idea.trim(),
+        model: engine === 'opencode' ? chosen : null,
+        engine,
+      });
+      if (opts?.byo) {
+        toast.message('Created. Open it in your own tool from the build screen.');
+      }
       onCreated(created.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No pude crear la app');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t create the app');
       setCreating(false);
     }
   }
@@ -115,7 +147,7 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
       const project = await instantiateTemplate(t.slug);
       onCreated(project.id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No pude empezar desde ese ejemplo');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t start from that example');
       setBusySlug(null);
     }
   }
@@ -126,7 +158,7 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
     <div style={wrap}>
       {onBack && (
         <button onClick={onBack} style={backBtn} disabled={disabled}>
-          <ChevronLeft size={14} /> Volver a mis apps
+          <ChevronLeft size={14} /> Back to my apps
         </button>
       )}
 
@@ -139,21 +171,21 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
           </span>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tourStep + 1}/3</span>
           {tourStep < TOUR_STEPS.length - 1 ? (
-            <button onClick={() => setTourStep((s) => s + 1)} style={tourNext}>Siguiente</button>
+            <button onClick={() => setTourStep((s) => s + 1)} style={tourNext}>Next</button>
           ) : (
-            <button onClick={dismissTour} style={tourNext}>¡Entendido!</button>
+            <button onClick={dismissTour} style={tourNext}>Got it!</button>
           )}
-          <button onClick={dismissTour} style={tourSkip} aria-label="Saltar">
+          <button onClick={dismissTour} style={tourSkip} aria-label="Skip">
             <X size={13} />
           </button>
         </div>
       )}
 
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)', margin: '8px 0 2px', textAlign: 'center' }}>
-        ¿Qué te gustaría crear hoy?
+        What would you like to build today?
       </h1>
       <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', margin: '0 0 18px', textAlign: 'center' }}>
-        Dímelo con tus palabras y yo me encargo del resto.
+        Tell me in your own words and I'll handle the rest.
       </p>
 
       {/* Path 1 — free text */}
@@ -165,12 +197,31 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void continueFromIdea(); } }}
           rows={3}
           disabled={disabled}
-          placeholder={'Ej.: "quiero que mis clientas pidan cita solas y a mí me avise"'}
+          placeholder={'E.g.: "I want my clients to book their own appointments and notify me"'}
           style={ideaInput}
         />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+        {/* Engine chooser — the friendly card picker (§A1). Sits between
+            the idea and Continue, so the choice reads as a step. */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)' }}>Choose an engine</span>
+            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>you can change this later</span>
+          </div>
+          <EnginePicker
+            engine={engine}
+            onEngineChange={setEngine}
+            model={model}
+            onModelChange={setModel}
+            models={models}
+            onConfigureEngine={() => navigate('/settings/studio-engines')}
+            onChooseByo={() => { void continueFromIdea({ byo: true }); }}
+            disabled={disabled}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
           <button onClick={() => { void continueFromIdea(); }} disabled={!idea.trim() || disabled} style={continueBtn(!idea.trim() || disabled)}>
-            {creating ? <><Loader2 size={14} className="animate-spin" /> Preparando…</> : <>Continuar <ArrowRight size={14} /></>}
+            {creating ? <><Loader2 size={14} className="animate-spin" /> Preparing…</> : <>Continue <ArrowRight size={14} /></>}
           </button>
         </div>
       </div>
@@ -178,7 +229,7 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
       {/* Path 2 — examples (not blank templates: they pre-fill the flow) */}
       {templates.length > 0 && (
         <>
-          <div style={divider}><span style={dividerText}>o empieza desde un ejemplo</span></div>
+          <div style={divider}><span style={dividerText}>or start from an example</span></div>
           <div style={exampleGrid}>
             {templates.map((t) => (
               <button key={t.slug} onClick={() => { void pickExample(t); }} disabled={disabled} style={exampleCard(busySlug === t.slug)}>
@@ -186,7 +237,7 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
                 <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>{t.name}</span>
                 {busySlug === t.slug && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.66rem', color: 'var(--amber)' }}>
-                    <Loader2 size={10} className="animate-spin" /> Preparando…
+                    <Loader2 size={10} className="animate-spin" /> Preparing…
                   </span>
                 )}
               </button>
@@ -198,10 +249,10 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
       {/* Privacy + Pro escape hatch */}
       <div style={footerRow}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          <Lock size={12} /> Tus datos se quedan en tu sistema.
+          <Lock size={12} /> Your data stays on your system.
         </span>
         <button onClick={onProMode} disabled={disabled} style={proLink}>
-          Soy técnico, llevo yo las riendas <ArrowRight size={12} />
+          I'm technical, let me drive <ArrowRight size={12} />
         </button>
       </div>
     </div>

@@ -188,7 +188,10 @@ export function ChatToolsSection() {
         )}
         <p style={{ margin: '12px 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
           Unknown tools (not in this list) are classified as Tier 3 by default. They follow the
-          preset rules unless explicitly toggled here.
+          preset rules unless explicitly toggled here. Third-party MCP tools
+          (<code>&lt;server&gt;__&lt;tool&gt;</code>) render in chat with a server badge and follow the
+          same rules — this is display only, never a permission (manage access in Settings → MCP
+          Connections and each Agent → Tools).
         </p>
       </section>
 

@@ -27,7 +27,13 @@ import { Loader2, RotateCcw } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
 
 interface DesignPreviewProps {
-  slug: string;
+  /** Catalog slug to fetch derived tokens for. Optional when
+   *  `tokensCssOverride` is supplied (the always-on brand preview). */
+  slug?: string;
+  /** A3 — when present, the component SKIPS the fetch effect and renders
+   *  this `:root { … }` tokens CSS directly. Used for the always-on brand
+   *  preview built from the Guided "feel" before any system is picked. */
+  tokensCssOverride?: string;
   /** S4 Fase C — user color overrides ({ "primary": "#ff0000", … }). The
    *  preview re-renders live with these; the parent folds them into the
    *  Frontend generation context so the emitted DESIGN.md honors them. */
@@ -49,7 +55,10 @@ function extractColors(tokensCss: string): Array<{ name: string; value: string }
   const re = /--color-([a-z0-9-]+):\s*([^;]+);/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(tokensCss)) !== null) {
-    out.push({ name: m[1], value: m[2].trim() });
+    const name = m[1];
+    const value = m[2];
+    if (name === undefined || value === undefined) continue; // capture groups always match — narrowing for indexed access
+    out.push({ name, value: value.trim() });
   }
   return out;
 }
@@ -119,20 +128,24 @@ body{
 </body></html>`;
 }
 
-export function DesignPreview({ slug, overrides = {}, onOverride, onResetOverrides }: DesignPreviewProps) {
+export function DesignPreview({ slug, tokensCssOverride, overrides = {}, onOverride, onResetOverrides }: DesignPreviewProps) {
   const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
-  const [tokensCss, setTokensCss] = useState<string | null>(null);
+  const [fetchedCss, setFetchedCss] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  // A3: an explicit override (feel-derived tokens) skips the fetch entirely.
+  const tokensCss = tokensCssOverride ?? fetchedCss;
 
   useEffect(() => {
+    // When tokens are supplied directly, there's nothing to fetch.
+    if (tokensCssOverride || !slug) return;
     let cancelled = false;
-    setTokensCss(null);
+    setFetchedCss(null);
     setError(false);
     fetchDesignSystemTokens(slug)
-      .then((css) => { if (!cancelled) setTokensCss(css); })
+      .then((css) => { if (!cancelled) setFetchedCss(css); })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [slug, fetchDesignSystemTokens]);
+  }, [slug, tokensCssOverride, fetchDesignSystemTokens]);
 
   const colors = useMemo(() => (tokensCss ? extractColors(tokensCss) : []), [tokensCss]);
   const srcDoc = useMemo(() => (tokensCss ? buildSrcDoc(tokensCss, overrides) : ''), [tokensCss, overrides]);
@@ -142,7 +155,7 @@ export function DesignPreview({ slug, overrides = {}, onOverride, onResetOverrid
   if (error) {
     return (
       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: 8 }}>
-        No pude cargar la vista previa de «{slug}».
+        No pude cargar la vista previa{slug ? ` de «${slug}»` : ''}.
       </div>
     );
   }
@@ -193,7 +206,7 @@ export function DesignPreview({ slug, overrides = {}, onOverride, onResetOverrid
       </div>
       {/* Sample component — isolated iframe (no allow-scripts). */}
       <iframe
-        title={`Vista previa de ${slug}`}
+        title={slug ? `Vista previa de ${slug}` : 'Vista previa de marca'}
         srcDoc={srcDoc}
         sandbox=""
         style={{ width: '100%', height: 280, border: 'none', display: 'block', background: '#fff' }}

@@ -29,8 +29,19 @@ interface ToolAccessResponse {
 // que su `deny` no fuerce "custom" ni apague los 26 toggles nativos (era el bug
 // "custom + todo OFF"). El backend re-aplica esta restricción en cada PATCH, así que
 // el dash nunca necesita tocarlas.
-function stripFacade(list: string[] | null | undefined): string[] {
-  return (list ?? []).filter((t) => !t.startsWith('claw-os__'));
+function isServerGlob(t: string): boolean {
+  return /__\*$/.test(t) && !t.startsWith('claw-os__');
+}
+// Strip BOTH the facade tools (claw-os__*) AND third-party MCP server globs
+// (<server>__*, managed by the "MCP connections" subsection) → leaves only
+// NATIVE tool names, so neither forces the agent into "custom" mode nor
+// pollutes the native allow/deny sets.
+function stripNonNative(list: string[] | null | undefined): string[] {
+  return (list ?? []).filter((t) => !t.startsWith('claw-os__') && !isServerGlob(t));
+}
+/** The <server> names denied for this agent via `<server>__*` globs. */
+function serverGlobsFrom(list: string[] | null | undefined): string[] {
+  return (list ?? []).filter(isServerGlob).map((t) => t.replace(/__\*$/, ''));
 }
 
 const TOOL_GROUPS: { label: string; tools: { name: string; desc: string }[] }[] = [
@@ -120,7 +131,7 @@ const PRESETS: { label: string; value: ToolProfile; desc: string }[] = [
 function getActiveProfile(agent: { profile: string | null; allow: string[] | null; deny: string[] | null }): ToolProfile {
   // If agent has explicit allow/deny lists of NATIVE tools → custom. El deny de
   // fachada (claw-os__*) se ignora aquí (lo gestiona el backend, no es nativo).
-  if (stripFacade(agent.allow).length > 0 || stripFacade(agent.deny).length > 0) return 'custom';
+  if (stripNonNative(agent.allow).length > 0 || stripNonNative(agent.deny).length > 0) return 'custom';
   // If agent has a profile set → that profile
   if (agent.profile && ['minimal', 'coding', 'messaging', 'full'].includes(agent.profile)) {
     return agent.profile as ToolProfile;
@@ -153,10 +164,13 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   const [customDeny, setCustomDeny] = useState<Set<string>>(new Set());
   // Fase 3.6-B: tools MCP (claw_*) descubiertas dinámicamente del registro.
   const [mcpTools, setMcpTools] = useState<{ name: string; domain: string; label: string; actions: string[] }[]>([]);
+  // §B3: third-party MCP servers + which this agent is DENIED (by name).
+  const [externalMcp, setExternalMcp] = useState<{ name: string; enabled: boolean }[]>([]);
+  const [mcpDeny, setMcpDeny] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[] } }>('/managed-agents/available-tools')
-      .then((r) => setMcpTools(r.data.mcp_tools ?? []))
+    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[]; external_mcp?: { name: string; enabled: boolean }[] } }>('/managed-agents/available-tools')
+      .then((r) => { setMcpTools(r.data.mcp_tools ?? []); setExternalMcp(r.data.external_mcp ?? []); })
       .catch(() => { /* opcional: la UI nativa sigue funcionando sin el grupo MCP */ });
   }, []);
 
@@ -168,10 +182,13 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
       const profile = getActiveProfile(res.data.agent);
       setActiveProfile(profile);
       if (profile === 'custom') {
-        // Solo tools nativos: las claw-os__* las re-aplica el backend.
-        setCustomAllow(new Set(stripFacade(res.data.agent.allow)));
-        setCustomDeny(new Set(stripFacade(res.data.agent.deny)));
+        // Solo tools nativos: las claw-os__* y los globs <server>__* se re-aplican aparte.
+        setCustomAllow(new Set(stripNonNative(res.data.agent.allow)));
+        setCustomDeny(new Set(stripNonNative(res.data.agent.deny)));
       }
+      // MCP per-server visibility lives in `deny` as <server>__* globs,
+      // independent of the native profile (loaded for every mode).
+      setMcpDeny(new Set(serverGlobsFrom(res.data.agent.deny)));
       setDirty(false);
     } catch {
       toast.error('Failed to load tool access config');
@@ -235,22 +252,27 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // §B3: MCP per-server denies ride along in `deny` as <server>__* globs,
+      // in every mode, without disturbing the native profile/allow/deny.
+      const serverGlobs = [...mcpDeny].map((n) => `${n}__*`);
       if (activeProfile === 'inherit') {
-        // Remove per-agent override: set profile to null, clear allow/deny
+        // Remove per-agent override (native) but keep any MCP server denies.
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
-          scope: 'agent', profile: null, allow: null, deny: null,
+          scope: 'agent', profile: null, allow: null,
+          deny: serverGlobs.length ? serverGlobs : null,
         });
       } else if (activeProfile === 'custom') {
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
           scope: 'agent',
           profile: null,
           allow: [...customAllow],
-          deny: [...customDeny],
+          deny: [...customDeny, ...serverGlobs],
         });
       } else {
         // Standard profile (minimal, coding, messaging, full)
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
-          scope: 'agent', profile: activeProfile, allow: null, deny: null,
+          scope: 'agent', profile: activeProfile, allow: null,
+          deny: serverGlobs.length ? serverGlobs : null,
         });
       }
       toast.success('Tool access updated');
@@ -262,6 +284,15 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleMcpServer = (name: string) => {
+    setMcpDeny(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+    setDirty(true);
   };
 
   const toggleGroup = (label: string) => {
@@ -551,6 +582,47 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6 }}>
             Las claw_* se controlan en bloque (bundle-mcp). El acceso por dominio/etiqueta de
             cada agente se ajusta en Settings → Agent Permissions.
+          </p>
+        </div>
+      )}
+
+      {/* §B3: third-party MCP connections — per-agent visibility. Gated by the
+          bundle-mcp master above; toggling a server writes <server>__* to this
+          agent's deny (independent of the native matrix). */}
+      {externalMcp.length > 0 && (
+        <div>
+          <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            MCP connections
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.5 }}>
+            {externalMcp.map((srv) => {
+              const visible = !mcpDeny.has(srv.name);
+              return (
+                <div key={srv.name} onClick={() => toggleMcpServer(srv.name)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{srv.name}</div>
+                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                      {srv.enabled ? 'Enabled globally' : 'Disabled globally'}
+                    </div>
+                  </div>
+                  <div style={{
+                    width: 32, height: 18, borderRadius: 9,
+                    background: visible ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+                    position: 'relative', flexShrink: 0, marginLeft: 8, transition: 'background 0.2s',
+                  }}>
+                    <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: visible ? 16 : 2, transition: 'left 0.2s' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+            Off blocks every tool from that server for this agent (writes <code>&lt;server&gt;__*</code> to its deny).
+            The <b>bundle-mcp</b> master above gates all MCP tools. Manage the connections in Settings → MCP Connections.
           </p>
         </div>
       )}

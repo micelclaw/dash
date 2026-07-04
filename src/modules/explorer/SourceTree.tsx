@@ -261,21 +261,25 @@ function MountTreeItem({ mount, currentPath, onNavigate, onDelete, icon }: {
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {mount.name}
           </span>
-          {hovered ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              style={{
-                background: 'transparent', border: 'none', cursor: 'pointer',
-                color: 'var(--text-muted)', padding: 2, display: 'flex',
-              }}
-              title="Remove mount"
-            >
-              <Trash2 size={11} />
-            </button>
-          ) : mount.read_only ? (
-            <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)' }}>RO</span>
-          ) : null}
         </button>
+        {/* Acciones a nivel de FILA — HERMANAS del botón de navegar, no dentro.
+            Un <button> (borrar) anidado en otro <button> (navegar) es HTML inválido
+            → React validateDOMNesting "<button> cannot be a descendant of <button>",
+            que solo saltaba en hover (el botón interno se renderiza con `hovered`). */}
+        {hovered ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: 2, display: 'flex',
+            }}
+            title="Remove mount"
+          >
+            <Trash2 size={11} />
+          </button>
+        ) : mount.read_only ? (
+          <span style={{ fontSize: '0.5625rem', color: 'var(--text-muted)', paddingRight: 4 }}>RO</span>
+        ) : null}
       </div>
 
       {expanded && (

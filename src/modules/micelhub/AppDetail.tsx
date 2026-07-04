@@ -273,19 +273,19 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
   };
 
   const handleToggleStatus = async () => {
-    const newStatus = app.status === 'active' ? 'disabled' : 'active';
+    const installing = app.status !== 'active';
+    const newStatus = installing ? 'active' : 'available';
     try {
       await updateAppStatus(app.app_name, newStatus);
       if (app.app_level === 1) {
-        setRestartRequired('openclaw', `${app.app_name} was ${newStatus}`);
+        setRestartRequired('openclaw', `${app.app_name} ${installing ? 'instalada' : 'desinstalada'}`);
       }
       onRefresh();
-      // Módulos dinámicos servidos por Core (p.ej. n8n): reflejar enable/disable en el
-      // sidebar al instante, sin recargar (su backend es nativo + gated por status).
+      // Una app desinstalada sale de /me/ui-modules → refrescar quita su módulo del sidebar al instante.
       void useUiModulesStore.getState().refresh();
-      toast.success(`App ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
+      toast.success(installing ? 'App instalada' : 'App desinstalada');
     } catch {
-      toast.error('Failed to update status');
+      toast.error(installing ? 'No se pudo instalar' : 'No se pudo desinstalar');
     }
   };
 
@@ -710,7 +710,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
             )}
             <FooterButton
               icon={<Power size={13} />}
-              label={app.status === 'active' ? 'Disable' : 'Enable'}
+              label={app.status === 'active' ? 'Desinstalar' : 'Instalar'}
               onClick={handleToggleStatus}
             />
             <FooterButton

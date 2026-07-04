@@ -73,8 +73,8 @@ export function TesterChat({ projectId }: Props) {
       if (!inFlightRef.current) return;
       const idleMs = Date.now() - lastActivityRef.current;
       if (idleMs >= 85_000) {
-        setError('El Tester no respondió a tiempo. Refresca y vuelve a intentarlo.');
-        toast.error('Timeout: el Tester dejó de responder');
+        setError('The Tester didn\'t respond in time. Refresh and try again.');
+        toast.error('Timeout: the Tester stopped responding');
         setStreaming(null);
         setBusy(false);
         clearInFlight();
@@ -201,7 +201,7 @@ export function TesterChat({ projectId }: Props) {
       setError(err instanceof Error ? err.message : 'Failed to send message');
       setBusy(false);
       clearInFlight();
-      toast.error('Tester no respondió. Inténtalo de nuevo.');
+      toast.error('The Tester didn\'t respond. Try again.');
     }
   }
 
@@ -214,7 +214,7 @@ export function TesterChat({ projectId }: Props) {
         </span>
         <span style={{ flex: 1 }} />
         <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
-          read-only · no escribe código
+          read-only · doesn't write code
         </span>
       </div>
 
@@ -223,13 +223,13 @@ export function TesterChat({ projectId }: Props) {
           <div style={emptyStateStyle}>
             <FlaskConical size={28} style={{ color: 'var(--amber)', marginBottom: 12 }} />
             <p style={{ margin: '0 0 8px', fontSize: '0.875rem', color: 'var(--text)' }}>
-              Pregunta lo que quieras verificar
+              Ask anything you want to check
             </p>
             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-              Ejemplos:<br />
-              "¿Qué debería probar de esta app?"<br />
-              "El endpoint /weather/madrid devuelve algo raro, ¿qué hago?"<br />
-              "¿Está todo listo para empaquetar?"
+              Examples:<br />
+              "What should I test in this app?"<br />
+              "The /weather/madrid endpoint returns something odd, what do I do?"<br />
+              "Is everything ready to package?"
             </p>
           </div>
         )}
@@ -292,7 +292,7 @@ function MessageBubble({ message }: { message: StudioTestMessage }) {
   const toolCalls = Array.isArray(message.tool_calls) ? message.tool_calls as ToolCallSummary[] : [];
   return (
     <div style={isUser ? userBubble : assistantBubble}>
-      <div style={bubbleLabel}>{isUser ? 'Tú' : 'Studio Tester'}</div>
+      <div style={bubbleLabel}>{isUser ? 'You' : 'Studio Tester'}</div>
       {isUser ? (
         <div style={{ fontSize: '0.8125rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
           {message.content}

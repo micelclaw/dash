@@ -42,12 +42,12 @@ interface Props {
 
 // Human-language summary of what survives a guided rewind (R-C copy).
 // Honest: the generated build is discarded; the idea/design/data are kept.
-const GUIDED_KEPT = 'Tu idea, tu diseño y tus datos se conservan.';
+const GUIDED_KEPT = 'Your idea, your design and your data are kept.';
 const GUIDED_LOST: Record<StudioRewindTarget, string> = {
-  scoping: 'Se borra todo lo generado (diseño, plan y lo construido) y empiezas de nuevo desde tu idea.',
-  concept: 'Se descartan el diseño, el plan y lo construido hasta ahora.',
-  frontend: 'Se descartan el plan y lo construido hasta ahora.',
-  foundation: 'Se descarta lo que he construido hasta ahora — puedo reconstruirlo cuando quieras.',
+  scoping: 'Everything generated (design, plan and what was built) is deleted and you start over from your idea.',
+  concept: 'The design, the plan and what was built so far are discarded.',
+  frontend: 'The plan and what was built so far are discarded.',
+  foundation: 'What I\'ve built so far is discarded — I can rebuild it whenever you want.',
 };
 
 // Mirror of the cleared-fields table in `core/src/studio/services/rewind.service.ts`.
@@ -97,7 +97,7 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
     setBusy(true);
     try {
       await rewindProject(projectId, target);
-      toast.success(guided ? 'Hecho — has vuelto atrás.' : `Project rewound to "${target}"`);
+      toast.success(guided ? 'Done — you went back.' : `Project rewound to "${target}"`);
       // Drop the ?phase= query param so the page re-renders in edit
       // mode against the new (lower) status. Use replace so the back
       // button doesn't take the user to the now-invalid past view.
@@ -120,9 +120,9 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
         type="button"
         onClick={() => setOpen(true)}
         style={guided ? triggerGuided : triggerStyle}
-        title={guided ? 'Volver atrás sin romper nada' : `Rewind to ${target}`}
+        title={guided ? 'Go back without breaking anything' : `Rewind to ${target}`}
       >
-        <Rewind size={12} /> {label ?? (guided ? 'Volver atrás' : 'Rewind here to edit')}
+        <Rewind size={12} /> {label ?? (guided ? 'Go back' : 'Rewind here to edit')}
       </button>
 
       {open && (
@@ -131,7 +131,7 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
             <div style={dialogHeader}>
               <AlertTriangle size={16} style={{ color: 'var(--amber)' }} />
               <h3 style={{ fontSize: '0.9375rem', margin: 0, color: 'var(--text)', flex: 1 }}>
-                {guided ? '¿Volver atrás?' : `Rewind to "${target}"`}
+                {guided ? 'Go back?' : `Rewind to "${target}"`}
               </h3>
               <button
                 type="button"
@@ -183,7 +183,7 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
                 disabled={busy}
                 style={cancelBtn}
               >
-                {guided ? 'Ahora no' : 'Cancel'}
+                {guided ? 'Not now' : 'Cancel'}
               </button>
               <button
                 type="button"
@@ -192,8 +192,8 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
                 style={confirmBtn(busy)}
               >
                 {busy
-                  ? <><Loader2 size={12} className="animate-spin" /> {guided ? 'Volviendo…' : 'Rewinding…'}</>
-                  : <><Rewind size={12} /> {guided ? 'Sí, volver atrás' : 'Yes, rewind'}</>
+                  ? <><Loader2 size={12} className="animate-spin" /> {guided ? 'Going back…' : 'Rewinding…'}</>
+                  : <><Rewind size={12} /> {guided ? 'Yes, go back' : 'Yes, rewind'}</>
                 }
               </button>
             </div>

@@ -50,7 +50,7 @@ export function FriendlyError({ title, message, detail, actions, reassurance }: 
         <AlertCircle size={18} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)' }}>
-            {title ?? 'Algo no salió como esperaba'}
+            {title ?? 'Something didn\'t go as expected'}
           </div>
           {message && (
             <div style={{ fontSize: '0.82rem', color: 'var(--text-dim)', marginTop: 3, lineHeight: 1.45 }}>
@@ -59,7 +59,7 @@ export function FriendlyError({ title, message, detail, actions, reassurance }: 
           )}
           <div style={{ fontSize: '0.78rem', color: '#22c55e', marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span aria-hidden>🔒</span>
-            {reassurance ?? 'No se ha roto nada — tu idea y tus datos están a salvo.'}
+            {reassurance ?? 'Nothing broke — your idea and your data are safe.'}
           </div>
         </div>
       </div>

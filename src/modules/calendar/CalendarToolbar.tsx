@@ -123,6 +123,8 @@ export function CalendarToolbar({
       {/* Create button */}
       <button
         onClick={onCreateEvent}
+        title="New event"
+        aria-label="New event"
         style={{
           ...iconButton,
           background: 'var(--amber-dim)',

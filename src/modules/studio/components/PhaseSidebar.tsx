@@ -25,6 +25,8 @@
 
 import { Check, Lock, Hammer, Sparkles, LayoutGrid, ListChecks, Rocket, Package, FlaskConical } from 'lucide-react';
 import type { StudioProject, StudioProjectStatus } from '@/stores/studio.store';
+// M22: pipeline order lives in lib/phases.ts (SSOT shared with ProjectDetailPage).
+import { statusIndex } from '../lib/phases';
 
 interface Props {
   project: StudioProject;
@@ -39,49 +41,42 @@ interface Props {
 
 // Human-language phase names for Guided mode (§3 journey mapping).
 const HUMAN_LABELS: Partial<Record<StudioProjectStatus, string>> = {
-  scoping: 'Tu idea',
-  concept: 'El acuerdo',
-  frontend: 'El diseño',
-  foundation: 'El plan',
-  build: 'Construcción',
-  testing: 'Probar',
-  packaging: 'Instalar',
+  scoping: 'Your idea',
+  concept: 'The agreement',
+  frontend: 'The design',
+  foundation: 'The plan',
+  build: 'Building',
+  testing: 'Test it',
+  packaging: 'Install',
 };
 
 interface PhaseEntry {
   id: StudioProjectStatus;
   label: string;
   icon: typeof Check;
+  /** Whether this phase applies to this project. UX-5: we ALWAYS render the
+   *  full pipeline so the rail doesn't grow/shrink a step mid-journey; a phase
+   *  that doesn't apply (e.g. frontend for a no-UI app) is shown dimmed and
+   *  non-clickable instead of vanishing. */
+  applicable: boolean;
 }
 
 function buildPhases(project: StudioProject): PhaseEntry[] {
   const isL1 = project.app_level === 'L1';
-  const needsUi = project.scope?.needs_ui === true;
-  const phases: PhaseEntry[] = [
-    { id: 'scoping', label: 'Scope', icon: Hammer },
-    { id: 'concept', label: 'Concept', icon: Sparkles },
+  // needs_ui is only resolved AFTER scoping. Default unknown → applies, so the
+  // rail doesn't gain "The design" the moment scoping finishes.
+  const needsUi = project.scope?.needs_ui;
+  const uiApplies = !isL1 && needsUi !== false;
+  const backendApplies = !isL1;
+  return [
+    { id: 'scoping', label: 'Scope', icon: Hammer, applicable: true },
+    { id: 'concept', label: 'Concept', icon: Sparkles, applicable: true },
+    { id: 'frontend', label: 'Frontend', icon: LayoutGrid, applicable: uiApplies },
+    { id: 'foundation', label: 'Foundation', icon: ListChecks, applicable: backendApplies },
+    { id: 'build', label: 'Build', icon: Rocket, applicable: backendApplies },
+    { id: 'testing', label: 'Testing', icon: FlaskConical, applicable: true },
+    { id: 'packaging', label: 'Packaging', icon: Package, applicable: true },
   ];
-  if (!isL1 && needsUi) {
-    phases.push({ id: 'frontend', label: 'Frontend', icon: LayoutGrid });
-  }
-  if (!isL1) {
-    phases.push({ id: 'foundation', label: 'Foundation', icon: ListChecks });
-    phases.push({ id: 'build', label: 'Build', icon: Rocket });
-  }
-  phases.push({ id: 'testing', label: 'Testing', icon: FlaskConical });
-  phases.push({ id: 'packaging', label: 'Packaging', icon: Package });
-  return phases;
-}
-
-// Linear order for rewind comparisons.
-const STATUS_ORDER: StudioProjectStatus[] = [
-  'scoping', 'concept', 'frontend', 'foundation', 'build',
-  'testing', 'packaging', 'packaged', 'published',
-];
-
-function statusIndex(status: StudioProjectStatus): number {
-  const i = STATUS_ORDER.indexOf(status);
-  return i >= 0 ? i : 0;
 }
 
 export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) {
@@ -97,14 +92,14 @@ export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) 
     const isViewed = idx === viewedIdx;
     const isPast = idx < currentIdx;
     const isFuture = idx > currentIdx;
-    const isClickable = !isFuture && !!onSelect;
+    const isClickable = !isFuture && !!onSelect && p.applicable;
 
-    // Icon priority: future = Lock; past completed = green check;
-    // current/viewed = phase's own icon.
-    const Icon = isFuture ? Lock : (isPast && !isViewed ? Check : p.icon);
+    // Icon priority: not applicable = Lock; future = Lock; past completed =
+    // green check; current/viewed = phase's own icon.
+    const Icon = (!p.applicable || isFuture) ? Lock : (isPast && !isViewed ? Check : p.icon);
     const iconColor = isViewed
       ? 'var(--amber)'
-      : (isPast ? '#22c55e' : 'var(--text-muted)');
+      : (isPast && p.applicable ? '#22c55e' : 'var(--text-muted)');
 
     const commonStyles: React.CSSProperties = {
       display: 'flex', alignItems: 'center', gap: 6,
@@ -118,6 +113,9 @@ export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) 
       fontFamily: 'var(--font-sans)',
       flexShrink: 0,
       whiteSpace: 'nowrap',
+      // UX-5: dim + strike-hint phases that don't apply to this project.
+      opacity: p.applicable ? 1 : 0.4,
+      textDecoration: p.applicable ? 'none' : 'line-through',
     };
 
     const content = (
@@ -136,7 +134,7 @@ export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) 
             letterSpacing: '0.04em',
             marginLeft: 2,
           }}>
-            {guided ? 'aquí' : 'current'}
+            {guided ? 'here' : 'current'}
           </span>
         )}
       </>

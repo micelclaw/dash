@@ -24,6 +24,7 @@ import { ProjectCard } from './components/ProjectCard';
 import { NewProjectModal } from './components/NewProjectModal';
 import { TemplateGallery } from './components/TemplateGallery';
 import { OnboardingWelcome } from './components/OnboardingWelcome';
+import { useConfirm } from './lib/useConfirm';
 
 export function Component() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export function Component() {
   const fetchProjects = useStudioStore((s) => s.fetchProjects);
   const deleteProject = useStudioStore((s) => s.deleteProject);
 
+  const { confirm, confirmDialog } = useConfirm();
   const [modalOpen, setModalOpen] = useState(false);
   const [tab, setTab] = useState<'projects' | 'templates'>('projects');
   // 'onboarding' = the warm §3.1 welcome (free-text idea + example gallery).
@@ -44,7 +46,13 @@ export function Component() {
   }, [fetchProjects]);
 
   async function handleDelete(id: string) {
-    if (!confirm('Delete this project? It will be soft-deleted (recoverable).')) return;
+    const ok = await confirm({
+      title: 'Delete this project?',
+      body: 'It will be soft-deleted — you can recover it.',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteProject(id);
       toast.success('Project deleted');
@@ -87,13 +95,15 @@ export function Component() {
           }}>
             Claw Studio
           </h1>
+          {/* UX-3: was a hardcoded "PRO" badge that falsely implied a paid
+              tier (shown even on Free). Neutral version tag instead. */}
           <span style={{
-            fontSize: '0.6875rem', color: 'var(--amber)',
-            background: 'var(--amber-dim, rgba(212, 160, 23, 0.15))',
+            fontSize: '0.6875rem', color: 'var(--text-dim)',
+            background: 'var(--surface)', border: '1px solid var(--border)',
             padding: '2px 8px', borderRadius: 'var(--radius-full)',
             fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            Pro
+            v3
           </span>
         </div>
         <button
@@ -192,6 +202,7 @@ export function Component() {
         onClose={() => setModalOpen(false)}
         onCreated={handleCreated}
       />
+      {confirmDialog}
     </div>
   );
 }

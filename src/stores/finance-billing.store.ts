@@ -22,6 +22,7 @@
 // puede ser cliente Y proveedor a la vez (roles es una lista).
 
 import { create } from 'zustand';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────
@@ -552,8 +553,15 @@ export const useFinanceBillingStore = create<FinanceBillingState>((set, get) => 
     await get().fetchDocument(docId);
   },
   emitDocument: async (id) => {
-    await api.post(`/finance/documents/${id}/emit`);
+    // La emisión devuelve el documento; si una venta dejó stock en negativo, el
+    // backend adjunta `stock_warnings` (no bloquea la emisión) → lo avisamos.
+    const res = await api.post<{ data: { stock_warnings?: Array<{ name: string; requested: number; available: number }> } }>(`/finance/documents/${id}/emit`);
     await Promise.all([get().fetchDocuments(), get().fetchDocument(id)]);
+    const warnings = res?.data?.stock_warnings ?? [];
+    if (warnings.length) {
+      const names = warnings.map((w) => w.name).join(', ');
+      toast.warning(`Vendes más de lo que tienes en stock (${names}). Se ha permitido, pero el stock queda en negativo.`);
+    }
   },
   recordPayment: async (input) => {
     await api.post('/finance/payments', input);

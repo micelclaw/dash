@@ -150,6 +150,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { sectionId: 'gateway-auth', groupId: 'connectivity', label: 'Gateway',
     tags: ['gateway', 'auth', 'token', 'tls', 'mdns', 'discovery', 'tailscale', 'bind', 'devices', 'pairing'],
     settings: ['auth mode', 'bind address', 'tls', 'tailscale', 'reload mode', 'mdns', 'discovery', 'paired devices'] },
+  { sectionId: 'mcp-connections', groupId: 'connectivity', label: 'MCP Connections',
+    tags: ['mcp', 'connections', 'conexiones', 'servers', 'servidores', 'tools', 'model context protocol', 'integrations'],
+    settings: ['mcp servers', 'add server', 'test connection', 'tool filter', 'claw-os'] },
+  { sectionId: 'companions', groupId: 'connectivity', label: 'Apps acompañantes',
+    tags: ['companions', 'acompañantes', 'devices', 'dispositivos', 'extension', 'desktop', 'mobile', 'movil', 'pairing', 'emparejar', 'crawlmicel', 'minimicel'],
+    settings: ['device pairing', 'paired devices', 'browser extension', 'desktop app', 'mobile app', 'revoke device'] },
+  { sectionId: 'studio-engines', groupId: 'ai-agents', label: 'Studio Engines',
+    tags: ['studio', 'engines', 'motores', 'opencode', 'acp', 'claude code', 'codex', 'byo', 'build', 'programacion'],
+    settings: ['engine', 'opencode', 'acp claude', 'acp codex', 'bring your own', 'model'] },
 
   // ── Sistema ──
   { sectionId: 'storage', groupId: 'system', label: 'Storage',

@@ -132,7 +132,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
       setClassification(result);
       setShowSummary(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (guided ? 'No pude preparar tu app' : 'Failed to compute scope'));
+      toast.error(err instanceof Error ? err.message : (guided ? 'Couldn\'t prepare your app' : 'Failed to compute scope'));
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +141,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
   async function goNext() {
     if (!currentQuestion) return;
     if (!answers[currentQuestion.id]) {
-      toast.error(guided ? 'Elige una opción para seguir' : 'Pick an option to continue');
+      toast.error('Pick an option to continue');
       return;
     }
     if (isLastStep) {
@@ -186,10 +186,10 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
     try {
       setSubmitting(true);
       await submitScoping(projectId, answers);
-      toast.success(guided ? 'Listo — empiezo a darle forma a tu app' : 'Scope saved — moving on to concept phase');
+      toast.success(guided ? 'Done — I\'m starting to shape your app' : 'Scope saved — moving on to concept phase');
       onComplete();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (guided ? 'No pude guardar tu idea' : 'Failed to save scope'));
+      toast.error(err instanceof Error ? err.message : (guided ? 'Couldn\'t save your idea' : 'Failed to save scope'));
     } finally {
       setSubmitting(false);
     }
@@ -314,7 +314,7 @@ export function ScopingWizard({ projectId, onComplete, viewMode = 'edit', projec
               fontFamily: 'var(--font-sans)',
             }}
           >
-            <ChevronLeft size={14} /> {guided ? 'Atrás' : 'Back'}
+            <ChevronLeft size={14} /> Back
           </button>
           {/* Guided auto-advances on pick, so no "Next" — a hint instead. */}
           {guided ? (

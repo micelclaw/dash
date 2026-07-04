@@ -60,7 +60,7 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
       const result = await packageProject(project.id);
       setLatest(result);
       await refetchProject(project.id);
-      toast.success(guided ? '¡Tu app está preparada!' : `Built ${result.manifest_name} v${result.package_version}`);
+      toast.success(guided ? 'Your app is packaged!' : `Built ${result.manifest_name} v${result.package_version}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : (guided ? 'No pude prepararla' : 'Build failed'));
     } finally {
@@ -73,7 +73,7 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
     try {
       const result = await installPackagedProject(project.id);
       await refetchProject(project.id);
-      toast.success(guided ? '¡Instalada! Ya puedes usarla.' : `Installed ${result.manifest_name}`);
+      toast.success(guided ? 'Installed! You can use it now.' : `Installed ${result.manifest_name}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : (guided ? 'No se pudo instalar' : 'Install failed'));
     } finally {
@@ -87,7 +87,7 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
       <div style={toolbarStyle}>
         <h2 style={titleStyle}>
           <Package size={14} style={{ color: 'var(--amber)' }} />
-          {guided ? 'Tu app está lista' : 'Empaquetado'}
+          {guided ? 'Your app is ready' : 'Packaging'}
         </h2>
         <div style={{ flex: 1 }} />
         {isPackaged && !guided && (
@@ -111,7 +111,7 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
             </h3>
             <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
               {guided ? (
-                'Reviso que todo esté correcto y preparo tu app para usarla. Tardo solo un momento.'
+                'I check everything\'s right and get your app ready to use. Just a moment.'
               ) : (
                 <>Studio will package the workspace + manifest + applied migrations into a single signed
                 <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)' }}>.claw</code>
@@ -148,11 +148,11 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
           {isPackaged && (
             <div style={cardStyle}>
               <h3 style={cardTitle}>
-                <Rocket size={14} style={{ color: '#22c55e' }} /> {guided ? '¡Tu app está lista!' : 'Ready to use'}
+                <Rocket size={14} style={{ color: '#22c55e' }} /> {guided ? 'Your app is ready!' : 'Ready to use'}
               </h3>
               <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                 {guided ? (
-                  'Ya está empaquetada y revisada. Instálala en tu MicelclawOS y aparecerá como una app más.'
+                  'It\'s packaged and checked. Install it on your MicelclawOS and it\'ll show up as another app.'
                 ) : (
                   <>Your app is packaged at
                   <code style={{ margin: '0 4px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
@@ -179,17 +179,17 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
                     style={primaryBtn(busy === 'install')}
                   >
                     {busy === 'install'
-                      ? <><Loader2 size={14} className="animate-spin" /> {guided ? 'Instalando…' : 'Installing…'}</>
-                      : <><Rocket size={14} /> {guided ? 'Instalar en mi MicelclawOS' : 'Install locally'}</>
+                      ? <><Loader2 size={14} className="animate-spin" /> {guided ? 'Installing…' : 'Installing…'}</>
+                      : <><Rocket size={14} /> {guided ? 'Install on my MicelclawOS' : 'Install locally'}</>
                     }
                   </button>
                 )}
               </div>
               <p style={{ margin: '12px 0 0', fontSize: '0.6875rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                 {guided
-                  ? 'Aparecerá en tu menú como una app más en cuanto se reinicie el sistema.'
-                  : <>Installing locally copies the package to <code>core/apps/</code> and the app will appear
-                    in your sidebar after restarting Core.</>}
+                  ? 'It\'ll show up in your menu as another app right away.'
+                  : <>Installing locally copies the package to <code>core/apps/</code> and the app appears
+                    in your sidebar right away.</>}
               </p>
             </div>
           )}

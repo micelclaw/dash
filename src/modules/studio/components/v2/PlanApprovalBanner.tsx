@@ -23,8 +23,8 @@
 // was still `idle` because the first WS event hadn't arrived yet, so
 // `streamingInProgress` was false but no plan existed yet).
 
-import { useState } from 'react';
-import { Check, Loader2, Sparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudioStore } from '@/stores/studio.store';
 
@@ -35,36 +35,61 @@ interface Props {
   /** Number of items in the project's build checklist. >0 means the
    *  agent has already emitted a `BUILD_CHECKLIST` sentinel block. */
   checklistCount: number;
+  /** Live build stream status. Used to render an error state instead of an
+   *  eternal "writing…" spinner when the session died with no plan (M10). */
+  status?: 'idle' | 'running' | 'aborted' | 'failed' | 'loading';
   /** Guided mode (D5): reframe the plan-approval as a plain-language
    *  "Propuesta: ¿lo hago?" instead of "approve the plan / Build". */
   guided?: boolean;
 }
 
-type BannerState = 'writing' | 'updating' | 'ready';
+type BannerState = 'writing' | 'updating' | 'ready' | 'error';
 
-export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCount, guided }: Props) {
+// After this long in the "writing" state with no progress, reassure the user
+// it's still working rather than leaving a silent spinner (R-B).
+const STALL_HINT_MS = 45_000;
+
+export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCount, status, guided }: Props) {
   const approveBuildPlan = useStudioStore((s) => s.approveBuildPlan);
   const [approving, setApproving] = useState(false);
+  const [stalled, setStalled] = useState(false);
 
-  const state: BannerState = streamingInProgress
-    ? (checklistCount > 0 ? 'updating' : 'writing')
-    : (checklistCount > 0 ? 'ready' : 'writing');
+  // M10: a dead session (failed/aborted) with no checklist must NOT keep
+  // spinning "writing…" forever — surface an error the user can act on.
+  const sessionDead = (status === 'failed' || status === 'aborted') && !streamingInProgress;
 
-  const title = guided
-    ? (state === 'writing'  ? 'Estoy pensando una propuesta…'
-      : state === 'updating' ? 'Estoy afinando la propuesta…'
-      : 'Tengo una propuesta para ti')
-    : (state === 'writing'  ? 'El Builder está escribiendo el plan…'
-      : state === 'updating' ? 'El Builder está actualizando el plan…'
-      : 'El Builder ha propuesto un plan');
+  const state: BannerState = sessionDead && checklistCount === 0
+    ? 'error'
+    : streamingInProgress
+      ? (checklistCount > 0 ? 'updating' : 'writing')
+      : (checklistCount > 0 ? 'ready' : 'writing');
 
-  const subtitle = guided
-    ? (state === 'writing'  ? 'En un momento te cuento qué pienso hacer.'
-      : state === 'updating' ? 'Estoy ajustando los pasos con lo que me has dicho.'
-      : 'Te propongo construir tu app con los pasos de la izquierda. ¿La empiezo?')
-    : (state === 'writing'  ? 'Verás los pasos en el chat según los redacta. Podrás aprobar cuando termine.'
-      : state === 'updating' ? 'Lee los cambios en el chat. Podrás aprobar cuando termine.'
-      : 'Revisa la checklist arriba y el plan en el chat. Pide ajustes o aprueba para empezar la ejecución.');
+  // Reassurance timer while we're in the (spinner) 'writing' state.
+  useEffect(() => {
+    if (state !== 'writing') { setStalled(false); return; }
+    const t = setTimeout(() => setStalled(true), STALL_HINT_MS);
+    return () => clearTimeout(t);
+  }, [state]);
+
+  const title = state === 'error'
+    ? (guided ? 'I couldn\'t prepare the proposal' : 'The build session stopped')
+    : guided
+    ? (state === 'writing'  ? 'Thinking up a proposal…'
+      : state === 'updating' ? 'Refining the proposal…'
+      : 'I have a proposal for you')
+    : (state === 'writing'  ? 'The Builder is writing the plan…'
+      : state === 'updating' ? 'The Builder is updating the plan…'
+      : 'The Builder proposed a plan');
+
+  const subtitle = state === 'error'
+    ? (guided ? 'Type below and I\'ll try again.' : 'Send a message in the chat to retry the plan.')
+    : guided
+    ? (state === 'writing'  ? (stalled ? 'Still on it — this can take a moment. You\'ll see it below as soon as it\'s ready.' : 'I\'ll tell you what I plan to do in a moment.')
+      : state === 'updating' ? 'I\'m adjusting the steps with what you told me.'
+      : 'I propose building your app with the steps on the left. Shall I start?')
+    : (state === 'writing'  ? (stalled ? 'Still working — this can take a while. You\'ll see the steps in the chat as they arrive.' : 'You\'ll see the steps in the chat as they\'re written. You can approve when it finishes.')
+      : state === 'updating' ? 'Read the changes in the chat. You can approve when it finishes.'
+      : 'Review the checklist above and the plan in the chat. Ask for tweaks or approve to start.');
 
   const buttonDisabled = approving || state !== 'ready';
 
@@ -73,10 +98,10 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
     setApproving(true);
     try {
       await approveBuildPlan(projectId);
-      toast.success('Plan aprobado — el Builder empieza a ejecutar.');
+      toast.success('Plan approved — the Builder is starting.');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`No se pudo aprobar el plan: ${msg}`);
+      toast.error(`Couldn't approve the plan: ${msg}`);
     } finally {
       setApproving(false);
     }
@@ -100,6 +125,8 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
     >
       {state === 'ready'
         ? <Sparkles size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+        : state === 'error'
+        ? <AlertCircle size={16} style={{ color: 'var(--danger)', flexShrink: 0 }} />
         : <Loader2 size={16} className="spin" style={{ color: 'var(--amber)', flexShrink: 0 }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>
@@ -109,6 +136,7 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
           {subtitle}
         </div>
       </div>
+      {state !== 'error' && (
       <button
         type="button"
         onClick={() => { void handleApprove(); }}
@@ -132,8 +160,9 @@ export function PlanApprovalBanner({ projectId, streamingInProgress, checklistCo
         }}
       >
         {approving ? <Loader2 size={12} className="spin" /> : <Check size={12} />}
-        {guided ? 'Sí, adelante' : 'Aprobar plan y empezar Build'}
+        {guided ? 'Yes, go ahead' : 'Approve plan & start Build'}
       </button>
+      )}
     </div>
   );
 }

@@ -28,6 +28,8 @@ import { FlaskConical, Play, ArrowLeft, CheckCircle2, Loader2, AlertTriangle, Ey
 import { toast } from 'sonner';
 import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioTestResults } from '@/stores/studio.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
+import { resolveInstalledModule } from '../lib/installedApp';
 import { TesterChat } from '../components/TesterChat';
 import { PhaseSidebar } from '../components/PhaseSidebar';
 import { useStudioMode } from '../hooks/useStudioMode';
@@ -56,10 +58,30 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
   // Iframe URL with token (same pattern as ImplementationPhase preview)
   const baseUrl = import.meta.env.VITE_API_URL ?? '';
   const token = useAuthStore.getState().tokens?.accessToken ?? '';
-  const previewUrl = `${baseUrl}/api/v1/studio/projects/${project.id}/ui-preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-  const hasUiFiles = ((project.generated_files ?? []) as Array<{ path: string }>).some(
-    (f) => f.path.startsWith('ui/'),
-  );
+  const sandboxPreviewUrl = `${baseUrl}/api/v1/studio/projects/${project.id}/ui-preview${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+  // For a PUBLISHED app, the real running app exists (installed L3 module) and
+  // its API works — the build-time sandbox API does NOT (its schema is gone
+  // after packaging → the preview renders "[object Object]"). So when the app
+  // is published, point the preview at the REAL installed app (same /app-ui
+  // route the dash module uses). Match the module by the clean name (the
+  // project slug is the raw scoping text, so we can't read it off the project).
+  const uiModules = useUiModulesStore((s) => s.modules);
+  const appModule = project.status === 'published'
+    ? resolveInstalledModule(project, uiModules)
+    : undefined;
+  const previewUrl = appModule
+    ? `${baseUrl}/api/v1/app-ui/${appModule.app_name}/${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    : sandboxPreviewUrl;
+  // v2/v3 builds write the UI to the WORKSPACE filesystem, NEVER to the legacy
+  // `generated_files` JSONB column — so gating on that column wrongly shows "no
+  // UI" for every real (built) project. The reliable signal is the phase: once
+  // the project reached Build, the workspace has `ui/` and the preview endpoint
+  // (which reads the workspace) renders it. (If it's somehow empty, the endpoint
+  // itself returns an error page — never a false "no files" from the dash.)
+  const BUILT_PHASES = ['build', 'testing', 'packaging', 'packaged', 'published'];
+  const hasUiFiles = BUILT_PHASES.includes(project.status)
+    || ((project.generated_files ?? []) as Array<{ path: string }>).some((f) => f.path.startsWith('ui/'));
 
   async function handleRunTests() {
     if (busy) return;
@@ -115,7 +137,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={toolbarStyle}>
-        <h2 style={titleStyle}><FlaskConical size={14} style={{ color: 'var(--amber)' }} /> {guided ? 'Pruébala tú misma' : 'Testing'}</h2>
+        <h2 style={titleStyle}><FlaskConical size={14} style={{ color: 'var(--amber)' }} /> {guided ? 'Try it yourself' : 'Testing'}</h2>
 
         {/* Test results summary */}
         {results && (
@@ -154,7 +176,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
               style={primaryBtn(busy === 'signoff')}
             >
               {busy === 'signoff' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-              {guided ? 'Todo bien · Instalar' : 'Sign off → Package'}
+              {guided ? 'All good · Install' : 'Sign off → Package'}
             </button>
           </>
         )}
@@ -188,11 +210,11 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
             <div style={emptyPreviewStyle}>
               <Eye size={28} style={{ color: 'var(--amber)', marginBottom: 12 }} />
               <div style={{ fontSize: '0.875rem', color: 'var(--text)', marginBottom: 6 }}>
-                {guided ? 'Tu app todavía no tiene pantallas' : 'No hay archivos UI todavía'}
+                {guided ? 'Your app doesn\'t have any screens yet' : 'No UI files yet'}
               </div>
               <div>{guided
-                ? 'Pulsa "Esto no va bien" para volver y pedirme que le añada una pantalla.'
-                : <>Vuelve a Implementation y genera al menos una sesión que produzca archivos en <code>ui/</code>.</>}</div>
+                ? 'Press "This isn\'t right" to go back and ask me to add a screen.'
+                : <>Go back to Implementation and run at least one session that produces files under <code>ui/</code>.</>}</div>
             </div>
           )}
         </div>
@@ -204,19 +226,19 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
         <div style={modalBackdrop} onClick={() => !busy && setConfirmSignoff(false)}>
           <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 12px', fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-              {guided ? '¿Tu app está lista?' : '¿Firmar y pasar a Packaging?'}
+              {guided ? 'Is your app ready?' : 'Sign off and move to Packaging?'}
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
               {guided
-                ? 'La dejaré lista para instalar. Si más adelante ves algo, puedes volver atrás sin problema.'
-                : 'La app se moverá a la fase de empaquetado. Podrás volver atrás más tarde si descubres problemas.'}
+                ? 'I\'ll get it ready to install. If you spot something later, you can always go back.'
+                : 'The app moves to the packaging phase. You can go back later if you find issues.'}
             </p>
             {failingTests && (
               <div style={warningBox}>
                 <AlertTriangle size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
                 <span style={{ fontSize: '0.75rem', color: 'var(--text)' }}>
-                  Hay <strong>{results!.failed}</strong> test{results!.failed === 1 ? '' : 's'} fallando.
-                  Puedes firmar igualmente, pero se recomienda arreglarlo antes.
+                  <strong>{results!.failed}</strong> test{results!.failed === 1 ? '' : 's'} failing.
+                  You can sign off anyway, but it\'s better to fix it first.
                 </span>
               </div>
             )}
@@ -227,7 +249,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
                 disabled={busy !== null}
                 style={secondaryBtn(false)}
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="button"
@@ -236,7 +258,7 @@ export function TestingPhase({ project, viewMode = 'edit', onSelectPhase }: Prop
                 style={primaryBtn(busy === 'signoff')}
               >
                 {busy === 'signoff' ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
-                {guided ? 'Sí, está lista' : 'Sí, firmar'}
+                {guided ? 'Yes, it\'s ready' : 'Yes, sign off'}
               </button>
             </div>
           </div>

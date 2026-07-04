@@ -12,7 +12,7 @@
 
 import type { MouseEvent } from 'react';
 import { toast } from 'sonner';
-import { scanApp, exportApp, updateAppStatus } from '@/services/apps.service';
+import { scanApp, exportApp, updateAppStatus, uninstallApp } from '@/services/apps.service';
 import { useAppsStore } from '@/stores/apps.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import type { InstalledApp } from '@/types/apps';
@@ -56,24 +56,40 @@ export function useAppActions(app: InstalledApp, onRefresh: () => void) {
     }
   };
 
+  // Instalar (available→active) / Desinstalar (active→available, conserva datos). Es el
+  // ÚNICO eje del ciclo de vida (no hay enable/disable). Refrescar los módulos dinámicos
+  // refleja el cambio en el sidebar al instante (una app desinstalada sale de /me/ui-modules).
   const handleToggleStatus = async (e: MouseEvent) => {
     e.stopPropagation();
-    const newStatus = app.status === 'active' ? 'disabled' : 'active';
+    const installing = app.status !== 'active';
+    const newStatus = installing ? 'active' : 'available';
     try {
       await updateAppStatus(app.app_name, newStatus);
-      // Solo las skills L1 (OpenClaw) exigen reload del Gateway. Las L2/L3 con backend nativo
-      // (p.ej. n8n, UI-only) NO requieren reiniciar Core — refrescar los módulos dinámicos
-      // refleja el enable/disable en el sidebar al instante (alineado con AppDetail).
+      // Solo las skills L1 (OpenClaw) exigen reload del Gateway para el runtime del agente.
       if (app.app_level === 1) {
-        setRestartRequired('openclaw', `${app.app_name} was ${newStatus}`);
+        setRestartRequired('openclaw', `${app.app_name} ${installing ? 'instalada' : 'desinstalada'}`);
       }
       onRefresh();
       void useUiModulesStore.getState().refresh();
-      toast.success(`App ${newStatus === 'active' ? 'enabled' : 'disabled'}`);
+      toast.success(installing ? 'App instalada' : 'App desinstalada');
     } catch {
-      toast.error('Failed to update status');
+      toast.error(installing ? 'No se pudo instalar' : 'No se pudo desinstalar');
     }
   };
 
-  return { handleScan, handleExport, handleToggleStatus };
+  // Borrar (destructivo): elimina el paquete + los datos + el esquema. Solo desde Disponibles.
+  const handleDelete = async (e: MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Borrar "${app.app_name}" del todo? Se eliminan sus datos y no se podrá reinstalar sin volver a obtenerla.`)) return;
+    try {
+      await uninstallApp(app.app_name, true);
+      onRefresh();
+      void useUiModulesStore.getState().refresh();
+      toast.success('App borrada');
+    } catch {
+      toast.error('No se pudo borrar');
+    }
+  };
+
+  return { handleScan, handleExport, handleToggleStatus, handleDelete };
 }

@@ -605,6 +605,78 @@ export async function updateSandboxConfig(config: Record<string, unknown>): Prom
   await api.patch('/gateway/sandbox-config', config);
 }
 
+// ─── MCP Connections (§B, admin-only) ───────────────────────────────
+
+export interface McpServerView {
+  name: string;
+  transport: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+  enabled: boolean;
+  timeout?: number;
+  tool_filter?: { include?: string[]; exclude?: string[] };
+  /** true for our own facade `claw-os` → read-only in the UI. */
+  system: boolean;
+}
+export interface McpServerInput {
+  transport?: string;
+  url?: string;
+  command?: string;
+  args?: string[];
+  headers?: Record<string, string>;
+  env?: Record<string, string>;
+  enabled?: boolean;
+  timeout?: number;
+  tool_filter?: { include?: string[]; exclude?: string[] };
+}
+export interface McpProbeResult {
+  ok: boolean;
+  tool_count?: number;
+  tools?: Array<{ name: string; description?: string }>;
+  resources?: boolean;
+  prompts?: boolean;
+  error?: string;
+}
+
+export async function getMcpConfig(): Promise<McpServerView[]> {
+  const res = await api.get<{ data: { servers: McpServerView[] } }>('/gateway/mcp-config');
+  return res.data.servers;
+}
+export async function upsertMcpServer(name: string, server: McpServerInput): Promise<void> {
+  await api.patch('/gateway/mcp-config', { name, server });
+}
+export async function deleteMcpServer(name: string): Promise<void> {
+  await api.patch('/gateway/mcp-config', { name, server: null });
+}
+export async function testMcpServer(body: McpServerInput & { name?: string }): Promise<McpProbeResult> {
+  const res = await api.post<{ data: McpProbeResult }>('/gateway/mcp/test', body);
+  return res.data;
+}
+
+// ─── ACP engines config (§A4, Studio Engines) ───────────────────────
+
+export interface AcpConfig {
+  acp_enabled: boolean;
+  acpx_enabled: boolean;
+  backend: string;
+  agents: Record<string, { command?: string; expected_version?: string }>;
+}
+export async function getAcpConfig(): Promise<AcpConfig> {
+  const res = await api.get<{ data: AcpConfig }>('/gateway/acp-config');
+  return res.data;
+}
+export async function updateAcpConfig(body: {
+  acp_enabled?: boolean;
+  acpx_enabled?: boolean;
+  backend?: string;
+  agents?: Record<string, { command?: string; expected_version?: string }>;
+}): Promise<void> {
+  await api.patch('/gateway/acp-config', body);
+}
+
 // ─── Browser Config ────────────────────────────────────────────────
 
 export interface BrowserConfig {

@@ -20,7 +20,7 @@
 // caps live in their own milestones (M6/M7/M8).
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Loader2, AlertCircle, Plug, Package } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioMountedRoute } from '@/stores/studio.store';
@@ -36,8 +36,10 @@ import { OpencodeEmbed } from '../../components/v2/OpencodeEmbed';
 import { GuidedBuildPanel } from '../../components/v2/GuidedBuildPanel';
 import { FriendlyError } from '../../components/v2/FriendlyError';
 import { PlanApprovalBanner } from '../../components/v2/PlanApprovalBanner';
+import { ConnectExternalEngineModal } from '../../components/v2/ConnectExternalEngineModal';
 import { ResizeHandle } from '../../components/v2/ResizeHandle';
 import { useOpencodeStream } from '../../hooks/useOpencodeStream';
+import { useConfirm } from '../../lib/useConfirm';
 import { useStudioMode } from '../../hooks/useStudioMode';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 
@@ -50,6 +52,7 @@ interface Props {
 
 export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props) {
   const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirm();
   const startBuild = useStudioStore((s) => s.startBuild);
   const finishBuild = useStudioStore((s) => s.finishBuild);
   const fetchWorkspaceFile = useStudioStore((s) => s.fetchWorkspaceFile);
@@ -69,6 +72,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
   const [fileLoading, setFileLoading] = useState(false);
   const [routes, setRoutes] = useState<StudioMountedRoute[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [showConnect, setShowConnect] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
@@ -159,7 +163,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
       await startBuild(project.id);
       setStartedAt(Date.now());
       if (!opts?.silent) {
-        toast.success('Plan-turn iniciado — el Builder está leyendo specs y escribiendo el plan.');
+        toast.success('Plan turn started — the Builder is reading specs and writing the plan.');
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -189,13 +193,18 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
     setFinishing(true);
     try {
       await finishBuild(project.id, force);
-      toast.success('Build finalizado, pasando a Testing');
+      toast.success('Build finished — moving to Testing');
       onSelectPhase?.('testing');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // 409 CHECKLIST_INCOMPLETE → ask the user to confirm with force.
       if (/CHECKLIST_INCOMPLETE/i.test(msg)) {
-        if (window.confirm('La checklist no está completa. ¿Forzar transición a Testing igualmente?')) {
+        const ok = await confirm({
+          title: 'The checklist isn\'t complete',
+          body: 'Move to Testing anyway? Some acceptance items are still pending.',
+          confirmLabel: 'Move to Testing',
+        });
+        if (ok) {
           setFinishing(false);
           return handleFinish(true);
         }
@@ -210,9 +219,70 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
   // ─── Render ───────────────────────────────────────────────────
 
   if (isPast) {
+    // Read-only view of HOW the app was built — never a dead-end. A compact
+    // summary header (what/how + checklist progress + a way back) followed by
+    // a browsable, read-only workspace (file tree | code) so the user can SEE
+    // the code that was built — the Build-phase equivalent of the other
+    // phases' read-only doc. (Fixes: it used to show only a summary card, so
+    // Build looked "empty" compared to every other phase — worse when the
+    // checklist is empty, e.g. a BYO/Claude-Code build.)
+    const checklist = (project.build_checklist ?? []) as Array<{ id: string; text: string; status: string }>;
+    const doneCount = checklist.filter((c) => c.status === 'done').length;
+    const isPublished = project.status === 'published';
     return (
-      <div style={{ padding: 32, color: 'var(--text-dim)', fontSize: '0.875rem', textAlign: 'center' }}>
-        Build phase es read-only en past view. Vuelve al fase actual del proyecto para interactuar.
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+        <div style={{ padding: '6px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <PhaseSidebar project={project} viewedPhase="build" onSelect={onSelectPhase} guided={guided} />
+        </div>
+        {/* Compact summary header */}
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)' }}>
+              <Package size={16} /> {guided ? 'Your app is built' : 'Build complete'}
+              {checklist.length > 0 && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400 }}>· {doneCount}/{checklist.length} steps built</span>
+              )}
+            </div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.4 }}>
+              {isPublished
+                ? 'You\'re viewing how your app was built (read-only). It\'s installed and running — open or use it from "My apps". Browse the files below.'
+                : 'You\'re viewing the build phase in read-only mode. Browse the files below, or go back to the current phase to keep working.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSelectPhase?.(project.status)}
+            style={{ flexShrink: 0, padding: '8px 14px', background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+          >
+            Back to where I was
+          </button>
+        </div>
+        {/* Read-only workspace browser — the actual built files */}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
+            <WorkspaceFileTree
+              projectId={project.id}
+              refreshKey={0}
+              recentEdits={[]}
+              selected={selectedFile}
+              onSelect={setSelectedFile}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+            {fileLoading && (
+              <div style={overlayLoaderStyle}><Loader2 size={14} className="spin" /></div>
+            )}
+            {fileError && (
+              <div style={{ padding: 16, color: 'var(--danger)', fontSize: '0.75rem' }}>{fileError}</div>
+            )}
+            {!fileError && (
+              <CodeView
+                selected={fileContent}
+                emptyHint="Pick a file from the tree to see what was built."
+              />
+            )}
+          </div>
+        </div>
       </div>
     );
   }
@@ -254,6 +324,33 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
         guided={guided}
       />
 
+      {/* PRO-mode BYO control row: open the project in the user's own
+          Claude Code / Cursor via MCP (not ACP — OpenCode does not take
+          part; the user spends their own Claude subscription). Gated to
+          Pro because it exposes the engine path; Guided keeps it hidden. */}
+      {!guided && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+          gap: 8, padding: '6px 16px', borderBottom: '1px solid var(--border)',
+          flexShrink: 0, background: 'var(--card)',
+        }}>
+          <button
+            type="button"
+            onClick={() => setShowConnect(true)}
+            title="Build this project from your own Claude Code / Cursor via MCP (not ACP)"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', fontSize: '0.72rem', fontWeight: 600,
+              background: 'transparent', color: 'var(--text-dim)',
+              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Plug size={12} /> Open in my tool
+          </button>
+        </div>
+      )}
+
       {/* Build checklist panel — collapsible. Hidden when no items
           yet (project just entered Build, generation in flight). In
           Guided mode the human milestone list (GuidedBuildPanel) shows
@@ -270,6 +367,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
           projectId={project.id}
           streamingInProgress={stream.status === 'running'}
           checklistCount={stream.checklist.length}
+          status={stream.status}
           guided={guided}
         />
       )}
@@ -282,17 +380,26 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
         />
       )}
 
+      {showConnect && (
+        <ConnectExternalEngineModal
+          projectId={project.id}
+          onClose={() => setShowConnect(false)}
+        />
+      )}
+
+      {confirmDialog}
+
       {/* Top error surfaces. In Guided mode the empathetic template (§8):
           what happened in plain words + reassurance + ways out (never a
           dead end, never a stack trace up front). In Pro, the raw banner. */}
       {startError && (guided ? (
         <FriendlyError
-          title="No pude empezar a construir tu app"
-          message="Lo intenté pero algo lo impidió. Casi siempre se arregla al reintentar."
+          title="I couldn't start building your app"
+          message="I tried, but something got in the way. It usually works on a retry."
           detail={startError}
           actions={[
-            { label: 'Reintentar', onClick: () => { void handleStart(); }, primary: true },
-            { label: 'Descartar aviso', onClick: () => setStartError(null) },
+            { label: 'Retry', onClick: () => { void handleStart(); }, primary: true },
+            { label: 'Dismiss', onClick: () => setStartError(null) },
           ]}
         />
       ) : (
@@ -302,11 +409,11 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
       ))}
       {stream.error && (guided ? (
         <FriendlyError
-          title="El Builder se encontró un problema"
-          message="Puedo intentarlo otra vez. Si sigue fallando, vuelve al plan (abajo a la izquierda) y ajusta algo."
+          title="The Builder hit a problem"
+          message="I can try again. If it keeps failing, go back to the plan (bottom left) and tweak something."
           detail={stream.error}
           actions={[
-            { label: 'Probar de nuevo', onClick: () => { void handleStart(); }, primary: true },
+            { label: 'Try again', onClick: () => { void handleStart(); }, primary: true },
           ]}
         />
       ) : (
@@ -423,6 +530,7 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
                 studioMode={studioMode}
                 onStudioModeChange={setStudioMode}
                 onAutoStart={handleStart}
+                engine={project.engine}
                 fallback={
                   <BuildChat
                     projectId={project.id}

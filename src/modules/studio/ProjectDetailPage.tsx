@@ -14,9 +14,9 @@
 // Phase 2 wires in the ScopingWizard for projects with status 'scoping'.
 // Other statuses still show raw metadata until later phases land.
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-import { ChevronLeft, Hammer, Snowflake, Eye } from 'lucide-react';
+import { ChevronLeft, Hammer, Snowflake, Eye, PackageX } from 'lucide-react';
 import { useStudioStore, type StudioProjectStatus } from '@/stores/studio.store';
 import { ScopingWizard } from './phases/ScopingWizard';
 import { ConceptPhase } from './phases/ConceptPhase';
@@ -28,19 +28,9 @@ import { PackagingPhase } from './phases/PackagingPhase';
 import { LivingAppCard } from './components/LivingAppCard';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
 import { useStudioMode } from './hooks/useStudioMode';
-
-// Mirror of `core/src/studio/services/phase-advancement.ts::STATUS_ORDER`.
-// Used here to clamp viewedPhase ≤ project.status so the user can never
-// "preview" a phase the project hasn't reached yet.
-const STATUS_ORDER: StudioProjectStatus[] = [
-  'scoping', 'concept', 'frontend', 'foundation', 'build',
-  'testing', 'packaging', 'packaged', 'published',
-];
-
-function indexOfStatus(status: string): number {
-  const i = STATUS_ORDER.indexOf(status as StudioProjectStatus);
-  return i >= 0 ? i : 0;
-}
+// M22: pipeline order is a single source in lib/phases.ts (no more local
+// STATUS_ORDER copies that could drift from PhaseSidebar / the backend).
+import { statusIndex as indexOfStatus } from './lib/phases';
 
 export function Component() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -48,6 +38,9 @@ export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
   const projects = useStudioStore((s) => s.projects);
   const fetchProjects = useStudioStore((s) => s.fetchProjects);
+  const refetchProject = useStudioStore((s) => s.refetchProject);
+  const loading = useStudioStore((s) => s.loading);
+  const fetched = useStudioStore((s) => s.fetched);
   const [studioMode] = useStudioMode();
   const guided = studioMode === 'guided';
 
@@ -55,23 +48,54 @@ export function Component() {
     if (projects.length === 0) fetchProjects();
   }, [projects.length, fetchProjects]);
 
+  // A9: the project LIST omits the heavy doc fields, so fetch the full
+  // project on open to populate them (phases read doc_concept/frontend/etc.).
+  useEffect(() => {
+    if (projectId) refetchProject(projectId).catch(() => {});
+  }, [projectId, refetchProject]);
+
   const project = projects.find((p) => p.id === projectId);
+
+  // Frozen/archived are TERMINAL states (beyond the normal pipeline). They
+  // still hold every doc, so the user can browse all phases read-only; we
+  // treat them as "past view" and let the clamp ceiling reach 'published'.
+  const isTerminal = project?.status === 'frozen' || project?.status === 'archived';
 
   // Resolve which phase the user is *viewing*. The default (no query
   // param) is the project's actual current status — preserves the
-  // pre-rewind UX. When `?phase=<x>` is set, clamp it to ≤ status so
+  // pre-rewind UX. When `?phase=<x>` is set, clamp it to ≤ ceiling so
   // the user can never preview a future phase.
   const requestedPhase = searchParams.get('phase');
   const viewedPhase: StudioProjectStatus = (() => {
     if (!project) return 'scoping';
-    if (!requestedPhase) return project.status;
+    const ceiling: StudioProjectStatus = isTerminal ? 'published' : project.status;
+    const fallback: StudioProjectStatus = isTerminal ? 'concept' : project.status;
+    if (!requestedPhase) return fallback;
     const reqIdx = indexOfStatus(requestedPhase);
-    const curIdx = indexOfStatus(project.status);
-    if (reqIdx > curIdx) return project.status;
+    const ceilIdx = indexOfStatus(ceiling);
+    if (reqIdx > ceilIdx) return fallback;
     return requestedPhase as StudioProjectStatus;
   })();
-  const isPastView = !!project && viewedPhase !== project.status;
-  const viewMode: 'edit' | 'past' = isPastView ? 'past' : 'edit';
+  const isPastView = !!project && !isTerminal && viewedPhase !== project.status;
+  const viewMode: 'edit' | 'past' = (isPastView || isTerminal) ? 'past' : 'edit';
+
+  // M7: when the project's status advances past the phase the user was
+  // viewing AS current (an explicit `?phase` equal to the OLD status), drop
+  // the stale param so they follow forward instead of being trapped in a
+  // read-only past view of what they just signed off.
+  const prevStatusRef = useRef(project?.status);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const cur = project?.status;
+    prevStatusRef.current = cur;
+    if (!cur || !prev || prev === cur) return;
+    if (requestedPhase && requestedPhase === prev) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('phase');
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.status]);
 
   function selectPhase(phase: StudioProjectStatus) {
     if (!project) return;
@@ -88,6 +112,9 @@ export function Component() {
   }
 
   if (!project) {
+    // Distinguish "still loading" from "loaded but this project is gone"
+    // (deleted / bad deep-link) — the latter must NOT spin forever.
+    const stillLoading = loading || !fetched;
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', height: '100%',
@@ -95,8 +122,20 @@ export function Component() {
         color: 'var(--text-dim)', fontSize: '0.875rem',
         fontFamily: 'var(--font-sans)',
       }}>
-        <Hammer size={32} style={{ color: 'var(--text-muted)' }} />
-        <span>Loading project…</span>
+        {stillLoading ? (
+          <>
+            <Hammer size={32} style={{ color: 'var(--text-muted)' }} className="animate-pulse" />
+            <span>Loading project…</span>
+          </>
+        ) : (
+          <>
+            <PackageX size={32} style={{ color: 'var(--text-muted)' }} />
+            <span style={{ color: 'var(--text)', fontWeight: 500 }}>Project not found</span>
+            <span style={{ fontSize: '0.75rem', maxWidth: 320, textAlign: 'center' }}>
+              It may have been deleted, or the link is out of date.
+            </span>
+          </>
+        )}
         <button
           onClick={() => navigate('/studio')}
           style={{
@@ -133,7 +172,7 @@ export function Component() {
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <ChevronLeft size={14} /> {guided ? 'Mis apps' : 'Projects'}
+          <ChevronLeft size={14} /> {guided ? 'My apps' : 'Projects'}
         </button>
         <Hammer size={18} style={{ color: 'var(--amber)' }} />
         <h1 style={{
@@ -183,7 +222,7 @@ export function Component() {
         )}
       </header>
 
-      {project.status === 'frozen' && (
+      {isTerminal && (
         <div style={{
           padding: '12px 24px',
           background: 'color-mix(in srgb, #06b6d4 12%, var(--card))',
@@ -193,11 +232,14 @@ export function Component() {
         }}>
           <Snowflake size={16} style={{ color: '#06b6d4', flexShrink: 0, marginTop: 1 }} />
           <div>
-            <strong style={{ color: 'var(--text)' }}>Project frozen</strong>
+            <strong style={{ color: 'var(--text)' }}>
+              {project.status === 'archived' ? 'Project archived' : 'Project frozen'}
+            </strong>
             <div style={{ marginTop: 2, color: 'var(--text-dim)', fontSize: '0.75rem', lineHeight: 1.5 }}>
-              It exceeds the active-project limit on your current plan. It's still readable and downloadable,
-              but you can't regenerate phases or run sessions. Upgrade your plan or delete another active project
-              to unfreeze it.
+              {project.status === 'archived'
+                ? 'This project is archived. Every phase stays readable and downloadable, but you can\'t regenerate phases or run sessions.'
+                : 'It exceeds the active-project limit on your current plan. It\'s still readable and downloadable, but you can\'t regenerate phases or run sessions. Upgrade your plan or delete another active project to unfreeze it.'}
+              {' '}Use the phase rail below to browse it.
             </div>
           </div>
         </div>
@@ -214,7 +256,7 @@ export function Component() {
           <Eye size={12} style={{ color: 'var(--amber)' }} />
           <span style={{ color: 'var(--text)' }}>
             {guided
-              ? 'Estás mirando un paso anterior (solo lectura).'
+              ? 'You\'re viewing an earlier step (read-only).'
               : <>You are viewing the <strong>{viewedPhase}</strong> phase in read-only mode.
                   The project's current phase is <strong>{project.status}</strong>.</>}
           </span>
@@ -229,7 +271,7 @@ export function Component() {
               cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            {guided ? 'Volver a donde estaba' : 'Back to current phase'}
+            {guided ? 'Back to where I was' : 'Back to current phase'}
           </button>
         </div>
       )}
@@ -241,6 +283,10 @@ export function Component() {
         <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
           {viewedPhase === 'scoping' ? (
             <ScopingWizard
+              // A7: remount when past↔edit flips so the wizard's hook count
+              // never changes within a single fiber (it early-returns a
+              // read-only view before its hooks in 'past' mode).
+              key={`scoping-${viewMode}`}
               projectId={project.id}
               onComplete={() => { /* status refreshes from server */ }}
               viewMode={viewMode}
@@ -271,23 +317,15 @@ export function Component() {
                 <h2 style={{
                   margin: '0 0 8px', fontSize: '1rem', fontWeight: 600, color: 'var(--text)',
                 }}>
-                  Phase {project.status} — placeholder
+                  Nothing to show for this phase
                 </h2>
                 <p style={{
-                  margin: '0 0 16px', fontSize: '0.8125rem', color: 'var(--text-dim)',
+                  margin: 0, fontSize: '0.8125rem', color: 'var(--text-dim)',
                   lineHeight: 1.5,
                 }}>
-                  This phase isn't implemented yet. Coming soon: session
-                  planner, code generation, sandbox and packaging.
+                  This phase has no content yet. Use the phase rail to move to a phase
+                  the project has reached.
                 </p>
-                <pre style={{
-                  margin: 0, padding: 12, background: 'var(--surface)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.6875rem', fontFamily: 'var(--font-mono)',
-                  color: 'var(--text)', overflow: 'auto', maxHeight: 320,
-                }}>
-                  {JSON.stringify(project, null, 2)}
-                </pre>
               </div>
             </div>
           )}

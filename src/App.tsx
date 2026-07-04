@@ -10,12 +10,14 @@
  * https://micelclaw.com
  */
 
-import { createBrowserRouter, Navigate, Outlet, RouterProvider, useParams } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, useNavigate, useParams } from 'react-router';
+import { Compass } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { LoginPage } from '@/pages/LoginPage';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 function AuthGate() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -40,6 +42,24 @@ function WhiteboardRedirect() {
 function DiagramsRedirect() {
   const { fileId } = useParams();
   return <Navigate to={`/sketches/${fileId}`} replace />;
+}
+
+/**
+ * Catch-all para URLs que no matchean ninguna ruta (enlaces obsoletos, typos).
+ * Antes caían en la pantalla por defecto de React Router ("Unexpected Application
+ * Error… Hey developer, provide your own ErrorBoundary"). Ahora un 404 amigable
+ * DENTRO del shell (queda cubierto por RouteErrorBoundary).
+ */
+function NotFound() {
+  const navigate = useNavigate();
+  return (
+    <EmptyState
+      icon={Compass}
+      title="Página no encontrada"
+      description="Esta dirección no corresponde a ninguna página."
+      actions={[{ label: 'Ir al inicio', onClick: () => navigate('/chat'), variant: 'primary' }]}
+    />
+  );
 }
 
 const router = createBrowserRouter([
@@ -133,8 +153,7 @@ const router = createBrowserRouter([
           { path: '/settings/:section', lazy: () => import('@/modules/settings/SettingsPage') },
           { path: '/micelhub', lazy: () => import('@/modules/micelhub/MicelHubPage') },
           { path: '/gateway', lazy: () => import('@/modules/gateway/GatewayPage') },
-          { path: '/flows', lazy: () => import('@/modules/flows/FlowsPage') },
-          { path: '/flows/:flowId', lazy: () => import('@/modules/flows/FlowEditor') },
+          // MicelFlow retirado (2026-06-30): rutas /flows eliminadas; la automatización es n8n.
           // Ruta genérica de módulos dinámicos (apps L3 servidas por Core como
           // iframe): el AppModuleHost resuelve :appName contra el ui-modules store.
           { path: '/app/:appName', lazy: () => import('@/modules/app-host/AppModuleHost') },
@@ -145,6 +164,8 @@ const router = createBrowserRouter([
           ...(import.meta.env.DEV
             ? [{ path: '/dev/components', lazy: () => import('@/modules/dev/ComponentsDemo') }]
             : []),
+          // Catch-all: cualquier URL sin match → 404 amigable (dentro del shell).
+          { path: '*', element: <NotFound /> },
         ],
       },
     ],

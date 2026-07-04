@@ -20,12 +20,15 @@
 // anterior" reuses the real rewind mechanism. Edit re-enters the build.
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Sparkles, Check, Palette, RotateCcw, PackageCheck, RefreshCw, GitBranch,
-  Pencil, ShieldCheck, Clock,
+  LayoutGrid, ShieldCheck, Clock, ExternalLink,
 } from 'lucide-react';
 import { useStudioStore, type StudioProject, type StudioProjectEvent, type StudioProjectStatus } from '@/stores/studio.store';
-import { RewindButton } from './RewindButton';
+import { useUiModulesStore } from '@/stores/ui-modules.store';
+import { resolveInstalledModule } from '../lib/installedApp';
+import { PhaseSidebar } from './PhaseSidebar';
 
 interface LivingAppCardProps {
   project: StudioProject;
@@ -53,7 +56,15 @@ function formatDate(iso: string): string {
 
 export function LivingAppCard({ project, onSelectPhase }: LivingAppCardProps) {
   const fetchProjectEvents = useStudioStore((s) => s.fetchProjectEvents);
+  const navigate = useNavigate();
   const [events, setEvents] = useState<StudioProjectEvent[] | null>(null);
+
+  // The published app, if it surfaced an openable UI module, is in the
+  // ui-modules store (loaded by the Shell). Resolve it via the shared helper,
+  // which reads the REAL installed app_name from the project's package (not a
+  // fragile kebab of the project name).
+  const uiModules = useUiModulesStore((s) => s.modules);
+  const appModule = resolveInstalledModule(project, uiModules);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,8 +74,11 @@ export function LivingAppCard({ project, onSelectPhase }: LivingAppCardProps) {
     return () => { cancelled = true; };
   }, [project.id, fetchProjectEvents]);
 
-  // Newest-first for the timeline.
-  const timeline = events ? [...events].reverse() : null;
+  // Newest-first for the timeline, collapsing consecutive identical entries
+  // (e.g. a re-install records "Instalaste la app" each time — show it once).
+  const timeline = events
+    ? [...events].reverse().filter((e, i, arr) => i === 0 || e.kind !== arr[i - 1]?.kind || e.label !== arr[i - 1]?.label)
+    : null;
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 24 }}>
@@ -77,45 +91,69 @@ export function LivingAppCard({ project, onSelectPhase }: LivingAppCardProps) {
             <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--text)' }}>{project.name}</div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--green, #16a34a)', fontWeight: 600, marginTop: 2 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green, #16a34a)' }} />
-              Instalada y en marcha
+              Installed and running
             </div>
           </div>
         </div>
 
+        {/* Phase rail — navigate back to any prior phase READ-ONLY (incl.
+            "El diseño" = Open Design). Safe: viewing has no side effects.
+            A published app can't be rewound (backend-protected), but it can
+            always be reviewed. */}
+        <PhaseSidebar project={project} viewedPhase="published" onSelect={onSelectPhase} guided />
+
         {/* Metadata (real) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: '0.78rem', color: 'var(--text-muted)', paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> Creada el {formatDate(project.created_at)}</span>
-          {project.package_version && <span>Versión {project.package_version}</span>}
-          {project.app_level && <span>Nivel {project.app_level}</span>}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> Created {formatDate(project.created_at)}</span>
+          {project.package_version && <span>Version {project.package_version}</span>}
+          {project.app_level && <span>Level {project.app_level}</span>}
         </div>
 
-        {/* Actions */}
+        {/* Actions — only what actually works for a published app. Viewing
+            any phase is via the rail above (read-only). "Ver el diseño" is a
+            one-click shortcut to the Frontend phase where the Open Design
+            previews live. (A published app is protected from rewrite/rewind;
+            re-editing requires a future "nueva versión" flow.) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {appModule && (
+            <button
+              type="button"
+              onClick={() => navigate(`/app/${appModule.app_name}`)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 'var(--radius-md)',
+                fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+              }}
+            >
+              <ExternalLink size={14} /> Open the app
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => onSelectPhase?.('build')}
+            onClick={() => onSelectPhase?.('frontend')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 'var(--radius-md)',
+              background: appModule ? 'var(--card)' : 'var(--amber)',
+              color: appModule ? 'var(--text)' : '#000',
+              border: appModule ? '1px solid var(--border)' : 'none', borderRadius: 'var(--radius-md)',
               fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)',
             }}
           >
-            <Pencil size={14} /> Editar la app
+            <LayoutGrid size={14} /> View the design
           </button>
-          <RewindButton projectId={project.id} target="build" label="Volver a una versión anterior" guided />
         </div>
 
         {/* Reassurance */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
           <ShieldCheck size={14} style={{ color: 'var(--green, #16a34a)' }} />
-          Tus datos están a salvo. Editar la app no los borra.
+          Your app is installed and safe. You can review any phase of the process from the bar above.
         </div>
 
         {/* Real change history */}
         <div>
-          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Historial de cambios</div>
-          {timeline === null && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Cargando…</div>}
-          {timeline && timeline.length === 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Aún no hay cambios registrados.</div>}
+          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text)', marginBottom: 10 }}>Change history</div>
+          {timeline === null && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Loading…</div>}
+          {timeline && timeline.length === 0 && <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>No changes recorded yet.</div>}
           {timeline && timeline.length > 0 && (
             <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {timeline.map((e) => {

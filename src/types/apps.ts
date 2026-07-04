@@ -92,10 +92,12 @@ export interface ScanResult {
 }
 
 export interface InstallPayload {
-  source: 'local' | 'micelhub' | 'registry';
+  source: 'local' | 'micelhub' | 'registry' | 'studio';
   name: string;
   package_path?: string;
   registry_id?: string;
+  /** false = "Obtener": copia al sistema como Disponible (available) sin activar. */
+  activate?: boolean;
 }
 
 export interface InstallResult {

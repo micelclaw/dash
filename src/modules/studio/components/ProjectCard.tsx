@@ -108,7 +108,7 @@ export function ProjectCard({ project, onOpen, onDelete }: ProjectCardProps) {
           }}>
             {project.name}
           </div>
-          {project.description && (
+          {project.description && project.description.trim() !== project.name.trim() && (
             <div style={{
               fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

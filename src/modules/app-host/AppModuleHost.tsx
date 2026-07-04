@@ -18,22 +18,41 @@
 // (ya filtrado por instalada+activa+cargada+concedida).
 
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
-import { ArrowLeft, Minimize2, PackageOpen, Loader2 } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router';
+import { PackageOpen, Loader2 } from 'lucide-react';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
-import { lucideLookup } from '@/config/lucide-lookup';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function Component() {
   const { appName } = useParams<{ appName: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
 
   const modules = useUiModulesStore((s) => s.modules);
   const loaded = useUiModulesStore((s) => s.loaded);
   const mod = modules.find((m) => m.app_name === appName);
+
+  // A2: authenticate the embed with a `?token=` param (accepted by the auth
+  // plugin), captured ONCE at mount so a later silent token refresh doesn't
+  // reload the iframe. Without this, an expired `claw_session` cookie makes
+  // the embed render a raw 401 JSON body instead of the app.
+  const [embedToken] = useState<string | null>(() => useAuthStore.getState().tokens?.accessToken ?? null);
+
+  // Reenvía la query string de ESTA ruta (p.ej. `?workflow=<id>` de una chip de
+  // entidad de app) al iframe — la UI embebida (launcher de n8n, etc.) la lee de
+  // su propia `window.location.search` para deep-linkear a un registro concreto.
+  const iframeSrc = (() => {
+    if (!mod) return undefined;
+    const params = new URLSearchParams(searchParams);
+    if (embedToken) params.set('token', embedToken);
+    const qs = params.toString();
+    const sep = mod.iframe_url.includes('?') ? '&' : '?';
+    return qs ? `${mod.iframe_url}${sep}${qs}` : mod.iframe_url;
+  })();
 
   const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
   const loadServiceUrls = useServiceUrlsStore((s) => s.load);
@@ -65,22 +84,47 @@ export function Component() {
     );
   }
 
-  const Icon = lucideLookup(mod.icon);
   const accent = mod.color ?? 'var(--accent)';
 
+  // El título + icono del módulo ya los muestra la TopBar (resuelta contra el
+  // ui-modules store), así que aquí NO repetimos una fila-header: el iframe va a
+  // viewport completo y las acciones (pantalla completa + abrir en pestaña) se
+  // superponen en la esquina, sin robar una fila entera.
   return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', ...rootStyle }}>
-      <div style={{
-        height: fullscreen ? 0 : 36, overflow: 'hidden', display: 'flex', alignItems: 'center',
-        padding: fullscreen ? 0 : '0 12px', borderBottom: fullscreen ? 'none' : '1px solid var(--border)',
-        background: 'var(--surface)', gap: 8, fontSize: 12, color: 'var(--text-dim)', flexShrink: 0,
-      }}>
-        <button onClick={() => navigate('/chat')} style={iconBtn} title="Volver al panel" aria-label="Volver al panel">
-          <ArrowLeft size={14} />
-        </button>
-        <Icon size={14} style={{ color: accent }} />
-        <span style={{ fontWeight: 500, color: 'var(--text)' }}>{mod.label}</span>
-        <div style={{ flex: 1 }} />
+    <div style={{ position: 'absolute', inset: 0, ...rootStyle }}>
+      {!iframeLoaded && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 1,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 10, background: 'var(--bg)', color: 'var(--text-dim)',
+        }}>
+          <Loader2 size={28} className="animate-spin" style={{ color: accent }} />
+          <span style={{ fontSize: 13 }}>Cargando {mod.label}…</span>
+        </div>
+      )}
+      <iframe
+        key={mod.app_name}
+        src={iframeSrc}
+        title={mod.label}
+        onLoad={() => setIframeLoaded(true)}
+        style={{ width: '100%', height: '100%', border: 'none', background: 'var(--bg)', display: 'block' }}
+        allow="clipboard-read; clipboard-write"
+      />
+      {/* Acciones superpuestas en la esquina del iframe (fullscreen + abrir en
+          pestaña). Semitransparente en reposo para no tapar la UI de la app;
+          opaca al pasar el ratón. */}
+      <div
+        style={{
+          position: 'absolute', top: 8, right: 8, zIndex: 10,
+          display: 'flex', alignItems: 'center',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)', padding: '3px 8px',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.28)',
+          opacity: 0.55, transition: 'opacity 0.15s ease',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.55'; }}
+      >
         <EmbedActions
           slug={mod.app_name}
           fallbackUrl={mod.iframe_url}
@@ -89,49 +133,9 @@ export function Component() {
           onToggleFullscreen={toggle}
         />
       </div>
-      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-        {!iframeLoaded && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 1,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            gap: 10, background: 'var(--bg)', color: 'var(--text-dim)',
-          }}>
-            <Loader2 size={28} className="animate-spin" style={{ color: accent }} />
-            <span style={{ fontSize: 13 }}>Cargando {mod.label}…</span>
-          </div>
-        )}
-        <iframe
-          key={mod.app_name}
-          src={mod.iframe_url}
-          title={mod.label}
-          onLoad={() => setIframeLoaded(true)}
-          style={{ width: '100%', height: '100%', border: 'none', background: 'var(--bg)' }}
-          allow="clipboard-read; clipboard-write"
-        />
-      </div>
-      <button
-        onClick={toggle}
-        style={{
-          position: 'fixed', top: 8, right: 8, zIndex: 60,
-          opacity: fullscreen ? 1 : 0, pointerEvents: fullscreen ? 'auto' : 'none',
-          transition: 'opacity 0.15s ease',
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-md)', padding: '4px 8px',
-          cursor: 'pointer', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: 4,
-          fontSize: 11,
-        }}
-        title="Salir de pantalla completa (ESC)"
-      >
-        <Minimize2 size={12} /> ESC
-      </button>
     </div>
   );
 }
-
-const iconBtn: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  color: 'var(--text-dim)', display: 'flex', alignItems: 'center',
-};
 
 const retryBtn: React.CSSProperties = {
   padding: '6px 16px', background: 'var(--surface)',

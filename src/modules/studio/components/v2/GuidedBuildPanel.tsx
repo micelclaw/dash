@@ -126,11 +126,11 @@ export function GuidedBuildPanel({ projectId, status, checklist, tokensUsed, tok
 }
 
 function headline(status: StreamStatus, isStarted: boolean, starting: boolean): string {
-  if (starting) return 'Preparando tu app…';
-  if (status === 'running') return 'Construyendo tu app…';
-  if (status === 'failed') return 'Me encontré un obstáculo';
-  if (!isStarted) return 'Lista para empezar';
-  return 'En pausa, lista para ti';
+  if (starting) return 'Getting your app ready…';
+  if (status === 'running') return 'Building your app…';
+  if (status === 'failed') return 'I hit a snag';
+  if (!isStarted) return 'Ready to start';
+  return 'Paused, ready for you';
 }
 
 const wrap: React.CSSProperties = {

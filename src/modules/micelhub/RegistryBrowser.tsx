@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Upload, RefreshCw, Power, Loader2, Trash2 } from 'lucide-react';
+import { Package, Upload, RefreshCw, Loader2, Trash2, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { installApp, uninstallApp } from '@/services/apps.service';
@@ -63,7 +63,7 @@ function toInstalledApp(r: RegistryApp): InstalledApp {
       icon,
       description: (m.description as string) ?? r.description ?? '',
       tier_required: (m.tier_required as string) ?? 'free',
-      tags: [...(installed ? [] : ['registry-available']), 'verified', 'free'],
+      tags: [...(installed ? [] : ['registry-available']), 'free'],
       ...(mMod ? { ui: { ...mUi, module: { ...mMod, icon } } } : {}),
     },
     forked_from: null,
@@ -98,35 +98,23 @@ export function RegistryBrowser({ onSelect, selectedName, onChanged }: RegistryB
 
   useEffect(() => { load(); }, [load]);
 
-  // Enable = instalación real (POST /apps/install) de una app del store. source='registry'
-  // → la fila queda desinstalable (a diferencia de 'local'=preinstalado). Algunas con backend
-  // propio (legacy) requieren reiniciar Core; el resto NO.
+  // "Obtener" = copiar la app del registro al sistema como DISPONIBLE (activate:false)
+  // → aparece en la tab "Disponibles", desde donde se instala. No provisiona nada aún
+  // (ni contenedor, ni skill, ni módulo) → no requiere reinicio.
   const handleEnable = async (app: RegistryApp) => {
     if (!app.claw_file) { toast.error('Paquete .claw no encontrado'); return; }
     startBusy(app.name);
     try {
-      const res = await installApp(
-        { source: 'registry', name: app.name, package_path: app.claw_file },
-        { timeout: 120_000 }, // unpack + scan + copy + migraciones puede tardar >15s
+      await installApp(
+        { source: 'registry', name: app.name, package_path: app.claw_file, activate: false },
+        { timeout: 120_000 }, // unpack + scan + copy puede tardar >15s
       );
-      if (res.requires_core_restart) {
-        setRestartRequired('core', `${app.name} instalada — reinicia para activar el backend`);
-        toast.success(`${app.name} instalada`);
-      } else if (res.requires_openclaw_restart) {
-        // .claw L1 (skill) → la recoge el Gateway al recargar, no Core.
-        setRestartRequired('openclaw', `${app.name} instalada — recarga el Gateway para activarla`);
-        toast.success(`${app.name} instalada`);
-      } else {
-        toast.success(`${app.name} instalada y lista`);
-      }
+      toast.success(`${app.name} obtenida — está en "Disponibles" para instalar`);
       await load();
       onChanged?.();
-      // Si este item está abierto en el panel común, refléjalo como instalado al instante
-      // (sin esperar a que el usuario reclique).
       if (selectedName === app.name) onSelect(toInstalledApp({ ...app, status: 'installed' }));
-      void useUiModulesStore.getState().refresh();
     } catch (err) {
-      toast.error('No se pudo instalar la app', { description: (err as Error)?.message });
+      toast.error('No se pudo obtener la app', { description: (err as Error)?.message });
     } finally {
       endBusy(app.name);
     }
@@ -252,14 +240,14 @@ export function RegistryBrowser({ onSelect, selectedName, onChanged }: RegistryB
                     {desc && ` · ${desc.slice(0, 32)}`}
                   </div>
                 </div>
-                {/* Acciones: Enable (available), Update (update_available), Uninstall (instalada) */}
+                {/* Acciones: Obtener (available → Disponibles), Update, Borrar (instalada) */}
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                   {status !== 'installed' && (
                     <ActionBtn
                       onClick={() => void handleEnable(app)} disabled={isBusy}
                       bg="var(--amber)" fg="#06060a"
-                      icon={isBusy ? <Loader2 size={12} className="animate-spin" /> : <Power size={12} />}
-                      label={status === 'update_available' ? 'Update' : 'Enable'}
+                      icon={isBusy ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                      label={status === 'update_available' ? 'Actualizar' : 'Obtener'}
                     />
                   )}
                   {status !== 'available' && (

@@ -25,7 +25,7 @@
 // the classic dash chat (`fallback`).
 
 import { useEffect, useRef, useState } from 'react';
-import { Send, Square, Loader2, AlertCircle, RefreshCw, Eye, ChevronLeft } from 'lucide-react';
+import { Send, Square, Loader2, AlertCircle, RefreshCw, Eye, ChevronLeft, Cpu } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
 import type { StreamStatus } from '../../hooks/useOpencodeStream';
 import type { StudioMode } from '../../hooks/useStudioMode';
@@ -49,11 +49,21 @@ interface Props {
   onAutoStart?: () => void;
   /** Classic dash chat, rendered if the embed can't be reached. */
   fallback?: React.ReactNode;
+  /** Which engine runs the build. Server-side ACP engines (Claude Code /
+   *  Codex) have NO embeddable web UI, so we render the `fallback`
+   *  BuildChat directly (fed by the ACP relay's studio.opencode.* events)
+   *  + an engine badge — never the OpenCode iframe. Default 'opencode'. */
+  engine?: string;
 }
 
 type Phase = 'loading' | 'ready' | 'error';
 
-export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, checklist, studioMode, onStudioModeChange, onAutoStart, fallback }: Props) {
+const ACP_ENGINE_LABEL: Record<string, string> = {
+  acp_claude: 'Claude Code',
+  acp_codex: 'Codex',
+};
+
+export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, checklist, studioMode, onStudioModeChange, onAutoStart, fallback, engine }: Props) {
   const fetchOpencodeEmbed = useStudioStore((s) => s.fetchOpencodeEmbed);
   const sendBuildMessage = useStudioStore((s) => s.sendBuildMessage);
   const abortBuild = useStudioStore((s) => s.abortBuild);
@@ -69,9 +79,17 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
   const [sendError, setSendError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const inFlightRef = useRef(false);
+  // M11: when the user sends before a session exists, we queue the text here
+  // and auto-flush it once the session is live — instead of dropping it.
+  const pendingSendRef = useRef<string | null>(null);
+
+  const isAcp = engine === 'acp_claude' || engine === 'acp_codex';
 
   // ─── Open (or re-open) the embed ──────────────────────────────
   useEffect(() => {
+    // ACP engines have no embeddable web UI — the BuildChat fallback
+    // renders their relayed stream, so never fetch an embed URL.
+    if (isAcp) { setPhase('ready'); return; }
     let cancelled = false;
     setPhase('loading');
     setEmbedError(null);
@@ -94,7 +112,7 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, fetchOpencodeEmbed, attempt]);
+  }, [projectId, fetchOpencodeEmbed, attempt, isAcp]);
 
   // Auto-grow textarea.
   useEffect(() => {
@@ -104,28 +122,81 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [draft]);
 
-  const send = async () => {
-    if (!draft.trim() || inFlightRef.current) return;
-    if (!isStarted) { onAutoStart?.(); return; }
+  const doSend = async (text: string) => {
+    if (inFlightRef.current) return;
     inFlightRef.current = true;
     setBusy(true);
     setSendError(null);
-    const text = draft.trim();
-    setDraft('');
     try {
       await sendBuildMessage(projectId, text);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : String(err));
-      setDraft(text); // restore so the user can retry
+      setDraft((d) => d || text); // restore so the user can retry
     } finally {
       inFlightRef.current = false;
       setBusy(false);
     }
   };
 
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || inFlightRef.current) return;
+    if (!isStarted) {
+      // Queue the message and (re)start the session. The effect below sends
+      // it as soon as the session is live. The draft stays visible as
+      // feedback that something's happening (M11 — no silent drop).
+      pendingSendRef.current = text;
+      onAutoStart?.();
+      return;
+    }
+    setDraft('');
+    await doSend(text);
+  };
+
+  // M11: flush a queued message once the session comes up.
+  useEffect(() => {
+    if (!isStarted) return;
+    const pending = pendingSendRef.current;
+    if (pending && !inFlightRef.current) {
+      pendingSendRef.current = null;
+      setDraft('');
+      void doSend(pending);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStarted]);
+
   const stop = async () => {
     try { await abortBuild(projectId); } catch { /* feedback via WS */ }
   };
+
+  // ─── ACP engine: no iframe — render the BuildChat relay + a badge ─
+  // Claude Code / Codex run on the server (driven over ACP) and expose a
+  // stream, not an embeddable web UI. The `fallback` BuildChat renders the
+  // same studio.opencode.* events the ACP relay publishes; Core still owns
+  // the input + governance. A badge tells the user which engine + where.
+  if (isAcp && fallback) {
+    const label = ACP_ENGINE_LABEL[engine ?? ''] ?? 'Server engine';
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <div style={{
+          padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: '0.7rem', color: 'var(--text-dim)',
+          background: 'color-mix(in srgb, var(--amber) 8%, var(--card))',
+          borderBottom: '1px solid var(--border)', flexShrink: 0,
+        }}>
+          <Cpu size={12} style={{ color: 'var(--amber)' }} />
+          <strong style={{ color: 'var(--text)' }}>{label}</strong>
+          <span aria-hidden>·</span>
+          <span>runs on your server</span>
+          <div style={{ flex: 1 }} />
+          <span style={{
+            color: status === 'running' ? '#22c55e' : status === 'failed' ? 'var(--danger)' : 'var(--text-muted)',
+          }}>{status}</span>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>{fallback}</div>
+      </div>
+    );
+  }
 
   // ─── Degrade to the classic chat if the embed isn't reachable ─
   if (phase === 'error' && fallback) {
@@ -207,10 +278,10 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
               <Loader2 size={16} className="spin" style={{ color: 'var(--amber)' }} />
             )}
             <button onClick={() => setStudioMode('pro')} style={seeDevBtn}>
-              <Eye size={13} /> Ver cómo lo hace por dentro
+              <Eye size={13} /> See how it works under the hood
             </button>
             <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-              (detalle técnico — no necesitas entenderlo)
+              (technical detail — you don't need to understand it)
             </div>
           </div>
         )}
@@ -252,14 +323,14 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
             disabled={inputDisabled}
             placeholder={
               inputDisabled
-                ? '(el agente está trabajando…)'
+                ? '(the agent is working…)'
                 : starting
-                  ? 'Iniciando Build…'
+                  ? 'Starting Build…'
                   : !isStarted
-                    ? 'Pulsa enviar para arrancar el Build…'
+                    ? 'Press send to start the Build…'
                     : mode === 'plan'
-                      ? 'Pregunta o pide ajustes al plan…'
-                      : 'Pídele un ajuste, una nueva feature, o que retome…'
+                      ? 'Ask a question or request changes to the plan…'
+                      : 'Ask for a tweak, a new feature, or to pick things back up…'
             }
             rows={2}
             style={{
@@ -295,23 +366,23 @@ function friendlyStatus(
 ): { icon: string; title: string; sub: string } {
   const total = checklist?.length ?? 0;
   const done = checklist?.filter((c) => c.status === 'done').length ?? 0;
-  const milestones = total > 0 ? `${done} de ${total} pasos listos` : '';
+  const milestones = total > 0 ? `${done} of ${total} steps done` : '';
   if (starting) {
-    return { icon: '🛠️', title: 'Preparando tu app…', sub: 'Estoy montando el espacio de trabajo y el plan. Tarda un momentito.' };
+    return { icon: '🛠️', title: 'Getting your app ready…', sub: 'I\'m setting up the workspace and the plan. Just a moment.' };
   }
   if (status === 'running') {
-    return { icon: '🛠️', title: 'Construyendo tu app…', sub: milestones || 'El Builder está trabajando — verás cómo avanza.' };
+    return { icon: '🛠️', title: 'Building your app…', sub: milestones || 'The Builder is working — you\'ll see it progress.' };
   }
   if (status === 'failed') {
-    return { icon: '⚠️', title: 'Me encontré un obstáculo', sub: 'Mira el detalle técnico para entender qué pasó, o pídeme que lo reintente abajo.' };
+    return { icon: '⚠️', title: 'I hit a snag', sub: 'Check the technical detail to see what happened, or ask me to retry below.' };
   }
   if (!isStarted) {
-    return { icon: '✨', title: 'Listo para empezar', sub: 'Escribe abajo lo que quieres, o aprueba el plan para que empiece a construir.' };
+    return { icon: '✨', title: 'Ready to start', sub: 'Type what you want below, or approve the plan so it starts building.' };
   }
   return {
     icon: '✅',
-    title: 'En pausa, listo para ti',
-    sub: milestones ? `${milestones} · pídeme lo siguiente abajo.` : 'Pídeme un ajuste o lo siguiente abajo.',
+    title: 'Paused, ready for you',
+    sub: milestones ? `${milestones} · ask me for the next thing below.` : 'Ask me for a tweak or the next step below.',
   };
 }
 

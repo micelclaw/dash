@@ -16,12 +16,13 @@ import type { InstalledApp } from '@/types/apps';
 import { useAppActions } from './useAppActions';
 
 // Plantilla de columnas COMPARTIDA por la cabecera y las filas → alineación perfecta.
-// app | descripción | nivel | origen | tier | estado | acciones
-export const LIST_GRID = 'minmax(150px,1.5fr) minmax(130px,2fr) 48px 92px 48px 88px minmax(112px,max-content)';
+// app | descripción | nivel | origen | tier | acciones. (Sin columna de Estado: en
+// Instaladas todas están instaladas y en Disponibles todas disponibles → sería redundante.)
+export const LIST_GRID = 'minmax(150px,1.5fr) minmax(130px,2fr) 48px 92px 48px minmax(112px,max-content)';
 
 const LEVEL_COLOR: Record<string, string> = { '1': 'var(--text-dim)', '2': '#3b82f6', '3': '#a855f7' };
 const ORIGIN_COLOR: Record<string, string> = {
-  Micelclaw: '#06b6d4', OpenClaw: '#9f1239', Registry: '#8b5cf6', Verified: '#22c55e', Community: '#64748b',
+  Micelclaw: '#06b6d4', OpenClaw: '#9f1239', Tuya: '#f59e0b', Community: '#64748b',
 };
 
 interface AppListRowProps {
@@ -45,7 +46,6 @@ export function AppListHeader() {
       <span>Nivel</span>
       <span>Origen</span>
       <span>Tier</span>
-      <span>Estado</span>
       <span>Acciones</span>
     </div>
   );
@@ -105,22 +105,13 @@ export function AppListRow({ app, origin, selected, onClick, onRefresh }: AppLis
         {tier}
       </span>
 
-      {/* Estado */}
-      <span style={{
-        fontSize: '0.6875rem',
-        color: app.status === 'active' ? '#22c55e' : app.status === 'error' ? 'var(--error)' : 'var(--text-muted)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {app.status === 'active' ? '✓ activa' : app.status === 'disabled' ? 'inactiva' : app.status}
-      </span>
-
       {/* Acciones — para toda app (L1/L2/L3) */}
       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
         <IconBtn icon={<Scan size={13} />} title="Scan" onClick={handleScan} />
         <IconBtn icon={<Download size={13} />} title="Export" onClick={handleExport} />
         <IconBtn
           icon={<Power size={13} />}
-          title={app.status === 'active' ? 'Disable' : 'Enable'}
+          title={app.status === 'active' ? 'Desinstalar' : 'Instalar'}
           warn={app.status === 'active'}
           onClick={handleToggleStatus}
         />

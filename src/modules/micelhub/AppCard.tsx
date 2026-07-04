@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { Download, Power, Scan } from 'lucide-react';
+import { Download, Power, Scan, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { InstalledApp } from '@/types/apps';
 import { useAppActions } from './useAppActions';
@@ -32,15 +32,18 @@ const LEVEL_STYLES: Record<string, { border: string; color: string }> = {
 const ORIGIN_STYLES: Record<string, { bg: string; color: string }> = {
   Micelclaw: { bg: '#06b6d415', color: '#06b6d4' },
   OpenClaw: { bg: '#9f123915', color: '#9f1239' },
-  Verified: { bg: '#22c55e15', color: '#22c55e' },
-  Registry: { bg: '#8b5cf615', color: '#8b5cf6' },
+  Tuya: { bg: '#f59e0b15', color: '#f59e0b' },
   Community: { bg: '#64748b15', color: '#64748b' },
 };
 
 export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardProps) {
   const manifest = app.manifest;
   const levelStyle = LEVEL_STYLES[String(app.app_level)] ?? LEVEL_STYLES['1'];
-  const { handleScan, handleExport, handleToggleStatus } = useAppActions(app, onRefresh);
+  const { handleScan, handleExport, handleToggleStatus, handleDelete } = useAppActions(app, onRefresh);
+  // "Borrar" (eliminar del todo: paquete + datos) solo tiene sentido para una app DISPONIBLE
+  // (no activa) con backend propio (L2/L3, no las skills bundled de OpenClaw).
+  const canDelete = app.status !== 'active' && app.app_level >= 2
+    && app.source !== 'openclaw' && app.source !== 'micelhub' && app.source !== 'local';
 
   const isError = app.status === 'error';
 
@@ -174,9 +177,12 @@ export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardPr
         <ActionButton icon={<Scan size={12} />} label="Scan" onClick={handleScan} />
         <ActionButton icon={<Download size={12} />} label="Export" onClick={handleExport} />
         <div style={{ flex: 1 }} />
+        {canDelete && (
+          <ActionButton icon={<Trash2 size={12} />} label="Borrar" onClick={handleDelete} warn />
+        )}
         <ActionButton
           icon={<Power size={12} />}
-          label={app.status === 'active' ? 'Disable' : 'Enable'}
+          label={app.status === 'active' ? 'Desinstalar' : 'Instalar'}
           onClick={handleToggleStatus}
           warn={app.status === 'active'}
         />

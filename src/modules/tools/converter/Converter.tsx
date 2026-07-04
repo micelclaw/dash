@@ -112,7 +112,10 @@ export function Converter() {
       } catch { /* ignore */ }
     }
 
-    fetch('https://api.frankfurter.app/latest?from=EUR')
+    // La API migró de frankfurter.app (301) a frankfurter.dev/v1/. El dominio viejo
+    // devolvía un redirect cross-origin que el fetch del navegador no seguía → feature
+    // rota. frankfurter.dev/v1 responde 200 con el mismo shape ({ base, rates }) y CORS *.
+    fetch('https://api.frankfurter.dev/v1/latest?from=EUR')
       .then(r => r.json())
       .then(data => {
         const rates = { EUR: 1, ...data.rates };

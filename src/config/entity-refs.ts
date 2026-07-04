@@ -306,12 +306,24 @@ export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', '
 // (defensa: si una app declara un `type` ya existente, se ignora esa entrada y
 // se avisa por consola). Tipos con `mention !== false` se suman también a
 // MENTION_DOMAINS para que el editor `@` los ofrezca.
+// Qué app registró cada tipo aportado por una app. Hace idempotente la función
+// de abajo: re-registrar el MISMO tipo desde la MISMA app (boot doble por React
+// StrictMode en dev, remount del Shell, o un re-fetch tras instalar una app) es un
+// no-op silencioso. Solo se avisa en un conflicto REAL: un tipo del core o de OTRA
+// app. (Antes el `if (ENTITY_REF_MAP[type])` avisaba también de las re-invocaciones
+// benignas → "workflow ya existe — ignorado" en cada navegación.)
+const appEntityOwner = new Map<string, string>();
+
 export function registerAppEntityTypes(entries: AppEntityType[]): void {
   for (const entry of entries) {
     if (ENTITY_REF_MAP[entry.type]) {
+      // Re-registro idempotente de la misma app → silencio.
+      if (appEntityOwner.get(entry.type) === entry.app_name) continue;
+      // Conflicto real (tipo del core, o de otra app) → avisar y respetar al dueño.
       console.warn(`[entity-refs] "${entry.type}" (app ${entry.app_name}) ya existe — ignorado`);
       continue;
     }
+    appEntityOwner.set(entry.type, entry.app_name);
     ENTITY_REF_MAP[entry.type] = {
       Icon: lucideLookup(entry.icon),
       color: entry.color,

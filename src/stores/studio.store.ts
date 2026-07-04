@@ -108,8 +108,11 @@ export interface StudioProject {
   build_force_plan_mode: boolean;
   /** Per-project LLM model in `<provider>/<model>` form. Picked in the
    *  create wizard, applies to every phase (Concept / Frontend /
-   *  Foundation / Build). */
+   *  Foundation / Build). Only meaningful when engine === 'opencode'. */
   model: string | null;
+  /** Which engine runs the governed build (default 'opencode'). BYO
+   *  ("open in your own tool") is orthogonal — not an engine value. */
+  engine: StudioEngineId;
   /** S4: catalog design system the user picked as a base for the
    *  Frontend phase (slug, e.g. "material", "stripe"). null = none. */
   design_system: string | null;
@@ -139,6 +142,25 @@ export interface StudioDesignSystem {
   n_colors: number;
 }
 
+/** The engines that can RUN a governed Studio build (GET /studio/engines).
+ *  BYO is orthogonal and not part of this union. */
+export type StudioEngineId = 'opencode' | 'acp_claude' | 'acp_codex';
+
+export interface StudioEngineInfo {
+  id: StudioEngineId;
+  label: string;
+  kind: 'builtin' | 'acp';
+  ready: boolean;
+  blurb: string;
+  reason?: string;
+  requires?: string[];
+  detail: {
+    cli_installed: boolean | null;
+    vendor_auth: boolean | null;
+    acpx_enabled: boolean;
+  };
+}
+
 export interface CreateProjectInput {
   name: string;
   description?: string;
@@ -146,12 +168,16 @@ export interface CreateProjectInput {
   /** `<provider>/<model>` identifier picked in the create wizard.
    *  Applies to every LLM call for this project. */
   model?: string | null;
+  /** Which engine runs the build (default 'opencode' server-side). */
+  engine?: StudioEngineId;
 }
 
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
   icon?: string | null;
+  model?: string | null;
+  engine?: StudioEngineId;
 }
 
 // ─── Scoping (Phase 2) types ────────────────────────────────────────
@@ -192,6 +218,11 @@ export type ScopingAnswers = Record<string, string>;
 interface StudioState {
   projects: StudioProject[];
   loading: boolean;
+  /** True once fetchProjects has completed at least once (success OR error).
+   *  Lets consumers distinguish "still loading" from "loaded, not found" so a
+   *  deep-link to a deleted project shows an error instead of an infinite
+   *  spinner. */
+  fetched: boolean;
   error: string | null;
 
   /** Bundled-template metadata cache. Populated lazily on first
@@ -228,6 +259,13 @@ interface StudioState {
   /** S4 Fase C: derived `:root`+@theme CSS for a catalog system, used by
    *  the visual preview (swatch + sample component in an isolated iframe). */
   fetchDesignSystemTokens: (slug: string) => Promise<string>;
+  /** Frontend mockups: dedicated step that generates rendered HTML screens
+   *  ("así se verá tu app") from the wireframes + DESIGN.md. Persists them as
+   *  the `claw-mockups` comment the doc parser reads. */
+  generateMockups: (projectId: string) => Promise<{ screens: Array<{ name: string; html: string }>; fell_back: boolean }>;
+  /** The `:root { … }` tokens CSS derived from the project's OWN DESIGN.md
+   *  (in doc_frontend) — used to render the mockups on-brand. '' when none. */
+  fetchProjectDesignTokens: (projectId: string) => Promise<string>;
   /** S6: the living-app change history (real events only). */
   fetchProjectEvents: (projectId: string) => Promise<StudioProjectEvent[]>;
 
@@ -293,12 +331,38 @@ interface StudioState {
    *  to the agent. Used by the dash to render an empty-state preview
    *  in the chat before the user clicks Start. */
   fetchBuildWelcomePreview: (projectId: string) => Promise<StudioBuildWelcomePreview>;
+
+  /** V3 A2 — fetch the BYO-via-MCP connection info for the project so the
+   *  user can wire their own Claude Code / Cursor to the studio-context
+   *  MCP. Writes a `.mcp.json` into the workspace server-side and returns
+   *  the workspace path + MCP url/bearer + AGENTS.md path. */
+  fetchConnect: (projectId: string) => Promise<ConnectInfo>;
 }
 
 export interface StudioBuildWelcomePreview {
   prompt: string;
   mode: 'plan';
   workspace_path: string;
+}
+
+/** V3 A2 — payload returned by POST /studio/projects/:id/connect.
+ *  Everything the user needs to wire their OWN Claude Code / Cursor to
+ *  the project's studio-context MCP (BYO via MCP, NOT ACP — OpenCode
+ *  does not participate in this path; the user spends their own Claude
+ *  subscription, Claude Code talking directly to Core's MCP). */
+export interface ConnectInfo {
+  /** Absolute on-disk workspace dir to open in VS Code with Claude Code. */
+  workspace_path: string;
+  /** Path of the AGENTS.md contract the external agent reads. */
+  agents_md_path: string;
+  /** Path of the `.mcp.json` Core wrote into the workspace. */
+  mcp_config_path: string;
+  /** MCP server name Claude Code auto-discovers (e.g. "studio-context"). */
+  mcp_server_name: string;
+  /** HTTP URL of the studio-context MCP endpoint. */
+  mcp_url: string;
+  /** Bearer token to authenticate against the MCP. */
+  mcp_bearer: string;
 }
 
 // ─── Studio v2 wire types ─────────────────────────────────────────
@@ -491,6 +555,7 @@ interface ApiEnvelope<T> {
 export const useStudioStore = create<StudioState>()((set, get) => ({
   projects: [],
   loading: false,
+  fetched: false,
   error: null,
   templates: null,
 
@@ -509,10 +574,10 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await api.get<ApiEnvelope<StudioProject[]>>('/studio/projects');
-      set({ projects: res.data ?? [], loading: false });
+      set({ projects: res.data ?? [], loading: false, fetched: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load Studio projects';
-      set({ error: message, loading: false });
+      set({ error: message, loading: false, fetched: true });
     }
   },
 
@@ -667,6 +732,22 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
   async fetchDesignSystemTokens(slug) {
     const res = await api.get<ApiEnvelope<{ tokens_css: string }>>(
       `/studio/design-systems/${encodeURIComponent(slug)}/tokens`,
+    );
+    return res.data.tokens_css;
+  },
+
+  async generateMockups(projectId) {
+    const res = await api.post<ApiEnvelope<{ screens: Array<{ name: string; html: string }>; fell_back: boolean }>>(
+      `/studio/projects/${projectId}/mockups`,
+      {},
+      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
+    );
+    return res.data;
+  },
+
+  async fetchProjectDesignTokens(projectId) {
+    const res = await api.get<ApiEnvelope<{ tokens_css: string }>>(
+      `/studio/projects/${projectId}/design-tokens`,
     );
     return res.data.tokens_css;
   },
@@ -925,7 +1006,24 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
       `/studio/projects/${projectId}/build/settings`,
       settings,
     );
-    return res.data;
+    const s = res.data;
+    // M8: reflect the saved caps + plan-mode into the project row so every
+    // consumer (settings popover, BuildPhase) sees fresh values without a
+    // separate refetch.
+    set((state) => ({
+      projects: state.projects.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              build_token_cap: s.build_token_cap,
+              build_turn_cap: s.build_turn_cap,
+              build_force_plan_mode: s.build_force_plan_mode,
+              ...(s.model !== undefined && s.model !== null ? { model: s.model } : {}),
+            }
+          : p,
+      ),
+    }));
+    return s;
   },
 
   async fetchBuildChecklist(projectId) {
@@ -1013,6 +1111,18 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const res = await api.get<ApiEnvelope<StudioBuildRecentEvents>>(
       `/studio/projects/${projectId}/build/recent-events`,
       { since: sinceSeq },
+    );
+    return res.data;
+  },
+
+  async fetchConnect(projectId) {
+    // Empty `{}` body is REQUIRED — Fastify rejects a missing body on a
+    // `content-type: application/json` POST. The endpoint materializes the
+    // workspace + writes `.mcp.json`, so give it a generous timeout.
+    const res = await api.post<ApiEnvelope<ConnectInfo>>(
+      `/studio/projects/${projectId}/connect`,
+      {},
+      { timeout: 60_000 },
     );
     return res.data;
   },

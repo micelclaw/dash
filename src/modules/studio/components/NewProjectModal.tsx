@@ -18,18 +18,22 @@
 // this choice.
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { X, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore } from '@/stores/studio.store';
+import { useStudioStore, type StudioEngineId } from '@/stores/studio.store';
 import { api } from '@/services/api';
+import { EnginePicker } from './EnginePicker';
 
 interface ModelEntry {
   id: string;
   provider: string;
   model: string;
-  is_default: boolean;
-  is_fallback: boolean;
-  status: 'available' | 'no_auth' | string;
+  label?: string;
+  recommended?: boolean;
+  is_default?: boolean;
+  is_fallback?: boolean;
+  status?: 'available' | 'no_auth' | string;
 }
 interface ApiEnvelope<T> { data: T }
 interface ModelsResponse { models: ModelEntry[]; default_model?: string }
@@ -42,9 +46,11 @@ interface NewProjectModalProps {
 
 export function NewProjectModal({ open, onClose, onCreated }: NewProjectModalProps) {
   const createProject = useStudioStore((s) => s.createProject);
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [model, setModel] = useState<string>('');
+  const [engine, setEngine] = useState<StudioEngineId>('opencode');
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -55,20 +61,21 @@ export function NewProjectModal({ open, onClose, onCreated }: NewProjectModalPro
       setName('');
       setDescription('');
       setModel('');
+      setEngine('opencode');
       setModels([]);
       setModelsError(null);
       setSubmitting(false);
       // Defer focus to next frame so the modal is fully painted
       setTimeout(() => inputRef.current?.focus(), 50);
-      // Pull authed models so we can populate the picker.
+      // Pull the models the Studio engine can ACTUALLY reach (filtered to
+      // OpenCode's synthesized providers — NOT the full gateway catalog,
+      // which lists models OpenCode has no key for → V3-8 silent hangs).
       void (async () => {
         try {
-          const res = await api.get<ApiEnvelope<ModelsResponse>>('/gateway/models');
-          const all = res.data.models ?? [];
-          const available = all.filter((m) => m.status === 'available');
+          const res = await api.get<ApiEnvelope<ModelsResponse>>('/studio/models');
+          const available = res.data.models ?? [];
           setModels(available);
-          // Pre-select the system default if it's available, else the
-          // first authed model. The user can change before submitting.
+          // Pre-select the recommended default; the user can change it.
           const def = res.data.default_model && available.find((m) => m.id === res.data.default_model)
             ? res.data.default_model
             : available[0]?.id ?? '';
@@ -91,25 +98,33 @@ export function NewProjectModal({ open, onClose, onCreated }: NewProjectModalPro
 
   if (!open) return null;
 
-  const canSubmit = name.trim().length > 0 && model.length > 0 && !submitting;
+  // OpenCode (built-in) needs a model; the ACP engines run with their own.
+  const canSubmit = name.trim().length > 0 && (engine !== 'opencode' || model.length > 0) && !submitting;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function doCreate(byo?: boolean) {
     if (!canSubmit) return;
     setSubmitting(true);
     try {
       const created = await createProject({
         name: name.trim(),
         description: description.trim() || undefined,
-        model,
+        model: engine === 'opencode' ? model : null,
+        engine,
       });
-      toast.success(`Project "${created.name}" created`);
+      toast.success(byo
+        ? `Project "${created.name}" created — open it in your own tool from the build screen.`
+        : `Project "${created.name}" created`);
       onCreated(created.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create project';
       toast.error(message);
       setSubmitting(false);
     }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void doCreate(false);
   }
 
   return (
@@ -201,32 +216,23 @@ export function NewProjectModal({ open, onClose, onCreated }: NewProjectModalPro
           display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)',
           marginBottom: 6, fontWeight: 500,
         }}>
-          LLM model <span style={{ color: 'var(--danger)' }}>*</span>
+          Engine
         </label>
-        <select
-          value={model}
-          onChange={(e) => setModel(e.target.value)}
-          style={{
-            width: '100%', boxSizing: 'border-box', padding: '8px 12px',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-            fontSize: '0.875rem', fontFamily: 'var(--font-mono)', outline: 'none',
-            marginBottom: 4,
-          }}
-        >
-          {models.length === 0 && (
-            <option value="" disabled>{modelsError ? 'failed to load' : 'loading…'}</option>
-          )}
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.id}{m.is_default ? '  (system default)' : ''}
-            </option>
-          ))}
-        </select>
+        <EnginePicker
+          variant="compact"
+          engine={engine}
+          onEngineChange={setEngine}
+          model={model}
+          onModelChange={setModel}
+          models={models}
+          onConfigureEngine={() => { onClose(); navigate('/settings/studio-engines'); }}
+          onChooseByo={() => { void doCreate(true); }}
+          disabled={submitting}
+        />
         <p style={{
-          margin: '0 0 16px', fontSize: '0.65rem', color: 'var(--text-muted)', lineHeight: 1.4,
+          margin: '8px 0 16px', fontSize: '0.65rem', color: 'var(--text-muted)', lineHeight: 1.4,
         }}>
-          Se aplica a TODAS las fases (Concept, Frontend, Foundation, Build). Sin fallback automático — si el provider falla, el proyecto falla y tendrás que cambiar el modelo desde la edición del proyecto.
+          The engine builds your app across every phase. Only models the build engine (OpenCode) can actually reach are listed. You can change it later from the project's build settings.
         </p>
 
         {modelsError && (

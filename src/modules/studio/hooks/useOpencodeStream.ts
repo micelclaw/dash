@@ -111,7 +111,6 @@ export interface OpencodeStreamState {
 }
 
 interface OpencodeStreamApi extends OpencodeStreamState {
-  refreshFiles: () => void;
   refreshMessages: () => Promise<void>;
   refreshChecklist: () => Promise<void>;
   /** Push an optimistic user-role bubble. Used by BuildChat.send() so
@@ -136,6 +135,12 @@ export function useOpencodeStream(
   initialStatus: StreamStatus = 'idle',
 ): OpencodeStreamApi {
   const client = useWebSocketStore((s) => s.client);
+  // A8: the WS `client` instance is REUSED across reconnects, so an effect
+  // keyed only on `client` never re-runs when the socket drops and comes
+  // back. Track the connection status too, and re-backfill on reconnect so a
+  // `idle`/`message_complete` that fired during the gap isn't lost (which
+  // would otherwise strand the status on 'running').
+  const wsStatus = useWebSocketStore((s) => s.status);
   const fetchBuildMessages = useStudioStore((s) => s.fetchBuildMessages);
   const fetchBuildRecentEvents = useStudioStore((s) => s.fetchBuildRecentEvents);
   const fetchBuildChecklist = useStudioStore((s) => s.fetchBuildChecklist);
@@ -252,8 +257,12 @@ export function useOpencodeStream(
   }, [projectId, refreshMessages, refreshChecklist, refreshState]);
 
   // ─── backfill recent events on (re)connect ─────────────────────
+  // Re-runs whenever the socket (re)connects — the `wsStatus` dep is what
+  // makes reconnect recovery work (A8), since `client` stays the same
+  // instance. The fetch is keyed off `lastSeqRef`, so it only pulls the gap
+  // and is safe to run repeatedly.
   useEffect(() => {
-    if (!projectId || !client) return;
+    if (!projectId || !client || wsStatus !== 'connected') return;
     let cancelled = false;
     void (async () => {
       try {
@@ -273,7 +282,7 @@ export function useOpencodeStream(
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, client, fetchBuildRecentEvents]);
+  }, [projectId, client, wsStatus, fetchBuildRecentEvents]);
 
   // ─── live WS subscription ──────────────────────────────────────
   useEffect(() => {
@@ -618,11 +627,6 @@ export function useOpencodeStream(
   }
 
   // ─── exposed API ───────────────────────────────────────────────
-  const refreshFiles = useCallback(() => {
-    // Bumps recentEdits with a synthetic ts so consumers re-key tree.
-    setRecentEdits((prev) => [...prev]);
-  }, []);
-
   const pushUserMessage = useCallback((text: string): string => {
     const id = `optim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setMessages((prev) => [
@@ -662,11 +666,10 @@ export function useOpencodeStream(
     hydrated,
     checklist,
     mode,
-    refreshFiles,
     refreshMessages,
     refreshChecklist,
     pushUserMessage,
-  }), [status, messages, recentEdits, toolHistory, activeTool, activitySummary, error, silentForMs, tokensUsed, turnsUsed, hydrated, checklist, mode, refreshFiles, refreshMessages, refreshChecklist, pushUserMessage]);
+  }), [status, messages, recentEdits, toolHistory, activeTool, activitySummary, error, silentForMs, tokensUsed, turnsUsed, hydrated, checklist, mode, refreshMessages, refreshChecklist, pushUserMessage]);
 }
 
 // ─── helpers ────────────────────────────────────────────────────────

@@ -21,7 +21,7 @@
 // This component encapsulates that loop so each phase only has to
 // supply (a) the docKey, (b) the trigger callbacks, and (c) the copy.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2, Search, Palette } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioDesignSystem } from '@/stores/studio.store';
@@ -34,16 +34,19 @@ import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
 import { DesignPreview } from '../components/DesignPreview';
 import { FichaView } from '../components/FichaView';
+import { WireframeView } from '../components/WireframeView';
+import { MockupPreview } from '../components/MockupPreview';
 import { parseFicha, fichaHasContent } from '../lib/ficha';
+import { parseVisuals, hasWireframes, hasMockups, defaultTokensFromFeel } from '../lib/mockups';
 import { useStudioMode } from '../hooks/useStudioMode';
 
 // Frontend "feel" moods (§3.4) — each maps to a short hint folded into
 // the generation context so the DESIGN.md comes out in that character.
 const FEELS: { id: string; emoji: string; label: string; hint: string }[] = [
-  { id: 'elegant', emoji: '🖤', label: 'Elegante y sobria', hint: 'tonos neutros, mucho espacio, tipografía fina' },
-  { id: 'fresh', emoji: '🌈', label: 'Fresca y colorida', hint: 'colores vivos, alegre, con energía' },
-  { id: 'warm', emoji: '🧡', label: 'Cálida y cercana', hint: 'tonos cálidos, redondeada, amable' },
-  { id: 'minimal', emoji: '⚪', label: 'Minimal y limpia', hint: 'blanco, esencial, sin adornos' },
+  { id: 'elegant', emoji: '🖤', label: 'Sleek & understated', hint: 'neutral tones, lots of space, fine typography' },
+  { id: 'fresh', emoji: '🌈', label: 'Fresh & colorful', hint: 'vivid colors, cheerful, energetic' },
+  { id: 'warm', emoji: '🧡', label: 'Warm & friendly', hint: 'warm tones, rounded, approachable' },
+  { id: 'minimal', emoji: '⚪', label: 'Minimal & clean', hint: 'white, essential, no clutter' },
 ];
 
 // Human, Spanish chrome for each doc phase in Guided mode (§3.3–3.5).
@@ -55,34 +58,34 @@ const GUIDED_COPY: Record<'concept' | 'frontend' | 'foundation', {
   contextLabel: string; placeholder: string; generate: string; regenerate: string; thinking: string;
 }> = {
   concept: {
-    title: 'Esto es lo que entendí',
-    empty: 'Voy a resumir tu idea en una ficha clara para que la confirmes.',
-    approve: 'Sí, es esto · Continuar',
-    approveHeader: '¿Es esto lo que tenías en mente?',
-    approveBody: 'Si te cuadra, seguimos. Si algo no encaja, dímelo y lo ajusto.',
-    contextLabel: '¿Quieres añadir algo sobre tu idea?',
-    placeholder: 'Ej.: para quién es, qué es lo más importante, algo que ya tengas claro…',
-    generate: 'Preparar mi ficha', regenerate: 'Volver a intentarlo', thinking: 'Entendiendo tu idea…',
+    title: 'Here\'s what I understood',
+    empty: 'I\'ll turn your idea into a clear summary for you to confirm.',
+    approve: 'Yes, that\'s it · Continue',
+    approveHeader: 'Is this what you had in mind?',
+    approveBody: 'If it looks right, we\'ll continue. If something\'s off, tell me and I\'ll adjust it.',
+    contextLabel: 'Want to add anything about your idea?',
+    placeholder: 'E.g.: who it\'s for, what matters most, anything you already have in mind…',
+    generate: 'Prepare my summary', regenerate: 'Try again', thinking: 'Understanding your idea…',
   },
   frontend: {
-    title: 'Cómo se va a ver',
-    empty: 'Vamos a darle aspecto a tu app.',
-    approve: 'Me gusta · Continuar',
-    approveHeader: '¿Te gusta cómo se verá?',
-    approveBody: 'Si te convence, seguimos. Puedes pedirme cambios cuando quieras.',
-    contextLabel: '¿Cómo te imaginas que se vea?',
-    placeholder: 'Ej.: elegante y sobria, fresca y colorida, tus colores o tu logo…',
-    generate: 'Proponer un diseño', regenerate: 'Probar otro', thinking: 'Diseñando…',
+    title: 'How it will look',
+    empty: 'Let\'s give your app a look.',
+    approve: 'I like it · Continue',
+    approveHeader: 'Do you like how it looks?',
+    approveBody: 'If you\'re happy with it, we\'ll continue. You can ask for changes anytime.',
+    contextLabel: 'How do you picture it looking?',
+    placeholder: 'E.g.: sleek and minimal, fresh and colorful, your colors or your logo…',
+    generate: 'Propose a design', regenerate: 'Try another', thinking: 'Designing…',
   },
   foundation: {
-    title: 'El plan de construcción',
-    empty: 'Voy a preparar el plan para construir tu app.',
-    approve: 'Empezar a construir →',
-    approveHeader: '¿Empezamos con este plan?',
-    approveBody: 'Nada se construye hasta que tú lo apruebes. Puedes pedir cambios antes.',
-    contextLabel: '¿Algo que ya tengas decidido o prefieras?',
-    placeholder: 'Ej.: algo que ya tengas decidido, una preferencia, un dato importante…',
-    generate: 'Preparar el plan', regenerate: 'Rehacer el plan', thinking: 'Preparando el plan…',
+    title: 'The build plan',
+    empty: 'I\'ll prepare the plan to build your app.',
+    approve: 'Start building →',
+    approveHeader: 'Shall we start with this plan?',
+    approveBody: 'Nothing gets built until you approve it. You can ask for changes first.',
+    contextLabel: 'Anything you\'ve already decided or prefer?',
+    placeholder: 'E.g.: something you\'ve already decided, a preference, an important detail…',
+    generate: 'Prepare the plan', regenerate: 'Redo the plan', thinking: 'Preparing the plan…',
   },
 };
 
@@ -155,11 +158,23 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({});
   // The bound base system is project state (persisted server-side).
   const selectedSystem = project.design_system;
+  // A3: tokens CSS of the BOUND catalog system, fetched once so the
+  // post-generation mockups can be styled with it (else we fall back to
+  // the feel-derived tokens). null while loading / when no system bound.
+  const [boundTokensCss, setBoundTokensCss] = useState<string | null>(null);
+  // The project's OWN DESIGN.md tokens (from doc_frontend) — the mockups are
+  // rendered with THESE so they look on-brand (e.g. the project's dark theme),
+  // not the generic feel default. '' when the doc has no DESIGN.md yet.
+  const [projectTokensCss, setProjectTokensCss] = useState<string>('');
+  const [generatingMockups, setGeneratingMockups] = useState(false);
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
   const searchDesignSystems = useStudioStore((s) => s.searchDesignSystems);
   const setDesignSystem = useStudioStore((s) => s.setDesignSystem);
+  const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
+  const generateMockups = useStudioStore((s) => s.generateMockups);
+  const fetchProjectDesignTokens = useStudioStore((s) => s.fetchProjectDesignTokens);
   const [studioMode] = useStudioMode();
   const guided = studioMode === 'guided';
   const gc = GUIDED_COPY[phase];
@@ -168,6 +183,12 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   const [submitting, setSubmitting] = useState(false);
   const [comment, setComment] = useState('');
   const [showCommentBox, setShowCommentBox] = useState(false);
+  // A5: the stream store is global (per project+phase) and survives across
+  // mounts. A stale `status:'done'` from a PREVIOUS visit must not win over
+  // the persisted doc — otherwise, after a rewind clears this phase's doc, we
+  // would render the deleted text as if current. Only trust a 'done' stream
+  // when the generation actually happened during THIS mount.
+  const didGenerateRef = useRef(false);
 
   // Safety-net refetch for tab-navigation cases (user closed and
   // re-opened the tab while streaming). The PRIMARY refetch path is
@@ -195,6 +216,9 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // The backend GET self-heals via `reconcileDocPhaseFromOpencode`,
   // so this is also what triggers recovery when Core died mid-stream.
   useEffect(() => {
+    // New (project, phase) view → any 'done' stream is from a prior visit
+    // until this mount generates again (A5).
+    didGenerateRef.current = false;
     refetchProject(project.id).catch(() => {});
     // Run only on (project, phase) change — NOT on every state.status flip.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -221,9 +245,41 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       setColorOverrides({}); // tweaks belong to a system; reset on change
       await setDesignSystem(project.id, slug);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No pude guardar el diseño base');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t save the base design');
     }
   }
+
+  // A3: fetch the bound catalog system's derived tokens so the mockups can
+  // be styled with the user's actual design (else feel-derived fallback).
+  useEffect(() => {
+    if (!selectedSystem) { setBoundTokensCss(null); return; }
+    let cancelled = false;
+    fetchDesignSystemTokens(selectedSystem)
+      .then((css) => { if (!cancelled) setBoundTokensCss(css); })
+      .catch(() => { if (!cancelled) setBoundTokensCss(null); });
+    return () => { cancelled = true; };
+  }, [selectedSystem, fetchDesignSystemTokens]);
+
+  // The project's OWN DESIGN.md tokens (highest priority for mockups). Fetched
+  // on the frontend phase; deterministic server-side derivation, so it reflects
+  // exactly what the Build phase will use.
+  useEffect(() => {
+    if (phase !== 'frontend') return;
+    let cancelled = false;
+    fetchProjectDesignTokens(project.id)
+      .then((css) => { if (!cancelled) setProjectTokensCss(css || ''); })
+      .catch(() => { if (!cancelled) setProjectTokensCss(''); });
+    return () => { cancelled = true; };
+    // Re-fetch when the frontend doc changes (a new DESIGN.md may have landed).
+  }, [phase, project.id, project.doc_frontend, fetchProjectDesignTokens]);
+
+  // A3: feel-derived tokens for the ALWAYS-ON brand preview + the mockups
+  // fallback. Deterministic, no network — built from the Guided "feel" +
+  // free-text brand colors + the project name.
+  const feelTokensCss = useMemo(
+    () => defaultTokensFromFeel(feel, brandColors, project.name),
+    [feel, brandColors, project.name],
+  );
 
   const isStreaming = state.status === 'starting' || state.status === 'streaming';
   const docFromProject = (project[docKey] ?? '') as string;
@@ -232,15 +288,57 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // markers and the inline JSON of pending questions to the user.
   // `state.displayBody` falls back gracefully when sentinels haven't
   // arrived yet.
-  const displayText = isStreaming || state.status === 'done'
+  // Prefer the live stream while streaming, or a 'done' stream ONLY if it
+  // was produced in this mount (A5); otherwise fall back to the persisted
+  // doc (which is authoritative after a rewind).
+  const streamIsCurrent = isStreaming || (state.status === 'done' && didGenerateRef.current);
+  const displayText = streamIsCurrent
     ? (state.displayBody || state.text)
     : docFromProject;
   const hasDoc = displayText.length > 0;
   // V3-4: extract the structured "ficha" (Concept agreement card / Foundation
   // build plan) the doc-phase emitted as a `<!-- claw-ficha … -->` comment, and
   // strip it from the markdown. Absent/malformed → markdown fallback (no regression).
-  const { ficha, body: cleanDocText } = useMemo(() => parseFicha(displayText), [displayText]);
+  const { ficha, body: fichaBody } = useMemo(() => parseFicha(displayText), [displayText]);
   const showFicha = guided && fichaHasContent(phase, ficha);
+  // A3 (Frontend): extract the wireframes + mockups comments from the body
+  // (after the ficha is already stripped) so the markdown shown behind
+  // "Ver detalles" is clean, and we render the visuals as cards/iframes.
+  // Frontend has NO ficha, so `fichaBody` === the body for this phase.
+  const visuals = useMemo(() => parseVisuals(fichaBody), [fichaBody]);
+  const cleanDocText = visuals.body;
+  const showWireframes = phase === 'frontend' && hasWireframes(visuals);
+  // Resolve the tokens CSS for the mockups, in priority order:
+  //  1. the project's OWN DESIGN.md tokens (what the app is actually built with),
+  //  2. the bound catalog system's tokens (if the user picked one),
+  //  3. the Guided feel-derived default (always non-empty).
+  const mockupTokensCss = projectTokensCss
+    || (selectedSystem ? (boundTokensCss ?? '') : '')
+    || feelTokensCss;
+  const showMockups = phase === 'frontend' && hasMockups(visuals) && mockupTokensCss.length > 0;
+
+  // "Ver cómo se verá (HTML)" — the dedicated mockups step. Shown after the
+  // wireframes when no mockups exist yet (matches the user's flow: ASCII first,
+  // then the HTML on demand). One click → generate → re-render with MockupPreview.
+  async function handleGenerateMockups() {
+    if (generatingMockups) return;
+    setGeneratingMockups(true);
+    try {
+      const out = await generateMockups(project.id);
+      await refetchProject(project.id);
+      try { setProjectTokensCss((await fetchProjectDesignTokens(project.id)) || ''); } catch { /* keep prior */ }
+      if (out.fell_back) {
+        toast('Mockups ready (basic version — the model didn\'t return full HTML).');
+      } else {
+        toast.success('Bocetos en HTML listos');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No pude generar los bocetos');
+    } finally {
+      setGeneratingMockups(false);
+    }
+  }
+  const canGenerateMockups = phase === 'frontend' && showWireframes && !showMockups;
   // Questions: prefer the LIVE-streamed ones (parsed incrementally
   // from the WS token stream as soon as the JSON block closes), fall
   // back to the persisted ones from the project row when not streaming.
@@ -250,6 +348,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     if (submitting || isStreaming) return;
     try {
       setSubmitting(true);
+      didGenerateRef.current = true; // A5: this mount owns the stream now
       reset();
       // First-turn special case: if no answers were provided AND the
       // user typed something into the initial-context textarea, fold
@@ -304,7 +403,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // Refetch so the new status (and the new phase component) takes
       // over without requiring a page refresh.
       await refetchProject(project.id);
-      toast.success(guided ? '¡Listo! Pasamos a lo siguiente' : 'Phase approved');
+      toast.success(guided ? 'Done! On to the next step' : 'Phase approved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : (guided ? 'No se pudo continuar' : 'Approval failed'));
     } finally {
@@ -335,7 +434,13 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           </span>
         )}
         {isPast ? (
-          <RewindButton projectId={project.id} target={phase} />
+          // Rewind is blocked for protected states (published/frozen/archived) —
+          // showing it there would error (same class as the living-app B-2 bug).
+          // A published app is reviewed read-only; "go back to edit" only applies
+          // to a project still mid-journey. Pass `guided` for Spanish copy.
+          ['published', 'frozen', 'archived'].includes(project.status)
+            ? null
+            : <RewindButton projectId={project.id} target={phase} guided={guided} />
         ) : isStreaming ? (
           <button
             type="button"
@@ -374,7 +479,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             <FriendlyError
               title="No pude prepararlo esta vez"
               message="Casi siempre se arregla al reintentar."
-              detail={state.error}
+              detail={state.error ?? undefined}
               actions={[{ label: 'Reintentar', onClick: () => { void handleGenerate(); }, primary: true }]}
             />
           ) : (
@@ -482,7 +587,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                   {dsLoading && dsResults.length === 0 && (
                     <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Buscando…</div>
                   )}
-                  {selectedSystem && (
+                  {selectedSystem ? (
                     <>
                       <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                         Diseño base: <strong style={{ color: 'var(--text)' }}>{selectedSystem}</strong>
@@ -502,6 +607,11 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                         onResetOverrides={() => setColorOverrides({})}
                       />
                     </>
+                  ) : (
+                    /* A3: ALWAYS-ON brand preview — even with no system
+                       picked, the user sees how their "feel" + colors look.
+                       Feel-derived tokens, no fetch (tokensCssOverride). */
+                    <DesignPreview tokensCssOverride={feelTokensCss} />
                   )}
                   <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                     Siempre incluyo accesibilidad, responsive, buenos nombres y patrones de componentes.
@@ -588,7 +698,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 letterSpacing: '0.05em', color: 'var(--text-muted)',
                 fontWeight: 600, marginBottom: 4,
               }}>
-                {guided ? 'Cómo lo está pensando' : 'Builder reasoning'} {isStreaming && (guided ? '· en directo…' : '· streaming…')}
+                {guided ? 'How it\'s thinking' : 'Builder reasoning'} {isStreaming && (guided ? '· live…' : '· streaming…')}
               </summary>
               <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginTop: 6 }}>
                 {state.reasoning}
@@ -596,18 +706,14 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             </details>
           )}
 
+          {/* Concept / Foundation in Guided: structured "ficha" card +
+              technical markdown behind a "Ver detalles" toggle. */}
           {hasDoc && showFicha && ficha && (
             <>
               <FichaView phase={phase} ficha={ficha} />
               {cleanDocText.length > 0 && (
                 <details style={{ marginBottom: 8 }}>
-                  <summary style={{
-                    cursor: 'pointer', fontSize: '0.7rem', textTransform: 'uppercase',
-                    letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600,
-                    listStyle: 'none', userSelect: 'none',
-                  }}>
-                    Ver detalles
-                  </summary>
+                  <summary style={detailsSummary}>Ver detalles</summary>
                   <div style={{ marginTop: 8 }}>
                     <StreamingMarkdown text={cleanDocText} streaming={false} />
                   </div>
@@ -615,11 +721,76 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
               )}
             </>
           )}
-          {hasDoc && !showFicha && <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />}
+
+          {/* A3 — Frontend visual previews. In Guided: the wireframe cards +
+              real mockups come FIRST and the technical markdown sits behind
+              "Ver detalles". In Pro: markdown stays primary, visuals below. */}
+          {hasDoc && phase === 'frontend' && !showFicha && (
+            guided ? (
+              <>
+                {showWireframes && <WireframeView screens={visuals.wireframes} />}
+                {canGenerateMockups && (
+                  <MockupsCta generating={generatingMockups} onClick={handleGenerateMockups} guided />
+                )}
+                {showMockups && <MockupPreview screens={visuals.mockups} tokensCss={mockupTokensCss} />}
+                {cleanDocText.length > 0 && (
+                  (showWireframes || showMockups) ? (
+                    <details style={{ marginBottom: 8 }}>
+                      <summary style={detailsSummary}>Ver detalles</summary>
+                      <div style={{ marginTop: 8 }}>
+                        <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
+                      </div>
+                    </details>
+                  ) : (
+                    <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
+                  )
+                )}
+              </>
+            ) : (
+              <>
+                <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
+                {showWireframes && <WireframeView screens={visuals.wireframes} />}
+                {canGenerateMockups && (
+                  <MockupsCta generating={generatingMockups} onClick={handleGenerateMockups} />
+                )}
+                {showMockups && <MockupPreview screens={visuals.mockups} tokensCss={mockupTokensCss} />}
+              </>
+            )
+          )}
+
+          {/* Everything else (Concept/Foundation without a ficha, e.g. Pro
+              mode or malformed payload) — plain markdown fallback. */}
+          {hasDoc && phase !== 'frontend' && !showFicha && (
+            <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
+          )}
 
           {isStreaming && state.text.length === 0 && state.reasoning.length === 0 && (
-            <div style={loadingHint}>
-              <Loader2 size={14} className="animate-spin" /> {guided ? gc.thinking : 'Studio Builder is thinking…'}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 0' }}>
+              <div style={loadingHint}>
+                <Loader2 size={14} className="animate-spin" /> {guided ? gc.thinking : 'Studio Builder is thinking…'}
+              </div>
+              {/* UX-1: a document skeleton so the (slow) generating state reads
+                  as "working", not a blank/stuck screen (R-B). */}
+              <div aria-hidden style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 640 }}>
+                {[18, 12, 12, 12, 12, 12, 12].map((h, i) => (
+                  <div
+                    key={i}
+                    className="animate-pulse"
+                    style={{
+                      height: h,
+                      width: `${[55, 92, 84, 96, 70, 88, 44][i]}%`,
+                      borderRadius: 6,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                ))}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                {guided
+                  ? 'This usually takes a minute or two — you can leave it open, I\'ll keep working.'
+                  : 'This can take a minute for a complex prompt. Keep this tab open.'}
+              </div>
             </div>
           )}
         </div>
@@ -765,3 +936,45 @@ const loadingHint: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8,
   color: 'var(--text-dim)', fontSize: '0.8125rem',
 };
+
+const detailsSummary: React.CSSProperties = {
+  cursor: 'pointer', fontSize: '0.7rem', textTransform: 'uppercase',
+  letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600,
+  listStyle: 'none', userSelect: 'none',
+};
+
+/** CTA shown under the wireframes to generate the rendered HTML mockups
+ *  ("así se verá tu app") — the dedicated mockups step. */
+function MockupsCta({ generating, onClick, guided }: { generating: boolean; onClick: () => void; guided?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+      margin: '10px 0 14px',
+    }}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={generating}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px',
+          background: generating ? 'var(--card)' : 'var(--amber)',
+          color: generating ? 'var(--text-dim)' : '#000',
+          border: generating ? '1px solid var(--border)' : 'none',
+          borderRadius: 'var(--radius-md)', fontSize: '0.85rem', fontWeight: 600,
+          cursor: generating ? 'default' : 'pointer', fontFamily: 'var(--font-sans)',
+        }}
+      >
+        {generating
+          ? <><Loader2 size={15} className="animate-spin" /> Drawing the mockups…</>
+          : <><Sparkles size={15} /> See how it'll look (HTML)</>}
+      </button>
+      {!generating && (
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+          {guided
+            ? 'Turn the sketches above into real screens with your design.'
+            : 'Generate rendered HTML mockups from the wireframes + design tokens.'}
+        </span>
+      )}
+    </div>
+  );
+}

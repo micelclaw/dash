@@ -57,7 +57,7 @@ export function parseFicha(text: string): ParsedFicha {
   if (!m) return { ficha: null, body: text };
   let ficha: Ficha | null = null;
   try {
-    const parsed = JSON.parse(m[1]) as unknown;
+    const parsed = JSON.parse(m[1] ?? '') as unknown;
     if (parsed && typeof parsed === 'object') ficha = parsed as Ficha;
   } catch {
     ficha = null; // malformed → treat as absent (markdown fallback)

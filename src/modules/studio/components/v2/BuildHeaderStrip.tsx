@@ -22,6 +22,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import type { StreamStatus } from '../../hooks/useOpencodeStream';
 import { useStudioStore, type StudioChecklistItem, type StudioOpencodeMode } from '@/stores/studio.store';
+import { useConfirm } from '../../lib/useConfirm';
 
 interface Props {
   status: StreamStatus;
@@ -76,6 +77,7 @@ export function BuildHeaderStrip({
   checklist, turnsHaveStarted, mode, forcePlanMode,
   isStarted, starting, onStart, projectId, guided,
 }: Props) {
+  const { confirm, confirmDialog } = useConfirm();
   const elapsed = startedAt ? formatDuration(Date.now() - startedAt) : '—';
   const dot =
     status === 'running' ? '#22c55e'
@@ -114,8 +116,8 @@ export function BuildHeaderStrip({
     : 'ask';
   const finishStyle = finishMode === 'go' ? btnPrimary : btnAsk;
   const finishTitle =
-    finishMode === 'go' ? 'Continuar a Testing'
-    : `Checklist al ${Math.round(checklistRatio * 100)}% — recomendado ≥80%. Click para forzar.`;
+    finishMode === 'go' ? 'Continue to Testing'
+    : `Checklist at ${Math.round(checklistRatio * 100)}% — recommended ≥80%. Click to force.`;
   const finishBlockedReason = !isStarted
     ? 'Inicia el build primero'
     : mode === 'plan'
@@ -187,23 +189,24 @@ export function BuildHeaderStrip({
           style={starting ? { ...btnPrimary, opacity: 0.6, cursor: 'wait' } : btnPrimary}
           aria-label="Start build"
         >
-          <Play size={11} fill="currentColor" /> {starting ? (guided ? 'Preparando…' : 'Starting…') : (guided ? 'Empezar' : 'Start build')}
+          <Play size={11} fill="currentColor" /> {starting ? 'Starting…' : (guided ? 'Start' : 'Start build')}
         </button>
       )}
       {isStarted && status === 'running' && (
         <button onClick={onStop} style={btnDanger} aria-label="Stop">
-          <Square size={11} fill="currentColor" /> {guided ? 'Pausar' : 'Stop'}
+          <Square size={11} fill="currentColor" /> {guided ? 'Pause' : 'Stop'}
         </button>
       )}
       {finishVisible && (
         <button
           onClick={(e) => {
             if (finishMode === 'ask') {
-              const ok = e.shiftKey || window.confirm(
-                `La checklist está al ${Math.round(checklistRatio * 100)}%. ¿Forzar paso a Testing igualmente?`,
-              );
-              if (!ok) return;
-              onFinish(true);
+              if (e.shiftKey) { onFinish(true); return; }
+              void confirm({
+                title: `The checklist is at ${Math.round(checklistRatio * 100)}%`,
+                body: 'Move to Testing anyway? Some acceptance items are still pending.',
+                confirmLabel: 'Move to Testing',
+              }).then((ok) => { if (ok) onFinish(true); });
               return;
             }
             onFinish(false);
@@ -211,7 +214,7 @@ export function BuildHeaderStrip({
           style={finishStyle}
           title={finishTitle}
         >
-          {guided ? 'Probar mi app' : 'Continuar a Testing'} <ArrowRight size={11} />
+          {guided ? 'Test my app' : 'Continue to Testing'} <ArrowRight size={11} />
         </button>
       )}
       {!finishVisible && finishBlockedReason && isStarted && !guided && (
@@ -230,15 +233,16 @@ export function BuildHeaderStrip({
           <Settings size={13} />
         </button>
       )}
+      {confirmDialog}
     </div>
   );
 }
 
 function guidedStatusLabel(status: StreamStatus, isStarted: boolean): string {
-  if (status === 'running') return 'Construyendo tu app…';
-  if (status === 'failed') return 'Hubo un problema';
-  if (!isStarted) return 'Lista para empezar';
-  return 'En pausa';
+  if (status === 'running') return 'Building your app…';
+  if (status === 'failed') return 'Something went wrong';
+  if (!isStarted) return 'Ready to start';
+  return 'Paused';
 }
 
 function ModeBadge({
@@ -251,12 +255,13 @@ function ModeBadge({
 }) {
   const approveBuildPlan = useStudioStore((s) => s.approveBuildPlan);
   const revertBuildToPlan = useStudioStore((s) => s.revertBuildToPlan);
+  const { confirm, confirmDialog } = useConfirm();
   const [busy, setBusy] = useState(false);
 
   const isPlan = mode === 'plan';
   const fg = isPlan ? 'var(--amber)' : '#22c55e';
   const label = isPlan
-    ? (forcePlanMode ? 'PLAN MODE · forzado' : 'PLAN MODE')
+    ? (forcePlanMode ? 'PLAN MODE · forced' : 'PLAN MODE')
     : 'BUILD MODE';
   const subtitle = isPlan ? 'click to approve' : 'click to revert to plan';
   const tooltip = !canToggle
@@ -270,36 +275,41 @@ function ModeBadge({
   const handleClick = async (): Promise<void> => {
     if (!canToggle || busy) return;
     if (isPlan) {
-      const ok = window.confirm(
-        '¿Aprobar el plan y empezar el build? El agente pasará a ejecutar tool calls (escribir archivos, montar rutas, correr tests).',
-      );
+      const ok = await confirm({
+        title: 'Approve the plan and start building?',
+        body: 'The agent will start running tool calls — writing files, mounting routes, running tests.',
+        confirmLabel: 'Approve & build',
+      });
       if (!ok) return;
       setBusy(true);
       try {
         await approveBuildPlan(projectId);
-        toast.success('Plan aprobado — el Builder empieza a ejecutar.');
+        toast.success('Plan approved — the Builder is starting.');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        toast.error(`No se pudo aprobar: ${msg}`);
+        toast.error(`Couldn't approve: ${msg}`);
       } finally { setBusy(false); }
     } else {
-      const ok = window.confirm(
-        '¿Volver a PLAN MODE? El próximo mensaje irá al planner read-only — útil para extender o revisar el plan. La sesión sigue activa.',
-      );
+      const ok = await confirm({
+        title: 'Back to plan mode?',
+        body: 'The next message goes to the read-only planner — useful to extend or revise the plan. The session stays active.',
+        confirmLabel: 'Back to plan',
+      });
       if (!ok) return;
       setBusy(true);
       try {
         await revertBuildToPlan(projectId);
-        toast.success('Sesión revertida a plan-mode. El siguiente mensaje no tocará archivos.');
+        toast.success('Session reverted to plan mode. The next message won\'t touch files.');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        toast.error(`No se pudo revertir: ${msg}`);
+        toast.error(`Couldn't revert: ${msg}`);
       } finally { setBusy(false); }
     }
   };
 
   const interactive = canToggle && !busy;
   return (
+    <>
     <button
       type="button"
       onClick={handleClick}
@@ -330,6 +340,8 @@ function ModeBadge({
         <span style={{ opacity: 0.75, fontWeight: 500 }}>· {subtitle}</span>
       )}
     </button>
+    {confirmDialog}
+    </>
   );
 }
 

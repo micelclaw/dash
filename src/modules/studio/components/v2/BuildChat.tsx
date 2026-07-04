@@ -20,8 +20,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Send, Square, Loader2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { useStudioStore } from '@/stores/studio.store';
 import type { ChatMessage, ChatTextPart, ChatToolPart, StreamStatus } from '../../hooks/useOpencodeStream';
 import { ToolCallCard } from './ToolCallCard';
@@ -203,10 +202,10 @@ export function BuildChat({
               : starting
                 ? 'Iniciando Build…'
                 : !isStarted
-                  ? 'Pulsa Send para reintentar el arranque…'
+                  ? 'Press Send to retry starting…'
                   : mode === 'plan'
-                    ? 'Pregunta o pide ajustes al plan…'
-                    : 'Pídele un ajuste, una nueva feature, o que retome…'
+                    ? 'Ask a question or request changes to the plan…'
+                    : 'Ask for a tweak, a new feature, or to pick things back up…'
           }
           rows={2}
           style={{
@@ -244,7 +243,7 @@ function Bubble({ message }: { message: ChatMessage }) {
         fontSize: '0.65rem', color: 'var(--text-muted)',
         textTransform: 'uppercase', letterSpacing: '0.05em',
       }}>
-        <strong>{isUser ? 'Tú' : 'Studio Builder'}</strong>
+        <strong>{isUser ? 'You' : 'Studio Builder'}</strong>
         {message.streaming && <Loader2 size={10} className="spin" />}
         {message.tokensInput !== undefined && (
           <span>· {(message.tokensInput ?? 0) + (message.tokensOutput ?? 0)} tk</span>
@@ -265,7 +264,7 @@ function Bubble({ message }: { message: ChatMessage }) {
           if (p.type === 'text') {
             return (
               <div key={idx} className="markdown" style={{ wordBreak: 'break-word' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{(p as ChatTextPart).text}</ReactMarkdown>
+                <MarkdownRenderer content={(p as ChatTextPart).text} highlight={false} />
               </div>
             );
           }

@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import { X, Save, AlertCircle } from 'lucide-react';
 import { useStudioStore } from '@/stores/studio.store';
+import { api } from '@/services/api';
 
 interface Props {
   projectId: string;
@@ -32,6 +33,8 @@ export function BuildSettingsPanel({ projectId, workspacePath, onClose, onSaved 
   const saveBuildSettings = useStudioStore((s) => s.saveBuildSettings);
 
   const [model, setModel] = useState<string | null>(null);
+  const [initialModel, setInitialModel] = useState<string | null>(null);
+  const [models, setModels] = useState<Array<{ id: string; label?: string; recommended?: boolean }>>([]);
   const [tokenCap, setTokenCap] = useState<number>(2_000_000);
   const [turnCap, setTurnCap] = useState<number>(80);
   const [forcePlan, setForcePlan] = useState<boolean>(false);
@@ -50,7 +53,12 @@ export function BuildSettingsPanel({ projectId, workspacePath, onClose, onSaved 
         setTurnCap(settings.build_turn_cap);
         setForcePlan(settings.build_force_plan_mode);
         setModel(settings.model);
+        setInitialModel(settings.model);
         setError(null);
+        try {
+          const res = await api.get<{ data: { models: Array<{ id: string; label?: string; recommended?: boolean }> } }>('/studio/models');
+          if (!cancelled) setModels(res.data.models ?? []);
+        } catch { /* leave picker empty → falls back to showing current value */ }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -63,6 +71,10 @@ export function BuildSettingsPanel({ projectId, workspacePath, onClose, onSaved 
   async function save() {
     setSaving(true);
     try {
+      if (model && model !== initialModel) {
+        await api.patch(`/studio/projects/${projectId}`, { model });
+        setInitialModel(model);
+      }
       await saveBuildSettings(projectId, {
         build_token_cap: tokenCap,
         build_turn_cap: turnCap,
@@ -120,15 +132,32 @@ export function BuildSettingsPanel({ projectId, workspacePath, onClose, onSaved 
         {!loading && (
           <>
             <Field label="Modelo del proyecto">
-              <code style={{
-                display: 'block', padding: '8px 10px',
-                background: 'var(--surface)', borderRadius: 'var(--radius-sm)',
-                fontSize: '0.75rem', color: 'var(--text)',
-                fontFamily: 'var(--font-mono)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{model ?? '(no model picked)'}</code>
+              {models.length > 0 ? (
+                <select
+                  value={model ?? ''}
+                  onChange={(e) => setModel(e.target.value)}
+                  style={{
+                    display: 'block', width: '100%', padding: '8px 10px',
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: 'var(--text)',
+                  }}
+                >
+                  {/* keep the current value selectable even if not in the reachable list */}
+                  {model && !models.some((m) => m.id === model) && <option value={model}>{model} (actual)</option>}
+                  {models.map((m) => (
+                    <option key={m.id} value={m.id}>{(m.label ?? m.id)}{m.recommended ? ' · recomendado' : ''}</option>
+                  ))}
+                </select>
+              ) : (
+                <code style={{
+                  display: 'block', padding: '8px 10px',
+                  background: 'var(--surface)', borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.75rem', color: 'var(--text)', fontFamily: 'var(--font-mono)',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{model ?? '(no model picked)'}</code>
+              )}
               <p style={hintStyle}>
-                Se eligió al crear el proyecto. Aplica a todas las fases (Concept, Frontend, Foundation, Build). Para cambiarlo edita el proyecto desde la lista de proyectos.
+                Aplica a todas las fases. Solo se listan modelos que el motor de construcción (OpenCode) puede usar de verdad. Se guarda con "Save".
               </p>
             </Field>
 

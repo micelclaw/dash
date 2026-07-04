@@ -15,19 +15,25 @@ import { AssignAppsModal as SharedAssignAppsModal } from '@/components/shared/As
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { RegistryBrowser } from './RegistryBrowser';
+import { PluginsBrowser } from './PluginsBrowser';
+import { useAuthStore } from '@/stores/auth.store';
+import { useSearchParams } from 'react-router';
 import { api } from '@/services/api';
 import * as gwService from '@/services/gateway.service';
 import { getInstalledApps } from '@/services/apps.service';
 import type { InstalledApp } from '@/types/apps';
 
-type Tab = 'available' | 'installed' | 'adapted' | 'registry';
+// Claves internas (se conservan por compat). Etiquetas: 'available'→"Instaladas"
+// (apps activas), 'disponibles'→"Disponibles" (en el sistema, no activas), 'installed'
+// →"Asignadas" (a agentes), 'adapted'→"Adapted", 'registry'→"Registro".
+type Tab = 'available' | 'disponibles' | 'installed' | 'adapted' | 'registry' | 'plugins';
 
-// Origin tag colors — Micelclaw = cian (official), OpenClaw = granate (bundled)
+// Origin tag colors (quién hizo la app). Micelclaw = cian (oficial), OpenClaw = granate
+// (de serie), Tuya = ámbar (creada por ti en Claw Studio), Community = slate (de un tercero).
 const ORIGIN_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   Micelclaw: { bg: '#06b6d412', border: '#06b6d430', text: '#06b6d4' },
   OpenClaw:  { bg: '#9f123912', border: '#9f123930', text: '#9f1239' },
-  Registry:  { bg: '#8b5cf612', border: '#8b5cf630', text: '#8b5cf6' },
-  Verified:  { bg: '#22c55e12', border: '#22c55e30', text: '#22c55e' },
+  Tuya:      { bg: '#f59e0b12', border: '#f59e0b30', text: '#f59e0b' },
   Community: { bg: '#64748b12', border: '#64748b30', text: '#64748b' },
 };
 
@@ -38,17 +44,17 @@ const LEVEL_COLORS: Record<string, { bg: string; border: string; text: string }>
   L3: { bg: '#a855f718', border: '#a855f740', text: '#a855f7' },
 };
 
-// Tier tag colors
+// Tier (plan) tag colors — orden Free · Pro · Plus.
 const TIER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   Free:    { bg: '#22c55e12', border: '#22c55e30', text: '#22c55e' },
-  Plus:    { bg: '#3b82f612', border: '#3b82f630', text: '#3b82f6' },
   Pro:     { bg: '#d4a01712', border: '#d4a01730', text: 'var(--amber)' },
+  Plus:    { bg: '#3b82f612', border: '#3b82f630', text: '#3b82f6' },
 };
 
-// Status tag colors
-const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+// Distintivos (sellos de Micelclaw): Verified (revisada) · Featured (destacada).
+const DISTINTIVO_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   Verified: { bg: '#22c55e12', border: '#22c55e30', text: '#22c55e' },
-  Featured:   { bg: '#f59e0b12', border: '#f59e0b30', text: '#f59e0b' },
+  Featured: { bg: '#f59e0b12', border: '#f59e0b30', text: '#f59e0b' },
 };
 
 function TagButton({ label, active, colors, onClick }: {
@@ -85,15 +91,26 @@ export function Component() {
   } = useAppsStore();
 
   const [tab, setTab] = useState<Tab>('available');
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const [searchParams] = useSearchParams();
+  const focusPlugin = searchParams.get('focus') ?? undefined;
+  // Deep-link support: /micelhub?tab=plugins&focus=acpx (from Studio Engines).
+  useEffect(() => {
+    if (searchParams.get('tab') === 'plugins' && isAdmin) setTab('plugins');
+  }, [searchParams, isAdmin]);
   const [search, setSearch] = useState('');
   const [selectedApp, setSelectedApp] = useState<InstalledApp | null>(null);
   const [editingApp, setEditingApp] = useState<InstalledApp | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
-  // Clickable tag filters
-  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(['Micelclaw', 'OpenClaw', 'Registry', 'Verified', 'Community']));
+  // Clickable tag filters — 4 grupos: Origen · Nivel · Plan · Distintivos.
+  const [originFilters, setOriginFilters] = useState<Set<string>>(new Set(['Micelclaw', 'OpenClaw', 'Tuya', 'Community']));
   const [levelFilters, setLevelFilters] = useState<Set<string>>(new Set(['L1', 'L2', 'L3']));
-  const [tierFilters, setTierFilters] = useState<Set<string>>(new Set(['Free', 'Plus', 'Pro']));
+  const [tierFilters, setTierFilters] = useState<Set<string>>(new Set(['Free', 'Pro', 'Plus']));
+  // Distintivos: no excluyentes, OFF por defecto (sin restringir). Verified activo = solo
+  // verificadas; Featured activo = incluir las destacadas (ocultas por defecto).
+  const [distintivoFilters, setDistintivoFilters] = useState<Set<string>>(new Set());
   const [adaptedCount, setAdaptedCount] = useState(0);
   // Modo de visualización del grid de apps (Installed/Adapted): cuadrícula de tarjetas o lista
   // por columnas. Persistido en localStorage (patrón de Flows view-mode).
@@ -139,25 +156,51 @@ export function Component() {
         .then((r) => new Set(r.data?.disabled ?? []))
         .catch(() => new Set<string>());
 
+      // Las apps con backend (L2/L3) viven en installed_apps con su nivel/autor/estado REALES
+      // (p.ej. el acortador: L3, author='studio', status active/available). skills.status solo ve la
+      // SKILL.md materializada y sintetiza un nivel/origen heurístico (L1·Micelclaw) que MIENTE.
+      // Indexamos TODAS las filas de DB por nombre (cualquier source: studio/local/registry/adapted)
+      // para corregir nivel+autor+estado de la tarjeta (cero tarjetas nuevas: solo enriquece).
+      const installedByName = await getInstalledApps({})
+        .then((r) => new Map((r.data ?? []).map((a) => [a.app_name, a])))
+        .catch(() => new Map<string, InstalledApp>());
+
       // Convert skills.status data to InstalledApp shape for unified rendering
-      const allApps: InstalledApp[] = skills.map((s) => {
+      const seenNames = new Set<string>();
+      const allApps: InstalledApp[] = skills.filter((s) => {
+        // Dedup defensivo por nombre (dos SKILL.md con el mismo `name` → una tarjeta).
+        if (seenNames.has(s.name)) return false;
+        seenNames.add(s.name);
+        return true;
+      }).map((s) => {
         // Determine origin: openclaw-extra = Micelclaw, openclaw-bundled = OpenClaw
-        const source = s.source === 'openclaw-extra' ? 'micelhub' as const
+        const synthSource = s.source === 'openclaw-extra' ? 'micelhub' as const
           : s.source === 'openclaw-bundled' ? 'openclaw' as const
           : 'local' as const;
-        const author = source === 'micelhub' ? 'Micelclaw' : source === 'openclaw' ? 'OpenClaw' : 'Community';
 
         // Determine app state for UI
         const hasOsIssue = (s.missing?.os?.length ?? 0) > 0;
         const needsEnvOrConfig = !s.eligible && (s.missing?.env?.length ?? 0) + (s.missing?.config?.length ?? 0) > 0 && (s.install?.length ?? 0) === 0;
-        const status: 'active' | 'disabled' = (disabledApps.has(s.name) || !s.eligible) ? 'disabled' : 'active';
+
+        // ¿Hay app instalada (DB) homónima? → nivel/autor/source/estado REALES ganan al heurístico.
+        const dbApp = installedByName.get(s.name);
+        const dbManifest = (dbApp?.manifest ?? undefined) as Record<string, unknown> | undefined;
+        const dbAuthor = typeof dbManifest?.author === 'string' ? (dbManifest.author as string) : undefined;
+        const source = (dbApp?.source as typeof synthSource) ?? synthSource;
+        const author = dbAuthor ?? (synthSource === 'micelhub' ? 'Micelclaw' : synthSource === 'openclaw' ? 'OpenClaw' : 'Community');
+
+        // Estado unificado: 'active' = Instalada; 'available' = Disponible (en el sistema,
+        // no activa). Para apps L1 (skills.status), off/no-elegible = 'available'.
+        const status: 'active' | 'available' = dbApp
+          ? (dbApp.status === 'active' ? 'active' : 'available')
+          : ((disabledApps.has(s.name) || !s.eligible) ? 'available' : 'active');
 
         // Determine level: L1 = no external deps, L2 = has deps/install/external env/config
         const hasBins = (s.requirements?.bins?.length ?? 0) > 0 || (s.requirements?.any_bins?.length ?? 0) > 0;
         const hasExternalEnv = (s.requirements?.env ?? []).filter((e: string) => e !== 'CLAW_API_KEY' && e !== 'CLAW_CORE_TOKEN').length > 0;
         const hasConfig = (s.requirements?.config?.length ?? 0) > 0;
         const hasInstall = (s.install?.length ?? 0) > 0;
-        const appLevel = (hasBins || hasExternalEnv || hasConfig || hasInstall) ? 2 : 1;
+        const appLevel = dbApp?.app_level ?? ((hasBins || hasExternalEnv || hasConfig || hasInstall) ? 2 : 1);
 
         return {
           id: `${source}-${s.skill_key ?? s.name}`,
@@ -184,7 +227,10 @@ export function Component() {
               ...((s.install?.length ?? 0) > 0 && !s.eligible && !hasOsIssue ? ['installable'] : []),
               ...(needsEnvOrConfig ? ['needs-setup'] : []),
               ...(hasOsIssue ? ['unsupported'] : []),
-              // All current apps are verified and free
+              // First-party / curated apps (built-in Micelclaw + OpenClaw
+              // skills) are verified. Registry/community/Studio apps are NOT
+              // (see fetchRegistryApps / RegistryBrowser) so the badge means
+              // something instead of appearing on every card.
               'verified',
               'free',
             ],
@@ -196,7 +242,15 @@ export function Component() {
         } as InstalledApp;
       });
 
-      setAvailableApps(allApps);
+      // Apps de DB (L2/L3: studio/local) que NO están en skills.status — típicamente una app
+      // DESINSTALADA (status='available'), cuya SKILL.md se desmaterializó → el Gateway ya no la
+      // lista. Deben seguir apareciendo (en Disponibles) para poder reinstalarla. Las 'registry'
+      // ya vienen por su propio fetch; las 'adapted' tienen su tab.
+      const extras: InstalledApp[] = [...installedByName.values()].filter(
+        (a) => !seenNames.has(a.app_name) && a.source !== 'registry' && a.source !== 'adapted',
+      );
+
+      setAvailableApps([...allApps, ...extras]);
     } catch { /* silent */ }
     finally { setAvailableLoading(false); }
   }, []);
@@ -226,7 +280,8 @@ export function Component() {
             name: a.app_name,
             icon,
             tier_required: (m.tier_required as string) ?? 'free',
-            tags: Array.from(new Set([...(((m.tags as string[]) ?? [])), 'verified', 'free'])),
+            // Registry apps are third-party/community — NOT auto-verified.
+            tags: Array.from(new Set([...(((m.tags as string[]) ?? [])), 'free'])),
             ...(mMod ? { ui: { ...mUi, module: { ...mMod, icon } } } : {}),
           },
         } as unknown as InstalledApp;
@@ -258,7 +313,7 @@ export function Component() {
 
   // Reload data when tab changes
   useEffect(() => {
-    if (tab === 'available') { fetchAvailable(); fetchRegistryApps(); }
+    if (tab === 'available' || tab === 'disponibles') { fetchAvailable(); fetchRegistryApps(); }
     else if (tab === 'installed') fetchInstalled();
     else if (tab === 'adapted') {
       fetchInstalledApps({ source: 'adapted' });
@@ -285,23 +340,30 @@ export function Component() {
   };
 
   const handleRefresh = useCallback(() => {
-    if (tab === 'available') { fetchAvailable(); fetchRegistryApps(); }
+    if (tab === 'available' || tab === 'disponibles') { fetchAvailable(); fetchRegistryApps(); }
     else if (tab === 'installed') fetchInstalled();
     else if (tab === 'adapted') fetchInstalledApps({ source: 'adapted' });
   }, [tab, fetchAvailable, fetchInstalled, fetchRegistryApps, fetchInstalledApps]);
 
-  // Get origin label for an app
+  // ORIGEN de una app (quién la hizo) — mutuamente excluyente, UNA por app.
+  //  • OpenClaw   = de serie con el runtime OpenClaw.
+  //  • Tuya       = la creaste TÚ en Claw Studio (author='studio' / source='studio').
+  //  • Micelclaw  = oficial (author='micelclaw', o las skills/apps de fábrica del repo).
+  //  • Community  = la subió un tercero (registro público / autor ajeno).
+  // (Verified/Registry ya NO son un origen — Verified es un distintivo; Registry es una tab.)
   const getOrigin = (app: InstalledApp): string => {
-    if (app.source === 'openclaw') return 'OpenClaw';
-    if (app.source === 'micelhub') return 'Micelclaw';
-    if (app.source === 'registry') return 'Registry';
-    if (app.source === 'adapted') return 'Micelclaw';
-    if (app.source === 'local') return 'Micelclaw';
+    const author = app.manifest?.author;
+    // El backend ya emite source='studio' (mig 0268); el union AppSource aún no lo recoge.
+    const source: string = app.source;
+    if (source === 'openclaw') return 'OpenClaw';
+    if (author === 'studio' || source === 'studio') return 'Tuya';
+    if (author === 'micelclaw') return 'Micelclaw';
+    if (source === 'micelhub' || source === 'local' || source === 'adapted') return 'Micelclaw';
     return 'Community';
   };
 
-  // Filter apps based on active tag filters + search
-  // Tag filters only apply to the Available tab; Adapted only uses search
+  // Filter apps based on active tag filters + search. Los filtros de tag solo
+  // aplican en las tabs de catálogo (available/installed); Adapted solo usa search.
   const filterApps = (apps: InstalledApp[]): InstalledApp[] => {
     return apps.filter(app => {
       // Search (all tabs)
@@ -311,39 +373,44 @@ export function Component() {
         const desc = (app.manifest?.description ?? '').toLowerCase();
         if (!name.includes(q) && !desc.includes(q)) return false;
       }
-      // Tag filters only for Available tab
-      if (tab !== 'available') return true;
-      // Origin filter
-      const origin = getOrigin(app);
-      if (originFilters.size > 0 && !originFilters.has(origin)) return false;
-      // Level filter
+      if (tab !== 'available' && tab !== 'disponibles') return true;
+      // Origen
+      if (originFilters.size > 0 && !originFilters.has(getOrigin(app))) return false;
+      // Nivel
       const level = `L${app.app_level}`;
       if (levelFilters.size > 0 && !levelFilters.has(level)) return false;
-      // Tier filter
+      // Plan (tier)
       const tierReq = app.manifest?.tier_required ?? 'free';
       const tier = tierReq === 'pro' ? 'Pro' : tierReq === 'plus' ? 'Plus' : 'Free';
       if (tierFilters.size > 0 && !tierFilters.has(tier)) return false;
-      // Verified filter (if active, only show verified apps)
-      if (originFilters.has('Verified') && !(app.manifest?.tags ?? []).includes('verified')) return false;
-      // Featured filter (hide featured apps unless Featured tag is active)
-      const isFeatured = (app.manifest?.tags ?? []).includes('featured');
-      if (isFeatured && !originFilters.has('Featured')) return false;
+      // Distintivos (grupo propio, sellos de Micelclaw): Verified activo = solo verificadas;
+      // las Featured se ocultan salvo que se incluyan explícitamente.
+      const tags = app.manifest?.tags ?? [];
+      if (distintivoFilters.has('Verified') && !tags.includes('verified')) return false;
+      const isFeatured = tags.includes('featured');
+      if (isFeatured && !distintivoFilters.has('Featured')) return false;
       return true;
     });
   };
 
-  const currentApps = tab === 'available' ? availableApps : tab === 'adapted' ? installedApps : [];
-  // En la pestaña "Installed" (antes Available) las apps del registry instaladas (p.ej. n8n)
-  // se mezclan con el resto y pasan por los MISMOS filtros (búsqueda + tags) que cualquier app
-  // — NO son un caso especial. Dedup por nombre: la app del registry (con ciclo de vida) gana
-  // sobre una skill homónima.
-  const registryForTab = tab === 'available' ? registryApps : [];
-  const registryNames = new Set(registryForTab.map((a) => a.app_name));
-  const filtered = filterApps([...registryForTab, ...currentApps.filter((a) => !registryNames.has(a.app_name))]);
-  // Contador del badge "Installed (N)" deduplicado por nombre (igual que el grid: una app del
-  // registry y su skill homónima cuentan UNA vez).
-  const installedCount = new Set([...registryApps.map((a) => a.app_name), ...availableApps.map((a) => a.app_name)]).size;
-  const isLoading = tab === 'available' ? availableLoading : tab === 'installed' ? installedLoading : loading;
+  // Catálogo combinado (skills.status enriquecidas + apps del registry), dedup por nombre
+  // (la fila de DB con ciclo de vida gana sobre una skill homónima). Se PARTE por estado:
+  // Instaladas = activas ('active'); Disponibles = en el sistema pero no activas ('available').
+  const isCatalogTab = tab === 'available' || tab === 'disponibles';
+  const registryNames = new Set(registryApps.map((a) => a.app_name));
+  const catalog = isCatalogTab
+    ? [...registryApps, ...availableApps.filter((a) => !registryNames.has(a.app_name))]
+    : [];
+  const installedList = catalog.filter((a) => a.status === 'active');
+  const disponiblesList = catalog.filter((a) => a.status !== 'active');
+  const currentApps = tab === 'available' ? installedList
+    : tab === 'disponibles' ? disponiblesList
+    : tab === 'adapted' ? installedApps
+    : [];
+  const filtered = filterApps(currentApps);
+  const installedCount = installedList.length;
+  const disponiblesCount = disponiblesList.length;
+  const isLoading = isCatalogTab ? availableLoading : tab === 'installed' ? installedLoading : loading;
 
   // Mobile: push to detail (salvo si hay editor abierto — el editor de :361 gana).
   if (isMobile && selectedApp && !editingApp) {
@@ -403,7 +470,7 @@ export function Component() {
 
           {/* Tabs + toggle de vista (cuadrícula/lista) */}
           <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {(['available', 'installed', 'adapted', 'registry'] as Tab[]).map((t) => (
+            {([...(['available', 'disponibles', 'installed', 'adapted', 'registry'] as Tab[]), ...(isAdmin ? (['plugins'] as Tab[]) : [])]).map((t) => (
               <button key={t} onClick={() => { setTab(t); setSelectedApp(null); }} style={{
                 padding: '6px 12px',
                 background: tab === t ? 'var(--surface-hover)' : 'transparent',
@@ -413,18 +480,18 @@ export function Component() {
                 fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                 fontWeight: tab === t ? 500 : 400,
               }}>
-                {/* Renombre (petición del usuario): la antigua "Available" pasa a
-                    "Installed" (catálogo de skills/apps disponibles+instaladas) y la
-                    antigua "Installed" pasa a "Assigned" (qué se asigna a cada agente).
-                    Las claves internas (available/installed) se conservan. */}
-                {t === 'available' && `Installed${installedCount > 0 ? ` (${installedCount})` : ''}`}
-                {t === 'installed' && `Assigned${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
+                {/* Ciclo de vida: Instaladas (activas) · Disponibles (en el sistema, no
+                    activas) · Asignadas (a agentes) · Adapted · Registro. */}
+                {t === 'available' && `Instaladas${installedCount > 0 ? ` (${installedCount})` : ''}`}
+                {t === 'disponibles' && `Disponibles${disponiblesCount > 0 ? ` (${disponiblesCount})` : ''}`}
+                {t === 'installed' && `Asignadas${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
                 {t === 'adapted' && `Adapted${adaptedCount > 0 ? ` (${adaptedCount})` : ''}`}
-                {t === 'registry' && 'Registry'}
+                {t === 'registry' && 'Registro'}
+                {t === 'plugins' && 'Plugins'}
               </button>
             ))}
             {/* Toggle cuadrícula/lista — solo donde hay grid de tarjetas (Installed/Adapted) */}
-            {(tab === 'available' || tab === 'adapted') && (
+            {(tab === 'available' || tab === 'disponibles' || tab === 'adapted') && (
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
                 {([['grid', LayoutGrid, 'Cuadrícula'], ['list', List, 'Lista']] as const).map(([mode, Icon, title]) => (
                   <button key={mode} onClick={() => changeViewMode(mode)} title={title} style={{
@@ -441,35 +508,35 @@ export function Component() {
             )}
           </div>
 
-          {/* Clickable tag filters */}
-          {tab === 'available' && (
+          {/* Filtros por tag — 4 grupos: Origen · Nivel · Plan · Distintivos */}
+          {(tab === 'available' || tab === 'disponibles') && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-              {/* Origin tags */}
-              {['Micelclaw', 'OpenClaw', 'Community', 'Registry'].map(origin => (
+              {/* Origen */}
+              {['Micelclaw', 'OpenClaw', 'Tuya', 'Community'].map(origin => (
                 <TagButton key={origin} label={origin} active={originFilters.has(origin)}
                   colors={(ORIGIN_COLORS[origin] ?? ORIGIN_COLORS.Community)!}
                   onClick={() => toggleFilter(originFilters, origin, setOriginFilters)} />
               ))}
               <span style={{ color: 'var(--border)', margin: '0 2px' }}>|</span>
-              {/* Level tags */}
+              {/* Nivel */}
               {['L1', 'L2', 'L3'].map(level => (
                 <TagButton key={level} label={level} active={levelFilters.has(level)}
                   colors={LEVEL_COLORS[level]!}
                   onClick={() => toggleFilter(levelFilters, level, setLevelFilters)} />
               ))}
               <span style={{ color: 'var(--border)', margin: '0 2px' }}>|</span>
-              {/* Tier tags */}
-              {['Free', 'Plus', 'Pro'].map(tier => (
+              {/* Plan */}
+              {['Free', 'Pro', 'Plus'].map(tier => (
                 <TagButton key={tier} label={tier} active={tierFilters.has(tier)}
                   colors={TIER_COLORS[tier]!}
                   onClick={() => toggleFilter(tierFilters, tier, setTierFilters)} />
               ))}
               <span style={{ color: 'var(--border)', margin: '0 2px' }}>|</span>
-              {/* Status tags */}
+              {/* Distintivos */}
               {['Verified', 'Featured'].map(st => (
-                <TagButton key={st} label={st === 'Verified' ? '✓ Verified' : st} active={originFilters.has(st)}
-                  colors={STATUS_COLORS[st]!}
-                  onClick={() => toggleFilter(originFilters, st, setOriginFilters)} />
+                <TagButton key={st} label={st === 'Verified' ? '✓ Verified' : st} active={distintivoFilters.has(st)}
+                  colors={DISTINTIVO_COLORS[st]!}
+                  onClick={() => toggleFilter(distintivoFilters, st, setDistintivoFilters)} />
               ))}
             </div>
           )}
@@ -477,7 +544,9 @@ export function Component() {
 
         {/* Content */}
         <ScrollArea className="flex-1">
-          {tab === 'registry' ? (
+          {tab === 'plugins' ? (
+            <PluginsBrowser focusId={focusPlugin} />
+          ) : tab === 'registry' ? (
             <RegistryBrowser
               onSelect={setSelectedApp}
               selectedName={selectedApp?.app_name ?? null}

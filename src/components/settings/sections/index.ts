@@ -38,7 +38,7 @@ import {
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
   Container, Globe2, Terminal, Lock, Eye, Wrench, MemoryStick,
-  Puzzle,
+  Puzzle, Plug, Bot,
 } from 'lucide-react';
 
 import { AccountSection } from './AccountSection';
@@ -96,6 +96,8 @@ import { LoggingSection } from './LoggingSection';
 import { TelemetrySection } from './TelemetrySection';
 import { EnvSection } from './EnvSection';
 import { MyApiKeysSection } from './MyApiKeysSection';
+import { McpConnectionsSection } from './McpConnectionsSection';
+import { StudioEnginesSection } from './StudioEnginesSection';
 
 /** Grupos del sidebar de Settings (las definiciones viven en SettingsPage). */
 export type SettingsGroupId =
@@ -156,6 +158,7 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   'voice':                { component: VoiceSection,                meta: { label: 'Voice', icon: Mic, group: 'ai-agents' } },
   'tool-access-defaults': { component: ToolAccessDefaultsSection,   meta: { label: 'Tool Access', icon: Wrench, group: 'ai-agents' } },
   'chat-tools':           { component: ChatToolsSection,            meta: { label: 'Chat Tools Display', icon: Wrench, group: 'ai-agents' } },
+  'studio-engines':       { component: StudioEnginesSection,        meta: { label: 'Studio Engines', icon: Bot, group: 'ai-agents' } },
   'memory-search':        { component: MemorySearchSection,         meta: { label: 'Memory', icon: Brain, group: 'ai-agents' } },
   'active-memory':        { component: ActiveMemorySection,         meta: { label: 'Memoria Activa', icon: Brain, group: 'ai-agents' } },
   'preferences':          { component: PreferencesSection,          meta: { label: 'Learned Preferences', icon: Brain, group: 'ai-agents' } },
@@ -176,6 +179,7 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   'network':              { component: NetworkSection,              meta: { label: 'Network', icon: Network, group: 'connectivity' } },
   'domains':              { component: DomainsSection,              meta: { label: 'Domains', icon: Globe2, group: 'connectivity' } },
   'gateway-auth':         { component: GatewayAuthSection,          meta: { label: 'Gateway', icon: Radio, group: 'connectivity' } },
+  'mcp-connections':      { component: McpConnectionsSection,        meta: { label: 'MCP Connections', icon: Plug, group: 'connectivity' } },
   'companions':           { component: CompanionsSection,           meta: { label: 'Apps acompañantes', icon: Puzzle, group: 'connectivity' } },
 
   // ── System ──

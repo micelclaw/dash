@@ -46,9 +46,9 @@ const LEVEL_COPY: Record<string, { label: string; description: string; color: st
 
 // Human, code-free descriptions for Guided mode.
 const LEVEL_HUMAN: Record<string, string> = {
-  L1: 'Una habilidad para tu asistente — sin pantalla propia.',
-  L2: 'Una app con su propia pantalla donde se guardan tus datos.',
-  L3: 'Una app que se conecta con otro servicio o herramienta.',
+  L1: 'A skill for your assistant — no screen of its own.',
+  L2: 'An app with its own screen where your data lives.',
+  L3: 'An app that connects to another service or tool.',
 };
 
 export function ScopeSummary({ classification, onBack, onConfirm, submitting, guided }: Props) {
@@ -67,7 +67,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
           margin: '6px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)',
         }}>
           {guided
-            ? 'He entendido tu idea. Si te cuadra, empiezo a darle forma. Podrás cambiar cosas más adelante.'
+            ? 'I understood your idea. If it looks right, I\'ll start shaping it. You can change things later.'
             : "I've classified your idea using the information you provided. If everything fits, we can move on to the exploration phase."}
         </p>
       </div>
@@ -84,7 +84,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 4,
         }}>
-          {guided ? 'Qué será tu app' : 'Level'}
+          {guided ? 'What your app will be' : 'Level'}
         </div>
         {!guided && (
           <div style={{
@@ -112,11 +112,11 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
           fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
           color: 'var(--text-muted)', marginBottom: 8,
         }}>
-          {guided ? 'Lo que incluye' : 'Detected components'}
+          {guided ? 'What it includes' : 'Detected components'}
         </div>
         {detected_components.length === 0 ? (
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            {guided ? 'Lo esencial, sin complicaciones de más.' : 'No additional components — just the base skill.'}
+            {guided ? 'The essentials, no extra complications.' : 'No additional components — just the base skill.'}
           </div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -153,10 +153,10 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
             fontSize: '0.6875rem', textTransform: 'uppercase', letterSpacing: '0.04em',
             color: 'var(--text-muted)',
           }}>
-            {guided ? 'Coste estimado' : 'Estimated credits'}
+            {guided ? 'Estimated cost' : 'Estimated credits'}
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>
-            ~{credits_estimate} {guided ? 'créditos de IA' : 'credits'}
+            ~{credits_estimate} {guided ? 'AI credits' : 'credits'}
           </div>
         </div>
       </div>
@@ -175,7 +175,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
             fontFamily: 'var(--font-sans)',
           }}
         >
-          <ChevronLeft size={14} /> {guided ? 'Cambiar algo' : 'Change answers'}
+          <ChevronLeft size={14} /> {guided ? 'Change something' : 'Change answers'}
         </button>
         <button
           type="button"
@@ -192,7 +192,7 @@ export function ScopeSummary({ classification, onBack, onConfirm, submitting, gu
             fontFamily: 'var(--font-sans)',
           }}
         >
-          {submitting ? (guided ? 'Preparando…' : 'Saving…') : (guided ? 'Sí, es esto · Continuar →' : 'Start exploration →')}
+          {submitting ? (guided ? 'Preparing…' : 'Saving…') : (guided ? 'Yes, that\'s it · Continue →' : 'Start exploration →')}
         </button>
       </div>
     </div>

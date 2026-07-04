@@ -26,8 +26,15 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
   const [hovered, setHovered] = useState(false);
   const ProviderIcon = getProviderIcon(entry.provider);
   return (
-    <button
+    // Card clicable como <div role="button">, NO <button>: contiene un <button> de
+    // borrar (onDelete, providers custom) y un <button> dentro de otro <button> es
+    // HTML inválido → React validateDOMNesting / hydration error. onKeyDown replica
+    // la activación por teclado; el delete ya hace e.stopPropagation (ModelsTab).
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -88,7 +95,7 @@ export function ProviderCard({ entry, subtitle, onClick, onDelete, deleting }: {
           <ChevronRight size={14} style={{ color: 'var(--text-dim)', opacity: 0.5 }} />
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 

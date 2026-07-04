@@ -68,7 +68,9 @@ export async function installApp(
 
 export async function updateAppStatus(
   name: string,
-  status: 'active' | 'disabled',
+  // 'active' = install (activate), 'available' = uninstall (keep data). 'disabled'
+  // kept for back-compat (the backend normalises it to 'available').
+  status: 'active' | 'available' | 'disabled',
 ): Promise<InstalledApp> {
   const res = await api.patch<ApiResponse<InstalledApp>>(`/apps/${name}`, { status });
   return res.data;

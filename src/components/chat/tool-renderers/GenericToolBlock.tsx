@@ -28,6 +28,12 @@ export function GenericToolBlock({ tool }: Props) {
   const outputStr = asString(tool.output);
   const hasDetails = inputStr.length > 0 || outputStr.length > 0;
 
+  // §B3: a third-party MCP tool call is `<server>__<action>` — split it into
+  // a server badge + the bare action, instead of a raw double-underscore name.
+  const mcpMatch = /^([a-z0-9][a-z0-9_-]*)__(.+)$/i.exec(tool.tool);
+  const mcpServer = mcpMatch && !tool.tool.startsWith('claw-os__') ? mcpMatch[1] : null;
+  const mcpAction = mcpServer ? mcpMatch![2] : null;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
       <button
@@ -45,8 +51,20 @@ export function GenericToolBlock({ tool }: Props) {
             : <Check size={12} style={{ color: 'var(--success)' }} />}
         <Terminal size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
         <span style={SUMMARY_STYLE}>
-          <span style={ICON_STYLE}>{def.icon}</span>{' '}
-          <span style={{ color: 'var(--text-dim)' }}>{def.label || tool.tool} · </span>
+          {mcpServer ? (
+            <>
+              <span style={{
+                background: 'color-mix(in srgb, var(--amber) 15%, transparent)', color: 'var(--amber)',
+                borderRadius: 4, padding: '0 5px', fontSize: '0.68rem', fontWeight: 600,
+              }}>{mcpServer}</span>
+              <span style={{ color: 'var(--text-dim)' }}> ▸ {mcpAction} · </span>
+            </>
+          ) : (
+            <>
+              <span style={ICON_STYLE}>{def.icon}</span>{' '}
+              <span style={{ color: 'var(--text-dim)' }}>{def.label || tool.tool} · </span>
+            </>
+          )}
           <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>
             {truncateLine(tool.summary ?? inputStr, 50)}
           </span>
