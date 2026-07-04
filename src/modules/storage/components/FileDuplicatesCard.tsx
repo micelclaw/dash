@@ -27,17 +27,28 @@ function safeSize(bytes: number | null | undefined): string {
   return formatFileSize(bytes);
 }
 
+// El API devuelve parent_folder + filename (no un `filepath` plano). Reconstruye
+// la ruta completa para mostrar QUÉ copia es cada una.
+function filePathOf(f: { parent_folder: string | null; filename: string }): string {
+  return f.parent_folder ? `${f.parent_folder.replace(/\/+$/, '')}/${f.filename}` : f.filename;
+}
+
+// Shapes REALES de GET /files/duplicates (snake_case end-to-end). El tipo previo
+// leía campos inexistentes (`checksum`, `size_bytes`, `filepath`) → `key={undefined}`
+// en todos los grupos (React "unique key" warning) + tamaño "—" + ruta vacía.
 interface DuplicateFile {
   id: string;
   filename: string;
-  filepath: string;
+  parent_folder: string | null;
   size_bytes: number;
-  updated_at: string;
+  mime_type: string | null;
+  created_at: string;
 }
 
 interface DuplicateGroup {
-  checksum: string;
-  size_bytes: number;
+  checksum_sha256: string;
+  total_bytes: number;
+  file_count: number;
   files: DuplicateFile[];
 }
 
@@ -84,7 +95,7 @@ export function FileDuplicatesCard() {
 
   const totalWaste = groups.reduce((sum, g) => {
     const fileCount = Array.isArray(g.files) ? g.files.length : 0;
-    const size = Number.isFinite(g.size_bytes) ? g.size_bytes : 0;
+    const size = Number.isFinite(g.total_bytes) ? g.total_bytes : 0;
     return sum + size * Math.max(0, fileCount - 1);
   }, 0);
 
@@ -120,12 +131,12 @@ export function FileDuplicatesCard() {
         {groups.map(group => {
           const files = Array.isArray(group.files) ? group.files : [];
           return (
-            <div key={group.checksum} style={{
+            <div key={group.checksum_sha256} style={{
               borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
               background: 'var(--bg, var(--card))', padding: 12,
             }}>
               <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)', marginBottom: 8 }}>
-                {files.length} copias · {safeSize(group.size_bytes)} cada una
+                {files.length} copias · {safeSize(group.total_bytes)} cada una
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {files.map((file, i) => (
@@ -133,8 +144,8 @@ export function FileDuplicatesCard() {
                     <span style={{
                       flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       color: 'var(--text)', fontFamily: 'var(--font-sans)',
-                    }} title={file.filepath}>
-                      {file.filepath}
+                    }} title={filePathOf(file)}>
+                      {filePathOf(file)}
                     </span>
                     {i > 0 && (
                       <button

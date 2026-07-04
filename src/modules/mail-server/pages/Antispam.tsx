@@ -7,7 +7,12 @@ const targetLabels: Record<string, string> = { email: 'Email', domain: 'Dominio'
 const targetColors: Record<string, string> = { email: '#3b82f6', domain: '#8b5cf6', ip: '#22c55e' };
 
 export default function Antispam() {
-  const { available, blockList, allowList, loading, error, refetch, addEntry, removeEntry } = useBlockAllowLists();
+  const { available, blockList: blockListRaw, allowList: allowListRaw, loading, error, refetch, addEntry, removeEntry } = useBlockAllowLists();
+  // El hook devuelve blockList/allowList = undefined cuando el fetch falla (rspamd/Mailu
+  // caído → 503). Sin defaultear, los `.length`/`.map` de abajo lanzan TypeError → error
+  // boundary "Something went wrong" (crash) en vez de degradar como los tabs hermanos.
+  const blockList = blockListRaw ?? [];
+  const allowList = allowListRaw ?? [];
 
   const [blockForm, setBlockForm] = useState({ value: '', target: 'email' as 'email' | 'domain' | 'ip', comment: '' });
   const [allowForm, setAllowForm] = useState({ value: '', target: 'email' as 'email' | 'domain' | 'ip', comment: '' });
