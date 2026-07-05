@@ -662,7 +662,9 @@ export interface AcpConfig {
   acp_enabled: boolean;
   acpx_enabled: boolean;
   backend: string;
-  agents: Record<string, { command?: string; expected_version?: string }>;
+  // `has_api_key` is the masked read shape; PATCH sends `api_key` (sentinel =
+  // unchanged, '' = clear).
+  agents: Record<string, { command?: string; expected_version?: string; has_api_key?: boolean }>;
 }
 export async function getAcpConfig(): Promise<AcpConfig> {
   const res = await api.get<{ data: AcpConfig }>('/gateway/acp-config');
@@ -672,7 +674,7 @@ export async function updateAcpConfig(body: {
   acp_enabled?: boolean;
   acpx_enabled?: boolean;
   backend?: string;
-  agents?: Record<string, { command?: string; expected_version?: string }>;
+  agents?: Record<string, { command?: string; expected_version?: string; api_key?: string }>;
 }): Promise<void> {
   await api.patch('/gateway/acp-config', body);
 }

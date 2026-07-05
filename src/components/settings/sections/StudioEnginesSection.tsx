@@ -32,6 +32,12 @@ const ACP_ENGINES = [
   { id: 'codex', label: 'Codex' },
 ] as const;
 
+/** Masked placeholder for an already-set API key (matches the Core sentinel).
+ *  Sending it back unchanged tells Core to preserve the stored key. */
+const KEY_SENTINEL = '••••••••';
+
+type AcpAgentsState = Record<string, { command?: string; expected_version?: string; api_key?: string }>;
+
 export function StudioEnginesSection() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -40,7 +46,7 @@ export function StudioEnginesSection() {
   const [checking, setChecking] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
-  const [agents, setAgents] = useState<AcpConfig['agents']>({});
+  const [agents, setAgents] = useState<AcpAgentsState>({});
   const [engines, setEngines] = useState<StudioEngineInfo[]>([]);
 
   const loadEngines = useCallback(async () => {
@@ -55,7 +61,13 @@ export function StudioEnginesSection() {
     try {
       const cfg = await gwService.getAcpConfig();
       setEnabled(cfg.acp_enabled && cfg.acpx_enabled);
-      setAgents(cfg.agents ?? {});
+      // Map the masked read shape → local state; show the sentinel where a key
+      // is already stored so the input renders as "set" without leaking it.
+      const mapped: AcpAgentsState = {};
+      for (const [id, a] of Object.entries(cfg.agents ?? {})) {
+        mapped[id] = { command: a.command, expected_version: a.expected_version, api_key: a.has_api_key ? KEY_SENTINEL : '' };
+      }
+      setAgents(mapped);
       setDirty(false);
       await loadEngines();
     } catch (err) {
@@ -66,7 +78,7 @@ export function StudioEnginesSection() {
   }, [loadEngines]);
   useEffect(() => { void load(); }, [load]);
 
-  const setAgentField = (id: string, field: 'command' | 'expected_version', value: string) => {
+  const setAgentField = (id: string, field: 'command' | 'expected_version' | 'api_key', value: string) => {
     setAgents((a) => ({ ...a, [id]: { ...a[id], [field]: value } }));
     setDirty(true);
   };
@@ -163,20 +175,31 @@ export function StudioEnginesSection() {
         ))}
       </div>
       <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0 0 16px' }}>
-        <TriangleAlert size={11} /> CLI / API-key presence is set up on the server; acpx is the toggle above. Claude Code uses an API key (a Claude Pro/Max subscription can't be routed here — TOS).
+        <TriangleAlert size={11} /> An engine turns <b>Ready</b> when acpx is on, its harness is installed,
+        and its API key is set below. The harness ships with acpx; add the key to finish.
+        Claude Code / Codex use an API key — a Claude Pro/Max subscription can't be routed here (TOS).
       </p>
 
       {/* Per-engine fields */}
-      <h3 style={sub}>Per-engine command</h3>
+      <h3 style={sub}>Per-engine setup</h3>
       {ACP_ENGINES.map((eng) => (
         <div key={eng.id} style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
           <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>{eng.label}</div>
-          <label style={fieldLabel}>Command</label>
-          <input value={agents[eng.id]?.command ?? ''} placeholder={eng.id === 'claude' ? 'claude-code-acp' : 'codex'} onChange={(e) => setAgentField(eng.id, 'command', e.target.value)} style={{ ...input, marginBottom: 8 }} />
+          <label style={fieldLabel}>{eng.id === 'claude' ? 'Anthropic API key' : 'OpenAI API key'}</label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={agents[eng.id]?.api_key ?? ''}
+            placeholder={eng.id === 'claude' ? 'sk-ant-…' : 'sk-…'}
+            onChange={(e) => setAgentField(eng.id, 'api_key', e.target.value)}
+            style={{ ...input, marginBottom: 8 }}
+          />
+          <label style={fieldLabel}>Command <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — defaults to the acpx-bundled harness)</span></label>
+          <input value={agents[eng.id]?.command ?? ''} placeholder={eng.id === 'claude' ? 'claude-agent-acp' : 'codex-acp'} onChange={(e) => setAgentField(eng.id, 'command', e.target.value)} style={{ ...input, marginBottom: 8 }} />
           <label style={fieldLabel}>Expected version</label>
           <input value={agents[eng.id]?.expected_version ?? ''} placeholder=">=0.4.0" onChange={(e) => setAgentField(eng.id, 'expected_version', e.target.value)} style={input} />
           <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-            Writes <code style={code}>plugins.entries.acpx.config.agents.{eng.id}.command</code>
+            The key is injected into the harness as <code style={code}>{eng.id === 'claude' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}</code> and stored on the server (openclaw.json, same as your other provider keys). It is never shown back.
           </p>
         </div>
       ))}
