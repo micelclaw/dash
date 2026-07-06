@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Puzzle, Monitor, Smartphone, Copy, RefreshCw, Trash2, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import QRCode from 'qrcode';
 import { SettingSection } from '../SettingSection';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import * as companions from '@/services/companions.service';
@@ -33,6 +34,7 @@ function fmt(ts?: string | null): string {
 export function CompanionsSection() {
   const [devices, setDevices] = useState<companions.CompanionDevice[] | null>(null);
   const [code, setCode] = useState<companions.PairCodeResult | null>(null);
+  const [qr, setQr] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [confirm, setConfirm] = useState<companions.CompanionDevice | null>(null);
@@ -62,6 +64,12 @@ export function CompanionsSection() {
       const r = await companions.generatePairingCode();
       setCode(r);
       setRemaining(r.expires_in);
+      // QR para la app móvil (CG-M1): micelclaw://pair?v=1&code=<6díg>&base=<origen>.
+      // El código ES la credencial (claim anónimo); el base ahorra el discovery.
+      const payload = `micelclaw://pair?v=1&code=${r.code}&base=${encodeURIComponent(window.location.origin)}`;
+      QRCode.toDataURL(payload, { margin: 1, width: 180, color: { dark: '#000000', light: '#ffffff' } })
+        .then(setQr)
+        .catch(() => setQr(null));
     } catch {
       toast.error('No se pudo generar el código');
     } finally {
@@ -112,6 +120,16 @@ export function CompanionsSection() {
               <button onClick={copy} disabled={!!expired} style={iconBtn} title="Copiar"><Copy size={16} /></button>
               <button onClick={generate} disabled={generating} style={iconBtn} title="Regenerar"><RefreshCw size={16} /></button>
             </div>
+            {qr && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: expired ? 0.4 : 1 }}>
+                <img src={qr} alt="QR de emparejamiento" width={140} height={140}
+                  style={{ borderRadius: 8, background: '#fff', padding: 4 }} data-testid="pair-qr" />
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: 220 }}>
+                  Con la <strong>app móvil</strong>: «Escanear QR del dash» — empareja en un paso
+                  (lleva el código y la dirección del servidor).
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: '0.75rem', color: expired ? 'var(--error, #f43f5e)' : 'var(--text-muted)' }}>
               {expired ? 'Código caducado — genera otro.' : `Caduca en ${remaining}s`}
             </div>
