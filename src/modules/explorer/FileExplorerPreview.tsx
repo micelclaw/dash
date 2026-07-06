@@ -11,7 +11,7 @@
  */
 
 import { ExternalLink, Star, Users, User, FileText } from 'lucide-react';
-import { FilePreviewPanel } from '@/components/shared/FilePreviewPanel';
+import { FileDetailsContent } from '@/components/shared/FileDetailsContent';
 import { formatRelative } from '@/lib/date-helpers';
 import type { FileRecord } from '@/types/files';
 
@@ -27,11 +27,14 @@ export function FileExplorerPreview({ file, isWritable, onClose, onDelete }: Fil
   const meta = file.metadata as Record<string, any> | null;
 
   return (
-    <div style={{ flexShrink: 0 }}>
-      <FilePreviewPanel
+    <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+      {/* Same content as Drive's Details tab, horizontal (no Activity/Versions). */}
+      <FileDetailsContent
         file={file}
+        layout="horizontal"
+        onRefetch={() => { /* Explorer refetches via its own selection/list flow */ }}
         onClose={onClose}
-        onDelete={isWritable ? onDelete : undefined}
+        onDelete={isWritable ? (f) => onDelete(f.id) : undefined}
         showRelated={false}
       />
       {isGDrive && meta && <GDriveDetails meta={meta} createdAt={file.created_at} />}
