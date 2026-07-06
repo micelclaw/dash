@@ -25,6 +25,8 @@ import { MaintenanceTab } from './tabs/MaintenanceTab';
 import { ReportsTab } from './tabs/ReportsTab';
 import { ScanFab } from './components/ScanFab';
 import { ItemDrawer } from './components/ItemDrawer';
+import { ProfileSelector } from '@/components/profiles/ProfileSelector';
+import { useProfileStore } from '@/stores/profile.store';
 
 type InventoryTab = 'panel' | 'catalog' | 'locations' | 'stock' | 'lending' | 'maintenance' | 'reports';
 
@@ -35,6 +37,8 @@ export function Component() {
   const activeTab = locationParam ? 'locations' : ((searchParams.get('tab') as InventoryTab) || 'panel');
 
   const { items, moves, alerts, fetchItems, fetchLocations, fetchAlerts, fetchMeta, fetchProposals, selectedItemId, selectItem } = useInventoryStore();
+  // Perfil ERP activo: al cambiarlo, se remonta el contenido (key) → re-fetch por perfil.
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
 
   useEffect(() => {
     fetchMeta();
@@ -107,10 +111,12 @@ export function Component() {
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setTab} variant="underline" />
+        {/* Selector de PERFIL ERP (multi-perfil) — comparte el perfil activo con Finanzas */}
+        <div style={{ paddingBottom: 8, flex: '0 0 auto' }}><ProfileSelector /></div>
       </div>
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div key={activeProfileId ?? 'none'} style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
           {activeTab === 'panel' && <PanelTab onNavigate={setTab} />}
           {activeTab === 'catalog' && <CatalogTab />}

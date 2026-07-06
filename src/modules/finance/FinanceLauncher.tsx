@@ -23,6 +23,8 @@ import { useFinanceStore } from '@/stores/finance.store';
 import { PersonalLens } from './personal/PersonalLens';
 import { FacturacionLens } from './facturacion/FacturacionLens';
 import { ContabilidadLens } from './contabilidad/ContabilidadLens';
+import { ProfileSelector } from '@/components/profiles/ProfileSelector';
+import { useProfileStore } from '@/stores/profile.store';
 import { FinancePeriodProvider } from './period';
 
 type LensId = 'personal' | 'facturacion' | 'contabilidad';
@@ -36,6 +38,8 @@ const LENSES: { id: LensId; label: string; icon: React.ComponentType<{ size?: nu
 export function Component() {
   const [params, setParams] = useSearchParams();
   const { loading } = useFinanceStore();
+  // Perfil ERP activo: al cambiarlo, se remonta el contenido (key) → re-fetch por perfil.
+  const activeProfileId = useProfileStore((s) => s.activeProfileId);
   const rawTab = params.get('tab');
   const lens: LensId = rawTab === 'facturacion' ? 'facturacion' : rawTab === 'contabilidad' ? 'contabilidad' : 'personal';
   const setLens = (id: LensId) => setParams((p) => { p.set('tab', id); return p; }, { replace: true });
@@ -49,6 +53,9 @@ export function Component() {
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Finance</h1>
           {loading && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />}
         </div>
+
+        {/* Selector de PERFIL ERP (multi-perfil) — re-scopea Finanzas + Inventario */}
+        <ProfileSelector />
 
         {/* Selector de LENTE — control segmentado prominente (pills) */}
         <div
@@ -100,7 +107,7 @@ export function Component() {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div key={activeProfileId ?? 'none'} style={{ flex: 1, overflow: 'auto' }}>
         {lens === 'personal' && <PersonalLens />}
         {lens === 'facturacion' && <FacturacionLens />}
         {lens === 'contabilidad' && <ContabilidadLens />}
