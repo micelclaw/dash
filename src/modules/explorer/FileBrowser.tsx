@@ -13,9 +13,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { Loader2, FolderOpen } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
+import { FileThumbnail } from '@/components/shared/FileThumbnail';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
+import { formatFileSize, getMimeLabel, canShowThumbnail } from '@/lib/file-utils';
+import { useThumbnailBatch, getPrefetchedThumb } from '@/lib/thumbnail-batch';
 import { formatRelative } from '@/lib/date-helpers';
 import { buildExplorerContextMenu, buildExplorerBackgroundMenu, type ExplorerMenuContext } from './context-menu';
 import type { FileRecord } from '@/types/files';
@@ -25,6 +27,8 @@ interface FileBrowserProps {
   loading: boolean;
   error: string | null;
   view: 'grid' | 'list';
+  /** comfortable = miniaturas reales en el grid; compact = celdas/filas apretadas con iconos. */
+  density?: 'comfortable' | 'compact';
   selectedFile: FileRecord | null;
   selectedIds: Set<string>;
   isWritable: boolean;
@@ -40,9 +44,14 @@ interface FileBrowserProps {
 }
 
 export function FileBrowser({
-  files, loading, error, view, selectedFile, selectedIds, isWritable,
+  files, loading, error, view, density = 'comfortable', selectedFile, selectedIds, isWritable,
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll, onRename, menuCtx,
 }: FileBrowserProps) {
+  const compact = density === 'compact';
+
+  // Prefetch en lote de miniaturas de la carpeta (UN request, incluye VFS por
+  // ruta); las celdas leen getPrefetchedThumb() → pintado simultáneo.
+  useThumbnailBatch(files, 320, view === 'grid' && !compact);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -131,9 +140,9 @@ export function FileBrowser({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-          gap: 12,
-          padding: 12,
+          gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 110 : 140}px, 1fr))`,
+          gap: compact ? 8 : 12,
+          padding: compact ? 8 : 12,
           overflow: 'auto',
           height: '100%',
           alignContent: 'start',
@@ -143,6 +152,7 @@ export function FileBrowser({
           <ContextMenu key={file.id} trigger={
             <GridItem
               file={file}
+              compact={compact}
               isSelected={selectedFile?.id === file.id}
               checked={selectedIds.has(file.id)}
               showCheckbox={hasSelection}
@@ -205,6 +215,7 @@ export function FileBrowser({
         <ContextMenu key={file.id} trigger={
           <ListRow
             file={file}
+            compact={compact}
             isSelected={selectedFile?.id === file.id}
             checked={selectedIds.has(file.id)}
             isRenaming={renamingId === file.id}
@@ -225,8 +236,9 @@ export function FileBrowser({
 
 /* ── Grid Item ── */
 
-function GridItem({ file, isSelected, checked, showCheckbox, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
+function GridItem({ file, compact, isSelected, checked, showCheckbox, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
   file: FileRecord;
+  compact: boolean;
   isSelected: boolean;
   checked: boolean;
   showCheckbox: boolean;
@@ -242,6 +254,8 @@ function GridItem({ file, isSelected, checked, showCheckbox, isRenaming, renameV
 }) {
   const [hovered, setHovered] = useState(false);
   const showCb = showCheckbox || hovered || checked;
+  // Miniatura real solo en comfortable (imagen/PDF siempre; office solo indexado).
+  const showThumb = !compact && !file.is_directory && canShowThumbnail(file.id, file.mime_type);
 
   return (
     <div
@@ -255,10 +269,10 @@ function GridItem({ file, isSelected, checked, showCheckbox, isRenaming, renameV
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: compact ? 6 : 8,
         width: '100%',
-        height: 120,
-        padding: '12px 8px',
+        height: compact ? 92 : 120,
+        padding: compact ? '8px 6px' : '12px 8px',
         borderRadius: 'var(--radius-md)',
         background: checked ? 'var(--amber-dim)' : isSelected ? 'var(--surface-hover)' : hovered ? 'var(--surface)' : 'transparent',
         border: (isSelected || checked) ? '1px solid var(--amber-dim)' : '1px solid transparent',
@@ -285,7 +299,23 @@ function GridItem({ file, isSelected, checked, showCheckbox, isRenaming, renameV
           }}
         />
       )}
-      <FileIcon mime={file.mime_type} isDirectory={file.is_directory} size="lg" />
+      {showThumb ? (
+        <div style={{ width: '100%', height: 64, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--bg)', flexShrink: 0 }}>
+          {/* Fallback individual al width canónico 640; el batch sirve la 320 derivada. */}
+          <FileThumbnail
+            key={file.id}
+            file={file}
+            width={640}
+            fit="cover"
+            iconSize="lg"
+            retries="light"
+            prefetchedSrc={getPrefetchedThumb(file.id, 320)}
+              holdWhileBatching
+          />
+        </div>
+      ) : (
+        <FileIcon mime={file.mime_type} isDirectory={file.is_directory} size={compact ? 'md' : 'lg'} />
+      )}
       {isRenaming ? (
         <input
           ref={renameInputRef}
@@ -333,8 +363,9 @@ function GridItem({ file, isSelected, checked, showCheckbox, isRenaming, renameV
 
 /* ── List Row ── */
 
-function ListRow({ file, isSelected, checked, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
+function ListRow({ file, compact, isSelected, checked, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
   file: FileRecord;
+  compact: boolean;
   isSelected: boolean;
   checked: boolean;
   isRenaming: boolean;
@@ -360,7 +391,7 @@ function ListRow({ file, isSelected, checked, isRenaming, renameValue, renameInp
         gridTemplateColumns: '32px 1fr 90px 120px 100px',
         gap: 8,
         padding: '0 12px',
-        height: 36,
+        height: compact ? 30 : 36,
         alignItems: 'center',
         fontSize: '0.8125rem',
         fontFamily: 'var(--font-sans)',

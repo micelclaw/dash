@@ -575,22 +575,22 @@ export function MyDriveView() {
           />
         </DropZone>
 
-        {/* Inspector — replaces the old bottom DrivePreview */}
-        {inspectorFiles.length > 0 && (
-          <DriveInspector
-            files={inspectorFiles}
-            onClose={() => { clearSelection(); setSelectedFile(null); }}
-            onRefetch={() => { void fetchFiles(); }}
-            onDeleteFile={(f) => { void deleteFile(f.id); }}
-            onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
-            bulk={{
-              onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
-              onTags: (targets) => setTagsFiles(targets),
-              onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
-              onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
-            }}
-          />
-        )}
+        {/* Inspector — replaces the old bottom DrivePreview. Always rendered
+            (its footprint is governed by the persisted open/collapsed toggle,
+            NOT by the selection) so clicking items never reflows the grid. */}
+        <DriveInspector
+          files={inspectorFiles}
+          onClose={() => { clearSelection(); setSelectedFile(null); }}
+          onRefetch={() => { void fetchFiles(); }}
+          onDeleteFile={(f) => { void deleteFile(f.id); }}
+          onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
+          bulk={{
+            onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
+            onTags: (targets) => setTagsFiles(targets),
+            onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+            onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
+          }}
+        />
       </div>
 
       {/* Share modal (public link) */}

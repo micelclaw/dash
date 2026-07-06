@@ -12,7 +12,27 @@
 
 import { api } from './api';
 
-export interface FileServicesShare { name: string; slug: string; hidden: boolean; network_path: string; }
+export interface FileServicesShare {
+  name: string; slug: string; hidden: boolean; network_path: string;
+  smb_served: boolean;
+  not_served_reason: string | null;
+}
+
+export type ProtocolKey = 'smb' | 'webdav' | 'sftp' | 'rsync' | 'nfs';
+export interface NetworkProtocolInfo {
+  key: ProtocolKey;
+  label: string;
+  available: boolean;
+  running: boolean;
+  scope: 'global' | 'per_folder';
+  enabled: boolean;
+  windows_native: boolean;
+  respects_acl: boolean;
+  detail: string;
+  connect_hint: string;
+  can_start: boolean;
+}
+
 export interface FileServicesStatus {
   enabled: boolean;
   ready: boolean;
@@ -22,6 +42,9 @@ export interface FileServicesStatus {
   setup_command: string;
   shares: FileServicesShare[];
   last_reconcile: { ok: boolean; at: string; detail: string } | null;
+  protocols: NetworkProtocolInfo[];
+  webdav_url: string;
+  can_start_smbd: boolean;
 }
 
 export async function getFileServices(): Promise<FileServicesStatus> {
@@ -31,5 +54,11 @@ export async function getFileServices(): Promise<FileServicesStatus> {
 
 export async function setFileServices(enabled: boolean): Promise<FileServicesStatus> {
   const res = await api.patch<{ data: FileServicesStatus }>('/network/file-services', { enabled });
+  return res.data;
+}
+
+/** Arranca el daemon smbd (botón "Iniciar smbd" cuando quedó parado pese a SMB activo). */
+export async function startSmbd(): Promise<FileServicesStatus> {
+  const res = await api.post<{ data: FileServicesStatus }>('/network/file-services/start', {});
   return res.data;
 }

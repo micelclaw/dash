@@ -428,22 +428,21 @@ export function StarredView() {
           )}
         </div>
 
-        {/* Inspector (D5) — replaces the old bottom DrivePreview */}
-        {inspectorFiles.length > 0 && (
-          <DriveInspector
-            files={inspectorFiles}
-            onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
-            onRefetch={() => { void refetch(); }}
-            onDeleteFile={(f) => { void handleDelete(f.id); }}
-            onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
-            bulk={{
-              onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
-              onTags: (targets) => setTagsFiles(targets),
-              onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
-              onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
-            }}
-          />
-        )}
+        {/* Inspector (D5) — always rendered (footprint driven by the persisted
+            open/collapsed toggle, not the selection) so clicks never reflow. */}
+        <DriveInspector
+          files={inspectorFiles}
+          onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
+          onRefetch={() => { void refetch(); }}
+          onDeleteFile={(f) => { void handleDelete(f.id); }}
+          onToggleStar={(f, starred) => { void handleBulkStar([f], starred); }}
+          bulk={{
+            onStar: (targets, starred) => { void handleBulkStar(targets, starred); },
+            onTags: (targets) => setTagsFiles(targets),
+            onMove: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
+            onDelete: (targets) => setConfirmDeleteIds(new Set(targets.map(f => f.id))),
+          }}
+        />
       </div>
 
       {/* Modals */}

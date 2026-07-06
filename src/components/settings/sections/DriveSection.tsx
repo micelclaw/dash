@@ -18,16 +18,14 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { History, FolderTree, Users, HardDrive, ChevronRight, type LucideIcon } from 'lucide-react';
+import { History, Users, HardDrive, ChevronRight, type LucideIcon } from 'lucide-react';
 import { VersioningSection } from '@/modules/drive/settings/VersioningSection';
-import { TeamFoldersSection } from '@/modules/drive/settings/TeamFoldersSection';
 import { ConnectedClientsSection } from '@/modules/drive/settings/ConnectedClientsSection';
 
-type DriveSettingsTab = 'versioning' | 'team-folders' | 'connected-clients';
+type DriveSettingsTab = 'versioning' | 'connected-clients';
 
 const TABS: Array<{ id: DriveSettingsTab; label: string; icon: LucideIcon }> = [
   { id: 'versioning', label: 'Versioning', icon: History },
-  { id: 'team-folders', label: 'Team Folders', icon: FolderTree },
   { id: 'connected-clients', label: 'Connected clients', icon: Users },
 ];
 
@@ -109,7 +107,6 @@ export function DriveSection() {
 
       <div>
         {tab === 'versioning' && <VersioningSection />}
-        {tab === 'team-folders' && <TeamFoldersSection />}
         {tab === 'connected-clients' && <ConnectedClientsSection />}
       </div>
     </div>

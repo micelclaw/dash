@@ -13,9 +13,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { X, Copy, Plus, Link2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '@/services/api';
-import { useNotificationStore } from '@/stores/notification.store';
+import { buildShareUrl } from '@/lib/share-url';
+import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import type { FileRecord } from '@/types/files';
+
+/** Opciones de caducidad del enlace (horas; '' = nunca). */
+const EXPIRY_OPTIONS: { label: string; hours: number | '' }[] = [
+  { label: 'Nunca', hours: '' },
+  { label: '1 hora', hours: 1 },
+  { label: '24 horas', hours: 24 },
+  { label: '7 días', hours: 168 },
+  { label: '30 días', hours: 720 },
+];
 
 interface ShareModalProps {
   open: boolean;
@@ -36,10 +47,10 @@ interface ContactResult {
 }
 
 export function ShareModal({ open, file, onClose }: ShareModalProps) {
-  const addNotification = useNotificationStore(s => s.addNotification);
+  const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
   const [access, setAccess] = useState<'public' | 'private'>('public');
   const [password, setPassword] = useState('');
-  const [permission, setPermission] = useState<'read' | 'edit'>('read');
+  const [expiryHours, setExpiryHours] = useState<number | ''>('');
   const [people, setPeople] = useState<SharePerson[]>([]);
   const [personInput, setPersonInput] = useState('');
   const [suggestions, setSuggestions] = useState<ContactResult[]>([]);
@@ -102,29 +113,36 @@ export function ShareModal({ open, file, onClose }: ShareModalProps) {
   const handleShare = useCallback(async () => {
     setSharing(true);
     try {
-      const res = await api.post<{ data: { url: string } }>(`/files/${file.id}/share`, {
+      const res = await api.post<{ data: { token: string; url: string } }>(`/files/${file.id}/share`, {
         access,
+        is_public: access === 'public',
         password: access === 'private' ? password : null,
-        permission,
+        // Un enlace público es SIEMPRE de vista/descarga (un anónimo no edita). El
+        // endpoint público exige el permiso 'view'; enviar 'read'/'edit' lo dejaba
+        // como "solo subida" (can_download:false, /list → 403). Ver Fase 2 fix.
+        permissions: ['view'],
+        ...(expiryHours ? { expires_in_hours: expiryHours } : {}),
         people: people.map(p => ({ email: p.email, permission: p.permission })),
       });
-      setShareLink(res.data.url);
-      addNotification({ type: 'system', title: 'Link created', body: `Share link for ${file.filename} is ready` });
+      // El enlace usa el dominio configurado (victor.claw) si lo hay; si no, el origen
+      // del dash. Nunca el `url` del backend (apunta a la API :7200 → 404). Ver lib/share-url.ts.
+      setShareLink(buildShareUrl(res.data.token, primaryDomain));
+      toast.success('Enlace creado', { description: `El enlace público de ${file.filename} está listo` });
     } catch {
-      addNotification({ type: 'system', title: 'Error', body: 'Failed to create share link' });
+      toast.error('No se pudo crear el enlace');
     }
     setSharing(false);
-  }, [file, access, password, permission, people, addNotification]);
+  }, [file, access, password, expiryHours, people, primaryDomain]);
 
   const handleCopy = useCallback(async () => {
     if (!shareLink) return;
     try {
       await navigator.clipboard.writeText(shareLink);
-      addNotification({ type: 'system', title: 'Link copied', body: 'Share link copied to clipboard' });
+      toast.success('Enlace copiado al portapapeles');
     } catch {
-      // Fallback
+      toast.error('No se pudo copiar el enlace');
     }
-  }, [shareLink, addNotification]);
+  }, [shareLink]);
 
   if (!open) return null;
 
@@ -193,14 +211,15 @@ export function ShareModal({ open, file, onClose }: ShareModalProps) {
             )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Permission:</span>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Caduca:</span>
               <select
-                value={permission}
-                onChange={e => setPermission(e.target.value as 'read' | 'edit')}
+                value={String(expiryHours)}
+                onChange={e => setExpiryHours(e.target.value === '' ? '' : Number(e.target.value))}
                 style={selectStyle}
               >
-                <option value="read">Read only</option>
-                <option value="edit">Can edit</option>
+                {EXPIRY_OPTIONS.map(o => (
+                  <option key={o.label} value={String(o.hours)}>{o.label}</option>
+                ))}
               </select>
             </div>
           </Section>

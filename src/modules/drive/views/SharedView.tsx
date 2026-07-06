@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Users, Share2, Link2, Download, X, Copy as CopyIcon, KeyRound, Search, FolderOpen, Pencil, ExternalLink } from 'lucide-react';
+import { Users, Share2, Link2, Download, X, Copy as CopyIcon, KeyRound, FolderOpen, Pencil, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs } from '@/components/shared/Tabs';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -22,6 +22,8 @@ import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMe
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { downloadFile } from '@/lib/file-download';
+import { buildShareUrl } from '@/lib/share-url';
+import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { api } from '@/services/api';
 import type { ApiResponse, ApiListResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
@@ -47,21 +49,26 @@ interface ShareLink {
   token: string;
   url: string;
   is_public: boolean;
-  password_hash?: string | null;
+  has_password?: boolean;
   permissions: string[];
   expires_at: string | null;
   max_downloads: number | null;
   download_count: number | null;
   created_at: string;
+  // Presentes en el inventario global (join con files):
+  target_id?: string;
+  target_type?: string;
+  filename?: string | null;
+  is_directory?: boolean | null;
+  filepath?: string | null;
 }
 
 /**
  * Shared — three sub-views: shares received ("With me"), shares granted
- * ("By me", with permission change + revoke) and per-file public links.
+ * ("By me", with permission change + revoke) and public links.
  *
- * NOTE (documented gap): there is no global "all active public links"
- * endpoint in Core — links can only be listed per file via
- * GET /files/:id/shares, so the Links sub-view is search-then-inspect.
+ * Public links: inventario GLOBAL (ficheros Y carpetas) vía
+ * GET /files/share-links — se listan directamente, con copiar/abrir/revocar.
  */
 export function SharedView() {
   const [sub, setSub] = useState<SharedSub>('with-me');
@@ -377,197 +384,117 @@ function ByMeSub() {
 // ─── Public links ────────────────────────────────────────
 
 function LinksSub() {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FileRecord[]>([]);
-  const [selected, setSelected] = useState<FileRecord | null>(null);
+  const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
   const [links, setLinks] = useState<ShareLink[] | null>(null);
-  const [linksLoading, setLinksLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Debounced file search
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      try {
-        const res = await api.get<ApiListResponse<FileRecord>>('/files', {
-          search: query.trim(), is_directory: false, limit: 8,
-        });
-        setResults(res.data);
-      } catch {
-        setResults([]);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const loadLinks = useCallback(async (file: FileRecord) => {
-    setSelected(file);
-    setLinks(null);
-    setLinksLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await api.get<ApiResponse<ShareLink[]>>(`/files/${file.id}/shares`);
+      const res = await api.get<ApiListResponse<ShareLink>>('/files/share-links');
       setLinks(res.data);
     } catch {
-      toast.error('Failed to load links');
+      toast.error('No se pudieron cargar los enlaces');
       setLinks([]);
     } finally {
-      setLinksLoading(false);
+      setLoading(false);
     }
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   const revokeLink = useCallback(async (link: ShareLink) => {
     try {
       await api.delete(`/files/share/${link.token}`);
       setLinks(prev => prev ? prev.filter(l => l.id !== link.id) : prev);
-      toast.success('Link revoked');
+      toast.success('Enlace revocado');
     } catch {
-      toast.error('Could not revoke link');
+      toast.error('No se pudo revocar el enlace');
     }
   }, []);
+
+  const copy = useCallback((url: string) => {
+    void navigator.clipboard.writeText(url);
+    toast.success('Enlace copiado');
+  }, []);
+
+  if (loading) {
+    return <div style={{ padding: '12px 16px' }}><Loading /></div>;
+  }
+
+  if (!links || links.length === 0) {
+    return (
+      <EmptyState
+        icon={Link2}
+        title="Sin enlaces públicos"
+        description="Comparte un fichero o una carpeta como enlace público (clic derecho → Compartir → Enlace público) y aparecerá aquí para copiarlo, abrirlo o revocarlo."
+      />
+    );
+  }
+
+  const now = Date.now();
 
   return (
     <div style={{ padding: '12px 16px' }}>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 10px' }}>
-        Look up a file to inspect and revoke its public links. (Links are listed
-        per file — there is no global link inventory yet.)
+        Todos tus enlaces públicos activos (ficheros y carpetas). Cópialos, ábrelos o revócalos.
       </p>
 
-      {/* Search box */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-md)', padding: '0 10px', maxWidth: 380,
-      }}>
-        <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search a file by name…"
-          style={{
-            flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none',
-            fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', color: 'var(--text)', padding: '7px 4px',
-          }}
-        />
-      </div>
-
-      {/* Suggestions */}
-      {results.length > 0 && (
-        <div style={{
-          marginTop: 6, maxWidth: 380,
-          border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
-          background: 'var(--surface)', overflow: 'hidden',
-        }}>
-          {results.map(f => (
-            <button
-              key={f.id}
-              onClick={() => { setQuery(''); setResults([]); void loadLinks(f); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                padding: '6px 10px', border: 'none', background: 'transparent',
-                color: 'var(--text)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
-                cursor: 'pointer', textAlign: 'left',
-              }}
-            >
-              <FileIcon mime={f.mime_type} isDirectory={false} size="sm" />
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.filename}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '0.6875rem', color: 'var(--text-dim)', flexShrink: 0 }}>
-                {f.parent_folder}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Selected file links */}
-      {selected && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <FileIcon mime={selected.mime_type} isDirectory={false} size="sm" />
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>{selected.filename}</span>
-            <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{selected.parent_folder}</span>
-          </div>
-
-          {linksLoading && <Loading />}
-          {links && links.length === 0 && !linksLoading && (
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>
-              No active public links for this file.
-            </div>
-          )}
-          {links?.map(link => {
-            // P2 — bespoke menu: Copy link / Open link / Revoke (existing handlers).
-            const menuItems: ContextMenuItem[] = [
-              {
-                label: 'Copy link', icon: CopyIcon,
-                onClick: () => {
-                  void navigator.clipboard.writeText(link.url);
-                  toast.success('Link copied');
-                },
-              },
-              {
-                label: 'Open link', icon: ExternalLink,
-                onClick: () => { window.open(link.url, '_blank', 'noopener'); },
-              },
-              menuSep(),
-              {
-                label: 'Revoke link', icon: X, variant: 'danger' as const,
-                onClick: () => { void revokeLink(link); },
-              },
-            ];
-            return (
-              <ContextMenu
-                key={link.id}
-                items={menuItems}
-                trigger={
-                  <ShareRow>
-                    <Link2 size={14} style={{ color: 'var(--mod-drive)', flexShrink: 0 }} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{
-                        fontSize: '0.75rem', color: 'var(--text)',
-                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        fontFamily: 'var(--font-mono, monospace)',
-                      }}>
-                        {link.url}
-                      </div>
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span>{formatRelative(new Date(link.created_at))}</span>
-                        <span>· {link.download_count ?? 0}{link.max_downloads ? `/${link.max_downloads}` : ''} downloads</span>
-                        {link.expires_at && <span>· expires {formatRelative(new Date(link.expires_at))}</span>}
-                        {link.password_hash && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                            · <KeyRound size={10} /> password
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <IconButton
-                      icon={CopyIcon}
-                      title="Copy link"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(link.url);
-                        toast.success('Link copied');
-                      }}
-                    />
-                    <IconButton icon={X} title="Revoke" danger onClick={() => { void revokeLink(link); }} />
-                  </ShareRow>
-                }
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {!selected && results.length === 0 && !query && (
-        <div style={{ marginTop: 32 }}>
-          <EmptyState
-            icon={Link2}
-            title="Inspect public links"
-            description="Search for a file above to see its active share links, copy them or revoke them."
+      {links.map(link => {
+        const url = buildShareUrl(link.token, primaryDomain);
+        const expired = link.expires_at ? new Date(link.expires_at).getTime() < now : false;
+        const name = link.filename ?? 'Archivo no disponible';
+        const menuItems: ContextMenuItem[] = [
+          { label: 'Copiar enlace', icon: CopyIcon, onClick: () => copy(url) },
+          { label: 'Abrir enlace', icon: ExternalLink, onClick: () => { window.open(url, '_blank', 'noopener'); } },
+          menuSep(),
+          { label: 'Revocar enlace', icon: X, variant: 'danger' as const, onClick: () => { void revokeLink(link); } },
+        ];
+        return (
+          <ContextMenu
+            key={link.id}
+            items={menuItems}
+            trigger={
+              <ShareRow>
+                <FileIcon mime="" isDirectory={!!link.is_directory} size="sm" />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: '0.8125rem', color: 'var(--text)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {name}
+                  </div>
+                  <div style={{
+                    fontSize: '0.6875rem', color: 'var(--text-dim)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    fontFamily: 'var(--font-mono, monospace)',
+                  }}>
+                    {url}
+                  </div>
+                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span>{formatRelative(new Date(link.created_at))}</span>
+                    <span>· {link.download_count ?? 0}{link.max_downloads ? `/${link.max_downloads}` : ''} descargas</span>
+                    {link.expires_at && (
+                      <span style={{ color: expired ? 'var(--error)' : undefined }}>
+                        · {expired ? 'caducado' : `caduca ${formatRelative(new Date(link.expires_at))}`}
+                      </span>
+                    )}
+                    {link.has_password && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                        · <KeyRound size={10} /> contraseña
+                      </span>
+                    )}
+                    {link.is_directory && <span>· carpeta</span>}
+                  </div>
+                </div>
+                <IconButton icon={CopyIcon} title="Copiar enlace" onClick={() => copy(url)} />
+                <IconButton icon={ExternalLink} title="Abrir" onClick={() => window.open(url, '_blank', 'noopener')} />
+                <IconButton icon={X} title="Revocar" danger onClick={() => { void revokeLink(link); }} />
+              </ShareRow>
+            }
           />
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }

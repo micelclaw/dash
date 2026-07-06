@@ -10,8 +10,63 @@
  * https://micelclaw.com
  */
 
-import { X, History } from 'lucide-react';
+import { useState } from 'react';
+import { X, History, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
+import type { ApiResponse } from '@/types/api';
 import { SnapshotSettingsForm } from '../../settings/SnapshotSettingsForm';
+
+interface ReconcileResult { created: number; updated: number; removed: number; fixed: number; total: number }
+
+/**
+ * "Resincronizar Drive" (Drive-unify F3): reconcilia el índice del módulo con
+ * el disco (indexa lo que llegó por fuera, quita fantasmas, corrige rutas
+ * legacy). Con el índice-al-escribir del VFS ya casi nunca hace falta — es la
+ * red de seguridad manual.
+ */
+function ReconcileBlock({ onDone }: { onDone?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const res = await api.post<ApiResponse<ReconcileResult>>('/files/reconcile', {});
+      const r = res.data;
+      toast.success(`Drive resincronizado: ${r.created} indexados, ${r.removed} fantasmas fuera, ${r.fixed} rutas corregidas`);
+      onDone?.();
+    } catch (e) {
+      toast.error(`No se pudo resincronizar: ${e instanceof Error ? e.message : e}`);
+    }
+    setBusy(false);
+  };
+  return (
+    <div style={{
+      marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    }}>
+      <div>
+        <div style={{ fontSize: '0.8125rem', color: 'var(--text)', fontWeight: 500 }}>Resincronizar con el disco</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          Reindexa archivos añadidos por fuera (WebDAV, red) y quita entradas sin archivo
+        </div>
+      </div>
+      <button
+        onClick={() => void run()}
+        disabled={busy}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+          background: 'transparent', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)',
+          fontSize: '0.8125rem', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-sans)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <RefreshCw size={13} className={busy ? 'animate-spin' : undefined} />
+        {busy ? 'Resincronizando…' : 'Resincronizar'}
+      </button>
+    </div>
+  );
+}
 
 interface DriveSettingsModalProps {
   open: boolean;
@@ -88,6 +143,7 @@ export function DriveSettingsModal({ open, onClose, onSaved }: DriveSettingsModa
               </button>
             )}
           />
+          <ReconcileBlock onDone={onSaved} />
         </div>
       </div>
     </div>

@@ -46,7 +46,9 @@ export function useVFS() {
     setMountsLoading(true);
     try {
       const res = await api.get<{ data: VFSMount[] }>('/vfs/mounts');
-      setMounts(res.data);
+      // El mount home del usuario (/user/files) se muestra como "HOME" (estilo
+      // Synology). Renombrado SOLO de display; el mount_path/rootPath no cambian.
+      setMounts(res.data.map((m) => (m.name === 'Files' ? { ...m, name: 'HOME' } : m)));
     } catch { /* ignore */ }
     finally { setMountsLoading(false); }
   }, []);

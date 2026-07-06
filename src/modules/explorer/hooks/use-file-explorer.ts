@@ -80,6 +80,11 @@ export function useFileExplorer() {
   const [view, setView] = useState<'grid' | 'list'>(
     () => (localStorage.getItem('fexp-view') as 'grid' | 'list') || 'list',
   );
+  // Densidad (espejo del toggle de Drive): comfortable muestra miniaturas
+  // reales en el grid; compact aprieta celdas/filas y vuelve a iconos.
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(
+    () => (localStorage.getItem('fexp-density') as 'comfortable' | 'compact') || 'comfortable',
+  );
   const [search, setSearch] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -256,6 +261,11 @@ export function useFileExplorer() {
     localStorage.setItem('fexp-view', v);
   }, []);
 
+  const changeDensity = useCallback((d: 'comfortable' | 'compact') => {
+    setDensity(d);
+    localStorage.setItem('fexp-density', d);
+  }, []);
+
   const handleUpload = useCallback(async (f: File) => {
     if (isVfs) {
       const apiPath = joinVfsPath(toVfsApiPath(currentPath), f.name);
@@ -411,6 +421,8 @@ export function useFileExplorer() {
     handleItemDoubleClick,
     view,
     changeView,
+    density,
+    changeDensity,
     search,
     setSearch,
     isWritable,

@@ -303,14 +303,13 @@ export function RecentView() {
         </section>
       </div>
 
-      {/* Inspector (D5) */}
-      {selectedFile && (
-        <DriveInspector
-          files={[selectedFile]}
-          onClose={() => setSelectedFile(null)}
-          onRefetch={refetchAll}
-        />
-      )}
+      {/* Inspector (D5) — always rendered (footprint driven by the persisted
+          open/collapsed toggle, not the selection) so clicks never reflow. */}
+      <DriveInspector
+        files={selectedFile ? [selectedFile] : []}
+        onClose={() => setSelectedFile(null)}
+        onRefetch={refetchAll}
+      />
 
       {/* Modals (P2 — calqued from StarredView) */}
       {shareFile && (

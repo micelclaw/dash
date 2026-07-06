@@ -11,7 +11,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Search, FolderPlus, Upload } from 'lucide-react';
+import { Search, FolderPlus, Upload, Rows3, Rows4 } from 'lucide-react';
 import { FileBreadcrumb } from '@/components/shared/FileBreadcrumb';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import type { SourceRoot } from './types';
@@ -21,9 +21,11 @@ interface FileBrowserToolbarProps {
   currentSource: SourceRoot;
   isWritable: boolean;
   view: 'grid' | 'list';
+  density: 'comfortable' | 'compact';
   search: string;
   onNavigate: (path: string) => void;
   onViewChange: (view: 'grid' | 'list') => void;
+  onDensityChange: (density: 'comfortable' | 'compact') => void;
   onSearchChange: (search: string) => void;
   onCreateFolder: (name: string) => void;
   onUploadClick: () => void;
@@ -34,9 +36,11 @@ export function FileBrowserToolbar({
   currentSource,
   isWritable,
   view,
+  density,
   search,
   onNavigate,
   onViewChange,
+  onDensityChange,
   onSearchChange,
   onCreateFolder,
   onUploadClick,
@@ -164,6 +168,14 @@ export function FileBrowserToolbar({
 
       {/* View toggle */}
       <ViewToggle view={view} onChange={onViewChange} />
+
+      {/* Density toggle (espejo del de Drive): comfortable = miniaturas en grid */}
+      <ToolbarButton
+        icon={density === 'compact' ? Rows4 : Rows3}
+        title={density === 'compact' ? 'Density: Compact — switch to Comfortable' : 'Density: Comfortable — switch to Compact'}
+        onClick={() => onDensityChange(density === 'compact' ? 'comfortable' : 'compact')}
+        active={density === 'compact'}
+      />
 
       {/* Writable actions */}
       {isWritable && (

@@ -50,6 +50,8 @@ export function Component() {
     handleItemDoubleClick,
     view,
     changeView,
+    density,
+    changeDensity,
     search,
     setSearch,
     isWritable,
@@ -307,6 +309,7 @@ export function Component() {
             loading={loading}
             error={error}
             view={view}
+            density={density}
             selectedFile={selectedFile}
             selectedIds={selectedIds}
             isWritable={isWritable}
@@ -325,6 +328,7 @@ export function Component() {
             loading={loading}
             error={error}
             view={view}
+            density={density}
             selectedFile={selectedFile}
             selectedIds={selectedIds}
             isWritable={isWritable}
@@ -347,9 +351,11 @@ export function Component() {
         currentSource={currentSource}
         isWritable={isWritable}
         view={view}
+        density={density}
         search={search}
         onNavigate={navigateTo}
         onViewChange={changeView}
+        onDensityChange={changeDensity}
         onSearchChange={setSearch}
         onCreateFolder={createFolder}
         onUploadClick={handleUploadClick}

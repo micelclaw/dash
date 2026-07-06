@@ -239,10 +239,10 @@ function buildSingleMenu(file: FileRecord, ctx: DriveMenuContext): ContextMenuIt
   }
 
   // Share ▶ — public link / internal user / by email / copy path.
-  // Public link + email only for files (folders can't be served via link yet);
-  // internal user shares work for folders too.
+  // Public link + email work for files AND folders (una carpeta pública es
+  // navegable en /share/:token; el backend sirve list/zip anónimos).
   const shareSub: ContextMenuItem[] = [
-    ...(!isDir && cb.onShare ? [{ label: 'Public link…', icon: Globe, onClick: () => cb.onShare!(file) }] : []),
+    ...(cb.onShare ? [{ label: 'Public link…', icon: Globe, onClick: () => cb.onShare!(file) }] : []),
     ...(cb.onShareUser ? [{ label: 'With user…', icon: UserPlus, onClick: () => cb.onShareUser!([file]) }] : []),
     ...(!isDir && cb.onShareEmail ? [{ label: 'By email…', icon: Mail, onClick: () => cb.onShareEmail!(file) }] : []),
     ...(!isDir ? [{ label: 'Copy link', icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } }] : []),

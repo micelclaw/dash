@@ -54,8 +54,14 @@ const PANEL_WIDTH = 360;
  * for a single selection, or an aggregate summary for a multi-selection.
  *
  * Open/collapsed state + active tab live in `useDriveStore` (persisted).
- * Collapsed with a selection → slim rail with a reopen button.
- * Below 1024px the panel renders as a fixed overlay sheet.
+ *
+ * On desktop the panel is ALWAYS present (open → 360px with details or an
+ * empty-state hint; collapsed → 34px rail). Its footprint depends ONLY on the
+ * manual open/collapsed toggle, never on the selection — so clicking files or
+ * folders never reflows the grid (which used to move the item out from under
+ * the cursor mid double-click). Below 1024px it renders as a fixed overlay
+ * sheet (doesn't push content → no reflow concern), shown only with a
+ * selection.
  */
 export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onToggleStar, bulk }: DriveInspectorProps) {
   const inspectorOpen = useDriveStore(s => s.inspectorOpen);
@@ -80,11 +86,16 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
   const effectiveTab: DriveInspectorTab =
     single?.is_directory && inspectorTab === 'versions' ? 'details' : inspectorTab;
 
-  if (files.length === 0) return null;
+  const hasSelection = files.length > 0;
 
-  // Collapsed → slim rail so the user can reopen (persisted preference).
-  if (!inspectorOpen) {
-    if (isOverlay) return null;
+  // Mobile: overlay sheet. It floats above content (doesn't push it), so there
+  // is no reflow to avoid — keep it minimal: only when open AND something is
+  // selected.
+  if (isOverlay) {
+    if (!inspectorOpen || !hasSelection) return null;
+  } else if (!inspectorOpen) {
+    // Desktop collapsed → slim rail, ALWAYS present (even with no selection) so
+    // the layout stays fixed and clicks never reflow the grid.
     return (
       <div
         data-testid="drive-inspector-rail"
@@ -151,13 +162,21 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
               variant="underline"
             />
           </div>
-        ) : (
+        ) : hasSelection ? (
           <div style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8,
             fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)',
           }}>
             <FilesIcon size={14} style={{ color: 'var(--mod-drive)' }} />
             {files.length} items selected
+          </div>
+        ) : (
+          <div style={{
+            flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)',
+          }}>
+            <Info size={14} style={{ color: 'var(--mod-drive)' }} />
+            Details
           </div>
         )}
         <button
@@ -170,16 +189,18 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
         >
           <PanelRightClose size={15} />
         </button>
-        <button
-          onClick={onClose}
-          title="Close (clear selection)"
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0,
-          }}
-        >
-          <X size={15} />
-        </button>
+        {hasSelection && (
+          <button
+            onClick={onClose}
+            title="Close (clear selection)"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0,
+            }}
+          >
+            <X size={15} />
+          </button>
+        )}
       </div>
 
       {/* Body */}
@@ -197,8 +218,19 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
             {effectiveTab === 'activity' && <ActivityTab fileId={single.id} />}
             {effectiveTab === 'versions' && !single.is_directory && <VersionsTab file={single} />}
           </>
-        ) : (
+        ) : hasSelection ? (
           <MultiSummary files={files} bulk={bulk} />
+        ) : (
+          <div style={{
+            height: '100%', display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 10,
+            padding: 24, textAlign: 'center', color: 'var(--text-muted)',
+          }}>
+            <Info size={26} style={{ opacity: 0.45 }} />
+            <span style={{ fontSize: 13, lineHeight: 1.5 }}>
+              Select a file or folder<br />to see its details
+            </span>
+          </div>
         )}
       </div>
     </div>

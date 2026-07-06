@@ -283,14 +283,14 @@ export function TrashView() {
       </div>
 
       {/* Inspector (D5) — multi via checkboxes wins, otherwise the clicked row.
-          No bulk quick actions here (trash has its own restore/delete bar). */}
-      {(selectedFiles.length > 0 || selectedFile) && (
-        <DriveInspector
-          files={selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []}
-          onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
-          onRefetch={() => { void refetch(); }}
-        />
-      )}
+          No bulk quick actions here (trash has its own restore/delete bar).
+          Always rendered (footprint driven by the persisted open/collapsed
+          toggle, not the selection) so clicks never reflow. */}
+      <DriveInspector
+        files={selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []}
+        onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
+        onRefetch={() => { void refetch(); }}
+      />
       </div>
 
       <ConfirmDialog

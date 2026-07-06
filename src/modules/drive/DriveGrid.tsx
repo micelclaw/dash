@@ -13,9 +13,11 @@
 import { useState } from 'react';
 import { Image, Folder, Star } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
+import { FileThumbnail } from '@/components/shared/FileThumbnail';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { isImageMime, simpleHash } from '@/lib/file-utils';
+import { isImageMime, simpleHash, canShowThumbnail } from '@/lib/file-utils';
+import { useThumbnailBatch, getPrefetchedThumb } from '@/lib/thumbnail-batch';
 import { useDriveStore } from '@/stores/drive.store';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
@@ -51,6 +53,10 @@ export function DriveGrid({
   const density = useDriveStore(s => s.density);
   const compact = density === 'compact';
   const itemHeight = compact ? 92 : 120;
+
+  // Prefetch en lote de las miniaturas de la carpeta (UN request); las celdas
+  // leen getPrefetchedThumb() y pintan a la vez, sin tormenta de <img> HTTP/1.1.
+  useThumbnailBatch(files, 320, !compact);
 
   if (!loading && files.length === 0) {
     return (
@@ -283,7 +289,22 @@ function GridItem({
             } : {}),
           }}
         >
-          {isImage ? (
+          {!compact && !isDir && canShowThumbnail(file.id, file.mime_type) ? (
+            // Miniatura real (imagen/PDF/office) — solo en densidad comfortable;
+            // el icono por tipo es el fallback integrado mientras carga/si falla.
+            <FileThumbnail
+              key={file.id}
+              file={file}
+              // Fallback individual al width canónico 640 (una sola caché de
+              // conversión); el batch sirve la variante 320 derivada.
+              width={640}
+              fit="cover"
+              iconSize="lg"
+              retries="light"
+              prefetchedSrc={getPrefetchedThumb(file.id, 320)}
+              holdWhileBatching
+            />
+          ) : isImage ? (
             <Image size={compact ? 22 : 28} style={{ color: 'var(--text-dim)', opacity: 0.7 }} />
           ) : isDir ? (
             <Folder size={compact ? 22 : 28} style={{ color: isDragOver ? 'var(--amber)' : 'var(--amber)' }} />

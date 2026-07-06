@@ -13,11 +13,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, HardDrive, Cloud, ChevronRight, ChevronDown,
-  Trash2, Folder, FolderOpen,
+  Trash2, Folder, FolderPlus,
 } from 'lucide-react';
 import { useVFS } from './hooks/use-vfs';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { AddLocalSourceDialog } from './AddLocalSourceDialog';
+import { SharedFolderCreateDialog } from '@/components/settings/sections/SharedFolderCreateDialog';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
@@ -38,7 +38,7 @@ interface SourceTreeProps {
 export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }: SourceTreeProps) {
   const { mounts, mountsLoading, fetchMounts, deleteMount } = useVFS();
   const [deleteTarget, setDeleteTarget] = useState<VFSMount | null>(null);
-  const [localSourceOpen, setLocalSourceOpen] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
 
   useEffect(() => { fetchMounts(); }, [fetchMounts, refreshKey]);
 
@@ -104,8 +104,8 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setLocalSourceOpen(true)} className="gap-2">
-              <FolderOpen size={14} /> Local folder
+            <DropdownMenuItem onClick={() => setCreateFolderOpen(true)} className="gap-2">
+              <FolderPlus size={14} /> Nueva carpeta compartida
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onAddSource?.()} className="gap-2">
               <Cloud size={14} /> Cloud storage
@@ -124,7 +124,7 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
         <div style={{ padding: '4px 8px' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>No storage yet</span>
           <button
-            onClick={() => setLocalSourceOpen(true)}
+            onClick={() => setCreateFolderOpen(true)}
             style={{
               display: 'block',
               marginTop: 4,
@@ -138,7 +138,7 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
               fontFamily: 'var(--font-sans)',
             }}
           >
-            + Add a folder
+            + Nueva carpeta compartida
           </button>
         </div>
       )}
@@ -164,11 +164,12 @@ export function SourceTree({ currentPath, onNavigate, onAddSource, refreshKey }:
         variant="danger"
       />
 
-      {/* Add local source dialog */}
-      <AddLocalSourceDialog
-        open={localSourceOpen}
-        onClose={() => setLocalSourceOpen(false)}
-        onCreated={() => { setLocalSourceOpen(false); fetchMounts(); }}
+      {/* Crear carpeta compartida (reemplaza "Local folder" — el "+" del Explorer
+          ahora crea carpetas COMPARTIDAS del NAS, no monta directorios sueltos). */}
+      <SharedFolderCreateDialog
+        open={createFolderOpen}
+        onOpenChange={setCreateFolderOpen}
+        onCreated={() => { void fetchMounts(); }}
       />
     </div>
   );
