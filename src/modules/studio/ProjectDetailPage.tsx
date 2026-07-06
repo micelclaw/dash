@@ -27,6 +27,7 @@ import { TestingPhase } from './phases/TestingPhase';
 import { PackagingPhase } from './phases/PackagingPhase';
 import { LivingAppCard } from './components/LivingAppCard';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
+import { DesignStudioPage } from './design/DesignStudioPage';
 import { useStudioMode } from './hooks/useStudioMode';
 // M22: pipeline order is a single source in lib/phases.ts (no more local
 // STATUS_ORDER copies that could drift from PhaseSidebar / the backend).
@@ -149,6 +150,19 @@ export function Component() {
           <ChevronLeft size={14} /> Back to projects
         </button>
       </div>
+    );
+  }
+
+  // Design-only projects (target='design') get the canvas experience —
+  // no phase rail, no doc phases. Conversion ("Build this app") flips the
+  // target/status server-side; refetch routes it into the normal pipeline.
+  if (project.target === 'design') {
+    return (
+      <DesignStudioPage
+        project={project}
+        onExit={() => navigate('/studio')}
+        onProjectChanged={() => { void refetchProject(project.id); }}
+      />
     );
   }
 

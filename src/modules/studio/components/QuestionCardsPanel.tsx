@@ -36,10 +36,36 @@ interface Props {
   preamble?: string | null;
   busy: boolean;
   onSubmit: (answers: Record<string, string>) => void;
+  /** Which doc-phase this panel iterates — picks the suggestion chips. */
+  phase?: 'concept' | 'frontend' | 'foundation';
 }
 
-export function QuestionCardsPanel({ questions, preamble, busy, onSubmit }: Props) {
+// One-click iteration starters per phase. Clicking fills the free-comment
+// box (still editable before sending) — a non-technical user shouldn't
+// have to invent what to ask for.
+const PHASE_SUGGESTIONS: Record<string, string[]> = {
+  concept: [
+    'Narrow the scope to the essentials',
+    'Add an example user journey',
+    "Be explicit about what's OUT of scope",
+  ],
+  frontend: [
+    'Make it more minimal',
+    'Try a darker palette',
+    'Bigger, bolder typography',
+    'More whitespace between sections',
+    'Add a stats/summary section',
+  ],
+  foundation: [
+    'Simplify the data model',
+    'Fewer endpoints, more reuse',
+    'Explain the riskiest part in plain words',
+  ],
+};
+
+export function QuestionCardsPanel({ questions, preamble, busy, onSubmit, phase }: Props) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const suggestions = phase ? PHASE_SUGGESTIONS[phase] ?? [] : [];
 
   // The panel ALWAYS renders, even when there are no structured
   // questions, because the free-comment box gives the user a way to
@@ -219,6 +245,29 @@ export function QuestionCardsPanel({ questions, preamble, busy, onSubmit }: Prop
             ? 'Anything else to add or clarify? (optional)'
             : 'Want to request a change or clarify something? (optional)'}
         </label>
+        {suggestions.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 2 }}>
+            {suggestions.map((sug) => (
+              <button
+                key={sug}
+                type="button"
+                disabled={busy}
+                onClick={() => setAnswers((a) => ({ ...a, [FREE_COMMENT_ID]: sug }))}
+                style={{
+                  padding: '4px 10px', fontSize: '0.68rem',
+                  background: (answers[FREE_COMMENT_ID] ?? '') === sug
+                    ? 'color-mix(in srgb, var(--amber) 12%, transparent)'
+                    : 'var(--surface)',
+                  color: 'var(--text-dim)',
+                  border: `1px solid ${(answers[FREE_COMMENT_ID] ?? '') === sug ? 'var(--amber)' : 'var(--border)'}`,
+                  borderRadius: 999, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {sug}
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={answers[FREE_COMMENT_ID] ?? ''}
           onChange={(e) => setAnswers((a) => ({ ...a, [FREE_COMMENT_ID]: e.target.value }))}

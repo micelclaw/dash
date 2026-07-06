@@ -41,6 +41,7 @@ import { ResizeHandle } from '../../components/v2/ResizeHandle';
 import { useOpencodeStream } from '../../hooks/useOpencodeStream';
 import { useConfirm } from '../../lib/useConfirm';
 import { useStudioMode } from '../../hooks/useStudioMode';
+import { useStudioEngines } from '../../hooks/useStudioEngines';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 
 interface Props {
@@ -64,6 +65,13 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
   // Owned here so it governs both the left technical pane and the embed.
   const [studioMode, setStudioMode] = useStudioMode();
   const guided = studioMode === 'guided';
+
+  // Live engine readiness — powers the proactive degradation banner when
+  // this project's ACP engine stopped being ready (key removed, acpx off).
+  const { engines } = useStudioEngines();
+  const engineInfo = engines.find((e) => e.id === project.engine);
+  const engineDegraded = (project.engine === 'acp_claude' || project.engine === 'acp_codex')
+    && !!engineInfo && !engineInfo.ready;
 
   const [tab, setTab] = useState<'code' | 'api'>('code');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -324,32 +332,59 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
         guided={guided}
       />
 
-      {/* PRO-mode BYO control row: open the project in the user's own
-          Claude Code / Cursor via MCP (not ACP — OpenCode does not take
-          part; the user spends their own Claude subscription). Gated to
-          Pro because it exposes the engine path; Guided keeps it hidden. */}
-      {!guided && (
+      {/* Engine degradation banner — this project's server-side engine is
+          no longer ready (key removed / acpx off / harness gone). Proactive:
+          the user learns BEFORE a send fails, with the two ways out. */}
+      {engineDegraded && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-          gap: 8, padding: '6px 16px', borderBottom: '1px solid var(--border)',
-          flexShrink: 0, background: 'var(--card)',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 16px', flexShrink: 0,
+          background: 'color-mix(in srgb, var(--amber) 10%, var(--card))',
+          borderBottom: '1px solid color-mix(in srgb, var(--amber) 40%, var(--border))',
+          fontSize: '0.75rem', color: 'var(--text)',
         }}>
-          <button
-            type="button"
-            onClick={() => setShowConnect(true)}
-            title="Build this project from your own Claude Code / Cursor via MCP (not ACP)"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', fontSize: '0.72rem', fontWeight: 600,
-              background: 'transparent', color: 'var(--text-dim)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer', fontFamily: 'var(--font-sans)',
-            }}
-          >
-            <Plug size={12} /> Open in my tool
+          <AlertCircle size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+          <span style={{ flex: 1, lineHeight: 1.4 }}>
+            {engineInfo?.label} isn't ready on this server{engineInfo?.reason ? ` — ${engineInfo.reason}` : '.'}
+          </span>
+          <button type="button" onClick={() => navigate('/settings/studio-engines')} style={degradedBtn(true)}>
+            Configure
+          </button>
+          <button type="button" onClick={() => setShowSettings(true)} style={degradedBtn(false)}>
+            Switch engine
           </button>
         </div>
       )}
+
+      {/* BYO control row: open the project in the user's own Claude Code /
+          Cursor via MCP (not ACP — OpenCode does not take part; the user
+          spends their own subscription). Visible in BOTH modes — Guided
+          gets jargon-free copy (the create-time toasts promise this). */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        gap: 8, padding: '6px 16px', borderBottom: '1px solid var(--border)',
+        flexShrink: 0, background: 'var(--card)',
+      }}>
+        {guided && (
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Prefer your own coding tool?
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setShowConnect(true)}
+          title="Build this project from your own Claude Code / Cursor via MCP (not ACP)"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', fontSize: '0.72rem', fontWeight: 600,
+            background: 'transparent', color: 'var(--text-dim)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer', fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <Plug size={12} /> {guided ? 'Open this project in it' : 'Open in my tool'}
+        </button>
+      </div>
 
       {/* Build checklist panel — collapsible. Hidden when no items
           yet (project just entered Build, generation in flight). In
@@ -392,7 +427,27 @@ export function BuildPhase({ project, viewMode = 'edit', onSelectPhase }: Props)
       {/* Top error surfaces. In Guided mode the empathetic template (§8):
           what happened in plain words + reassurance + ways out (never a
           dead end, never a stack trace up front). In Pro, the raw banner. */}
-      {startError && (guided ? (
+      {startError && (/ENGINE_NOT_READY|ACP_HARNESS_MISSING/i.test(startError) ? (
+        guided ? (
+          <FriendlyError
+            title="This engine isn't ready yet"
+            message="The engine this project uses needs a one-time setup on the server before it can build."
+            detail={startError}
+            actions={[
+              { label: 'Open Settings › Studio Engines', onClick: () => navigate('/settings/studio-engines'), primary: true },
+              { label: 'Switch engine', onClick: () => setShowSettings(true) },
+              { label: 'Dismiss', onClick: () => setStartError(null) },
+            ]}
+          />
+        ) : (
+          <Banner kind="error" icon={<AlertCircle size={14} />}>
+            {startError}{' '}
+            <button type="button" onClick={() => navigate('/settings/studio-engines')} style={bannerLinkBtn}>
+              Open Settings › Studio Engines
+            </button>
+          </Banner>
+        )
+      ) : guided ? (
         <FriendlyError
           title="I couldn't start building your app"
           message="I tried, but something got in the way. It usually works on a retry."
@@ -651,6 +706,18 @@ const paneHeader: React.CSSProperties = {
 const overlayLoaderStyle: React.CSSProperties = {
   position: 'absolute', top: 8, right: 12, color: 'var(--text-muted)',
   zIndex: 1,
+};
+const degradedBtn = (primary: boolean): React.CSSProperties => ({
+  flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4,
+  padding: '4px 10px', fontSize: '0.7rem', fontWeight: 600,
+  background: primary ? 'var(--amber)' : 'transparent',
+  color: primary ? '#000' : 'var(--text-dim)',
+  border: primary ? 'none' : '1px solid var(--border)',
+  borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+});
+const bannerLinkBtn: React.CSSProperties = {
+  padding: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+  color: 'inherit', textDecoration: 'underline', fontSize: 'inherit', fontFamily: 'inherit',
 };
 const floatingBackStyle: React.CSSProperties = {
   position: 'absolute', top: 14, left: 14, zIndex: 5,

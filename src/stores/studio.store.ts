@@ -36,9 +36,13 @@ export type StudioProjectStatus =
   | 'packaged'
   | 'published'
   | 'archived'
-  | 'frozen';
+  | 'frozen'
+  | 'design';
 
 export type AppLevel = 'L1' | 'L2' | 'L3';
+
+/** WHAT a project produces (orthogonal to `engine`). */
+export type StudioTarget = 'micelclaw_app' | 'website' | 'webapp' | 'mobile' | 'design';
 
 export interface StudioPendingQuestion {
   id: string;
@@ -113,6 +117,10 @@ export interface StudioProject {
   /** Which engine runs the governed build (default 'opencode'). BYO
    *  ("open in your own tool") is orthogonal — not an engine value. */
   engine: StudioEngineId;
+  /** WHAT the project produces: 'micelclaw_app' (default), 'website',
+   *  'webapp', 'mobile', or 'design' (design-only canvas — status stays
+   *  'design' and ProjectDetailPage routes to the Design studio). */
+  target: StudioTarget;
   /** S4: catalog design system the user picked as a base for the
    *  Frontend phase (slug, e.g. "material", "stripe"). null = none. */
   design_system: string | null;
@@ -146,6 +154,13 @@ export interface StudioDesignSystem {
  *  BYO is orthogonal and not part of this union. */
 export type StudioEngineId = 'opencode' | 'acp_claude' | 'acp_codex';
 
+export interface StudioEngineModel {
+  /** Value stored in the project's `model`. `''` = harness default (NULL). */
+  id: string;
+  label?: string;
+  recommended?: boolean;
+}
+
 export interface StudioEngineInfo {
   id: StudioEngineId;
   label: string;
@@ -154,6 +169,8 @@ export interface StudioEngineInfo {
   blurb: string;
   reason?: string;
   requires?: string[];
+  /** Curated model choices for ACP engines (opencode uses /studio/models). */
+  models?: StudioEngineModel[];
   detail: {
     cli_installed: boolean | null;
     vendor_auth: boolean | null;
@@ -170,6 +187,9 @@ export interface CreateProjectInput {
   model?: string | null;
   /** Which engine runs the build (default 'opencode' server-side). */
   engine?: StudioEngineId;
+  /** WHAT the project produces (default 'micelclaw_app'). 'design'
+   *  creates a design-only canvas project. */
+  target?: StudioTarget;
 }
 
 export interface UpdateProjectInput {
@@ -389,8 +409,12 @@ export interface StudioBuildState {
 }
 
 export interface StudioBuildSettings {
-  /** Project-wide model. Set at creation; not editable from BuildPhase. */
+  /** Project-wide model. Engine-scoped: `<provider>/<model>` for opencode,
+   *  a curated alias/id for ACP engines (null = harness default). */
   model: string | null;
+  /** Which engine runs the governed build. Editable here (with an abort
+   *  confirm if a build session is active — 409 ENGINE_CHANGE_BLOCKED). */
+  engine: StudioEngineId;
   build_token_cap: number;
   build_turn_cap: number;
   build_force_plan_mode: boolean;
@@ -574,7 +598,26 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await api.get<ApiEnvelope<StudioProject[]>>('/studio/projects');
-      set({ projects: res.data ?? [], loading: false, fetched: true });
+      set((state) => ({
+        // A9: the list omits the heavy doc fields. Never clobber a row a
+        // refetchProject already filled (direct-nav race: the slow list can
+        // resolve AFTER the fast single fetch) — carry the docs over.
+        projects: (res.data ?? []).map((p) => {
+          const prev = state.projects.find((x) => x.id === p.id);
+          const slim = p.doc_concept === undefined && p.doc_frontend === undefined && p.doc_foundation === undefined;
+          return prev && slim
+            ? {
+              ...p,
+              doc_concept: prev.doc_concept,
+              doc_frontend: prev.doc_frontend,
+              doc_foundation: prev.doc_foundation,
+              generated_files: prev.generated_files ?? p.generated_files,
+            }
+            : p;
+        }),
+        loading: false,
+        fetched: true,
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load Studio projects';
       set({ error: message, loading: false, fetched: true });
@@ -995,6 +1038,7 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const p = res.data;
     return {
       model: p.model ?? null,
+      engine: p.engine ?? 'opencode',
       build_token_cap: p.build_token_cap,
       build_turn_cap: p.build_turn_cap,
       build_force_plan_mode: p.build_force_plan_mode,

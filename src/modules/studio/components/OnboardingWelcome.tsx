@@ -23,11 +23,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, ChevronLeft, Loader2, Lock, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Loader2, Lock, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore, type StudioTemplateMeta, type StudioEngineId } from '@/stores/studio.store';
+import { useStudioStore, type StudioTemplateMeta, type StudioEngineId, type StudioTarget } from '@/stores/studio.store';
 import { api } from '@/services/api';
 import { EnginePicker } from './EnginePicker';
+import { ConnectExternalEngineModal } from './v2/ConnectExternalEngineModal';
+import { useStudioEngines } from '../hooks/useStudioEngines';
+import { TARGET_CARDS } from '../lib/target-cards';
 
 
 interface Props {
@@ -66,12 +69,20 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   const instantiateTemplate = useStudioStore((s) => s.instantiateTemplate);
 
   const [idea, setIdea] = useState('');
+  const [kind, setKind] = useState<StudioTarget>('micelclaw_app');
+  // The engine choice lives behind "Advanced" in Guided — most users
+  // should never have to think about it (the default engine just works).
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Set right after a BYO create — opens the MCP connection modal in place.
+  const [connectProjectId, setConnectProjectId] = useState<string | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [templates, setTemplates] = useState<StudioTemplateMeta[]>([]);
   const [models, setModels] = useState<Array<{ id: string; label?: string; recommended?: boolean }>>([]);
   const [model, setModel] = useState<string>('');
   const [engine, setEngine] = useState<StudioEngineId>('opencode');
+  const engineTouched = useRef(false);
+  const { engines, defaultEngine } = useStudioEngines();
   const navigate = useNavigate();
   const [tourSeen, setTourSeen] = useState(() => {
     try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return true; }
@@ -82,19 +93,48 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   useEffect(() => {
     let cancelled = false;
     fetchTemplates().then((t) => { if (!cancelled) setTemplates(t.slice(0, 6)); }).catch(() => {});
-    // Pull the models the build engine can actually reach + the recommended
-    // default. The guided user gets a sane default but CAN change the engine.
+    return () => { cancelled = true; };
+  }, [fetchTemplates]);
+
+  // Apply the system default engine once it arrives — unless the user
+  // already picked one.
+  useEffect(() => {
+    if (!engineTouched.current && defaultEngine) setEngine(defaultEngine);
+  }, [defaultEngine]);
+
+  // OpenCode models load LAZILY — when the built-in engine is the
+  // selection (an ACP engine ignores /studio/models entirely) or when
+  // the kind is design (its generator runs on the same reachable list).
+  useEffect(() => {
+    if ((engine !== 'opencode' && kind !== 'design') || models.length > 0) return;
+    let cancelled = false;
     void (async () => {
       try {
         const res = await api.get<{ data: { models: Array<{ id: string; label?: string; recommended?: boolean }>; default_model?: string } }>('/studio/models');
         if (cancelled) return;
         const list = res.data.models ?? [];
         setModels(list);
-        setModel(res.data.default_model ?? list[0]?.id ?? '');
+        setModel((prev) => prev || (res.data.default_model ?? list[0]?.id ?? ''));
       } catch { /* fall back to server-side default at create time */ }
     })();
     return () => { cancelled = true; };
-  }, [fetchTemplates]);
+  }, [engine, kind, models.length]);
+
+  const selectedEngineInfo = engines.find((e) => e.id === engine);
+  // A not-ready ACP engine can be SELECTED (so the choice is visible) but
+  // never submitted — the hint below the picker says how to finish setup.
+  const engineBlocked = engine !== 'opencode' && selectedEngineInfo ? !selectedEngineInfo.ready : false;
+
+  function changeEngine(next: StudioEngineId) {
+    engineTouched.current = true;
+    setEngine(next);
+    // `model` is engine-scoped: reset when the axis changes.
+    if (next === 'opencode') {
+      setModel(models.find((m) => m.recommended)?.id ?? models[0]?.id ?? '');
+    } else {
+      setModel('');
+    }
+  }
 
   useEffect(() => { ideaRef.current?.focus(); }, []);
 
@@ -104,34 +144,65 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   }
 
   async function continueFromIdea(opts?: { byo?: boolean }) {
-    if (!idea.trim() || creating) return;
+    if (creating) return;
+    if (!idea.trim()) {
+      // Never a silent no-op on a click — the BYO card is reachable with an
+      // empty idea (the Continue button is disabled, the card is not).
+      toast.message(opts?.byo
+        ? 'Write your idea first — then I create the project and hand you the connection file for your editor.'
+        : 'Write your idea first.');
+      ideaRef.current?.focus();
+      return;
+    }
+    if (kind !== 'design' && engineBlocked && !opts?.byo) return;
     setCreating(true);
     try {
-      // OpenCode (built-in) needs a model; the ACP engines run with their
-      // own model, so a model is only required when engine === 'opencode'.
-      let chosen = model;
-      if (engine === 'opencode' && !chosen) {
+      // Design-only: no build engine, but the canvas generator DOES run
+      // on an LLM — honor an explicit model pick ('' = server resolves
+      // the recommended one via ensureDesignProjectModel).
+      if (kind === 'design') {
+        const created = await createProject({
+          name: deriveName(idea),
+          description: idea.trim(),
+          target: 'design',
+          model: model || null,
+        });
+        onCreated(created.id);
+        return;
+      }
+      // BYO is orthogonal: it always creates with the built-in engine, then
+      // the user opens it in their own tool from the build screen.
+      const effectiveEngine: StudioEngineId = opts?.byo ? 'opencode' : engine;
+      // OpenCode (built-in) needs a model; ACP engines carry a curated
+      // alias/id ('' = harness default → null).
+      let chosen = effectiveEngine === 'opencode'
+        ? (engine === 'opencode' ? model : '')
+        : (model.trim() || null);
+      if (effectiveEngine === 'opencode' && !chosen) {
         try {
           const res = await api.get<{ data: { models: Array<{ id: string }>; default_model?: string } }>('/studio/models');
           chosen = res.data.default_model ?? res.data.models?.[0]?.id ?? '';
         } catch { /* ignore */ }
       }
-      if (engine === 'opencode' && !chosen) {
+      if (effectiveEngine === 'opencode' && !chosen) {
         toast.message('You need to set up an AI model first.');
         setCreating(false);
         onProMode();
         return;
       }
-      // BYO is orthogonal: create with the built-in engine, then the user
-      // opens it in their own tool from the build screen ("Open in my tool").
       const created = await createProject({
         name: deriveName(idea),
         description: idea.trim(),
-        model: engine === 'opencode' ? chosen : null,
-        engine,
+        model: chosen || null,
+        engine: effectiveEngine,
+        target: kind === 'micelclaw_app' ? undefined : kind,
       });
       if (opts?.byo) {
-        toast.message('Created. Open it in your own tool from the build screen.');
+        // BYO handoff happens RIGHT HERE: open the connection modal with the
+        // .mcp.json + bearer; navigating to the project happens on close.
+        setCreating(false);
+        setConnectProjectId(created.id);
+        return;
       }
       onCreated(created.id);
     } catch (err) {
@@ -188,6 +259,26 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
         Tell me in your own words and I'll handle the rest.
       </p>
 
+      {/* What are we making? — the target axis as BIG self-explanatory
+          cards (icon + description + concrete example), not tiny chips.
+          Shared copy with the Pro modal via TARGET_CARDS. */}
+      <div style={kindGrid}>
+        {TARGET_CARDS.map((k) => {
+          const active = kind === k.id;
+          const Icon = k.icon;
+          return (
+            <button key={k.id} type="button" onClick={() => setKind(k.id)} disabled={disabled} style={kindCard(active)}>
+              <Icon size={20} style={{ color: active ? 'var(--amber)' : 'var(--text-dim)' }} />
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>{k.title}</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', lineHeight: 1.45 }}>{k.desc}</span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 'auto' }}>
+                e.g. “{k.example}”
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Path 1 — free text */}
       <div style={ideaCard}>
         <textarea
@@ -197,30 +288,83 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void continueFromIdea(); } }}
           rows={3}
           disabled={disabled}
-          placeholder={'E.g.: "I want my clients to book their own appointments and notify me"'}
+          placeholder={
+            kind === 'design' ? 'E.g.: "A landing page for my dog-grooming studio, with prices and a booking form"'
+              : kind === 'website' ? 'E.g.: "A site for my bakery: home, products with prices, where to find us"'
+                : kind === 'webapp' ? 'E.g.: "A workout tracker that keeps everything in the browser"'
+                  : kind === 'mobile' ? 'E.g.: "A shopping-list app I can install on my phone"'
+                    : 'E.g.: "I want my clients to book their own appointments and notify me"'
+          }
           style={ideaInput}
         />
-        {/* Engine chooser — the friendly card picker (§A1). Sits between
-            the idea and Continue, so the choice reads as a step. */}
+        {kind === 'design' && (
+          <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            You'll get three visual directions to pick from, then refine the screens on a canvas.
+            No build engine involved — but you can pick the AI model under Advanced.
+          </p>
+        )}
+        {/* Engine chooser — folded behind "Advanced" in Guided: the
+            important decision here is the idea, not the engine. The
+            summary always shows the active choice (amber when it needs
+            setup). Design-only projects have no build engine, but their
+            canvas generator runs on an LLM → model-only picker. */}
         <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)' }}>Choose an engine</span>
-            <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>you can change this later</span>
-          </div>
-          <EnginePicker
-            engine={engine}
-            onEngineChange={setEngine}
-            model={model}
-            onModelChange={setModel}
-            models={models}
-            onConfigureEngine={() => navigate('/settings/studio-engines')}
-            onChooseByo={() => { void continueFromIdea({ byo: true }); }}
-            disabled={disabled}
-          />
+          <button type="button" onClick={() => setAdvancedOpen((v) => !v)} disabled={disabled} style={advancedToggle}>
+            {advancedOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <span style={{ fontWeight: 600 }}>{kind === 'design' ? 'Advanced — AI model' : 'Advanced — engine & model'}</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: engineBlocked ? 'var(--amber)' : 'var(--text-muted)' }}>
+              {kind === 'design'
+                ? (model ? model.split('/').pop() : 'Automatic (recommended)')
+                : (selectedEngineInfo?.label ?? 'Built-in')
+                  + (engine === 'opencode' && model ? ` · ${model.split('/').pop()}` : '')
+                  + (engineBlocked ? ' — needs setup' : '')}
+            </span>
+          </button>
+          {advancedOpen && (kind === 'design' ? (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-dim)' }}>
+                AI model for the design generation
+              </label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={disabled}
+                style={modelSelect}
+              >
+                <option value="">Automatic (recommended)</option>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label ?? m.id}{m.recommended ? ' ★' : ''}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                Only models the generator can actually reach are listed (from Models › Configured).
+              </span>
+            </div>
+          ) : (
+            <div style={{ marginTop: 10 }}>
+              <EnginePicker
+                engines={engines}
+                engine={engine}
+                onEngineChange={changeEngine}
+                model={model}
+                onModelChange={setModel}
+                models={models}
+                onConfigureEngine={(id) => navigate(`/settings/studio-engines${id ? `?focus=${id}` : ''}`)}
+                onChooseByo={() => { void continueFromIdea({ byo: true }); }}
+                disabled={disabled}
+              />
+            </div>
+          ))}
         </div>
 
+        {kind !== 'design' && engineBlocked && (
+          <p style={{ margin: '10px 0 0', fontSize: '0.72rem', color: 'var(--amber)', lineHeight: 1.4 }}>
+            Finish setup to use {selectedEngineInfo?.label ?? 'this engine'} — or pick Built-in to start now.
+          </p>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={() => { void continueFromIdea(); }} disabled={!idea.trim() || disabled} style={continueBtn(!idea.trim() || disabled)}>
+          <button onClick={() => { void continueFromIdea(); }} disabled={!idea.trim() || disabled || (kind !== 'design' && engineBlocked)} style={continueBtn(!idea.trim() || disabled || (kind !== 'design' && engineBlocked))}>
             {creating ? <><Loader2 size={14} className="animate-spin" /> Preparing…</> : <>Continue <ArrowRight size={14} /></>}
           </button>
         </div>
@@ -246,6 +390,18 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
         </>
       )}
 
+      {/* BYO handoff — the connection modal opens right after the create. */}
+      {connectProjectId && (
+        <ConnectExternalEngineModal
+          projectId={connectProjectId}
+          onClose={() => {
+            const id = connectProjectId;
+            setConnectProjectId(null);
+            onCreated(id);
+          }}
+        />
+      )}
+
       {/* Privacy + Pro escape hatch */}
       <div style={footerRow}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
@@ -260,8 +416,31 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
 }
 
 const wrap: React.CSSProperties = {
-  maxWidth: 620, margin: '0 auto', padding: '24px 16px',
+  maxWidth: 680, margin: '0 auto', padding: '24px 16px',
   display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-sans)', position: 'relative',
+};
+const kindGrid: React.CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+  gap: 10, marginBottom: 14,
+};
+const kindCard = (active: boolean): React.CSSProperties => ({
+  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
+  padding: '13px 14px', textAlign: 'left', minHeight: 118,
+  background: active ? 'color-mix(in srgb, var(--amber) 8%, var(--card))' : 'var(--card)',
+  border: `1px solid ${active ? 'var(--amber)' : 'var(--border)'}`,
+  borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+});
+const advancedToggle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+  padding: '8px 10px', background: 'var(--surface)',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+  color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+};
+const modelSelect: React.CSSProperties = {
+  padding: '6px 10px', fontSize: '0.8rem', width: '100%', maxWidth: 340,
+  background: 'var(--surface)', color: 'var(--text)',
+  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+  fontFamily: 'var(--font-sans)',
 };
 const backBtn: React.CSSProperties = {
   position: 'absolute', top: 0, left: 0,

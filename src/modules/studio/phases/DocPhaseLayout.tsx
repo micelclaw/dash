@@ -811,6 +811,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
               preamble={project.last_preamble ?? null}
               busy={submitting}
               onSubmit={(answers) => handleGenerate(answers)}
+              phase={phase}
             />
           )}
 

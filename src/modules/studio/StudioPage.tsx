@@ -117,7 +117,7 @@ export function Component() {
           }}
         >
           <Plus size={14} />
-          Nueva app
+          New app
         </button>
       </header>
 
@@ -131,14 +131,14 @@ export function Component() {
           onClick={() => setTab('projects')}
           style={tabBtn(tab === 'projects')}
         >
-          <FolderKanban size={12} /> Mis proyectos ({projects.length})
+          <FolderKanban size={12} /> My projects ({projects.length})
         </button>
         <button
           type="button"
           onClick={() => setTab('templates')}
           style={tabBtn(tab === 'templates')}
         >
-          <Sparkles size={12} /> Plantillas
+          <Sparkles size={12} /> Templates
         </button>
       </div>
 
@@ -152,7 +152,7 @@ export function Component() {
           <div style={{
             color: 'var(--text-dim)', fontSize: '0.875rem', textAlign: 'center', padding: 40,
           }}>
-            Cargando tus apps…
+            Loading your apps…
           </div>
         )}
 

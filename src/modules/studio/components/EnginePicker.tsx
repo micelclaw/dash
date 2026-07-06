@@ -21,12 +21,15 @@
 //   - Bring your own tool  — BYO (open in your editor); orthogonal, only
 //                            rendered when the parent passes onChooseByo.
 //
-// Controlled: the parent owns `engine` + `model`. Degrades gracefully if
-// GET /studio/engines 404s (Core not restarted yet) → OpenCode-only.
+// Controlled: the parent owns `engine` + `model` and passes the engine
+// list (from useStudioEngines, which refreshes on focus). Falls back to
+// OpenCode-only when the list hasn't arrived (old Core / fetch failed).
+// Every engine gets a model sub-selector when selected: opencode picks
+// from `models` (/studio/models), ACP engines pick from their curated
+// `engine.models` ('' = harness default).
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Cpu, Command, SquareTerminal, Cloud, Check, TriangleAlert, ChevronDown, Settings } from 'lucide-react';
-import { api } from '@/services/api';
 import type { StudioEngineId, StudioEngineInfo } from '@/stores/studio.store';
 
 export interface EngineModelOption {
@@ -36,21 +39,24 @@ export interface EngineModelOption {
 }
 
 interface Props {
+  /** Engine list + readiness (useStudioEngines). Empty → OpenCode-only fallback. */
+  engines?: StudioEngineInfo[];
   engine: StudioEngineId;
   onEngineChange: (e: StudioEngineId) => void;
-  /** OpenCode model (`<provider>/<model>`), only used when engine === 'opencode'. */
+  /** The selected engine's model: `<provider>/<model>` for opencode, a
+   *  curated alias/id for ACP engines ('' = harness default). */
   model: string;
   onModelChange: (m: string) => void;
+  /** OpenCode model list (/studio/models); ACP lists ride on the engine. */
   models: EngineModelOption[];
-  /** Deep-link to Settings → Studio Engines (for not-ready ACP engines). */
-  onConfigureEngine?: () => void;
+  /** Deep-link to Settings → Studio Engines (for not-ready ACP engines).
+   *  Receives the engine id so Settings can focus that engine's key field. */
+  onConfigureEngine?: (engineId?: StudioEngineId) => void;
   /** When provided, renders a "Bring your own tool" card that calls this. */
   onChooseByo?: () => void;
   variant?: 'full' | 'compact';
   disabled?: boolean;
 }
-
-interface EnginesResponse { engines: StudioEngineInfo[]; default_engine: StudioEngineId }
 
 const ICONS: Record<StudioEngineId, typeof Cpu> = {
   opencode: Cpu,
@@ -71,26 +77,11 @@ const FALLBACK_ENGINES: StudioEngineInfo[] = [
 ];
 
 export function EnginePicker({
-  engine, onEngineChange, model, onModelChange, models,
+  engines: enginesProp, engine, onEngineChange, model, onModelChange, models,
   onConfigureEngine, onChooseByo, variant = 'full', disabled,
 }: Props) {
-  const [engines, setEngines] = useState<StudioEngineInfo[]>(FALLBACK_ENGINES);
+  const engines = enginesProp && enginesProp.length > 0 ? enginesProp : FALLBACK_ENGINES;
   const [explain, setExplain] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await api.get<{ data: EnginesResponse }>('/studio/engines');
-        if (cancelled) return;
-        const list = res.data.engines ?? [];
-        if (list.length) setEngines(list);
-      } catch {
-        /* Core not restarted yet → keep the OpenCode-only fallback. */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const compact = variant === 'compact';
 
@@ -99,7 +90,7 @@ export function EnginePicker({
     // Picking a not-ready ACP engine still selects it (so the user sees
     // their choice) but the parent should route them to Configure first.
     onEngineChange(e.id);
-    if (!e.ready) onConfigureEngine?.();
+    if (!e.ready) onConfigureEngine?.(e.id);
   }
 
   return (
@@ -150,7 +141,7 @@ export function EnginePicker({
                 {onConfigureEngine && (
                   <button
                     type="button"
-                    onClick={(ev) => { ev.stopPropagation(); onConfigureEngine(); }}
+                    onClick={(ev) => { ev.stopPropagation(); onConfigureEngine(e.id); }}
                     style={configureBtn}
                   >
                     <Settings size={12} /> Configure — Settings › Studio Engines
@@ -159,26 +150,31 @@ export function EnginePicker({
               </div>
             )}
 
-            {/* OpenCode model sub-selector, only when selected */}
-            {e.id === 'opencode' && selected && models.length > 0 && (
-              <div style={{ margin: `${compact ? 6 : 10}px 0 2px 28px` }} onClick={(ev) => ev.stopPropagation()}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                  Model
-                  <select
-                    value={model}
-                    disabled={disabled}
-                    onChange={(ev) => onModelChange(ev.target.value)}
-                    style={modelSelect}
-                  >
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {(m.label ?? m.id)}{m.recommended ? ' · recommended' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            )}
+            {/* Model sub-selector, only when selected. OpenCode picks from
+                /studio/models; ACP engines from their curated list. */}
+            {selected && (() => {
+              const options = e.id === 'opencode' ? models : (e.models ?? []);
+              if (options.length === 0) return null;
+              return (
+                <div style={{ margin: `${compact ? 6 : 10}px 0 2px 28px` }} onClick={(ev) => ev.stopPropagation()}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                    Model
+                    <select
+                      value={model}
+                      disabled={disabled}
+                      onChange={(ev) => onModelChange(ev.target.value)}
+                      style={modelSelect}
+                    >
+                      {options.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {(m.label ?? m.id)}{m.recommended && !(m.label ?? '').toLowerCase().includes('recommended') ? ' · recommended' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              );
+            })()}
           </div>
         );
       })}
@@ -202,7 +198,8 @@ export function EnginePicker({
           </div>
           {!compact && (
             <p style={{ margin: '4px 0 0 28px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.4 }}>
-              Open the project in YOUR Claude Code / Cursor / Codex, on your machine, with your subscription.
+              Open the project in YOUR Claude Code / Cursor / Codex, on your machine, with your
+              subscription. Creates the project and gives you a connection file for your editor.
             </p>
           )}
         </div>
@@ -270,7 +267,8 @@ const configureBtn: React.CSSProperties = {
 const modelSelect: React.CSSProperties = {
   background: 'var(--surface-2)', color: 'var(--text)',
   border: '1px solid var(--border)', borderRadius: 6,
-  padding: '4px 8px', fontSize: '0.7rem', maxWidth: 260, fontFamily: 'var(--font-mono)',
+  padding: '6px 10px', fontSize: '0.8rem', width: '100%', maxWidth: 340,
+  fontFamily: 'var(--font-sans)',
 };
 const explainToggle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 0',

@@ -16,16 +16,14 @@
 // (inherits requireAdmin). Enabling acpx also needs `@openclaw/acpx`
 // installed on the server + a Gateway reload — surfaced honestly here.
 
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Check, X, TriangleAlert, Loader2, RefreshCw, Puzzle } from 'lucide-react';
 import * as gwService from '@/services/gateway.service';
-import type { AcpConfig } from '@/services/gateway.service';
-import { api } from '@/services/api';
-import type { StudioEngineInfo } from '@/stores/studio.store';
 import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
+import { useStudioEngines } from '@/modules/studio/hooks/useStudioEngines';
 
 const ACP_ENGINES = [
   { id: 'claude', label: 'Claude Code' },
@@ -40,6 +38,12 @@ type AcpAgentsState = Record<string, { command?: string; expected_version?: stri
 
 export function StudioEnginesSection() {
   const navigate = useNavigate();
+  // `?focus=acp_claude|acp_codex` (the picker's Configure CTA) → scroll+focus
+  // that engine's API-key field once loaded.
+  const [searchParams] = useSearchParams();
+  const focusEngine = searchParams.get('focus'); // 'acp_claude' | 'acp_codex' | null
+  const keyRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const focusedOnce = useRef(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -47,14 +51,10 @@ export function StudioEnginesSection() {
 
   const [enabled, setEnabled] = useState(false);
   const [agents, setAgents] = useState<AcpAgentsState>({});
-  const [engines, setEngines] = useState<StudioEngineInfo[]>([]);
-
-  const loadEngines = useCallback(async () => {
-    try {
-      const res = await api.get<{ data: { engines: StudioEngineInfo[] } }>('/studio/engines');
-      setEngines(res.data.engines ?? []);
-    } catch { /* Core may not expose it yet */ }
-  }, []);
+  const [showReload, setShowReload] = useState(false);
+  // Shared engine list + readiness — refreshes on focus/visibility, so
+  // coming back from the plugin catalog updates the grid without F5.
+  const { engines, refresh: refreshEngines } = useStudioEngines();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,13 +69,13 @@ export function StudioEnginesSection() {
       }
       setAgents(mapped);
       setDirty(false);
-      await loadEngines();
+      await refreshEngines();
     } catch (err) {
       toast.error(describeError(err, 'Failed to load engine config'));
     } finally {
       setLoading(false);
     }
-  }, [loadEngines]);
+  }, [refreshEngines]);
   useEffect(() => { void load(); }, [load]);
 
   const setAgentField = (id: string, field: 'command' | 'expected_version' | 'api_key', value: string) => {
@@ -87,9 +87,12 @@ export function StudioEnginesSection() {
     setSaving(true);
     try {
       await gwService.updateAcpConfig({ acp_enabled: enabled, acpx_enabled: enabled, backend: 'acpx', agents });
-      toast.success('Saved — enabling acpx needs a Gateway reload (ask the owner)');
+      toast.success('Saved');
       setDirty(false);
-      await loadEngines();
+      // Toggling acpx only lands on the next Gateway reload — offer the
+      // button right here instead of a passive "ask the owner" note.
+      if (enabled) setShowReload(true);
+      await refreshEngines();
     } catch (err) {
       toast.error(describeError(err, 'Failed to save engine config'));
     } finally {
@@ -99,11 +102,29 @@ export function StudioEnginesSection() {
 
   const check = async () => {
     setChecking(true);
-    try { await loadEngines(); toast.success('Readiness refreshed'); }
+    try { await refreshEngines(); toast.success('Readiness refreshed'); }
     finally { setChecking(false); }
   };
 
   const acpEngines = engines.filter((e) => e.kind === 'acp');
+  // The runtime story: only nag about the plugin catalog / OpenClaw version
+  // while acpx or the harness are actually missing. With everything installed
+  // (the common post-setup state) the ONLY thing left is the API key.
+  const runtimeMissing = acpEngines.length === 0
+    || acpEngines.some((e) => !e.detail.acpx_enabled || !e.detail.cli_installed);
+
+  // Focus the requested engine's key field (deep-link from the picker).
+  useEffect(() => {
+    if (focusedOnce.current || loading || !focusEngine) return;
+    const agentId = focusEngine === 'acp_claude' ? 'claude' : focusEngine === 'acp_codex' ? 'codex' : null;
+    if (!agentId) return;
+    const el = keyRefs.current[agentId];
+    if (el) {
+      focusedOnce.current = true;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => el.focus(), 350);
+    }
+  }, [loading, focusEngine]);
 
   return (
     <SectionShell
@@ -122,36 +143,78 @@ export function StudioEnginesSection() {
           <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>Enable server-side engines (acpx)</span>
           <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2, lineHeight: 1.5 }}>
             Runs Claude Code / Codex on this server for Studio builds. Needs the
-            <code style={code}> acpx</code> runtime — install it in one click from the plugin catalog (no terminal).
+            <code style={code}> acpx</code> runtime — install it from the plugin catalog (no terminal),
+            then reload the Gateway (button appears after saving).
           </span>
         </span>
       </label>
-      <button
-        type="button"
-        onClick={() => navigate('/micelhub?tab=plugins&focus=acpx')}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
-          padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600,
-          background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
-          border: '1px solid var(--amber)', color: 'var(--amber)',
-          borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-        }}
-      >
-        <Puzzle size={13} /> Set up the ACP engine in the Plugin catalog
-      </button>
-      <div style={{
-        display: 'flex', gap: 8, padding: '8px 10px', marginBottom: 16,
-        background: 'color-mix(in srgb, var(--amber) 7%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--amber) 30%, var(--border))',
-        borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--text-dim)', lineHeight: 1.5,
-      }}>
-        <TriangleAlert size={13} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
-        <span>
-          The <code style={code}>acpx</code> runtime needs <b>OpenClaw ≥ 2026.6.11</b>. If the install
-          fails with a version error, upgrade OpenClaw first. Meanwhile you can use Claude Code / Codex
-          today via <b>Bring your own tool</b> — open the project in your own editor from the build screen.
-        </span>
-      </div>
+      {showReload && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', marginBottom: 8,
+          background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+          border: '1px solid var(--amber)', borderRadius: 'var(--radius-sm)',
+          fontSize: '0.75rem', color: 'var(--text)',
+        }}>
+          <span style={{ flex: 1 }}>Reload the Gateway so the acpx runtime picks up the change.</span>
+          <button
+            type="button"
+            onClick={() => { void gwService.restartGateway().then(() => { toast.success('Gateway reloading…'); setShowReload(false); }).catch((err) => toast.error(describeError(err, 'Reload failed'))); }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px',
+              fontSize: '0.75rem', fontWeight: 600, background: 'var(--amber)', color: '#000',
+              border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <RefreshCw size={13} /> Reload Gateway
+          </button>
+        </div>
+      )}
+      {/* Runtime setup nag — ONLY while acpx / the harness are missing.
+          Once everything is installed (the common post-setup state), the
+          only thing left is the API key, and saying anything else is noise. */}
+      {runtimeMissing ? (
+        <>
+          <button
+            type="button"
+            onClick={() => navigate('/micelhub?tab=plugins&focus=acpx')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
+              padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600,
+              background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
+              border: '1px solid var(--amber)', color: 'var(--amber)',
+              borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Puzzle size={13} /> Set up the ACP engine in the Plugin catalog
+          </button>
+          <div style={{
+            display: 'flex', gap: 8, padding: '8px 10px', marginBottom: 16,
+            background: 'color-mix(in srgb, var(--amber) 7%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--amber) 30%, var(--border))',
+            borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--text-dim)', lineHeight: 1.5,
+          }}>
+            <TriangleAlert size={13} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
+            <span>
+              The <code style={code}>acpx</code> runtime needs <b>OpenClaw ≥ 2026.6.11</b>. If the install
+              fails with a version error, upgrade OpenClaw first. Meanwhile you can use Claude Code / Codex
+              today via <b>Bring your own tool</b> — open the project in your own editor from the build screen.
+            </span>
+          </div>
+        </>
+      ) : (
+        <div style={{
+          display: 'flex', gap: 8, padding: '8px 10px', marginBottom: 16, alignItems: 'center',
+          background: 'color-mix(in srgb, #22c55e 8%, transparent)',
+          border: '1px solid color-mix(in srgb, #22c55e 40%, var(--border))',
+          borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', color: 'var(--text)', lineHeight: 1.5,
+        }}>
+          <Check size={14} style={{ color: '#22c55e', flexShrink: 0 }} />
+          <span>
+            The <code style={code}>acpx</code> runtime and the engine harnesses are installed and
+            loaded — <b>just add the API key below</b> to finish.
+          </span>
+        </div>
+      )}
 
       {/* Readiness grid */}
       <h3 style={sub}>Engine readiness</h3>
@@ -170,6 +233,21 @@ export function StudioEnginesSection() {
             <TriBool v={e.detail.acpx_enabled} />
             <div style={{ fontSize: '0.75rem', color: e.ready ? '#22c55e' : 'var(--amber)' }}>
               {e.ready ? 'Ready to use' : (e.reason ?? 'Requires setup')}
+              {!e.detail.cli_installed && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/micelhub?tab=plugins&focus=acpx')}
+                    style={{
+                      padding: 0, background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: 'var(--amber)', textDecoration: 'underline', fontSize: 'inherit', fontFamily: 'inherit',
+                    }}
+                  >
+                    Install from the catalog →
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -187,6 +265,7 @@ export function StudioEnginesSection() {
           <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)', marginBottom: 8 }}>{eng.label}</div>
           <label style={fieldLabel}>{eng.id === 'claude' ? 'Anthropic API key' : 'OpenAI API key'}</label>
           <input
+            ref={(el) => { keyRefs.current[eng.id] = el; }}
             type="password"
             autoComplete="off"
             value={agents[eng.id]?.api_key ?? ''}
@@ -199,7 +278,9 @@ export function StudioEnginesSection() {
           <label style={fieldLabel}>Expected version</label>
           <input value={agents[eng.id]?.expected_version ?? ''} placeholder=">=0.4.0" onChange={(e) => setAgentField(eng.id, 'expected_version', e.target.value)} style={input} />
           <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
-            The key is injected into the harness as <code style={code}>{eng.id === 'claude' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}</code> and stored on the server (openclaw.json, same as your other provider keys). It is never shown back.
+            The key is injected into the harness as <code style={code}>{eng.id === 'claude' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY'}</code> and
+            stored in a Core-owned file on this server (<code style={code}>~/.config/micelclaw/acp-engines.json</code>,
+            permissions 600) — never in openclaw.json, never shown back.
           </p>
         </div>
       ))}

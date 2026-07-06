@@ -169,63 +169,22 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
     try { await abortBuild(projectId); } catch { /* feedback via WS */ }
   };
 
-  // ─── ACP engine: no iframe — render the BuildChat relay + a badge ─
-  // Claude Code / Codex run on the server (driven over ACP) and expose a
-  // stream, not an embeddable web UI. The `fallback` BuildChat renders the
-  // same studio.opencode.* events the ACP relay publishes; Core still owns
-  // the input + governance. A badge tells the user which engine + where.
-  if (isAcp && fallback) {
-    const label = ACP_ENGINE_LABEL[engine ?? ''] ?? 'Server engine';
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-        <div style={{
-          padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: '0.7rem', color: 'var(--text-dim)',
-          background: 'color-mix(in srgb, var(--amber) 8%, var(--card))',
-          borderBottom: '1px solid var(--border)', flexShrink: 0,
-        }}>
-          <Cpu size={12} style={{ color: 'var(--amber)' }} />
-          <strong style={{ color: 'var(--text)' }}>{label}</strong>
-          <span aria-hidden>·</span>
-          <span>runs on your server</span>
-          <div style={{ flex: 1 }} />
-          <span style={{
-            color: status === 'running' ? '#22c55e' : status === 'failed' ? 'var(--danger)' : 'var(--text-muted)',
-          }}>{status}</span>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>{fallback}</div>
-      </div>
-    );
-  }
-
-  // ─── Degrade to the classic chat if the embed isn't reachable ─
-  if (phase === 'error' && fallback) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-        <div style={{
-          padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: '0.7rem', color: 'var(--text-dim)',
-          background: 'color-mix(in srgb, var(--danger) 8%, var(--card))',
-          borderBottom: '1px solid var(--border)', flexShrink: 0,
-        }}>
-          <AlertCircle size={12} style={{ color: 'var(--danger)' }} />
-          <span>No se pudo abrir el editor nativo de OpenCode — usando la vista clásica.</span>
-          <button onClick={() => setAttempt((a) => a + 1)} style={retryBtn} aria-label="Reintentar">
-            <RefreshCw size={11} /> Reintentar
-          </button>
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>{fallback}</div>
-      </div>
-    );
-  }
-
   const inputDisabled = status === 'running';
   const guided = studioMode === 'guided';
   const human = friendlyStatus(status, isStarted, !!starting, checklist);
+  const acpLabel = ACP_ENGINE_LABEL[engine ?? ''] ?? 'Server engine';
+  // The classic BuildChat brings its OWN composer — don't render ours twice.
+  // It is the Pro body for ACP engines (no embeddable web UI) and the
+  // degradation path when the OpenCode embed can't be reached.
+  const usingFallbackChat = !guided && !!fallback && (isAcp || phase === 'error');
+
+  // ─── SINGLE render branch (Guided parity for every engine) ────────
+  // Header (status + Guided/Pro toggle + ACP badge) and the Guided curtain
+  // render for ALL engines; only the Pro body differs (iframe vs BuildChat).
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Header strip */}
+      {/* Header strip — always visible, every engine */}
       <div style={{
         padding: '8px 14px', borderBottom: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', gap: 8,
@@ -233,41 +192,35 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
         background: 'var(--card)', flexShrink: 0,
       }}>
         <strong style={{ color: 'var(--text)' }}>Studio Builder</strong>
+        {isAcp && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '2px 8px', borderRadius: 'var(--radius-full)',
+            background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--amber) 40%, var(--border))',
+            color: 'var(--text)', fontWeight: 600,
+          }}>
+            <Cpu size={11} style={{ color: 'var(--amber)' }} />
+            {acpLabel} · runs on your server
+          </span>
+        )}
         <span aria-hidden>·</span>
         <span style={{
           color: status === 'running' ? '#22c55e' : status === 'failed' ? 'var(--danger)' : 'var(--text-muted)',
         }}>{status}</span>
         <div style={{ flex: 1 }} />
-        {/* Guiado / Pro toggle (progressive disclosure) */}
-        <div style={modeSwitch} role="group" aria-label="Modo de vista">
-          <button onClick={() => setStudioMode('guided')} style={modeBtn(guided)} aria-pressed={guided}>Guiado</button>
+        {/* Guided / Pro toggle (progressive disclosure) */}
+        <div style={modeSwitch} role="group" aria-label="View mode">
+          <button onClick={() => setStudioMode('guided')} style={modeBtn(guided)} aria-pressed={guided}>Guided</button>
           <button onClick={() => setStudioMode('pro')} style={modeBtn(!guided)} aria-pressed={!guided}>Pro</button>
         </div>
       </div>
 
-      {/* Native OpenCode UI (composer hidden by the embed proxy) */}
+      {/* Body — Guided curtain / Pro iframe / Pro BuildChat */}
       <div style={{ flex: 1, minHeight: 0, position: 'relative', background: 'var(--surface)' }}>
-        {phase === 'loading' && (
-          <div style={centerStyle}>
-            <Loader2 size={18} className="spin" style={{ color: 'var(--amber)' }} />
-            <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Abriendo el editor…</span>
-          </div>
-        )}
-        {phase === 'error' && (
-          <div style={centerStyle}>
-            <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
-            <span style={{ fontSize: '0.8125rem', color: 'var(--danger)', maxWidth: 360, textAlign: 'center' }}>
-              No se pudo abrir el editor: {embedError}
-            </span>
-            <button onClick={() => setAttempt((a) => a + 1)} style={retryBtn}>
-              <RefreshCw size={12} /> Reintentar
-            </button>
-          </div>
-        )}
-
-        {/* MODO GUIADO: la cortina — narrativa en lenguaje humano. El iframe
-            técnico vive detrás; "Ver cómo lo hace por dentro" lo descorre. */}
-        {phase === 'ready' && guided && (
+        {/* GUIDED: the curtain — plain-language narrative for EVERY engine.
+            The technical view lives behind it; the toggle pulls it back. */}
+        {guided && (
           <div style={guidedCard}>
             <div style={{ fontSize: 40, lineHeight: 1 }}>{human.icon}</div>
             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>{human.title}</div>
@@ -286,73 +239,121 @@ export function OpencodeEmbed({ projectId, status, mode, isStarted, starting, ch
           </div>
         )}
 
-        {/* MODO PRO: la UI nativa de OpenCode (composer oculto). */}
-        {phase === 'ready' && !guided && embedUrl && (
+        {/* PRO + ACP engine: the classic BuildChat renders the relayed
+            stream (same studio.opencode.* events) — no iframe exists. */}
+        {!guided && isAcp && fallback && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            {fallback}
+          </div>
+        )}
+
+        {/* PRO + OpenCode: the native OpenCode UI (composer hidden). */}
+        {!guided && !isAcp && (
           <>
-            <iframe
-              key={embedUrl}
-              src={embedUrl}
-              title="OpenCode"
-              allow="clipboard-read; clipboard-write"
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
-            />
-            <button onClick={() => setStudioMode('guided')} style={backToGuidedPill}>
-              <ChevronLeft size={12} /> Vista sencilla
-            </button>
+            {phase === 'loading' && (
+              <div style={centerStyle}>
+                <Loader2 size={18} className="spin" style={{ color: 'var(--amber)' }} />
+                <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>Opening the editor…</span>
+              </div>
+            )}
+            {phase === 'error' && (fallback ? (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <div style={{
+                  padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 8,
+                  fontSize: '0.7rem', color: 'var(--text-dim)',
+                  background: 'color-mix(in srgb, var(--danger) 8%, var(--card))',
+                  borderBottom: '1px solid var(--border)', flexShrink: 0,
+                }}>
+                  <AlertCircle size={12} style={{ color: 'var(--danger)' }} />
+                  <span>Couldn't open the native OpenCode editor — using the classic view.</span>
+                  <button onClick={() => setAttempt((a) => a + 1)} style={retryBtn} aria-label="Retry">
+                    <RefreshCw size={11} /> Retry
+                  </button>
+                </div>
+                <div style={{ flex: 1, minHeight: 0 }}>{fallback}</div>
+              </div>
+            ) : (
+              <div style={centerStyle}>
+                <AlertCircle size={18} style={{ color: 'var(--danger)' }} />
+                <span style={{ fontSize: '0.8125rem', color: 'var(--danger)', maxWidth: 360, textAlign: 'center' }}>
+                  Couldn't open the editor: {embedError}
+                </span>
+                <button onClick={() => setAttempt((a) => a + 1)} style={retryBtn}>
+                  <RefreshCw size={12} /> Retry
+                </button>
+              </div>
+            ))}
+            {phase === 'ready' && embedUrl && (
+              <>
+                <iframe
+                  key={embedUrl}
+                  src={embedUrl}
+                  title="OpenCode"
+                  allow="clipboard-read; clipboard-write"
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none' }}
+                />
+                <button onClick={() => setStudioMode('guided')} style={backToGuidedPill}>
+                  <ChevronLeft size={12} /> Simple view
+                </button>
+              </>
+            )}
           </>
         )}
       </div>
 
-      {/* Core-owned input — Core keeps ownership of the prompt (D1) */}
-      <div style={{
-        padding: 10, borderTop: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', gap: 6,
-        background: 'var(--card)', flexShrink: 0,
-      }}>
-        {sendError && (
-          <div style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{sendError}</div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
-          <textarea
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
-            }}
-            disabled={inputDisabled}
-            placeholder={
-              inputDisabled
-                ? '(the agent is working…)'
-                : starting
-                  ? 'Starting Build…'
-                  : !isStarted
-                    ? 'Press send to start the Build…'
-                    : mode === 'plan'
-                      ? 'Ask a question or request changes to the plan…'
-                      : 'Ask for a tweak, a new feature, or to pick things back up…'
-            }
-            rows={2}
-            style={{
-              flex: 1, resize: 'none', padding: '8px 10px', fontSize: '0.8125rem',
-              background: 'var(--surface)', color: 'var(--text)',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-              fontFamily: 'var(--font-sans)', lineHeight: 1.4,
-              opacity: inputDisabled ? 0.6 : 1,
-            }}
-          />
-          {status === 'running' ? (
-            <button onClick={() => { void stop(); }} aria-label="Stop" style={btnDanger}>
-              <Square size={12} fill="currentColor" />
-            </button>
-          ) : (
-            <button onClick={() => { void send(); }} disabled={!draft.trim() || busy} aria-label="Send"
-              style={!draft.trim() || busy ? btnSendDisabled : btnSend}>
-              <Send size={12} />
-            </button>
+      {/* Core-owned input — Core keeps ownership of the prompt (D1).
+          Hidden only when the classic BuildChat (own composer) is the body. */}
+      {!usingFallbackChat && (
+        <div style={{
+          padding: 10, borderTop: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', gap: 6,
+          background: 'var(--card)', flexShrink: 0,
+        }}>
+          {sendError && (
+            <div style={{ fontSize: '0.7rem', color: 'var(--danger)' }}>{sendError}</div>
           )}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+            <textarea
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(); }
+              }}
+              disabled={inputDisabled}
+              placeholder={
+                inputDisabled
+                  ? '(the agent is working…)'
+                  : starting
+                    ? 'Starting Build…'
+                    : !isStarted
+                      ? 'Press send to start the Build…'
+                      : mode === 'plan'
+                        ? 'Ask a question or request changes to the plan…'
+                        : 'Ask for a tweak, a new feature, or to pick things back up…'
+              }
+              rows={2}
+              style={{
+                flex: 1, resize: 'none', padding: '8px 10px', fontSize: '0.8125rem',
+                background: 'var(--surface)', color: 'var(--text)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                fontFamily: 'var(--font-sans)', lineHeight: 1.4,
+                opacity: inputDisabled ? 0.6 : 1,
+              }}
+            />
+            {status === 'running' ? (
+              <button onClick={() => { void stop(); }} aria-label="Stop" style={btnDanger}>
+                <Square size={12} fill="currentColor" />
+              </button>
+            ) : (
+              <button onClick={() => { void send(); }} disabled={!draft.trim() || busy} aria-label="Send"
+                style={!draft.trim() || busy ? btnSendDisabled : btnSend}>
+                <Send size={12} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

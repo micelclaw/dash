@@ -143,7 +143,7 @@ export function BuildChat({
         {messages.length === 0 && starting && (
           <SystemBubble>
             <Loader2 size={12} className="spin" style={{ marginRight: 6, verticalAlign: '-2px' }} />
-            Iniciando Build — materializando workspace, generando checklist y enviando la foundation al agente. Esto suele tardar ~30 s.
+            Starting the Build — materializing the workspace, generating the checklist and sending the foundation to the agent. This usually takes ~30s.
           </SystemBubble>
         )}
         {messages.length === 0 && !starting && !isStarted && (
@@ -151,7 +151,7 @@ export function BuildChat({
         )}
         {messages.length === 0 && !starting && isStarted && status !== 'running' && (
           <SystemBubble>
-            Builder en idle. Mándale un mensaje para pedirle un ajuste, una nueva feature, o que retome donde lo dejó.
+            Builder is idle. Send it a message to ask for a tweak, a new feature, or to pick up where it left off.
           </SystemBubble>
         )}
         {messages.map((m) => (
@@ -165,7 +165,7 @@ export function BuildChat({
             borderRadius: 'var(--radius-sm)',
             fontSize: '0.75rem', color: 'var(--danger)',
           }}>
-            ⚠ El agente lleva {Math.floor(silentForMs / 1000)}s sin actividad — puede estar colgado. Considera Stop.
+            ⚠ The agent has been silent for {Math.floor(silentForMs / 1000)}s — it may be stuck. Consider Stop.
           </div>
         )}
         {error && (
@@ -200,7 +200,7 @@ export function BuildChat({
             inputDisabled
               ? '(input disabled — agent is working)'
               : starting
-                ? 'Iniciando Build…'
+                ? 'Starting the Build…'
                 : !isStarted
                   ? 'Press Send to retry starting…'
                   : mode === 'plan'
@@ -257,7 +257,7 @@ function Bubble({ message }: { message: ChatMessage }) {
       }}>
         {message.parts.length === 0 && (
           <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-            (mensaje persistido sin contenido — solo metadata)
+            (persisted message with no content — metadata only)
           </span>
         )}
         {message.parts.map((p, idx) => {

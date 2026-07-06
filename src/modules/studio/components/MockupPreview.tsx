@@ -10,19 +10,18 @@
  * https://micelclaw.com
  */
 
-// ─── Studio A3 — real HTML mockups ("Así se verá") ──────────────────
+// ─── Studio A3 — real HTML mockups ("this is how it'll look") ────────
 //
 // Renders the self-contained HTML fragments the Frontend doc-phase emitted
 // (parsed + sanitized by lib/mockups.ts) inside SANDBOXED iframes, each
 // styled with the project's design tokens so the user SEES their app before
-// it's built. The isolation approach mirrors DesignPreview.buildSrcDoc:
-//   - inject the tokens CSS in <style> FIRST (so the :root vars resolve),
-//   - then base resets + var() fallbacks (bg / text / font),
-//   - then the sanitized fragment in <body>.
-// The iframe is `sandbox=""` (NO allow-scripts, NO allow-same-origin) —
-// identical to DesignPreview, so there is no script/network surface even
-// though the fragment came from the model.
+// it's built. Full-bleed: the previews take the whole available width (the
+// old 480×360 fixed window read as a thumbnail); a desktop/mobile toggle
+// mirrors the design canvas. `sandbox=""` (no scripts, no same-origin) —
+// zero script/network surface even though the fragment came from the model.
 
+import { useState } from 'react';
+import { Monitor, Smartphone } from 'lucide-react';
 import type { MockupScreen } from '../lib/mockups';
 
 interface MockupPreviewProps {
@@ -32,10 +31,9 @@ interface MockupPreviewProps {
 }
 
 /** Build the sandboxed document for one mockup screen. Tokens FIRST, then
- *  resets + var() fallbacks, then the sanitized fragment. Same shape as
- *  DesignPreview's buildSrcDoc (static HTML+CSS only, no allow-scripts). */
+ *  resets + var() fallbacks, then the sanitized fragment. */
 function buildSrcDoc(tokensCss: string, html: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
 ${tokensCss}
 html,body{margin:0;padding:0}
 *{box-sizing:border-box}
@@ -54,33 +52,61 @@ ${html}
 }
 
 export function MockupPreview({ screens, tokensCss }: MockupPreviewProps) {
+  const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   if (!tokensCss || screens.length === 0) return null;
+  const mobile = device === 'mobile';
   return (
-    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Device toggle — same grammar as the design canvas. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+          {(['desktop', 'mobile'] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDevice(d)}
+              aria-label={d}
+              style={{
+                padding: '5px 10px', display: 'inline-flex', alignItems: 'center',
+                background: device === d ? 'var(--surface)' : 'transparent',
+                color: device === d ? 'var(--text)' : 'var(--text-muted)',
+                border: 'none', cursor: 'pointer',
+              }}
+            >
+              {d === 'desktop' ? <Monitor size={13} /> : <Smartphone size={13} />}
+            </button>
+          ))}
+        </div>
+      </div>
       {screens.map((s, i) => (
         <figure
           key={`${s.name}-${i}`}
           style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}
         >
           <div style={{
-            width: '100%', maxWidth: 480,
+            width: mobile ? 390 : '100%',
+            maxWidth: '100%',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
+            borderRadius: mobile ? 18 : 'var(--radius-md)',
             overflow: 'hidden', background: '#fff',
             boxShadow: '0 1px 3px color-mix(in srgb, var(--text) 8%, transparent)',
           }}>
             <iframe
-              title={`Mockup de ${s.name}`}
+              title={`Mockup: ${s.name}`}
               srcDoc={buildSrcDoc(tokensCss, s.html)}
               sandbox=""
-              style={{ width: '100%', height: 360, border: 'none', display: 'block', background: '#fff' }}
+              style={{
+                width: '100%',
+                height: mobile ? 640 : 'min(68vh, 720px)',
+                border: 'none', display: 'block', background: '#fff',
+              }}
             />
           </div>
           <figcaption style={{
             fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600,
-            maxWidth: 480, textAlign: 'center',
+            textAlign: 'center',
           }}>
-            Así se verá: {s.name}
+            This is how it'll look: {s.name}
           </figcaption>
         </figure>
       ))}
