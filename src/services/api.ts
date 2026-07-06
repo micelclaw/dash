@@ -11,6 +11,7 @@
  */
 
 import { useAuthStore } from '@/stores/auth.store';
+import { useProfileStore } from '@/stores/profile.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? '';
 const API_PREFIX = '/api/v1';
@@ -68,6 +69,10 @@ class ApiClient {
     const headers: Record<string, string> = {};
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Perfil ERP activo (multi-perfil): scopea Finanzas/Inventario. El backend solo
+    // lo lee bajo /finance y /inventory; inofensivo en el resto.
+    const profileId = useProfileStore.getState().activeProfileId;
+    if (profileId) headers['X-Claw-Profile-Id'] = profileId;
     if (options?.body) headers['Content-Type'] = 'application/json';
 
     const res = await fetch(url, {
@@ -145,6 +150,31 @@ class ApiClient {
   }
 
   /**
+   * GET que devuelve el cuerpo como TEXTO crudo (sin parseo JSON ni envelope).
+   * Para endpoints que sirven bytes/texto directamente (p.ej. `/vfs/read` de
+   * un .md/.txt para el snippet de previsualización).
+   */
+  async getText(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<string> {
+    let url = `${BASE_URL}${API_PREFIX}${path}`;
+    if (params) {
+      const qs = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined) qs.set(key, String(val));
+      }
+      const str = qs.toString();
+      if (str) url += `?${str}`;
+    }
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), cache: 'no-store' });
+    if (!res.ok) {
+      throw new ApiError('HTTP_ERROR', `Error del servidor (${res.status})`, undefined, res.status);
+    }
+    return res.text();
+  }
+
+  /**
    * Raw POST kept as a thin alias for `post` for legacy callers
    * (notably the ONLYOFFICE config flow) that need a guaranteed
    * pass-through with no future envelope post-processing.
@@ -154,6 +184,10 @@ class ApiClient {
     const headers: Record<string, string> = {};
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Perfil ERP activo (multi-perfil): scopea Finanzas/Inventario. El backend solo
+    // lo lee bajo /finance y /inventory; inofensivo en el resto.
+    const profileId = useProfileStore.getState().activeProfileId;
+    if (profileId) headers['X-Claw-Profile-Id'] = profileId;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
 
     const fetchOpts: RequestInit = { method: 'POST', headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
@@ -216,6 +250,10 @@ class ApiClient {
     const headers: Record<string, string> = {};
     const token = this.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Perfil ERP activo (multi-perfil): scopea Finanzas/Inventario. El backend solo
+    // lo lee bajo /finance y /inventory; inofensivo en el resto.
+    const profileId = useProfileStore.getState().activeProfileId;
+    if (profileId) headers['X-Claw-Profile-Id'] = profileId;
     // No Content-Type — browser sets multipart boundary
     const res = await fetch(url, { method, headers, body: formData, signal: AbortSignal.timeout(opts?.timeout ?? REQUEST_TIMEOUT_MS) });
     if (!res.ok) {
