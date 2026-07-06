@@ -168,6 +168,22 @@
   --glass-modal: rgba(247, 245, 241, 0.92);
 }
 
+/* Tell the browser which scheme native widgets should render in — without
+   this, the OS paints native popups (e.g. <select> option lists) LIGHT while
+   the options inherit our near-white --text → unreadable white-on-white.
+   Dark is the default (matches the :root vars above); light themes flip it. */
+:root {
+  color-scheme: dark;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+/* Safety net for engines that honor option styling instead of color-scheme. */
+select option {
+  background-color: var(--card);
+  color: var(--text);
+}
+
 html {
   background-color: var(--bg);
   min-height: 100dvh;
