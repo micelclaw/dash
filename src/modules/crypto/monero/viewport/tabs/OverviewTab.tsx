@@ -233,7 +233,11 @@ export function OverviewTab() {
         .ov-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
         .ov-info-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--surface); }
         .ov-info-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-        .ov-info-value { font-size: 12px; color: var(--text); }
+        .ov-info-value { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+
+        @media (max-width: 767px) {
+          .ov-info-grid { grid-template-columns: 1fr; }
+        }
 
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }

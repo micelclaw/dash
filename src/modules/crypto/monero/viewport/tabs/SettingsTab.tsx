@@ -388,7 +388,10 @@ export function SettingsTab() {
         .se-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
         .se-info-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--surface); }
         .se-info-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
-        .se-info-value { font-size: 12px; color: var(--text); }
+        .se-info-value { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+        @media (max-width: 767px) {
+          .se-info-grid { grid-template-columns: 1fr; }
+        }
 
         .se-warning-sm { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.15); border-radius: var(--radius-sm); color: #ef4444; font-size: 10px; margin-bottom: 10px; }
 

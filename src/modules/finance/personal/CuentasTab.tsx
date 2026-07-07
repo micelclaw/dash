@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useFinancePersonalStore, type AccountType, type FinanceAccount } from '@/stores/finance-personal.store';
 import { fmtMoney, movementFace, categoryVisual, tintBackground } from './lib';
 import { CuentaDialog } from './CuentaDialog';
@@ -24,6 +25,7 @@ import { RecurrenceBadge } from './RecurrenceBadge';
 const TYPE_LABEL: Record<AccountType, string> = { asset: 'Banco/Efectivo', liability: 'Tarjeta/Préstamo', equity: 'Patrimonio', income: 'Ingresos', expense: 'Gastos' };
 
 export function CuentasTab() {
+  const isMobile = useIsMobile();
   const { accounts, transactions, categories, selectedAccountId, setSelectedAccount, fetchTransactions, deleteAccount } = useFinancePersonalStore();
   const { openMovement } = usePersonalNav();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -54,9 +56,9 @@ export function CuentasTab() {
   };
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 360 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: isMobile ? 'auto' : '100%', minHeight: isMobile ? undefined : 360 }}>
       {/* Lista de cuentas */}
-      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--border)', overflowY: 'auto', padding: 12 }}>
+      <div style={{ width: isMobile ? '100%' : 260, flexShrink: 0, maxHeight: isMobile ? 240 : undefined, borderRight: isMobile ? 'none' : '1px solid var(--border)', borderBottom: isMobile ? '1px solid var(--border)' : 'none', overflowY: 'auto', padding: 12 }}>
         {userAccounts.map((a) => {
           const active = a.id === selected?.id;
           const inactive = !a.is_active;
@@ -85,7 +87,7 @@ export function CuentasTab() {
         {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Crea una cuenta para empezar.</div>}
         {selected && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{selected.name}</div>

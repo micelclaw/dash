@@ -47,7 +47,7 @@ export function Component() {
   return (
     <FinancePeriodProvider>
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px 14px' }}>
+      <div className="fin-launcher-header" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Wallet size={20} style={{ color: 'var(--mod-finance)' }} />
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Finance</h1>
@@ -61,6 +61,7 @@ export function Component() {
         <div
           role="tablist"
           aria-label="Lente financiera"
+          className="fin-lens-tabs"
           style={{
             display: 'inline-flex',
             gap: 4,
@@ -112,7 +113,28 @@ export function Component() {
         {lens === 'facturacion' && <FacturacionLens />}
         {lens === 'contabilidad' && <ContabilidadLens />}
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Móvil (<768px): la cabecera se apila y el selector de lente pasa a fila
+           propia con scroll horizontal en vez de desbordar la página. Escritorio
+           intacto (solo dentro del media query). */
+        @media (max-width: 767px) {
+          .fin-launcher-header {
+            padding: 12px 12px !important;
+            flex-wrap: wrap;
+            gap: 10px !important;
+            row-gap: 10px;
+          }
+          .fin-lens-tabs {
+            margin-left: 0 !important;
+            flex: 1 1 100%;
+            min-width: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .fin-lens-tabs > button { flex-shrink: 0; white-space: nowrap; }
+        }
+      `}</style>
     </div>
     </FinancePeriodProvider>
   );

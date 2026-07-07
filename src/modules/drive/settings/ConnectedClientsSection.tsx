@@ -179,6 +179,7 @@ export function ConnectedClientsSection() {
                         No active sessions.
                       </div>
                     ) : (
+                      <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -210,6 +211,7 @@ export function ConnectedClientsSection() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </div>
                 )}

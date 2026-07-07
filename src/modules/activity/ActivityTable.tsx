@@ -15,6 +15,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Adapter } from './adapters/types';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
@@ -25,10 +26,11 @@ interface Props<Row> {
 
 export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin entradas para los filtros actuales.' }: Props<Row>) {
   const [selectedRow, setSelectedRow] = useState<Row | null>(null);
+  const isMobile = useIsMobile();
   const getKey = adapter.getRowKey ?? ((row: Row) => String(rows.indexOf(row)));
 
   return (
-    <div className="flex h-full min-h-0 flex-1">
+    <div className={`flex h-full min-h-0 flex-1 ${isMobile ? 'relative' : ''}`}>
       <div className="flex-1 min-h-0 overflow-auto bg-[var(--surface)]">
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10 bg-[var(--bg)] border-b border-[var(--border)]">
@@ -85,7 +87,13 @@ export function ActivityTable<Row>({ adapter, rows, loading, emptyMessage = 'Sin
       </div>
 
       {selectedRow && (
-        <div className="w-[420px] border-l border-[var(--border)] bg-[var(--bg)] overflow-auto">
+        <div
+          className={
+            isMobile
+              ? 'absolute inset-0 z-40 bg-[var(--bg)] overflow-auto'
+              : 'w-[420px] border-l border-[var(--border)] bg-[var(--bg)] overflow-auto'
+          }
+        >
           <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
             <span className="text-sm font-medium">Detalle</span>
             <button

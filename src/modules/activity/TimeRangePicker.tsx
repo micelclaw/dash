@@ -22,6 +22,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, ChevronDown, X } from 'lucide-react';
 import type { TimeRange } from './adapters/types';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 type PresetKey =
   | 'last_hour'
@@ -182,6 +183,7 @@ interface Props {
 
 export function TimeRangePicker({ range, onChange }: Props) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Custom range draft — kept independent of the active range so the
@@ -280,11 +282,13 @@ export function TimeRangePicker({ range, onChange }: Props) {
         <div
           role="dialog"
           aria-label="Selector de rango temporal"
-          className="absolute right-0 top-full mt-1 z-30 w-[440px] rounded-md border border-[var(--border)] bg-[var(--bg)] shadow-lg"
+          className={`absolute right-0 top-full mt-1 z-30 rounded-md border border-[var(--border)] bg-[var(--bg)] shadow-lg ${
+            isMobile ? 'w-[calc(100vw-2rem)] max-w-[440px]' : 'w-[440px]'
+          }`}
         >
-          <div className="grid grid-cols-2">
+          <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {/* Presets — left column */}
-            <div className="border-r border-[var(--border)] py-1">
+            <div className={`py-1 ${isMobile ? 'border-b' : 'border-r'} border-[var(--border)]`}>
               <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-[var(--text-muted)]">
                 Presets
               </div>

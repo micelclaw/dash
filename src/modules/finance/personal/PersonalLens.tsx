@@ -122,6 +122,19 @@ export function PersonalLens() {
           width: 14px !important;
           height: 14px !important;
         }
+        /* Móvil (<768px): la barra se apila (tabs arriba a ancho completo con
+           scroll horizontal, acción debajo) para no desbordar a 393px. */
+        @media (max-width: 767px) {
+          .fin-personal-subtabs { flex-wrap: wrap; row-gap: 8px; padding-bottom: 8px; }
+          .fin-personal-subtabs > [role="tablist"] {
+            flex: 1 1 100%;
+            min-width: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .fin-personal-subtabs > [role="tablist"] > a,
+          .fin-personal-subtabs > [role="tablist"] > button { flex-shrink: 0; white-space: nowrap; }
+        }
       `}</style>
     </div>
     </PersonalNavProvider>

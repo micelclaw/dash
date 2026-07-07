@@ -125,6 +125,8 @@ export function TransactionsTab() {
         <div className="tt-empty">No transactions found</div>
       ) : (
         <>
+          {/* Table (scrolls horizontally inside its own box on narrow screens) */}
+          <div className="tt-scroll"><div className="tt-table">
           {/* Table header */}
           <div className="tt-table-head">
             <span className="tt-th tt-th-type">Type</span>
@@ -166,6 +168,7 @@ export function TransactionsTab() {
               );
             })}
           </div>
+          </div></div>
 
           {hasMore && (
             <button className="tt-load-more" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}>
@@ -196,6 +199,8 @@ export function TransactionsTab() {
         .tt-loading, .tt-empty { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; padding: 24px 0; }
         .tt-empty { font-style: italic; }
 
+        .tt-scroll { overflow-x: auto; }
+        .tt-table { min-width: 520px; }
         .tt-table-head { display: flex; padding: 6px 10px; border-bottom: 1px solid var(--border); }
         .tt-th { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
         .tt-th-type { width: 36px; }

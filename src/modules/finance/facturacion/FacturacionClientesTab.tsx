@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-media-query';
 import {
   useFinanceBillingStore,
   type FinanceRole,
@@ -46,6 +47,7 @@ const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
 ];
 
 export function FacturacionClientesTab() {
+  const isMobile = useIsMobile();
   const { contacts, selectedContactId, setSelectedContact } = useFinanceBillingStore();
   const { openInvoice } = useFacturacionNav();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -59,9 +61,9 @@ export function FacturacionClientesTab() {
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 360 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', height: isMobile ? 'auto' : '100%', minHeight: isMobile ? undefined : 360 }}>
       {/* Lista de contactos */}
-      <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid var(--border)', overflowY: 'auto', padding: 12 }}>
+      <div style={{ width: isMobile ? '100%' : 260, flexShrink: 0, maxHeight: isMobile ? 240 : undefined, borderRight: isMobile ? 'none' : '1px solid var(--border)', borderBottom: isMobile ? '1px solid var(--border)' : 'none', overflowY: 'auto', padding: 12 }}>
         {/* Filtro de rol (segmented): Todos | Clientes | Proveedores */}
         <div style={{ display: 'flex', gap: 2, padding: 2, marginBottom: 10, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)', border: '1px solid var(--border)' }}>
           {ROLE_FILTERS.map((f) => {

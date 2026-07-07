@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { Search, X, Loader2 } from 'lucide-react';
+import { Search, X, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSearchStore } from '@/stores/search.store';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { SEARCHABLE_DOMAINS } from '@/config/search-domains';
 import { SearchResultsList } from './SearchResultsList';
 import { SearchDiscover } from './SearchDiscover';
@@ -22,6 +23,9 @@ import { RankingPanel } from './RankingPanel';
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
+  // En móvil el panel de ranking arranca colapsado para dar protagonismo a los resultados.
+  const [rankingOpen, setRankingOpen] = useState(false);
 
   const query = useSearchStore(s => s.query);
   const setQuery = useSearchStore(s => s.setQuery);
@@ -66,17 +70,21 @@ export function Component() {
   return (
     <div style={{
       display: 'flex',
+      flexDirection: isMobile ? 'column' : 'row',
       height: '100%',
       fontFamily: 'var(--font-sans)',
-      overflow: 'hidden',
+      overflowX: 'hidden',
+      overflowY: isMobile ? 'auto' : 'hidden',
     }}>
-      {/* Left panel — 60% */}
+      {/* Left panel — 60% en escritorio, ancho completo en móvil */}
       <div style={{
-        flex: '1 1 60%',
+        flex: isMobile ? '0 0 auto' : '1 1 60%',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden',
-        borderRight: '1px solid var(--border)',
+        overflow: isMobile ? 'visible' : 'hidden',
+        minWidth: 0,
+        borderRight: isMobile ? 'none' : '1px solid var(--border)',
+        borderBottom: isMobile ? '1px solid var(--border)' : undefined,
       }}>
         {/* Search input */}
         <div style={{
@@ -158,7 +166,7 @@ export function Component() {
         </div>
 
         {/* Results */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px' }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: isMobile ? 'visible' : 'auto', padding: '0 16px 16px' }}>
           {error && (
             <div style={{
               padding: '8px 12px', marginTop: 8,
@@ -197,25 +205,51 @@ export function Component() {
         </div>
       </div>
 
-      {/* Right panel — 40% ranking */}
+      {/* Right panel — 40% ranking en escritorio, apilado/colapsable en móvil */}
       <div style={{
-        flex: '0 0 40%',
-        maxWidth: 380,
-        overflowY: 'auto',
+        flex: isMobile ? '0 0 auto' : '0 0 40%',
+        width: isMobile ? '100%' : undefined,
+        maxWidth: isMobile ? 'none' : 380,
+        minWidth: 0,
+        overflowY: isMobile ? 'visible' : 'auto',
         background: 'var(--surface)',
         display: 'flex',
         flexDirection: 'column',
       }}>
-        <div style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid var(--border)',
-          fontSize: '0.8125rem',
-          fontWeight: 600,
-          color: 'var(--text)',
-        }}>
-          Ranking
-        </div>
-        <RankingPanel />
+        {isMobile ? (
+          <button
+            onClick={() => setRankingOpen(o => !o)}
+            aria-expanded={rankingOpen}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border)',
+              background: 'transparent',
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              color: 'var(--text)',
+              fontFamily: 'var(--font-sans)',
+              cursor: 'pointer',
+            }}
+          >
+            Ranking
+            {rankingOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        ) : (
+          <div style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid var(--border)',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: 'var(--text)',
+          }}>
+            Ranking
+          </div>
+        )}
+        {(!isMobile || rankingOpen) && <RankingPanel />}
       </div>
     </div>
   );

@@ -241,7 +241,7 @@ export function RecentView() {
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
         {/* Hot now */}
         {hotFiles.length > 0 && (
           <section style={{ padding: '16px 16px 0' }}>

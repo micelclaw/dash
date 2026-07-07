@@ -118,7 +118,7 @@ export function ReportTable<T>(p: ReportTableProps<T>) {
   };
 
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+    <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] overflow-x-auto">
       {(p.title || p.search || p.exportName || p.right) && (
         <div className="flex items-center gap-3 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface)] flex-wrap">
           {p.title && <div className="text-[13px] font-semibold text-[var(--text)] flex items-center gap-1.5">{p.title}{p.tip && <Tip k={p.tip} />}</div>}

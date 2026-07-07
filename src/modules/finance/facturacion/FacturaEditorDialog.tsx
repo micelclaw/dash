@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { X, Plus, Trash2, Loader2, FileDown, Send, Eye, FileText, Paperclip } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-media-query';
 import {
   useFinanceBillingStore,
   type DocLineInput,
@@ -70,6 +71,7 @@ export function FacturaEditorDialog({
    *  ignora: prevalece el tipo del doc cargado. */
   docType?: DocType;
 }) {
+  const isMobile = useIsMobile();
   const {
     contacts,
     taxRates,
@@ -535,7 +537,7 @@ export function FacturaEditorDialog({
 
         {/* Cuerpo: formulario (izq) + totales (der), y debajo a ancho completo los 3 colapsables */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, padding: 20 }}>
-          <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16 }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Cliente (venta) / Proveedor (factura recibida) */}
             <div>
@@ -655,7 +657,8 @@ export function FacturaEditorDialog({
             <div>
               <label style={labelStyle}>Líneas</label>
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 8 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isMobile ? 560 : undefined }}>
                   <thead>
                     <tr>
                       <th style={{ ...th, width: '28%' }}>Descripción</th>
@@ -749,6 +752,7 @@ export function FacturaEditorDialog({
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {!isEmitted && (
                   <button onClick={addDraftLine} style={{ marginTop: 8, width: '100%', padding: '7px 12px', cursor: 'pointer', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
                     <Plus size={14} /> Línea
@@ -831,7 +835,7 @@ export function FacturaEditorDialog({
           </div>
 
           {/* Panel de totales */}
-          <div style={{ width: 220, flexShrink: 0 }}>
+          <div style={{ width: isMobile ? '100%' : 220, flexShrink: 0 }}>
             <div style={{ position: 'sticky', top: 0, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 16, fontFamily: 'var(--font-mono, monospace)' }}>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontFamily: 'var(--font-sans, inherit)', fontWeight: 600 }}>Totales</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Base</span><span>{fmtMoney(liveTotals.subtotal, currency)}</span></div>
@@ -862,7 +866,7 @@ export function FacturaEditorDialog({
         </div>
 
         {/* Pie de acciones */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '16px 20px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
           {isEmitted ? (
             <>
               <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cerrar</button>

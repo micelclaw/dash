@@ -18,6 +18,7 @@ import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useDriveStore } from '@/stores/drive.store';
 import type { FileRecord } from '@/types/files';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
@@ -51,6 +52,9 @@ const COLUMNS: { key: SortField; label: string; width?: string }[] = [
 ];
 
 const GRID_COLS = '32px 1fr 90px 120px 100px';
+// Móvil (<768px): solo caben Nombre + Tamaño; Modified/Type se ocultan para no
+// desbordar horizontalmente a 393px. Escritorio intacto.
+const GRID_COLS_MOBILE = '28px 1fr 72px';
 
 export function DriveList({
   files, loading, selectedFileId, selectedIds,
@@ -63,6 +67,12 @@ export function DriveList({
   // D6 — density toggle (persisted in drive.store): compact tightens rows.
   const density = useDriveStore(s => s.density);
   const compact = density === 'compact';
+  const isMobile = useIsMobile();
+  const gridCols = isMobile ? GRID_COLS_MOBILE : GRID_COLS;
+  // En móvil solo mostramos Name + Size (Modified/Type se ocultan).
+  const visibleColumns = isMobile
+    ? COLUMNS.filter(c => c.key === 'filename' || c.key === 'size_bytes')
+    : COLUMNS;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -121,7 +131,7 @@ export function DriveList({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: GRID_COLS,
+          gridTemplateColumns: gridCols,
           gap: 8,
           padding: '6px 16px',
           borderBottom: '1px solid var(--border)',
@@ -138,7 +148,7 @@ export function DriveList({
           onChange={onToggleAll}
           style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
         />
-        {COLUMNS.map(col => (
+        {visibleColumns.map(col => (
           <ColumnHeader
             key={col.key}
             label={col.label}
@@ -160,6 +170,8 @@ export function DriveList({
             selectedIds={selectedIds}
             isCut={!!cutIds?.has(file.id)}
             compact={compact}
+            isMobile={isMobile}
+            gridCols={gridCols}
             onClick={() => onItemClick(file)}
             onDoubleClick={() => onItemDoubleClick(file)}
             onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
@@ -228,7 +240,7 @@ function ColumnHeader({
 }
 
 function ListRow({
-  file, selected, checked, selectedIds, isCut, compact, onClick, onDoubleClick, onToggleSelect,
+  file, selected, checked, selectedIds, isCut, compact, isMobile, gridCols, onClick, onDoubleClick, onToggleSelect,
   contextItems, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
@@ -237,6 +249,8 @@ function ListRow({
   selectedIds: Set<string>;
   isCut: boolean;
   compact: boolean;
+  isMobile: boolean;
+  gridCols: string;
   onClick: () => void;
   onDoubleClick: () => void;
   onToggleSelect: (shiftKey: boolean) => void;
@@ -306,7 +320,7 @@ function ListRow({
           onMouseLeave={() => setHovered(false)}
           style={{
             display: 'grid',
-            gridTemplateColumns: GRID_COLS,
+            gridTemplateColumns: gridCols,
             gap: 8,
             padding: compact ? '2px 16px' : '6px 16px',
             cursor: 'pointer',
@@ -378,15 +392,19 @@ function ListRow({
             {isDir ? '--' : formatFileSize(file.size_bytes)}
           </span>
 
-          {/* Modified */}
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            {formatRelative(new Date(file.updated_at))}
-          </span>
+          {/* Modified — oculto en móvil por espacio */}
+          {!isMobile && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              {formatRelative(new Date(file.updated_at))}
+            </span>
+          )}
 
-          {/* Type */}
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            {getMimeLabel(file.mime_type)}
-          </span>
+          {/* Type — oculto en móvil por espacio */}
+          {!isMobile && (
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              {getMimeLabel(file.mime_type)}
+            </span>
+          )}
         </div>
       }
       items={contextItems}

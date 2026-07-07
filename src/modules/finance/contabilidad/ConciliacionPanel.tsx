@@ -111,7 +111,8 @@ export function ConciliacionPanel() {
       {/* Líneas del extracto */}
       <div style={card}>
         <div style={sectionTitle}>EXTRACTO BANCARIO</div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead><tr><th style={th}>Fecha</th><th style={th}>Descripción</th><th style={{ ...th, textAlign: 'right' }}>Importe</th><th style={th}>Estado</th><th style={{ ...th, textAlign: 'right' }}>Acción</th></tr></thead>
           <tbody>
             {lines.map((l) => (
@@ -138,6 +139,7 @@ export function ConciliacionPanel() {
             {lines.length === 0 && <tr><td style={{ ...td, color: 'var(--text-dim)' }} colSpan={5}>Sin líneas de extracto. Añade líneas (o impórtalas) para conciliar contra el mayor.</td></tr>}
           </tbody>
         </table>
+        </div>
       </div>
 
       <ImportWizard open={importing} onClose={() => setImporting(false)} fixedType="bank-statement" fixedAccountId={accountId} onDone={() => void reload()} />

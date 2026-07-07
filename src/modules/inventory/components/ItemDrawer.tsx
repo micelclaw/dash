@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { Boxes, PackageX, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { LabelModal } from '@/modules/inventory/components/LabelModal';
 import { MaintenancePlansSection } from '@/modules/inventory/components/MaintenancePlansSection';
@@ -179,6 +180,7 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     return updated;
   };
 
+  const isMobile = useIsMobile();
   const readOnly = fetchedDeleted;
   const itemEvents = events.filter(e => e.item_id === itemId);
   const locationName = item?.location_id
@@ -192,17 +194,34 @@ function ItemDrawerInner({ itemId }: { itemId: string }) {
     <div
       role="dialog"
       aria-label={item ? `Item: ${item.name}` : 'Item details'}
-      style={{
-        width: 400,
-        maxWidth: '40%',
-        flexShrink: 0,
-        height: '100%',
-        background: 'var(--bg)',
-        borderLeft: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflowY: 'auto',
-      }}
+      style={
+        isMobile
+          ? {
+              // A 393px el drawer lateral (40%) queda inservible: pasa a overlay
+              // a pantalla completa sobre el contenido (con su propio botón de cierre).
+              position: 'fixed',
+              inset: 0,
+              zIndex: 50,
+              width: '100%',
+              maxWidth: '100%',
+              height: '100%',
+              background: 'var(--bg)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+            }
+          : {
+              width: 400,
+              maxWidth: '40%',
+              flexShrink: 0,
+              height: '100%',
+              background: 'var(--bg)',
+              borderLeft: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+            }
+      }
     >
       {/* Sticky header */}
       <div

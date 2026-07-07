@@ -72,7 +72,7 @@ export function BtcPayKeySetup({ onClose, onDone }: Props) {
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: 440, maxHeight: '85vh',
+        width: 'min(440px, calc(100vw - 24px))', maxHeight: '85vh',
         background: 'var(--glass-modal)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',

@@ -144,6 +144,8 @@ export function OutputsTab() {
         <div className="ot-empty">No outputs found</div>
       ) : (
         <>
+          {/* Table (scrolls horizontally inside its own box on narrow screens) */}
+          <div className="ot-scroll"><div className="ot-table">
           {/* Table header */}
           <div className="ot-thead">
             <span className="ot-th ot-th-amount">Amount</span>
@@ -191,6 +193,7 @@ export function OutputsTab() {
               </div>
             ))}
           </div>
+          </div></div>
         </>
       )}
 
@@ -209,6 +212,8 @@ export function OutputsTab() {
 
         .ot-loading, .ot-empty { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; padding: 20px 0; }
 
+        .ot-scroll { overflow-x: auto; }
+        .ot-table { min-width: 560px; }
         .ot-thead { display: flex; padding: 6px 8px; border-bottom: 1px solid var(--border); }
         .ot-th { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
         .ot-th-amount { width: 100px; }

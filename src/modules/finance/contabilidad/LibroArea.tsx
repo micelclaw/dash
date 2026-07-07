@@ -108,7 +108,7 @@ export function AsientoDetalle({ entry, onClose, onChanged, onOpenDocument, onOp
           <DialogTitle className="flex items-center gap-2 text-base">Asiento <Tip k="asiento" /> <span className="text-[var(--text-dim)] font-normal text-sm">· {entry.date} · {SOURCE_LABEL[entry.source] ?? entry.source}</span></DialogTitle>
         </DialogHeader>
         <div className="text-sm text-[var(--text)]">{entry.description ?? '—'}</div>
-        <div className="rounded-[var(--radius-md)] border border-[var(--border)] overflow-hidden">
+        <div className="rounded-[var(--radius-md)] border border-[var(--border)] overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead><tr className="text-[var(--text-dim)] bg-[var(--surface)]"><th className="text-left font-medium px-3 py-1.5">Cuenta</th><th className="text-right font-medium px-3 py-1.5">Debe</th><th className="text-right font-medium px-3 py-1.5">Haber</th></tr></thead>
             <tbody>

@@ -165,6 +165,9 @@ export function StackSetupGuide({ services, onNodeClick }: Props) {
         .sg-optional { font-size: 0.5625rem; color: var(--text-muted); background: rgba(255,255,255,0.04); padding: 1px 4px; border-radius: 2px; white-space: nowrap; }
         .sg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: auto; }
         .sg-status { font-size: 0.5625rem; color: var(--text-muted); white-space: nowrap; min-width: 55px; text-align: right; }
+        @media (max-width: 767px) {
+          .sg-columns { flex-direction: column; gap: 12px; }
+        }
       `}</style>
     </div>
   );

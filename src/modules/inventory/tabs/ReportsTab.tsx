@@ -15,6 +15,7 @@ import { PieChart, TrendingUp, ShieldCheck, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { AccountingSettingsCard } from '@/modules/inventory/components/AccountingSettingsCard';
 import { DepreciationReport } from '@/modules/inventory/components/DepreciationReport';
 import { fmtMoney } from '@/modules/inventory/types';
@@ -58,6 +59,7 @@ export function ReportsTab() {
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [dossierLocationId, setDossierLocationId] = useState<string>('');
   const [generatingDossier, setGeneratingDossier] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     fetchValuation({ group_by: groupBy, at: atDate || undefined });
@@ -222,7 +224,7 @@ export function ReportsTab() {
       <DepreciationReport />
 
       {/* 2. Report cards grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 16 }}>
         {/* a. Top items by value */}
         <div style={cardStyle}>
           <div style={sectionTitleStyle}>

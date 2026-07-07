@@ -116,7 +116,7 @@ export function FacturacionLens() {
   return (
     <FacturacionNavProvider value={{ openInvoice, openNewQuote, openNewBill, openContact }}>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', borderBottom: '1px solid var(--border)' }}>
+        <div className="fact-subtabs-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', borderBottom: '1px solid var(--border)' }}>
           {/* A2 — sub-pestañas con peso SECUNDARIO: fila más pequeña y sutil que
               el selector de lente del header. La clase `fact-subtabs` afina la
               primitiva Tabs sin editarla (font más pequeña, alto menor, subrayado
@@ -196,6 +196,19 @@ export function FacturacionLens() {
             width: 14px !important;                 /* icono más pequeño */
             height: 14px !important;
             opacity: 0.85;
+          }
+          /* Móvil (<768px): 8 sub-pestañas no caben en 393px → la barra se apila y
+             la tira de tabs pasa a ancho completo con scroll horizontal; la acción
+             primaria cae debajo. Escritorio intacto (solo en el media query). */
+          @media (max-width: 767px) {
+            .fact-subtabs-bar { flex-wrap: wrap; row-gap: 8px; padding-bottom: 8px; }
+            .fact-subtabs {
+              flex: 1 1 100%;
+              min-width: 0;
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
+            }
+            .fact-subtabs > a, .fact-subtabs > button { flex-shrink: 0; white-space: nowrap; }
           }
         `}</style>
       </div>

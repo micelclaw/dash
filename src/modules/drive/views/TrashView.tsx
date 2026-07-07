@@ -21,6 +21,7 @@ import { ContextMenu } from '@/components/shared/ContextMenu';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { api } from '@/services/api';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
@@ -50,6 +51,10 @@ export function TrashView() {
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null);
   const [confirm, setConfirm] = useState<ConfirmKind | null>(null);
   const [busy, setBusy] = useState(false);
+  const isMobile = useIsMobile();
+  // Móvil (<768px): checkbox + Nombre + acciones; Size/Deleted se ocultan para
+  // no desbordar a 393px (escritorio conserva las 5 columnas).
+  const trashGridCols = isMobile ? '28px 1fr auto' : '32px 1fr 90px 140px 170px';
 
   const toggleSelection = useCallback((id: string) => {
     setSelectedIds(prev => {
@@ -215,7 +220,7 @@ export function TrashView() {
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
       {/* Header bar */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         padding: '8px 16px', borderBottom: '1px solid var(--border)', flexShrink: 0,
       }}>
         <Trash2 size={14} style={{ color: 'var(--mod-drive)' }} />
@@ -234,7 +239,7 @@ export function TrashView() {
 
       {/* List + inspector (D5) */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
         {error && (
           <div style={{ padding: '8px 16px', fontSize: 13, color: 'var(--error)' }}>{error}</div>
         )}
@@ -242,7 +247,7 @@ export function TrashView() {
         {/* Column header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '32px 1fr 90px 140px 170px',
+          gridTemplateColumns: trashGridCols,
           gap: 8,
           padding: '6px 16px',
           borderBottom: '1px solid var(--border)',
@@ -258,14 +263,16 @@ export function TrashView() {
             style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
           />
           <span>Name</span>
-          <span>Size</span>
-          <span>Deleted</span>
+          {!isMobile && <span>Size</span>}
+          {!isMobile && <span>Deleted</span>}
           <span />
         </div>
 
         {files.map(file => (
           <TrashRow
             key={file.id}
+            isMobile={isMobile}
+            gridCols={trashGridCols}
             file={file}
             checked={selectedIds.has(file.id)}
             selected={selectedFile?.id === file.id}
@@ -306,11 +313,13 @@ export function TrashView() {
   );
 }
 
-function TrashRow({ file, checked, selected, contextItems, onSelect, onToggle, onRestore, onDeleteForever }: {
+function TrashRow({ file, checked, selected, contextItems, isMobile, gridCols, onSelect, onToggle, onRestore, onDeleteForever }: {
   file: FileRecord;
   checked: boolean;
   selected: boolean;
   contextItems: ContextMenuItem[];
+  isMobile: boolean;
+  gridCols: string;
   onSelect: () => void;
   onToggle: () => void;
   onRestore: () => void;
@@ -327,7 +336,7 @@ function TrashRow({ file, checked, selected, contextItems, onSelect, onToggle, o
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: '32px 1fr 90px 140px 170px',
+        gridTemplateColumns: gridCols,
         gap: 8,
         padding: '6px 16px',
         alignItems: 'center',
@@ -352,15 +361,19 @@ function TrashRow({ file, checked, selected, contextItems, onSelect, onToggle, o
           {file.filename}
         </span>
       </div>
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-        {file.is_directory ? '--' : formatFileSize(file.size_bytes)}
-      </span>
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-        {file.deleted_at ? formatRelative(new Date(file.deleted_at)) : '--'}
-      </span>
+      {!isMobile && (
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+          {file.is_directory ? '--' : formatFileSize(file.size_bytes)}
+        </span>
+      )}
+      {!isMobile && (
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+          {file.deleted_at ? formatRelative(new Date(file.deleted_at)) : '--'}
+        </span>
+      )}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-        <ActionButton icon={RotateCcw} label="Restore" onClick={onRestore} />
-        <ActionButton icon={X} label="Delete forever" onClick={onDeleteForever} danger />
+        <ActionButton icon={RotateCcw} label={isMobile ? '' : 'Restore'} title="Restore" onClick={onRestore} />
+        <ActionButton icon={X} label={isMobile ? '' : 'Delete forever'} title="Delete forever" onClick={onDeleteForever} danger />
       </div>
     </div>
       }
@@ -368,22 +381,24 @@ function TrashRow({ file, checked, selected, contextItems, onSelect, onToggle, o
   );
 }
 
-function ActionButton({ icon: Icon, label, onClick, danger, disabled }: {
+function ActionButton({ icon: Icon, label, onClick, danger, disabled, title }: {
   icon: React.ComponentType<{ size?: number }>;
   label: string;
   onClick: () => void;
   danger?: boolean;
   disabled?: boolean;
+  title?: string;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={title}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 4,
+        display: 'flex', alignItems: 'center', gap: label ? 4 : 0,
         padding: '3px 8px', border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sm)',
         background: hovered && !disabled ? 'var(--surface-hover)' : 'var(--surface)',

@@ -123,7 +123,7 @@ export function LightningSetupWizard({ mode, btcRunning, onClose, onDone }: Prop
       <div style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: 480, maxHeight: '85vh',
+        width: 'min(480px, calc(100vw - 24px))', maxHeight: '85vh',
         background: 'var(--glass-modal)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',

@@ -15,6 +15,7 @@ import { ArrowDownToLine, ArrowRightLeft, ArrowUpToLine, Download, Undo2, X } fr
 import { toast } from 'sonner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { fmtMoney, type InventoryMove } from '@/modules/inventory/types';
@@ -498,6 +499,7 @@ export function StockTab() {
   const [bulkType, setBulkType] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const [confirmingReverse, setConfirmingReverse] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     void fetchMoves({ limit: 100 });
@@ -669,7 +671,7 @@ export function StockTab() {
           ))}
         </select>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        <div style={isMobile ? { display: 'flex', gap: 8, flexWrap: 'wrap' } : { marginLeft: 'auto', display: 'flex', gap: 8 }}>
           <button
             style={{ ...secondaryBtnStyle, display: 'inline-flex', alignItems: 'center', gap: 5, opacity: moves.length === 0 ? 0.5 : 1 }}
             disabled={moves.length === 0}

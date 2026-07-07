@@ -68,7 +68,7 @@ export function ContabilidadLens() {
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-3 px-6 pt-1 pb-2 flex-wrap border-b border-[var(--border)]">
-        <Tabs tabs={AREAS} activeTab={area} onChange={(a) => goArea(a as Area)} variant="underline" />
+        <Tabs className="cont-subtabs" tabs={AREAS} activeTab={area} onChange={(a) => goArea(a as Area)} variant="underline" />
         <div className="flex-1" />
         {area !== 'config' && <PeriodControl />}
       </div>
@@ -82,6 +82,19 @@ export function ContabilidadLens() {
       </div>
 
       {deepEntry && <AsientoDetalle entry={deepEntry} onClose={closeDeepEntry} onChanged={closeDeepEntry} onOpenDocument={openDocument} onOpenContact={openContact} />}
+      <style>{`
+        /* Móvil (<768px): la tira de áreas pasa a ancho completo con scroll
+           horizontal en vez de desbordar la página a 393px. */
+        @media (max-width: 767px) {
+          .cont-subtabs {
+            flex: 1 1 100%;
+            min-width: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .cont-subtabs > a, .cont-subtabs > button { flex-shrink: 0; white-space: nowrap; }
+        }
+      `}</style>
     </div>
   );
 }

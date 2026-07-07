@@ -523,7 +523,7 @@ export function MyDriveView() {
         <DropZone onFilesDropped={handleFilesDropped}>
           <ContextMenu
             trigger={
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+              <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
                 {error && (
                   <div style={{
                     padding: '8px 16px', margin: '8px 16px 0', fontSize: 13,

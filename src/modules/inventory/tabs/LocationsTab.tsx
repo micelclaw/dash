@@ -31,6 +31,7 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { LabelModal } from '@/modules/inventory/components/LabelModal';
 import { fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
@@ -378,19 +379,38 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
 
   const roots = childrenMap.get('') ?? [];
   const FormKindIcon = KIND_ICONS[formKind];
+  const isMobile = useIsMobile();
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div
+      style={
+        isMobile
+          ? { display: 'flex', flexDirection: 'column', height: 'auto', overflow: 'visible' }
+          : { display: 'flex', height: '100%', overflow: 'hidden' }
+      }
+    >
       {/* ---- Left panel: search + create + tree ---- */}
       <div
-        style={{
-          width: 300,
-          minWidth: 300,
-          borderRight: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
+        style={
+          isMobile
+            ? {
+                // A 393px el árbol (300px fijo) + detalle lado-a-lado no es usable:
+                // se apilan en una sola columna y la página scrollea verticalmente.
+                width: '100%',
+                minWidth: 0,
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+              }
+            : {
+                width: 300,
+                minWidth: 300,
+                borderRight: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+              }
+        }
       >
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input
@@ -472,7 +492,7 @@ export function LocationsTab({ deepLinkLocationId, onLocationConsumed }: {
       </div>
 
       {/* ---- Right panel: detail ---- */}
-      <div style={{ flex: 1, padding: 16, overflow: 'auto', minWidth: 0 }}>
+      <div style={isMobile ? { width: '100%', minWidth: 0, padding: 16 } : { flex: 1, padding: 16, overflow: 'auto', minWidth: 0 }}>
         {!selected ? (
           <EmptyState
             icon={MapPin}

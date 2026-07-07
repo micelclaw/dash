@@ -392,7 +392,7 @@ export function StarredView() {
       )}
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}>
           {error && (
             <div style={{ padding: '8px 16px', fontSize: 13, color: 'var(--error)' }}>{error}</div>
           )}

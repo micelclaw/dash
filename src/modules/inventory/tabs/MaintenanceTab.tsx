@@ -18,6 +18,7 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { daysUntil, fmtMeter, fmtMoney, thumbUrl } from '@/modules/inventory/types';
 import type { InventoryEvent, InventoryItem } from '@/modules/inventory/types';
 
@@ -472,6 +473,7 @@ export function MaintenanceTab() {
     !!(completing.due_meter || completing.recurrence_meter || completingItem?.meter_unit || completingItem?.meter_value);
 
   const isEmpty = eventsLoaded && upcomingSorted.length === 0 && chains.length === 0;
+  const isMobile = useIsMobile();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -485,17 +487,35 @@ export function MaintenanceTab() {
           />
         </div>
       ) : (
-        <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        <div
+          style={
+            isMobile
+              ? { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }
+              : { flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }
+          }
+        >
           {/* ---- Left: upcoming ---- */}
           <div
-            style={{
-              width: 380,
-              minWidth: 380,
-              borderRight: '1px solid var(--border)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
+            style={
+              isMobile
+                ? {
+                    // A 393px las dos columnas (380px fija + chains) no caben: se
+                    // apilan y el contenedor scrollea en vertical.
+                    width: '100%',
+                    minWidth: 0,
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }
+                : {
+                    width: 380,
+                    minWidth: 380,
+                    borderRight: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }
+            }
           >
             <div style={{ padding: '12px 16px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={sectionHeader}>Upcoming</span>
@@ -592,7 +612,7 @@ export function MaintenanceTab() {
           </div>
 
           {/* ---- Right: per-item chains ---- */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={isMobile ? { width: '100%', minWidth: 0, display: 'flex', flexDirection: 'column' } : { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px 8px' }}>
               <span style={sectionHeader}>Chains · last / next</span>
             </div>

@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, LayoutDashboard, Send, Download, List, BookOpen, Users, Box, Shield, Lock, Pickaxe, Settings, Coins, Loader2, AlertCircle, Wallet, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { api } from '@/services/api';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 import { OverviewTab } from './tabs/OverviewTab';
 import { SendTab } from './tabs/SendTab';
@@ -74,6 +75,7 @@ interface WalletStatus {
 
 export function Component() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   // ─── Status gate: check RPC, auto-start if needed ───
@@ -293,52 +295,95 @@ export function Component() {
   }
 
   return (
-    <div className="mwv-layout">
-      {/* Sidebar */}
-      <div className="mwv-sidebar">
-        <button className="mwv-back" onClick={() => navigate('/crypto')}>
-          <ArrowLeft size={14} /> Back to Stack
-        </button>
+    <div className={`mwv-layout ${isMobile ? 'mwv-layout-mobile' : ''}`}>
+      {/* Sidebar (desktop) / Top bar (mobile) */}
+      {isMobile ? (
+        <div className="mwv-topbar">
+          <div className="mwv-topbar-head">
+            <button className="mwv-back" onClick={() => navigate('/crypto')}>
+              <ArrowLeft size={14} /> Back
+            </button>
+            <div className="mwv-sidebar-title mwv-topbar-title">
+              <span style={{ color: '#ff6600' }}>&#9399;</span> Monero Wallet
+            </div>
+          </div>
 
-        <div className="mwv-sidebar-title">
-          <span style={{ color: '#ff6600' }}>&#9399;</span> Monero Wallet
-        </div>
-
-        {/* Wallet selector — only render when RPC reachable */}
-        {rpcReachable && (
-          <div style={{ padding: '0 4px', marginBottom: 8 }}>
+          {rpcReachable && (
             <AccountSelector
               onWalletChange={handleWalletChange}
               onCreateNew={handleCreateNew}
               onRestoreFromSeed={handleRestoreFromSeed}
             />
-          </div>
-        )}
+          )}
 
-        {/* Balance summary — only when wallet is open */}
-        {walletOpen && (
-          <>
-            <div className="mwv-balance-summary">
+          {walletOpen && (
+            <div className="mwv-balance-summary mwv-topbar-balance">
               <div className="mwv-balance-amount">{totalXmr} <span className="mwv-balance-unit">XMR</span></div>
               {fiatStr && <div className="mwv-balance-fiat">{fiatStr}</div>}
             </div>
+          )}
 
-            <div className="mwv-sidebar-divider" />
-          </>
-        )}
-
-        {/* Tab navigation — only when wallet is open */}
-        {walletOpen && TABS.map(tab => (
-          <button
-            key={tab.id}
-            className={`mwv-tab ${activeTab === tab.id ? 'mwv-tab-active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon}
-            {tab.label}
+          {walletOpen && (
+            <div className="mwv-tabstrip">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  className={`mwv-tab ${activeTab === tab.id ? 'mwv-tab-active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="mwv-sidebar">
+          <button className="mwv-back" onClick={() => navigate('/crypto')}>
+            <ArrowLeft size={14} /> Back to Stack
           </button>
-        ))}
-      </div>
+
+          <div className="mwv-sidebar-title">
+            <span style={{ color: '#ff6600' }}>&#9399;</span> Monero Wallet
+          </div>
+
+          {/* Wallet selector — only render when RPC reachable */}
+          {rpcReachable && (
+            <div style={{ padding: '0 4px', marginBottom: 8 }}>
+              <AccountSelector
+                onWalletChange={handleWalletChange}
+                onCreateNew={handleCreateNew}
+                onRestoreFromSeed={handleRestoreFromSeed}
+              />
+            </div>
+          )}
+
+          {/* Balance summary — only when wallet is open */}
+          {walletOpen && (
+            <>
+              <div className="mwv-balance-summary">
+                <div className="mwv-balance-amount">{totalXmr} <span className="mwv-balance-unit">XMR</span></div>
+                {fiatStr && <div className="mwv-balance-fiat">{fiatStr}</div>}
+              </div>
+
+              <div className="mwv-sidebar-divider" />
+            </>
+          )}
+
+          {/* Tab navigation — only when wallet is open */}
+          {walletOpen && TABS.map(tab => (
+            <button
+              key={tab.id}
+              className={`mwv-tab ${activeTab === tab.id ? 'mwv-tab-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Content */}
       <div className="mwv-content">
@@ -444,7 +489,18 @@ export function Component() {
         .mwv-tab:hover { background: var(--surface-hover); color: var(--text); }
         .mwv-tab-active { background: rgba(255,102,0,0.08); color: #ff6600; }
         .mwv-tab-active:hover { background: rgba(255,102,0,0.12); }
-        .mwv-content { flex: 1; overflow-y: auto; padding: 24px; }
+        .mwv-content { flex: 1; min-width: 0; overflow-y: auto; overflow-x: auto; padding: 24px; }
+
+        /* ─── Mobile layout (<768px): stack + horizontal tab strip ─── */
+        .mwv-layout-mobile { flex-direction: column; }
+        .mwv-topbar { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+        .mwv-topbar-head { display: flex; align-items: center; gap: 8px; }
+        .mwv-topbar .mwv-back { margin-bottom: 0; }
+        .mwv-topbar-title { padding: 0; margin: 0; }
+        .mwv-topbar-balance { padding: 0; }
+        .mwv-tabstrip { display: flex; gap: 4px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+        .mwv-tabstrip .mwv-tab { flex-shrink: 0; width: auto; white-space: nowrap; border: 1px solid var(--border); }
+        .mwv-layout-mobile .mwv-content { padding: 16px; }
         .mwv-status-msg { display: flex; align-items: flex-start; gap: 12px; color: var(--text); font-size: 14px; padding: 32px 0; }
         .mwv-retry-btn { margin-top: 8px; padding: 5px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); cursor: pointer; font-size: 12px; font-family: var(--font-sans); }
         .mwv-retry-btn:hover { background: var(--surface-hover); }

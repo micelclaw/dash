@@ -112,7 +112,14 @@ export function Component() {
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setTab} variant="underline" />
+        {/* La tira de tabs (7) no cabe a 393px: scroll horizontal DENTRO de su caja
+            (inner width:max-content evita que los tabs se compriman/apilen). En
+            desktop hay sitio de sobra → no aparece scroll y el layout no cambia. */}
+        <div style={{ flex: '1 1 auto', minWidth: 0, overflowX: 'auto' }}>
+          <div style={{ width: 'max-content' }}>
+            <Tabs tabs={tabs} activeTab={activeTab} onChange={setTab} variant="underline" />
+          </div>
+        </div>
         {/* Selector de PERFIL ERP (multi-perfil) — comparte el perfil activo con Finanzas */}
         <div style={{ paddingBottom: 8, flex: '0 0 auto' }}><ProfileSelector /></div>
       </div>

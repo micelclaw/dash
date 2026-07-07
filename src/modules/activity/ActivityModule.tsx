@@ -27,6 +27,7 @@ import { ActivitySettingsModal } from './settings/ActivitySettingsModal';
 import { getActivityStats } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 import { handleSpaAnchorClick } from '@/lib/nav';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 type TabKey = Adapter<never>['tabKey'];
 
@@ -57,6 +58,7 @@ function formatMB(bytes: number): string {
 export function Component() {
   const navigate = useNavigate();
   const [search] = useSearchParams();
+  const isMobile = useIsMobile();
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
@@ -147,9 +149,15 @@ export function Component() {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-[var(--bg)]">
-      {/* Left sidebar — 5 tabs */}
-      <aside className="w-[208px] shrink-0 border-r border-[var(--border)] flex flex-col">
+    <div className={`flex h-full min-h-0 bg-[var(--bg)] ${isMobile ? 'flex-col' : ''}`}>
+      {/* Rail — 5 tabs. Vertical on desktop; horizontal scroll strip on mobile. */}
+      <aside
+        className={
+          isMobile
+            ? 'w-full min-w-0 shrink-0 border-b border-[var(--border)] flex flex-col'
+            : 'w-[208px] shrink-0 border-r border-[var(--border)] flex flex-col'
+        }
+      >
         <header className="px-3 py-3 border-b border-[var(--border)] flex items-center justify-between">
           <span className="text-sm font-medium">Activity</span>
           <button
@@ -161,7 +169,7 @@ export function Component() {
             <SettingsIcon size={14} />
           </button>
         </header>
-        <nav className="flex-1 py-1">
+        <nav className={isMobile ? 'flex overflow-x-auto' : 'flex-1 py-1'}>
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const bucket = bucketSizeFor(tab.bucket);
@@ -174,8 +182,10 @@ export function Component() {
                 key={tab.key}
                 href={`/activity?tab=${tab.key}`}
                 onClick={(e) => handleSpaAnchorClick(e, () => setActiveTab(tab.key))}
-                className={`w-full flex items-center justify-between px-3 py-1.5 text-sm no-underline text-[var(--text)] hover:bg-[var(--surface-hover)] ${
-                  isActive ? 'bg-[var(--surface-hover)] border-l-2 border-[var(--primary)]' : ''
+                className={`flex items-center px-3 text-sm no-underline text-[var(--text)] hover:bg-[var(--surface-hover)] ${
+                  isMobile
+                    ? `shrink-0 gap-2 py-2 whitespace-nowrap ${isActive ? 'bg-[var(--surface-hover)] border-b-2 border-[var(--primary)]' : ''}`
+                    : `w-full justify-between py-1.5 ${isActive ? 'bg-[var(--surface-hover)] border-l-2 border-[var(--primary)]' : ''}`
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -194,7 +204,7 @@ export function Component() {
             );
           })}
         </nav>
-        {stats && (
+        {stats && !isMobile && (
           <footer className="px-3 py-2 border-t border-[var(--border)] text-[10px] text-[var(--text-muted)]">
             Budget total: {stats.budget.budget_mb} MB
           </footer>
@@ -202,7 +212,7 @@ export function Component() {
       </aside>
 
       {/* Main column — dispatch by active tab */}
-      <section className="flex-1 flex flex-col min-h-0">
+      <section className="flex-1 flex flex-col min-h-0 min-w-0">
         {activeTab === 'live' && <LiveTab {...sharedProps} />}
         {activeTab === 'events' && <EventsTab {...sharedProps} />}
         {activeTab === 'notifications' && <NotificationsTab {...sharedProps} />}

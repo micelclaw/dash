@@ -162,8 +162,8 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
         )}
       </div>
 
-      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
             <tr>
               <SortableTh label={lockedType === 'bill' ? 'Nº proveedor' : 'Número'} col="number" state={sort} />

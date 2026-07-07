@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, Trash2, Loader2, Percent, Palette, Image as ImageIcon, Upload, Building2, Package } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { useFinanceBillingStore, type TaxMode, type BillingAddress } from '@/stores/finance-billing.store';
 
 // Tipografías que puede elegir el usuario para sus facturas. El `value` es lo
@@ -36,6 +37,7 @@ function fontLabel(value: string | null): string {
 }
 
 export function FacturacionAjustesTab() {
+  const isMobile = useIsMobile();
   const { taxRates, fetchTaxRates, createTaxRate, deleteTaxRate, fetchBrand, saveBrand, fetchCompany, saveCompany, fetchCrossDomainSettings, saveCrossDomainSettings } = useFinanceBillingStore();
   const [name, setName] = useState('');
   const [ratePct, setRatePct] = useState('21');
@@ -234,8 +236,8 @@ export function FacturacionAjustesTab() {
       </p>
 
       {/* Alta */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14, marginBottom: 20 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14, marginBottom: 20 }}>
+        <div style={{ flex: '1 1 160px', minWidth: 0 }}>
           <label style={labelStyle}>Nombre</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="IVA general" style={{ ...fieldStyle, width: '100%' }} />
         </div>
@@ -350,7 +352,7 @@ export function FacturacionAjustesTab() {
         Personaliza el aspecto de los PDF y la vista previa de tus facturas: color de acento, tipografía y logo.
       </p>
 
-      <div style={{ display: 'flex', gap: 18, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 16, marginBottom: 14 }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 18, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 16, marginBottom: 14 }}>
         {/* Controles */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
           {/* Color de acento */}
@@ -419,7 +421,7 @@ export function FacturacionAjustesTab() {
         </div>
 
         {/* Mini-vista de feedback */}
-        <div style={{ width: 200, flexShrink: 0, borderLeft: '1px solid var(--border)', paddingLeft: 18 }}>
+        <div style={{ width: isMobile ? '100%' : 200, flexShrink: 0, borderLeft: isMobile ? 'none' : '1px solid var(--border)', borderTop: isMobile ? '1px solid var(--border)' : 'none', paddingLeft: isMobile ? 0 : 18, paddingTop: isMobile ? 14 : 0 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>Vista</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <div style={{ width: 28, height: 28, borderRadius: 6, background: accentValid ? accent : DEFAULT_ACCENT, border: '1px solid var(--border)', flexShrink: 0 }} />

@@ -24,6 +24,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } f
 import type { Adapter, TimeRange } from './adapters/types';
 import { bucketColor } from './adapters/types';
 import { TimeRangePicker } from './TimeRangePicker';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 interface Props<Row> {
   adapter: Adapter<Row>;
@@ -176,6 +177,7 @@ export function ActivityHeader<Row>({
   range,
   onRangeChange,
 }: Props<Row>) {
+  const isMobile = useIsMobile();
   const { points, buckets, granularity } = useMemo<HistogramResult>(() => {
     if (!adapter.histogramOf) return { points: [], buckets: [], granularity: 'hour' };
     return buildHistogram(rows, adapter.histogramOf);
@@ -204,7 +206,7 @@ export function ActivityHeader<Row>({
 
   return (
     <div className="border-b border-[var(--border)] bg-[var(--bg)]">
-      <div className="h-64 px-3 pt-2 pb-1">
+      <div className={`px-3 pt-2 pb-1 ${isMobile ? 'h-40' : 'h-64'}`}>
         {points.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
