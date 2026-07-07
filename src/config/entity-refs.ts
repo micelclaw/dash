@@ -250,6 +250,13 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     Icon: ArrowLeftRight,
     color: 'var(--mod-finance)',
     label: 'Movimiento',
+    // La lente Personal lee ?tx= y abre el MovimientoDetalle de ese id.
+    route: (id) => `/finance?tab=personal&tx=${encodeURIComponent(id)}`,
+  },
+  finance_budget: {
+    Icon: PieChart,
+    color: 'var(--mod-finance)',
+    label: 'Presupuesto',
     route: () => `/finance?tab=personal`,
   },
   // Finance — Facturación NATIVO (F2b). Chips → la lente Facturación
@@ -273,8 +280,9 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
   finance_journal_entry: {
     Icon: ArrowLeftRight,
     color: 'var(--mod-finance)',
-    label: 'Movimiento',
-    route: () => `/finance?tab=personal`,
+    label: 'Asiento',
+    // La lente Contabilidad lee ?entry= y abre el AsientoDetalle de ese id.
+    route: (id) => `/finance?tab=contabilidad&entry=${encodeURIComponent(id)}`,
   },
   // Finance — SolidInvoice. Chips → embed de SolidInvoice.
   solidinvoice_client: {

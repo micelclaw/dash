@@ -11,10 +11,14 @@
  */
 
 // Lente Personal — contenedor de sub-pestañas (P1-P6) + acción "Nuevo movimiento".
+// Deep-link: ?tx=<id> abre el MovimientoDetalle de ese movimiento (chips del chat).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { LayoutDashboard, ArrowLeftRight, Wallet, Tag, PiggyBank, Plus, Loader2 } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
+import { api } from '@/services/api';
 import { useFinancePersonalStore, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { useFinanceLiveRefresh } from '../use-finance-live-refresh';
 import { ResumenTab } from './ResumenTab';
@@ -37,6 +41,7 @@ const SECTIONS = [
 
 export function PersonalLens() {
   const { refreshAll, loading, setSelectedAccount } = useFinancePersonalStore();
+  const [params, setParams] = useSearchParams();
   const [section, setSection] = useState('resumen');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailTx, setDetailTx] = useState<FinanceTransaction | null>(null);
@@ -44,6 +49,28 @@ export function PersonalLens() {
   useEffect(() => { void refreshAll(); }, [refreshAll]);
   // Auto-refresco en vivo (WS change.finance.* + foco de pestaña), igual que Facturación.
   useFinanceLiveRefresh(refreshAll);
+
+  // Deep-link ?tx=<id> (chips finance_transaction del chat): carga el movimiento
+  // por id y abre su detalle. Al cerrar se limpia el param (sin pisar ?tab).
+  const txParam = params.get('tx');
+  useEffect(() => {
+    if (!txParam) return;
+    let cancelled = false;
+    void api.get<{ data: FinanceTransaction }>(`/finance/transactions/${txParam}`)
+      .then((r) => { if (!cancelled) setDetailTx(r.data); })
+      .catch(() => { if (!cancelled) toast.error('Movimiento no encontrado'); });
+    return () => { cancelled = true; };
+  }, [txParam]);
+
+  const closeDetail = useCallback(() => {
+    setDetailTx(null);
+    setParams((prev) => {
+      if (!prev.has('tx')) return prev;
+      const next = new URLSearchParams(prev);
+      next.delete('tx');
+      return next;
+    }, { replace: true });
+  }, [setParams]);
 
   // Navegación intra-lente: abrir una cuenta = ir a Cuentas con esa seleccionada;
   // abrir un movimiento = mostrar su detalle en un diálogo.
@@ -76,7 +103,7 @@ export function PersonalLens() {
       </div>
 
       <NuevoMovimientoDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
-      <MovimientoDetalle tx={detailTx} onClose={() => setDetailTx(null)} />
+      <MovimientoDetalle tx={detailTx} onClose={closeDetail} />
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         /* Sub-pestañas con peso visual SECUNDARIO frente al selector de lente del

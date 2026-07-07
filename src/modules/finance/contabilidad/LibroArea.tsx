@@ -20,7 +20,7 @@ import { ReportTable, Money, fmt, Tip, AccountSelect, useAccounts, useStandardPl
 import type { DataColumn } from '@/components/ui/data-table';
 
 interface Posting { id: string; account_id: string; account_code: string | null; account_name: string; debit: string | null; credit: string | null; memo: string | null; project_id: string | null; contact_id: string | null; }
-interface JournalEntry { id: string; date: string; description: string | null; source: string; document_id: string | null; document_number: string | null; reverses_entry_id: string | null; reversed_by_entry_id: string | null; total_debit: string; total_credit: string; postings: Posting[]; }
+export interface JournalEntry { id: string; date: string; description: string | null; source: string; document_id: string | null; document_number: string | null; reverses_entry_id: string | null; reversed_by_entry_id: string | null; total_debit: string; total_credit: string; postings: Posting[]; }
 interface Ledger { account: { id: string; code: string | null; name: string; type: string } | null; lines: { entry_id: string; posting_id: string; date: string; description: string | null; memo: string | null; debit: string | null; credit: string | null; running: string }[]; total_debit: string; total_credit: string; balance: string; }
 
 const SOURCE_LABEL: Record<string, string> = { manual: 'Manual', document: 'Factura', recurring: 'Recurrente', reversal: 'Contra-asiento', closing: 'Cierre', opening: 'Apertura', import: 'Importado', rule: 'Regla' };
@@ -89,7 +89,8 @@ function DiarioTab({ onOpenDocument, onOpenContact }: { onOpenDocument: (docId: 
 }
 
 // ─── Detalle de un asiento ───────────────────────────────────────────────────
-function AsientoDetalle({ entry, onClose, onChanged, onOpenDocument, onOpenContact }: { entry: JournalEntry; onClose: () => void; onChanged: () => void; onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
+// Exportado: ContabilidadLens lo abre también por deep-link (?entry=<id>, chips del chat).
+export function AsientoDetalle({ entry, onClose, onChanged, onOpenDocument, onOpenContact }: { entry: JournalEntry; onClose: () => void; onChanged: () => void; onOpenDocument: (docId: string) => void; onOpenContact: (contactId: string) => void }) {
   const [busy, setBusy] = useState(false);
   const cuadra = Math.abs(Number(entry.total_debit) - Number(entry.total_credit)) < 0.01;
   // Cierra la cadena → Contacto: primer posting con contacto (la pata AR/AP de cliente/proveedor).
@@ -378,5 +379,3 @@ function CuentaContableDialog({ account, accounts, onClose, onSaved }: { account
     </Dialog>
   );
 }
-
-export type { JournalEntry };

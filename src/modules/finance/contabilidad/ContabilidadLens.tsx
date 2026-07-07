@@ -9,14 +9,15 @@
 // potencia de un programa de verdad (tablas con orden/búsqueda/exportar, Diario,
 // asientos manuales, plan de cuentas gestionable, navegación encadenada).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { LayoutDashboard, BookOpen, FolderKanban, FileBarChart, Settings, Plus, Wallet, Scale, Receipt, ArrowRight } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
 import { api } from '@/services/api';
 import { useFinancePeriod, PeriodControl } from '../period';
 import { InformesArea } from './InformesArea';
-import { LibroArea } from './LibroArea';
+import { LibroArea, AsientoDetalle, type JournalEntry } from './LibroArea';
 import { GestionArea, ConfiguracionArea } from './GestionConfigArea';
 import { fmt, Money, Tip } from './shared';
 
@@ -30,9 +31,10 @@ const AREAS = [
 ];
 
 export function ContabilidadLens() {
-  const [, setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [area, setArea] = useState<Area>('resumen');
   const [ledgerAccountId, setLedgerAccountId] = useState<string | null>(null);
+  const [deepEntry, setDeepEntry] = useState<JournalEntry | null>(null);
 
   const openLedger = (id: string) => { setLedgerAccountId(id); setArea('contabilidad'); };
   const openDocument = (docId: string) => setParams((p) => { p.set('tab', 'facturacion'); p.set('doc', docId); p.delete('contact'); return p; }, { replace: true });
@@ -40,6 +42,28 @@ export function ContabilidadLens() {
   // ficha del contacto abierta (?tab=facturacion&contact=).
   const openContact = (contactId: string) => setParams((p) => { p.set('tab', 'facturacion'); p.set('contact', contactId); p.delete('doc'); return p; }, { replace: true });
   const goArea = (a: Area) => { setLedgerAccountId(null); setArea(a); };
+
+  // Deep-link ?entry=<id> (chips finance_journal_entry del chat): carga el asiento
+  // por id y abre su AsientoDetalle sobre cualquier área. Al cerrar, limpia el param.
+  const entryParam = params.get('entry');
+  useEffect(() => {
+    if (!entryParam) return;
+    let cancelled = false;
+    void api.get<{ data: JournalEntry }>(`/finance/journal-entries/${entryParam}`)
+      .then((r) => { if (!cancelled) setDeepEntry(r.data); })
+      .catch(() => { if (!cancelled) toast.error('Asiento no encontrado'); });
+    return () => { cancelled = true; };
+  }, [entryParam]);
+
+  const closeDeepEntry = useCallback(() => {
+    setDeepEntry(null);
+    setParams((p) => {
+      if (!p.has('entry')) return p;
+      const next = new URLSearchParams(p);
+      next.delete('entry');
+      return next;
+    }, { replace: true });
+  }, [setParams]);
 
   return (
     <div className="flex flex-col">
@@ -56,6 +80,8 @@ export function ContabilidadLens() {
         {area === 'informes' && <InformesArea onOpenLedger={openLedger} />}
         {area === 'config' && <ConfiguracionArea />}
       </div>
+
+      {deepEntry && <AsientoDetalle entry={deepEntry} onClose={closeDeepEntry} onChanged={closeDeepEntry} onOpenDocument={openDocument} onOpenContact={openContact} />}
     </div>
   );
 }
