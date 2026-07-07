@@ -12,15 +12,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router';
-import { Menu, Search, Newspaper, Network, Power, RotateCcw } from 'lucide-react';
+import { Search, Newspaper, Network, Power, RotateCcw } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { ClipboardButton } from './ClipboardButton';
 import { BriefingPanel } from '@/components/BriefingPanel';
 import { GraphViewModal } from '@/components/graph/GraphViewModal';
 import { ProUpsellModal } from '@/components/shared/ProUpsellModal';
-import { useSidebarStore } from '@/stores/sidebar.store';
 import { useDigestStore } from '@/stores/digest.store';
-import { useIsMobile } from '@/hooks/use-media-query';
 import { MODULES } from '@/config/modules';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
@@ -155,8 +153,6 @@ interface TopBarProps {
 
 export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
-  const isMobile = useIsMobile();
-  const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const isPro = useAuthStore((s) => s.user)?.tier === 'pro';
   const [graphOpen, setGraphOpen] = useState(false);
   const [centerEntityId, setCenterEntityId] = useState<string | undefined>();
@@ -202,23 +198,8 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         gap: 12,
       }}
     >
-      {/* Left zone */}
+      {/* Left zone (en móvil la navegación vive en la bottom-nav — sin hamburguesa) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-        {isMobile && (
-          <button
-            onClick={() => setMobileOpen(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-dim)',
-              padding: 4,
-              display: 'flex',
-            }}
-          >
-            <Menu size={20} />
-          </button>
-        )}
         {ModIcon && (
           <ModIcon size={18} style={{ color: moduleColor, flexShrink: 0 }} />
         )}

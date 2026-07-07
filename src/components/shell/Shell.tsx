@@ -33,10 +33,10 @@ import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { useTheme } from '@/hooks/use-theme';
 import { useHeartbeat } from '@/hooks/use-heartbeat';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { BottomBar } from './BottomBar';
+import { MobileBottomNav } from './MobileBottomNav';
 import { CommandPalette } from './CommandPalette';
 import { UrgentAlertModal } from '@/components/UrgentAlertModal';
 import { FloatingPanelsLayer } from '@/components/floating-panel/FloatingPanelsLayer';
@@ -63,8 +63,6 @@ export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
   const toggle = useSidebarStore((s) => s.toggle);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
-  const mobileOpen = useSidebarStore((s) => s.mobileOpen);
-  const setMobileOpen = useSidebarStore((s) => s.setMobileOpen);
   const isMobile = useIsMobile();
   const isCompact = useIsCompact();
   const location = useLocation();
@@ -783,18 +781,9 @@ export function Shell() {
           <OnboardingBanner variant="completed" onDismiss={() => setBannerDismissed(true)} />
         )}
 
-        {/* Desktop sidebar */}
+        {/* Desktop sidebar (en móvil se sustituye por la bottom-nav de abajo) */}
         {!isMobile && (
           <Sidebar onOpenCommandPalette={openPalette} />
-        )}
-
-        {/* Mobile sidebar drawer */}
-        {isMobile && (
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetContent side="left" style={{ padding: 0, width: 280 }}>
-              <Sidebar onOpenCommandPalette={openPalette} forceExpanded />
-            </SheetContent>
-          </Sheet>
         )}
 
         {/* Main content area */}
@@ -806,7 +795,9 @@ export function Shell() {
             <div style={{ flex: 1, overflow: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <AppAccessGate><Outlet /></AppAccessGate>
             </div>
-            {!isChatPage && <BottomBar />}
+            {/* Móvil: nav inferior de 5 slots (Hoy/Chat/+/Buscar/Más). Escritorio:
+                la BottomBar de chat acoplada (salvo en /chat). */}
+            {isMobile ? <MobileBottomNav /> : (!isChatPage && <BottomBar />)}
           </div>
         </div>
 

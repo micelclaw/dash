@@ -34,24 +34,34 @@ SheetOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 const SheetContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { side?: 'left' | 'right' }
->(({ className, children, side = 'left', style: styleProp, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { side?: 'left' | 'right' | 'top' | 'bottom' }
+>(({ className, children, side = 'left', style: styleProp, ...props }, ref) => {
+  const horizontal = side === 'left' || side === 'right';
+  return (
   <DialogPrimitive.Portal>
     <SheetOverlay />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed inset-y-0 flex flex-col gap-4 p-4 animate-in',
+        'fixed flex flex-col gap-4 p-4 animate-in',
+        horizontal && 'inset-y-0',
+        !horizontal && 'inset-x-0',
         side === 'left' && 'left-0 slide-in-from-left',
         side === 'right' && 'right-0 slide-in-from-right',
+        side === 'top' && 'top-0 slide-in-from-top',
+        side === 'bottom' && 'bottom-0 slide-in-from-bottom',
         className,
       )}
       style={{
         zIndex: 'var(--z-modal)',
-        width: 280,
+        ...(horizontal ? { width: 280 } : { width: 'auto', maxHeight: '90dvh' }),
         background: 'var(--surface)',
         borderRight: side === 'left' ? '1px solid var(--border)' : undefined,
         borderLeft: side === 'right' ? '1px solid var(--border)' : undefined,
+        borderTop: side === 'bottom' ? '1px solid var(--border)' : undefined,
+        borderBottom: side === 'top' ? '1px solid var(--border)' : undefined,
+        borderTopLeftRadius: side === 'bottom' ? 'var(--radius-lg)' : undefined,
+        borderTopRightRadius: side === 'bottom' ? 'var(--radius-lg)' : undefined,
         boxShadow: 'var(--shadow-lg)',
         ...styleProp,
       }}
@@ -66,7 +76,8 @@ const SheetContent = React.forwardRef<
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
-));
+  );
+});
 SheetContent.displayName = 'SheetContent';
 
 export { Sheet, SheetTrigger, SheetClose, SheetContent };
