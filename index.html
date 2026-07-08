@@ -15,6 +15,39 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@700;900&display=swap" rel="stylesheet" />
+    <script>
+      // crypto.randomUUID() SÓLO existe en contextos seguros (HTTPS o localhost).
+      // Cuando se accede al dash por HTTP plano en una IP de LAN (p.ej. la app móvil
+      // en modo "Directa" http://192.168.x.x:7100), isSecureContext es false y
+      // crypto.randomUUID queda undefined → el dash casca ("crypto.randomUUID is not
+      // a function"). Polyfill con crypto.getRandomValues (SÍ disponible en contextos
+      // inseguros). No-op cuando randomUUID ya existe (HTTPS/localhost/PWA).
+      (function () {
+        try {
+          var c = window.crypto || {};
+          if (typeof c.randomUUID !== 'function' && typeof c.getRandomValues === 'function') {
+            var uuid = function () {
+              var b = c.getRandomValues(new Uint8Array(16));
+              b[6] = (b[6] & 0x0f) | 0x40; // versión 4
+              b[8] = (b[8] & 0x3f) | 0x80; // variante RFC 4122
+              var h = [];
+              for (var i = 0; i < 256; i++) h[i] = (i + 0x100).toString(16).slice(1);
+              return (
+                h[b[0]] + h[b[1]] + h[b[2]] + h[b[3]] + '-' +
+                h[b[4]] + h[b[5]] + '-' + h[b[6]] + h[b[7]] + '-' +
+                h[b[8]] + h[b[9]] + '-' +
+                h[b[10]] + h[b[11]] + h[b[12]] + h[b[13]] + h[b[14]] + h[b[15]]
+              );
+            };
+            try {
+              Object.defineProperty(c, 'randomUUID', { value: uuid, configurable: true, writable: true });
+            } catch (e) {
+              c.randomUUID = uuid;
+            }
+          }
+        } catch (e) { /* no-op */ }
+      })();
+    </script>
   </head>
   <body>
     <!-- Splash screen: OUTSIDE #root so React doesn't destroy it. Removed by main.tsx after mount. -->
