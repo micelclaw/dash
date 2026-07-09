@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Plus, Archive } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
@@ -83,10 +83,19 @@ export function Component() {
   const navigate = useNavigate();
 
   const [showNew, setShowNew] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     fetchBoards();
   }, [fetchBoards]);
+
+  // Deep-link del widget "Nuevo tablero": /projects?action=new → abre el modal.
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setShowNew(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>

@@ -228,7 +228,7 @@ export function Component() {
   const selectedClusterId = usePhotoAiStore((s) => s.selectedClusterId);
   const clusterPhotos = usePhotoAiStore((s) => s.clusterPhotos);
   const selectCluster = usePhotoAiStore((s) => s.selectCluster);
-  const isPro = useAuthStore((s) => s.user?.tier === 'pro');
+  const isPro = useAuthStore((s) => s.user?.tier !== 'free');
 
   // Detail panel collapse state + responsive
   const [detailsCollapsed, setDetailsCollapsed] = useState(() => window.innerWidth < 1024);
@@ -340,10 +340,11 @@ export function Component() {
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams, selectCluster]);
 
-  // PWA share-target landing: ?shared=1 → open the upload dialog, which drains
-  // the photos the user shared from their phone gallery (cached by the SW).
+  // PWA share-target landing (?shared=1) o widget "Foto rápida" (?upload=1) → abre el
+  // diálogo de subida (que también drena las fotos compartidas cacheadas por el SW).
   useEffect(() => {
-    if (searchParams.get('shared') !== '1' || sharedHandled.current) return;
+    const wantUpload = searchParams.get('shared') === '1' || searchParams.get('upload') === '1';
+    if (!wantUpload || sharedHandled.current) return;
     sharedHandled.current = true;
     setUploadDialogOpen(true);
     setSearchParams({}, { replace: true });

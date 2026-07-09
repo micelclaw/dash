@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { LayoutDashboard, Boxes, MapPin, ArrowRightLeft, HandHeart, Wrench, BarChart3 } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
@@ -24,6 +24,7 @@ import { LendingTab } from './tabs/LendingTab';
 import { MaintenanceTab } from './tabs/MaintenanceTab';
 import { ReportsTab } from './tabs/ReportsTab';
 import { ScanFab } from './components/ScanFab';
+import { ScannerModal, type ScanIntent } from './components/ScannerModal';
 import { ItemDrawer } from './components/ItemDrawer';
 import { ProfileSelector } from '@/components/profiles/ProfileSelector';
 import { useProfileStore } from '@/stores/profile.store';
@@ -35,6 +36,15 @@ export function Component() {
   // Deep-link a ubicación (QR de bin/estante): fuerza la tab Locations y pasa el id.
   const locationParam = searchParams.get('location_id');
   const activeTab = locationParam ? 'locations' : ((searchParams.get('tab') as InventoryTab) || 'panel');
+
+  // Deep-link del widget "Escanear ticket": ?scan=1 → abre el escáner (intent Locate).
+  const [scanIntent, setScanIntent] = useState<ScanIntent | null>(null);
+  useEffect(() => {
+    if (searchParams.get('scan') === '1') {
+      setScanIntent('locate');
+      setSearchParams((prev) => { const n = new URLSearchParams(prev); n.delete('scan'); return n; }, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const { items, moves, alerts, fetchItems, fetchLocations, fetchAlerts, fetchMeta, fetchProposals, selectedItemId, selectItem } = useInventoryStore();
   // Perfil ERP activo: al cambiarlo, se remonta el contenido (key) → re-fetch por perfil.
@@ -147,6 +157,8 @@ export function Component() {
       </div>
       {/* A5: escáner global con intención (localizar/recuento/mover/check-in-out) */}
       <ScanFab />
+      {/* Deep-link ?scan=1 (widget Escanear ticket) → abre el escáner directamente. */}
+      {scanIntent && <ScannerModal intent={scanIntent} onClose={() => setScanIntent(null)} />}
     </div>
   );
 }
