@@ -8,12 +8,15 @@
 // (cámara). "Más" abre el grid de todos los módulos.
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { Home, MessageSquare, Search, LayoutGrid, Plus } from 'lucide-react';
+import { Settings, MessageSquare, Search, LayoutGrid, Plus } from 'lucide-react';
 import { MobileMoreSheet } from './MobileMoreSheet';
 import { CaptureSheet } from './CaptureSheet';
+import { settingsRouteForPath } from '@/config/settings-route-map';
 
+// Slot 0 = "Ajustes" contextual (sustituye a "Hoy"): abre los ajustes del módulo
+// actual, o los generales si no tiene sección propia (ver settings-route-map).
 const SLOTS = [
-  { id: 'today', label: 'Hoy', icon: Home, path: '/' },
+  { id: 'settings', label: 'Ajustes', icon: Settings, path: '__settings' },
   { id: 'chat', label: 'Chat', icon: MessageSquare, path: '/chat' },
   { id: 'search', label: 'Buscar', icon: Search, path: '/search' },
   { id: 'more', label: 'Más', icon: LayoutGrid, path: '__more' },
@@ -25,14 +28,23 @@ export function MobileBottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
 
-  const isActive = (path: string) =>
-    path === '/' ? location.pathname === '/' : location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path: string) => {
+    if (path === '__settings') return location.pathname.startsWith('/settings');
+    if (path === '__more') return false;
+    return path === '/' ? location.pathname === '/' : location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
+  const onSlotClick = (path: string) => {
+    if (path === '__more') return setMoreOpen(true);
+    if (path === '__settings') return navigate(settingsRouteForPath(location.pathname));
+    navigate(path);
+  };
 
   const Slot = ({ id, label, icon: Icon, path }: (typeof SLOTS)[number]) => {
-    const active = path !== '__more' && isActive(path);
+    const active = isActive(path);
     return (
       <button
-        onClick={() => (path === '__more' ? setMoreOpen(true) : navigate(path))}
+        onClick={() => onSlotClick(path)}
         data-testid={`nav-${id}`}
         style={{
           flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,

@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { consumeMobileHandoff } from './lib/mobile-handoff';
 import { configureNativeShell } from './lib/native-shell';
+import { configureWidgetBridge } from './lib/widget-bridge';
 import './index.css';
 
 // App móvil → dash: si venimos con sesión en el hash (#mmauth=), rellena el store
@@ -22,6 +23,8 @@ import './index.css';
 consumeMobileHandoff();
 // Dentro del APK: oculta la barra de estado del sistema (no-op en web/PWA).
 configureNativeShell();
+// Dentro del APK: mantiene fresca la credencial que leen los widgets nativos (no-op en web).
+configureWidgetBridge();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');

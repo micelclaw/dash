@@ -58,6 +58,7 @@ import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
 import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
 import { useChatReconcile } from '@/hooks/use-chat-reconcile';
+import { useDeepLinks } from '@/hooks/use-deep-links';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -73,6 +74,9 @@ export function Shell() {
   const refresh = useAuthStore((s) => s.refresh);
   const logout = useAuthStore((s) => s.logout);
   const isChatPage = location.pathname === '/chat';
+
+  // Deep-links del wrapper móvil (widgets nativos → abrir ruta/registro). No-op en web.
+  useDeepLinks();
 
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
 
