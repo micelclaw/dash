@@ -13,7 +13,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { consumeMobileHandoff } from './lib/mobile-handoff';
 import './index.css';
+
+// App móvil → dash: si venimos con sesión en el hash (#mmauth=), rellena el store
+// de auth ANTES de montar React/AuthGate (no-op en la web/PWA normal).
+consumeMobileHandoff();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
