@@ -12,63 +12,40 @@ import { useNavigate } from 'react-router';
 import { parseDeepLink } from '@/lib/deep-link';
 
 /**
- * Escucha los deep-links del wrapper móvil (widgets nativos, share, etc.) y navega
- * a la ruta interna del dash. Usa el puente Capacitor inyectado en runtime
- * (`window.Capacitor.Plugins.App`) SIN importar `@capacitor/*` (el dash se sirve
- * también como PWA/escritorio). No-op fuera del APK.
+ * Recibe deep-links del wrapper móvil (widgets nativos) y navega a la ruta interna.
  *
- * Debe montarse DENTRO del router y de una sesión autenticada → va en el Shell.
- * Cubre arranque en frío (`getLaunchUrl`) y app ya abierta (`appUrlOpen`).
+ * IMPORTANTE: el dash se sirve desde un origen REMOTO (http(s)://…) al que Capacitor
+ * NO inyecta su puente (`window.Capacitor` es undefined ahí, aunque allowNavigation
+ * permita la navegación). Por eso NO usamos `@capacitor/app` appUrlOpen: en su lugar,
+ * MainActivity (nativo) parsea el intent `micelclaw://open?route=…` y llama por
+ * `evaluateJavascript` a `window.__clawDeepLink(<uri>)`, que exponemos aquí. El nativo
+ * reintenta hasta que este handler existe (cubre el arranque en frío). No-op en web/PWA
+ * (nadie llama al global).
  */
-interface AppPluginBridge {
-  addListener?: (
-    event: 'appUrlOpen',
-    cb: (data: { url?: string }) => void,
-  ) => Promise<{ remove: () => void }>;
-  getLaunchUrl?: () => Promise<{ url?: string } | null>;
-}
-interface CapacitorBridge {
-  isNativePlatform?: () => boolean;
-  Plugins?: { App?: AppPluginBridge };
-}
-
 export function useDeepLinks(): void {
   const navigate = useNavigate();
-  const lastHandled = useRef<string | null>(null);
+  const lastRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const cap = (window as unknown as { Capacitor?: CapacitorBridge }).Capacitor;
-    if (!cap?.isNativePlatform?.()) return;
-    const appPlugin = cap.Plugins?.App;
-    if (!appPlugin) return;
-
-    const handle = (url: string | undefined) => {
-      if (!url || url === lastHandled.current) return;
-      const route = parseDeepLink(url);
-      if (!route) return;
-      lastHandled.current = url;
+    const go = (raw: string) => {
+      const route = parseDeepLink(raw);
+      if (!route || route === lastRef.current) return;
+      lastRef.current = route;
       navigate(route);
     };
-
-    let cancelled = false;
-    let remove: (() => void) | undefined;
-
-    // Arranque en frío: la app se abrió por un deep-link (widget con la app cerrada).
-    void appPlugin.getLaunchUrl?.().then((res) => {
-      if (!cancelled) handle(res?.url);
-    }).catch(() => {});
-
-    // App ya abierta: el deep-link llega en caliente.
-    void appPlugin.addListener?.('appUrlOpen', (data) => handle(data?.url))
-      .then((h) => {
-        if (cancelled) h.remove();
-        else remove = () => h.remove();
-      })
-      .catch(() => {});
-
+    const w = window as unknown as {
+      __clawDeepLink?: (raw: string) => void;
+      __clawPendingDeepLink?: string | null;
+    };
+    w.__clawDeepLink = go;
+    // Por si el nativo dejó un deep-link pendiente antes de montar el handler.
+    if (w.__clawPendingDeepLink) {
+      const pending = w.__clawPendingDeepLink;
+      w.__clawPendingDeepLink = null;
+      go(pending);
+    }
     return () => {
-      cancelled = true;
-      remove?.();
+      if (w.__clawDeepLink === go) delete w.__clawDeepLink;
     };
   }, [navigate]);
 }
