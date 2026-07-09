@@ -153,7 +153,8 @@ interface TopBarProps {
 
 export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
-  const isPro = useAuthStore((s) => s.user)?.tier === 'pro';
+  // Any paid tier (pro OR plus) unlocks Pro features; only 'free' is gated.
+  const isPro = useAuthStore((s) => s.user)?.tier !== 'free';
   const [graphOpen, setGraphOpen] = useState(false);
   const [centerEntityId, setCenterEntityId] = useState<string | undefined>();
   const [upsellOpen, setUpsellOpen] = useState(false);
@@ -187,11 +188,17 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   return (
     <div
       style={{
-        height: 48,
+        // Altura fija + inset de safe-area arriba: en el APK móvil (barra de estado
+        // oculta/edge-to-edge) despeja el recorte de cámara y la barra transitoria
+        // al deslizar; en web/PWA/escritorio env()=0 → altura 48 sin cambios.
+        height: 'calc(48px + env(safe-area-inset-top, 0px))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px',
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 0,
         background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
         flexShrink: 0,
