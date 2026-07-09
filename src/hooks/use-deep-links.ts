@@ -24,13 +24,18 @@ import { parseDeepLink } from '@/lib/deep-link';
  */
 export function useDeepLinks(): void {
   const navigate = useNavigate();
-  const lastRef = useRef<string | null>(null);
+  const lastRef = useRef<{ route: string; t: number }>({ route: '', t: 0 });
 
   useEffect(() => {
     const go = (raw: string) => {
       const route = parseDeepLink(raw);
-      if (!route || route === lastRef.current) return;
-      lastRef.current = route;
+      if (!route) return;
+      // Dedup por TIEMPO (no permanente): traga duplicados inmediatos (p.ej. el
+      // arranque en frío que ya cargó la ruta + un reintento nativo), pero permite
+      // volver a tocar el mismo widget pasado un momento.
+      const now = Date.now();
+      if (route === lastRef.current.route && now - lastRef.current.t < 2000) return;
+      lastRef.current = { route, t: now };
       navigate(route);
     };
     const w = window as unknown as {
