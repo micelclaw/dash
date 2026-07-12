@@ -11,9 +11,13 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Save, PanelRightClose, PanelRightOpen, Search } from 'lucide-react';
+import { Save, PanelRightClose, Search } from 'lucide-react';
 import { getPreviewUrl, formatFileSize } from '@/lib/file-utils';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { useExif } from './hooks/use-exif';
+import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { StarRating } from './StarRating';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -25,7 +29,7 @@ function FindSimilarToggle({ photoId }: { photoId: string }) {
   const similarPanelOpen = usePhotoAiStore((s) => s.similarPanelOpen);
   const fetchSimilar = usePhotoAiStore((s) => s.fetchSimilar);
   const closeSimilarPanel = usePhotoAiStore((s) => s.closeSimilarPanel);
-  const isPro = useAuthStore((s) => s.user?.tier === 'pro');
+  const isPro = useAuthStore((s) => s.user?.tier !== 'free');
   const [hovered, setHovered] = useState(false);
 
   const handleClick = () => {
@@ -75,8 +79,13 @@ interface ExifPanelProps {
 }
 
 export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifPanelProps) {
+  const isMobile = useIsMobile();
+  // Bug 8: en móvil el panel de detalles se cierra con el botón "atrás".
+  useBackGuard(!collapsed && !!onToggleCollapse, () => onToggleCollapse?.(), isMobile);
   const { data: exif, loading, error } = useExif(photo.id);
   const [filename, setFilename] = useState(photo.filename);
+  const [shareManageOpen, setShareManageOpen] = useState(false);
+  const [shareRefreshKey, setShareRefreshKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
 
@@ -152,50 +161,16 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
   const focalLength = exifExif?.FocalLength ?? null;
   const exposureTime = exifExif?.ExposureTime ?? null;
 
-  if (collapsed) {
-    return (
-      <div
-        style={{
-          width: 36,
-          flexShrink: 0,
-          background: 'var(--glass-50)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderLeft: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          paddingTop: 10,
-          height: '100%',
-        }}
-      >
-        <button
-          onClick={onToggleCollapse}
-          title="Expand details"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            padding: 6,
-            borderRadius: 'var(--radius-sm)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <PanelRightOpen size={16} />
-        </button>
-      </div>
-    );
-  }
+  // La barra-rail colapsada desapareció (petición 2026-07-11): el panel se
+  // abre solo bajo demanda (botón superpuesto del visor / "View details").
+  if (collapsed) return null;
 
   return (
     <div
       style={{
-        width: 400,
+        width: isMobile ? '100%' : 400,
         flexShrink: 0,
-        background: 'var(--glass-50)',
+        background: isMobile ? 'var(--bg)' : 'var(--glass-50)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         borderLeft: '1px solid var(--border)',
@@ -203,6 +178,10 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         flexDirection: 'column',
         fontFamily: 'var(--font-sans)',
         height: '100%',
+        // En móvil el panel cubre la pantalla como overlay (400px no caben).
+        // Reservar el notch/barra de estado → el header (título + cerrar) queda
+        // por debajo y es tocable (bug 8).
+        ...(isMobile ? { position: 'fixed', inset: 0, zIndex: 60, paddingTop: 'env(safe-area-inset-top, 0px)' } : {}),
       }}
     >
       {/* Header */}
@@ -272,6 +251,16 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
           <EditableField label="Filename" value={filename} onChange={setFilename} />
           <ReadonlyField label="Size" value={formatFileSize(photo.size_bytes)} />
           <ReadonlyField label="Type" value={photo.mime_type} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: '0.75rem', color: 'var(--amber)', minWidth: 90 }}>Compartido</span>
+            <SharedWithIndicator
+              entityType="photo"
+              entityId={photo.id}
+              refreshKey={shareRefreshKey}
+              showLinkChip
+              onManage={() => setShareManageOpen(true)}
+            />
+          </div>
         </FieldGroup>
 
         {/* Image dimensions */}
@@ -368,6 +357,19 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
+      )}
+
+      {shareManageOpen && (
+        <EntityShareModal
+          open
+          entityType="photo"
+          entityId={photo.id}
+          entityTitle={photo.filename}
+          shareMeta={{ mime: photo.mime_type ?? undefined }}
+          initialSection="shared"
+          onShared={() => setShareRefreshKey(k => k + 1)}
+          onClose={() => setShareManageOpen(false)}
+        />
       )}
     </div>
   );

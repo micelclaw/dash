@@ -15,6 +15,7 @@ import { useParams, useSearchParams } from 'react-router';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { BoardHeader } from './components/BoardHeader';
 import { KanbanBoard } from './views/KanbanBoard';
 import { ListView } from './views/ListView';
@@ -24,7 +25,7 @@ import { DashboardView } from './views/DashboardView';
 import { CardDetailPanel } from './components/CardDetailPanel';
 import { BoardSettings } from './components/BoardSettings';
 import { CustomFieldManager } from './components/CustomFieldManager';
-import { ShareBoardModal } from './components/ShareBoardModal';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useKanbanKeyboard } from './hooks/use-kanban-keyboard';
 
@@ -32,6 +33,7 @@ export function Component() {
   const { boardId } = useParams<{ boardId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const fetchFullBoard = useProjectsStore((s) => s.fetchFullBoard);
+  const activeBoardTitle = useProjectsStore((s) => s.activeBoardTitle);
   const selectCard = useProjectsStore((s) => s.selectCard);
   const activeView = useProjectsStore((s) => s.activeView);
   const boardLoading = useProjectsStore((s) => s.boardLoading);
@@ -46,6 +48,15 @@ export function Component() {
 
   const toggleShortcuts = useCallback(() => setShortcutsOpen(s => !s), []);
   useKanbanKeyboard(toggleShortcuts);
+
+  // Back jerárquico (móvil): atrás cierra el overlay actual y vuelve al TABLERO en el que
+  // estabas, en vez de salir a la elección de tableros. Cada capa se cierra por separado
+  // (una pulsación de atrás por overlay). El fix clave es el de la tarjeta (selectCard).
+  useBackGuard(cardDetailOpen && !!selectedCardId, () => selectCard(null), isMobile);
+  useBackGuard(settingsOpen, () => setSettingsOpen(false), isMobile);
+  useBackGuard(fieldsOpen, () => setFieldsOpen(false), isMobile);
+  useBackGuard(shareOpen, () => setShareOpen(false), isMobile);
+  useBackGuard(shortcutsOpen, () => setShortcutsOpen(false), isMobile);
 
   useEffect(() => {
     if (boardId) fetchFullBoard(boardId);
@@ -125,7 +136,13 @@ export function Component() {
         <CustomFieldManager boardId={boardId} open={fieldsOpen} onClose={() => setFieldsOpen(false)} />
       )}
       {shareOpen && boardId && (
-        <ShareBoardModal boardId={boardId} onClose={() => setShareOpen(false)} />
+        <EntityShareModal
+          open
+          entityType="kanban_board"
+          entityId={boardId}
+          entityTitle={activeBoardTitle ?? ''}
+          onClose={() => setShareOpen(false)}
+        />
       )}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </div>

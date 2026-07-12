@@ -37,6 +37,8 @@ export function useNotes(filters: NoteFilters) {
         source: filters.source || undefined,
         pinned: filters.pinned,
         archived: filters.archived ?? false,
+        // Incluir notas que otros usuarios me han compartido (user_shares).
+        include_shared: 'true',
       });
       setNotes(res.data);
       setMeta(res.meta);

@@ -43,6 +43,8 @@ export function useContacts(filters: ContactFilters = {}) {
         order: filters.order ?? 'asc',
         limit: filters.limit ?? 100,
         offset: filters.offset ?? 0,
+        // Incluir contactos que otros usuarios me han compartido (user_shares).
+        include_shared: 'true',
       });
       setContacts(res.data);
       setMeta(res.meta);

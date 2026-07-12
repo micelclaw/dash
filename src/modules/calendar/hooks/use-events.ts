@@ -42,6 +42,9 @@ export function useEvents(params: {
         limit: 200,
         sort: 'start_at',
         order: 'asc',
+        // Incluir eventos que otros usuarios me han compartido (user_shares) →
+        // aparecen en el calendario con `_shared`/`_shared_by`.
+        include_shared: 'true',
       });
       setEvents(res.data);
     } catch (err) {

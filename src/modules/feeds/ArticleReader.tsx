@@ -11,8 +11,9 @@
  */
 
 import { useState } from 'react';
-import { ExternalLink, Star, FileText, Sparkles, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ExternalLink, Star, FileText, Sparkles, Eye, EyeOff, Loader2, Share2 } from 'lucide-react';
 import { useFeedsStore } from '@/stores/feeds.store';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import DOMPurify from 'dompurify';
 
 export function ArticleReader() {
@@ -27,6 +28,7 @@ export function ArticleReader() {
   const [fetchingFull, setFetchingFull] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [summarizeError, setSummarizeError] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const article = articles.find(a => a.id === activeArticleId);
   if (!article) {
@@ -97,6 +99,11 @@ export function ArticleReader() {
           >
             <ExternalLink size={14} /> Original
           </a>
+          <ActionButton
+            icon={<Share2 size={14} />}
+            label="Compartir"
+            onClick={() => setShareOpen(true)}
+          />
           {!article.full_text_fetched && !isYoutube && (
             <ActionButton
               icon={fetchingFull ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
@@ -196,6 +203,17 @@ export function ArticleReader() {
           <p className="text-sm text-[var(--text-muted)]">No content available</p>
         )}
       </div>
+
+      {shareOpen && (
+        <EntityShareModal
+          open={shareOpen}
+          entityType="article"
+          entityId={article.id}
+          entityTitle={article.title || article.url}
+          shareMeta={{ url: article.url }}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

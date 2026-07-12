@@ -10,25 +10,44 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useMemo } from 'react';
-import { BookOpen } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, Share2 } from 'lucide-react';
 import { MediaCard, MediaGrid, MediaRail } from '@/components/media';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { useBooksStore } from '@/stores/books.store';
 import { coverUrl, type Book } from '@/services/books.service';
 
 function BookCard({ book }: { book: Book }) {
   const openBook = useBooksStore((s) => s.openBook);
+  const [shareOpen, setShareOpen] = useState(false);
   return (
-    <MediaCard
-      image={book.cover ? coverUrl(book.id) : null}
-      fallbackIcon={BookOpen}
-      title={book.title}
-      subtitle={book.author ?? undefined}
-      aspect="poster"
-      progress={book.progress?.fraction ?? undefined}
-      onClick={() => openBook({ id: book.id, title: book.title })}
-    />
+    <>
+      <MediaCard
+        image={book.cover ? coverUrl(book.id) : null}
+        fallbackIcon={BookOpen}
+        title={book.title}
+        subtitle={book.author ?? undefined}
+        aspect="poster"
+        progress={book.progress?.fraction ?? undefined}
+        onClick={() => openBook({ id: book.id, title: book.title })}
+        menu={
+          <DropdownMenuItem onClick={() => setShareOpen(true)}>
+            <Share2 size={14} /> Compartir
+          </DropdownMenuItem>
+        }
+      />
+      {shareOpen && (
+        <EntityShareModal
+          open={shareOpen}
+          entityType="book"
+          entityId={book.id}
+          entityTitle={book.title}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

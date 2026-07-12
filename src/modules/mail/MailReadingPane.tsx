@@ -15,13 +15,15 @@ import {
   ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
   Printer, ExternalLink, Trash2, Ban, ShieldAlert,
-  AlertTriangle, Languages, Code, Download, Tag,
+  AlertTriangle, Languages, Code, Download, Tag, Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { TagInput } from '@/components/shared/TagInput';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
+import { downloadAuthed } from '@/lib/file-download';
 import { useEmailLinks } from './hooks/use-email-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
@@ -86,6 +88,7 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
@@ -329,24 +332,9 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
 
   const handleDownloadEml = async () => {
     if (!email) return;
-    try {
-      const res = await fetch(`/api/v1/emails/${email.id}/download`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('claw_token')}` },
-      });
-      if (!res.ok) throw new Error('Download failed');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `email-${email.id}.eml`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('Email downloaded');
-    } catch {
-      toast.error('Failed to download email');
-    }
+    // downloadAuthed usa el token real del store (antes `claw_token` de
+    // localStorage no existía → Bearer null → descarga fallaba).
+    await downloadAuthed(`/api/v1/emails/${email.id}/download`, `email-${email.id}.eml`);
     setMoreOpen(false);
   };
 
@@ -843,6 +831,11 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                     <Forward size={14} /> Forward
                   </button>
+                  <button onClick={() => { setShareOpen(true); setMoreOpen(false); }} style={menuItemStyle}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Share2 size={14} /> Compartir
+                  </button>
                 </>
               )}
 
@@ -940,6 +933,16 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         cancelLabel="Cancel"
         variant="danger"
       />
+
+      {shareOpen && email && (
+        <EntityShareModal
+          open={shareOpen}
+          entityType="email"
+          entityId={email.id}
+          entityTitle={email.subject ?? ''}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

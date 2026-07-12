@@ -175,6 +175,37 @@ class ApiClient {
   }
 
   /**
+   * Fetch a binary/blob response (images, files, .ics/.vcf downloads) as a Blob.
+   * Returns the blob plus the server-suggested filename (from Content-Disposition)
+   * and mime type. Used by the "Share externally" flow to attach a native file.
+   */
+  async getBlob(
+    path: string,
+    params?: Record<string, string | number | boolean | undefined>,
+  ): Promise<{ blob: Blob; filename: string | null; mime: string }> {
+    let url = `${BASE_URL}${API_PREFIX}${path}`;
+    if (params) {
+      const qs = new URLSearchParams();
+      for (const [key, val] of Object.entries(params)) {
+        if (val !== undefined) qs.set(key, String(val));
+      }
+      const str = qs.toString();
+      if (str) url += `?${str}`;
+    }
+    const headers: Record<string, string> = {};
+    const token = this.getToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), cache: 'no-store' });
+    if (!res.ok) {
+      throw new ApiError('HTTP_ERROR', `Error del servidor (${res.status})`, undefined, res.status);
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') ?? '';
+    const match = /filename="?([^"]+)"?/i.exec(cd);
+    return { blob, filename: match ? match[1] : null, mime: res.headers.get('content-type') ?? blob.type ?? 'application/octet-stream' };
+  }
+
+  /**
    * Raw POST kept as a thin alias for `post` for legacy callers
    * (notably the ONLYOFFICE config flow) that need a guaranteed
    * pass-through with no future envelope post-processing.

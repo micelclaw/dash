@@ -14,11 +14,12 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   Bookmark as BookmarkIcon, Plus, RefreshCw, Search, ExternalLink,
-  MoreHorizontal, Trash2, Copy, Pencil, X,
+  MoreHorizontal, Trash2, Copy, Pencil, X, Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useBookmarksStore } from '@/stores/bookmarks.store';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import type { Bookmark } from '@/stores/bookmarks.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
@@ -185,6 +186,7 @@ function BookmarkCard({
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const checkAlive = useBookmarksStore((s) => s.checkAlive);
 
   const faviconSrc = bookmark.favicon_url || `https://${bookmark.domain}/favicon.ico`;
@@ -325,6 +327,7 @@ function BookmarkCard({
             >
               {[
                 { icon: Pencil, label: 'Edit', action: () => { onEdit(); setMenuOpen(false); } },
+                { icon: Share2, label: 'Compartir', action: () => { setShareOpen(true); setMenuOpen(false); } },
                 { icon: Copy, label: 'Copy URL', action: () => { navigator.clipboard.writeText(bookmark.url); toast.success('Copied'); setMenuOpen(false); } },
                 { icon: ExternalLink, label: 'Open in new tab', action: () => { window.open(bookmark.url, '_blank'); setMenuOpen(false); } },
                 { icon: RefreshCw, label: 'Check link', action: () => { checkAlive([bookmark.id]); setMenuOpen(false); } },
@@ -353,6 +356,17 @@ function BookmarkCard({
           </>
         )}
       </div>
+
+      {shareOpen && (
+        <EntityShareModal
+          open={shareOpen}
+          entityType="bookmark"
+          entityId={bookmark.id}
+          entityTitle={bookmark.title || bookmark.url}
+          shareMeta={{ url: bookmark.url }}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

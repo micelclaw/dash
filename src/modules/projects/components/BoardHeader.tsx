@@ -16,6 +16,7 @@ import {
   ArrowLeft, LayoutGrid, List, CalendarRange,
   Settings, Calendar, BarChart3, Share2, Search, X, SlidersHorizontal,
 } from 'lucide-react';
+import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
 import { useProjectsStore } from '@/stores/projects.store';
 import type { ViewMode } from '../types';
 
@@ -210,11 +211,16 @@ export function BoardHeader({ onOpenSettings, onOpenShare, onOpenFields }: {
         </button>
       )}
 
-      {/* Share */}
+      {/* Share (+ indicador de con quién está compartido) */}
       {onOpenShare && (
-        <button onClick={onOpenShare} style={iconBtnStyle} title="Share">
-          <Share2 size={14} />
-        </button>
+        <>
+          {activeBoardId && (
+            <SharedWithIndicator entityType="kanban_board" entityId={activeBoardId} onManage={onOpenShare} />
+          )}
+          <button onClick={onOpenShare} style={iconBtnStyle} title="Share">
+            <Share2 size={14} />
+          </button>
+        </>
       )}
 
       {/* Settings */}

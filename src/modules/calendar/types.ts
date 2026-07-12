@@ -32,6 +32,11 @@ export interface CalendarEvent {
   synced_at: string | null;
   deleted_at: string | null;
   heat_score?: number;
+  /** Presente cuando el evento te lo ha compartido otro usuario (user_shares). */
+  _shared?: boolean;
+  _shared_by?: string;
+  _shared_by_name?: string | null;
+  _shared_permission?: 'view' | 'edit';
 }
 
 export interface EventCreateInput {

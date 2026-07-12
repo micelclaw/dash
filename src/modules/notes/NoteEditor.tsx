@@ -36,7 +36,9 @@ import { TableOfContents, getHierarchicalIndexes, type TableOfContentDataItem } 
 import { DragHandle } from '@tiptap/extension-drag-handle-react';
 import FileHandler from '@tiptap/extension-file-handler';
 import { common, createLowlight } from 'lowlight';
-import { AlertCircle, Code, GripVertical } from 'lucide-react';
+import { AlertCircle, Code, GripVertical, Share2 } from 'lucide-react';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
+import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
 import { AuthImage } from './extensions/auth-image';
 import { UniversalMention, parseClawHref } from './extensions/mention';
 import { buildMentionSuggestion } from './extensions/mention-suggestion';
@@ -52,6 +54,7 @@ import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
+import { useKeyboardOpen } from '@/hooks/use-media-query';
 import { SourceBadge } from '@/components/shared/SourceBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { SourcePickerModal } from './SourcePickerModal';
@@ -132,6 +135,9 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareInitial, setShareInitial] = useState<'shared' | undefined>(undefined);
+  const [shareRefreshKey, setShareRefreshKey] = useState(0);
   const [tocItems, setTocItems] = useState<TableOfContentDataItem[]>([]);
   const [tocOpen, setTocOpen] = useState(false);
   // Modo código fuente: edita el markdown/HTML CRUDO en un textarea en vez
@@ -140,6 +146,12 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const [sourceMode, setSourceMode] = useState(false);
   const { links, loading: linksLoading } = useNoteLinks(noteId);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Bug 5: el botón de imagen abre este input nativo (galería en móvil,
+  // explorador en PC) y sube vía insertImages (mismo flujo que paste/drop).
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  // Con el teclado desplegado (móvil), ocultamos los paneles de inteligencia del
+  // pie para dar más espacio a la escritura.
+  const keyboardOpen = useKeyboardOpen();
   // La extensión TableOfContents dispara su onUpdate de forma SÍNCRONA durante la
   // creación del editor (en render, antes de montar). Para no hacer setState
   // pre-mount ("...component that hasn't mounted yet") guardamos el primer TOC en
@@ -442,32 +454,35 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
-      <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--border)' }}>
-        {onBack && (
-          <button
-            onClick={onBack}
+      {/* Header (incluye la toolbar de formato en modo renderizado → sin doble
+          línea: si la toolbar se muestra, ella aporta el separador inferior). */}
+      <div style={{ padding: '12px 16px 8px', borderBottom: (format !== 'plain' && !sourceMode) ? 'none' : '1px solid var(--border)' }}>
+        {/* Título + "Back to list" en la MISMA fila (a la derecha) para no gastar
+            una fila propia (bug 6). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input
+            value={note.title || ''}
+            onChange={e => handleTitleChange(e.target.value)}
+            placeholder="Untitled"
             style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--text-dim)', fontSize: '0.8125rem', padding: 0,
-              marginBottom: 8, fontFamily: 'var(--font-sans)',
+              flex: 1, minWidth: 0, fontSize: '1.25rem', fontWeight: 600,
+              background: 'transparent', border: 'none', outline: 'none',
+              color: 'var(--text)', fontFamily: 'var(--font-sans)',
             }}
-          >
-            ← Back to list
-          </button>
-        )}
-
-        {/* Editable title */}
-        <input
-          value={note.title || ''}
-          onChange={e => handleTitleChange(e.target.value)}
-          placeholder="Untitled"
-          style={{
-            width: '100%', fontSize: '1.25rem', fontWeight: 600,
-            background: 'transparent', border: 'none', outline: 'none',
-            color: 'var(--text)', fontFamily: 'var(--font-sans)',
-          }}
-        />
+          />
+          {onBack && (
+            <button
+              onClick={onBack}
+              style={{
+                flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-dim)', fontSize: '0.8125rem', padding: 0,
+                fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
+              }}
+            >
+              ← Back to list
+            </button>
+          )}
+        </div>
 
         {/* Metadata row */}
         <div style={{
@@ -492,6 +507,27 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
           {/* Tags unificados */}
           <TagInput tags={note.tags} onChange={handleTagsChange} />
+
+          {/* Compartir la nota (usuarios de Micelclaw + apps del móvil) */}
+          <SharedWithIndicator
+            entityType="note"
+            entityId={noteId}
+            refreshKey={shareRefreshKey}
+            onManage={() => { setShareInitial('shared'); setShareOpen(true); }}
+          />
+          <button
+            onClick={() => { setShareInitial(undefined); setShareOpen(true); }}
+            title="Compartir"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)', padding: '1px 6px',
+              cursor: 'pointer', color: 'var(--text-dim)', fontSize: '0.6875rem',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Share2 size={12} /> Compartir
+          </button>
 
           {/* Selector de formato del contenido (markdown/html/plain) */}
           <select
@@ -546,6 +582,32 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
             </span>
           )}
         </div>
+
+        {/* Toolbar de formato SIEMPRE visible, dentro del header fijo (no del
+            scroll) → se accede a negrita/imagen/tabla/… sin subir del todo
+            (bug 6). Solo en modo renderizado (no plain/código). */}
+        {format !== 'plain' && !sourceMode && (
+          <>
+            <NoteEditorToolbar
+              editor={editor}
+              format={format}
+              tocOpen={tocOpen}
+              onToggleToc={() => setTocOpen((v) => !v)}
+              onPickImage={() => imageInputRef.current?.click()}
+            />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files && files.length && editor) void insertImages(editor, Array.from(files));
+                e.target.value = '';
+              }}
+            />
+          </>
+        )}
       </div>
 
       {/* Source picker modal */}
@@ -593,12 +655,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
           flexDirection: 'column',
           flex: 1,
         }}>
-            <NoteEditorToolbar
-              editor={editor}
-              format={format}
-              tocOpen={tocOpen}
-              onToggleToc={() => setTocOpen((v) => !v)}
-            />
+            {/* La toolbar de formato se movió al header fijo (bug 6). */}
             {/* Tabla de contenidos plegable (extensión table-of-contents) */}
             {tocOpen && tocItems.length > 0 && (
               <div style={{
@@ -642,12 +699,14 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         </div>
       </div>
 
-      {/* Intelligence panels */}
-      <div style={{ borderTop: '1px solid var(--border)' }}>
-        <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} sourceType="note" sourceId={noteId} />
-        <SimilarContentPanel sourceType="note" sourceId={noteId} />
-        <GraphProximityPanel sourceType="note" sourceId={noteId} />
-      </div>
+      {/* Intelligence panels — ocultos con el teclado desplegado (móvil). */}
+      {!keyboardOpen && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          <RelatedItemsPanel links={links} loading={linksLoading} onNavigate={onBack} sourceType="note" sourceId={noteId} />
+          <SimilarContentPanel sourceType="note" sourceId={noteId} />
+          <GraphProximityPanel sourceType="note" sourceId={noteId} />
+        </div>
+      )}
 
       <ConfirmDialog
         open={confirmPlain}
@@ -659,6 +718,18 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         cancelLabel="Cancel"
         variant="warning"
       />
+
+      {shareOpen && (
+        <EntityShareModal
+          open={shareOpen}
+          entityType="note"
+          entityId={noteId}
+          entityTitle={note.title || ''}
+          initialSection={shareInitial}
+          onShared={() => setShareRefreshKey(k => k + 1)}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 }

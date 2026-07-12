@@ -15,11 +15,14 @@ import { Share2, Link2, Pencil, Trash2 } from 'lucide-react';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { EntityShareModal } from './EntityShareModal';
 import { RelateModal } from './RelateModal';
+import type { ShareMeta } from '@/lib/share-payload';
 
 interface EntityContextMenuProps {
-  entityType: 'note' | 'contact' | 'diary_entry' | 'photo' | 'event' | 'email' | 'file';
+  entityType: 'note' | 'contact' | 'diary_entry' | 'photo' | 'event' | 'email' | 'file' | 'bookmark' | 'feed' | 'article' | 'book';
   entityId: string;
   entityTitle?: string;
+  /** Metadatos para resolver la 2ª acción nativa (mime del fichero, url del enlace, ubicación). */
+  shareMeta?: ShareMeta;
   trigger: ReactNode;
   extraItems?: ContextMenuItem[];
   onEdit?: () => void;
@@ -34,6 +37,7 @@ export function EntityContextMenu({
   entityType,
   entityId,
   entityTitle,
+  shareMeta,
   trigger,
   extraItems = [],
   onEdit,
@@ -110,6 +114,7 @@ export function EntityContextMenu({
           entityType={entityType}
           entityId={entityId}
           entityTitle={entityTitle ?? ''}
+          shareMeta={shareMeta}
           onClose={() => setShareOpen(false)}
         />
       )}

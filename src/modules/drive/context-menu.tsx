@@ -11,8 +11,8 @@
  */
 
 import {
-  FolderOpen, Eye, ExternalLink, Download, Star, StarOff, Share2, Link2, Globe,
-  UserPlus, Mail, Scissors, Copy, ClipboardPaste, FolderInput, FolderPlus,
+  FolderOpen, Eye, ExternalLink, Download, Star, StarOff, Share2, Link2,
+  Scissors, Copy, ClipboardPaste, FolderInput, FolderPlus,
   CopyPlus, Pencil, Tags, History, Trash2, RotateCcw, X, Info, FileText, Play,
   ListPlus, Upload, PenTool,
 } from 'lucide-react';
@@ -76,12 +76,8 @@ export interface DriveMenuCallbacks {
   onDownload?: (files: FileRecord[]) => void;
   /** Set the star state of one-or-many files. `starred` is the DESIRED state. */
   onToggleStar?: (files: FileRecord[], starred: boolean) => void;
-  /** Public link → shared ShareModal. */
-  onShare?: (file: FileRecord) => void;
-  /** Internal user share → ShareWithUserModal. */
-  onShareUser?: (files: FileRecord[]) => void;
-  /** Public link sent by email → ShareEmailModal. */
-  onShareEmail?: (file: FileRecord) => void;
+  /** Compartir unificado → EntityShareModal (fuera + enlace público + personas + gestión). */
+  onShare?: (files: FileRecord[]) => void;
   onCut?: (files: FileRecord[]) => void;
   onCopy?: (files: FileRecord[]) => void;
   /** Paste clipboard. `destFolder` set when invoked over a folder row; undefined = current folder. */
@@ -182,8 +178,8 @@ function buildMultiMenu(files: FileRecord[], ctx: DriveMenuContext): ContextMenu
   if (cb.onTags) {
     items.push({ label: 'Tags…', icon: Tags, onClick: () => cb.onTags!(files) });
   }
-  if (cb.onShareUser) {
-    items.push({ label: 'Share with user…', icon: UserPlus, onClick: () => cb.onShareUser!(files) });
+  if (cb.onShare) {
+    items.push({ label: `Compartir… (${n})`, icon: Share2, onClick: () => cb.onShare!(files) });
   }
   items.push(sep());
   if (cb.onCut) items.push({ label: `Cut (${n})`, icon: Scissors, shortcut: 'Ctrl+X', onClick: () => cb.onCut!(files) });
@@ -238,17 +234,13 @@ function buildSingleMenu(file: FileRecord, ctx: DriveMenuContext): ContextMenuIt
       : { label: 'Star', icon: Star, onClick: () => cb.onToggleStar!([file], true) });
   }
 
-  // Share ▶ — public link / internal user / by email / copy path.
-  // Public link + email work for files AND folders (una carpeta pública es
-  // navegable en /share/:token; el backend sirve list/zip anónimos).
-  const shareSub: ContextMenuItem[] = [
-    ...(cb.onShare ? [{ label: 'Public link…', icon: Globe, onClick: () => cb.onShare!(file) }] : []),
-    ...(cb.onShareUser ? [{ label: 'With user…', icon: UserPlus, onClick: () => cb.onShareUser!([file]) }] : []),
-    ...(!isDir && cb.onShareEmail ? [{ label: 'By email…', icon: Mail, onClick: () => cb.onShareEmail!(file) }] : []),
-    ...(!isDir ? [{ label: 'Copy link', icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } }] : []),
-  ];
-  if (shareSub.length > 0) {
-    items.push({ label: 'Share', icon: Share2, onClick: () => {}, subItems: shareSub });
+  // Compartir unificado — UN ítem que abre EntityShareModal con todo dentro
+  // (compartir fuera / 2ª acción / enlace público / personas / gestión).
+  if (cb.onShare) {
+    items.push({ label: 'Compartir…', icon: Share2, onClick: () => cb.onShare!([file]) });
+  }
+  if (!isDir) {
+    items.push({ label: 'Copy link', icon: Link2, onClick: () => { void navigator.clipboard.writeText(file.filepath); } });
   }
 
   items.push(sep());

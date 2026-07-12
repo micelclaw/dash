@@ -13,12 +13,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  Pencil, Check, X, Copy, Download, Trash2, Star, Globe, UserX, Link2,
+  Pencil, Check, X, Copy, Download, Trash2, Star, Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { TagInput } from '@/components/shared/TagInput';
-import { AvatarInitials } from '@/components/shared/AvatarInitials';
+import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
@@ -29,7 +30,7 @@ import { downloadFile } from '@/lib/file-download';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useFileLinks } from '@/modules/drive/hooks/use-file-links';
 import { api } from '@/services/api';
-import type { ApiResponse, ApiListResponse } from '@/types/api';
+import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
 
 interface FileDetailsContentProps {
@@ -340,184 +341,49 @@ export function FileDetailsContent({
   );
 }
 
-// ─── Sharing status (user shares + public links) ──────────
-
-interface UserShareRow {
-  id: string;
-  shared_with_id: string;
-  target_id: string;
-  permission: string;
-  created_at: string;
-}
-
-interface Recipient {
-  id: string;
-  display_name: string | null;
-  email: string;
-  avatar_path: string | null;
-}
-
-interface ShareLinkRow {
-  id: string;
-  token: string;
-  permissions: string[] | null;
-  expires_at: string | null;
-  download_count: number | null;
-  max_downloads: number | null;
-}
+// ─── Sharing status (compacto: indicador + Gestionar → EntityShareModal) ──
 
 function SharingSection({ file }: { file: FileRecord }) {
-  const [shares, setShares] = useState<UserShareRow[]>([]);
-  const [recipients, setRecipients] = useState<Map<string, Recipient>>(new Map());
-  const [links, setLinks] = useState<ShareLinkRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [byMe, linksRes] = await Promise.all([
-        api.get<ApiListResponse<UserShareRow>>('/shares/by-me', { target_type: 'file', limit: 100 }),
-        file.is_directory
-          ? Promise.resolve({ data: [] as ShareLinkRow[] })
-          : api.get<ApiResponse<ShareLinkRow[]>>(`/files/${file.id}/shares`),
-      ]);
-      setShares(byMe.data.filter(s => s.target_id === file.id));
-      setLinks(linksRes.data ?? []);
-    } catch {
-      setShares([]);
-      setLinks([]);
-    }
-    setLoading(false);
-  }, [file.id, file.is_directory]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  // Recipient names (shares/by-me rows only carry ids)
-  useEffect(() => {
-    let cancelled = false;
-    void api.get<ApiResponse<Recipient[]>>('/shares/recipients')
-      .then(res => {
-        if (cancelled) return;
-        setRecipients(new Map(res.data.map(r => [r.id, r])));
-      })
-      .catch(() => { /* names degrade to "user" */ });
-    return () => { cancelled = true; };
-  }, []);
-
-  const revokeShare = async (id: string) => {
-    try {
-      await api.delete(`/shares/${id}`);
-      toast.success('Share revoked');
-      void load();
-    } catch {
-      toast.error('Could not revoke share');
-    }
-  };
-
-  const updatePermission = async (id: string, permission: string) => {
-    try {
-      await api.patch(`/shares/${id}`, { permission });
-      toast.success(`Permission set to ${permission}`);
-      void load();
-    } catch {
-      toast.error('Could not update permission');
-    }
-  };
-
-  const revokeLink = async (token: string) => {
-    try {
-      await api.delete(`/files/share/${token}`);
-      toast.success('Public link revoked');
-      void load();
-    } catch {
-      toast.error('Could not revoke link');
-    }
-  };
-
-  const copyLink = (token: string) => {
-    void navigator.clipboard.writeText(`${window.location.origin}/share/${token}`);
-    toast.success('Link copied');
-  };
-
-  if (loading) {
-    return (
-      <div>
-        <SectionLabel>Sharing</SectionLabel>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Loading…</div>
-      </div>
-    );
-  }
-
-  if (shares.length === 0 && links.length === 0) {
-    return (
-      <div>
-        <SectionLabel>Sharing</SectionLabel>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Not shared</div>
-      </div>
-    );
-  }
+  const [manageOpen, setManageOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   return (
     <div>
       <SectionLabel>Sharing</SectionLabel>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {shares.map(s => {
-          const who = recipients.get(s.shared_with_id);
-          const name = who?.display_name || who?.email || 'user';
-          return (
-            <div
-              key={s.id}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
-                background: 'var(--bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
-              }}
-            >
-              <AvatarInitials name={name} src={who?.avatar_path ?? undefined} size="sm" />
-              <span style={{
-                flex: 1, minWidth: 0, color: 'var(--text)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {name}
-              </span>
-              <select
-                value={s.permission}
-                onChange={e => { void updatePermission(s.id, e.target.value); }}
-                style={{
-                  background: 'var(--surface)', border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)', padding: '1px 4px',
-                  fontSize: '0.6875rem', color: 'var(--text-dim)',
-                  fontFamily: 'var(--font-sans)', cursor: 'pointer',
-                }}
-              >
-                <option value="view">view</option>
-                <option value="edit">edit</option>
-              </select>
-              <IconBtn icon={UserX} title="Revoke share" onClick={() => { void revokeShare(s.id); }} danger />
-            </div>
-          );
-        })}
-
-        {links.map(l => (
-          <div
-            key={l.id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px',
-              background: 'var(--bg)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem',
-            }}
-          >
-            <Globe size={13} style={{ color: 'var(--mod-drive)', flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 0, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              Public link
-              <span style={{ color: 'var(--text-muted)', marginLeft: 6, fontSize: '0.6875rem' }}>
-                {(l.download_count ?? 0) > 0 ? `${l.download_count} downloads` : ''}
-                {l.expires_at ? ` · expires ${formatRelative(new Date(l.expires_at))}` : ''}
-              </span>
-            </span>
-            <IconBtn icon={Link2} title="Copy link" onClick={() => copyLink(l.token)} />
-            <IconBtn icon={X} title="Revoke link" onClick={() => { void revokeLink(l.token); }} danger />
-          </div>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <SharedWithIndicator
+          entityType="file"
+          entityId={file.id}
+          refreshKey={refreshKey}
+          showLinkChip={!file.is_directory}
+          onManage={() => setManageOpen(true)}
+        />
+        <button
+          onClick={() => setManageOpen(true)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '3px 10px', background: 'var(--surface)',
+            border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <Share2 size={12} /> Gestionar…
+        </button>
       </div>
+
+      {manageOpen && (
+        <EntityShareModal
+          open
+          entityType="file"
+          entityId={file.id}
+          entityTitle={file.filename}
+          shareMeta={{ mime: file.mime_type ?? undefined, isDirectory: file.is_directory }}
+          initialSection="shared"
+          onShared={() => setRefreshKey(k => k + 1)}
+          onClose={() => setManageOpen(false)}
+        />
+      )}
     </div>
   );
 }

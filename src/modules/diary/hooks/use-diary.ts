@@ -41,6 +41,8 @@ export function useDiary(filters: DiaryFilters = {}) {
         from: filters.from || undefined,
         to: filters.to || undefined,
         mood: filters.mood || undefined,
+        // Incluir entradas de diario que otros usuarios me han compartido (user_shares).
+        include_shared: 'true',
       });
       setEntries(res.data);
     } catch (err) {

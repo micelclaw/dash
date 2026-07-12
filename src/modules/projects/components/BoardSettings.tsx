@@ -11,9 +11,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { X, Trash2, Archive } from 'lucide-react';
+import { X, Trash2, Archive, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useProjectsStore } from '@/stores/projects.store';
+import { TransferBoardModal } from './TransferBoardModal';
 import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
 import { TagInput } from '@/components/shared/TagInput';
 import { AutomationEditor } from './AutomationEditor';
@@ -42,9 +43,12 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
   // Las texturas se filtran por el tema del dash (los boards heredan el tema).
   const dashTheme = useSettingsStore((s) => s.settings?.dash?.theme ?? 'dark');
 
+  const activeBoardPermission = useProjectsStore((s) => s.activeBoardPermission);
+  const isOwner = activeBoardPermission === 'owner';
   const [tab, setTab] = useState<'general' | 'display' | 'automations' | 'danger'>('general');
   const [title, setTitle] = useState(activeBoardTitle || '');
   const [description, setDescription] = useState(activeBoard?.description ?? '');
+  const [transferOpen, setTransferOpen] = useState(false);
 
   useEffect(() => {
     fetchAutomations(boardId);
@@ -308,6 +312,27 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
 
           {tab === 'danger' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {isOwner && (
+                <button
+                  onClick={() => setTransferOpen(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 14px',
+                    background: 'none',
+                    border: '1px solid var(--border)',
+                    borderRadius: 6,
+                    color: 'var(--text)',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  <Crown size={14} />
+                  Transferir propiedad…
+                </button>
+              )}
               <button
                 onClick={handleArchive}
                 style={{
@@ -350,6 +375,10 @@ export function BoardSettings({ boardId, onClose }: BoardSettingsProps) {
           )}
         </div>
       </div>
+
+      {transferOpen && (
+        <TransferBoardModal boardId={boardId} onClose={() => setTransferOpen(false)} />
+      )}
     </div>
   );
 }
