@@ -24,8 +24,11 @@ import {
 import { api } from '@/services/api';
 import type { VFSMount, VFSNode } from './hooks/use-vfs';
 
-/** Default auto-created local mounts that are unused legacy placeholders */
-const HIDDEN_DEFAULT_MOUNTS = new Set(['/local/drive', '/local/photos']);
+/** Legacy auto-created local mounts (pre Drive-unify scheme) that must never
+ *  show as File Explorer sources — superseded by HOME (/user/files) + Drive
+ *  (/drive). Core retires them on the next /vfs/mounts; this hides any that
+ *  linger. Attachments is email storage, not a browsable source. */
+const HIDDEN_DEFAULT_MOUNTS = new Set(['/local/drive', '/local/photos', '/local/attachments']);
 
 interface SourceTreeProps {
   currentPath: string;
