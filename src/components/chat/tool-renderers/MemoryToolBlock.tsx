@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -43,7 +43,7 @@ export function MemoryToolBlock({ tool }: Props) {
   const { query, path } = extractMemoryArgs(tool.input);
   const out = asString(tool.output);
   const hits = extractHits(out);
-  const subjectText = query ? `"${truncateLine(query, 60)}"` : path ? path : '(empty)';
+  const subjectText = toolDetail(query ? `"${truncateLine(query, 60)}"` : path, tool.summary, '(empty)');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>

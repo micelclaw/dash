@@ -15,7 +15,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
 import { useChatStore } from '@/stores/chat.store';
 import { getAgentColor } from '@/modules/agents/agent-colors';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -64,7 +64,7 @@ export function SpawnToolBlock({ tool }: Props) {
   const [expanded, setExpanded] = useState(false);
   const args = parseInput(tool.input);
   const agentName = shortAgentName(args.agentId);
-  const taskPreview = truncateLine(args.task ?? '', 80);
+  const taskPreview = toolDetail(truncateLine(args.task ?? '', 80), tool.summary, '');
   const agents = useChatStore((s) => s.agents);
   const agentMatch = agents.find((a) => a.name.toLowerCase() === agentName.toLowerCase());
   const agentColor = getAgentColor(agentName, (agentMatch as { color?: string } | undefined)?.color);

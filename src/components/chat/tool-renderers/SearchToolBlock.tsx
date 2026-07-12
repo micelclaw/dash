@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -59,7 +59,7 @@ export function SearchToolBlock({ tool }: Props) {
         <span style={ICON_STYLE}>🔍</span>
         <span style={SUMMARY_STYLE}>
           <span style={{ color: 'var(--text-dim)' }}>search · </span>
-          <span>"{truncateLine(q, 60) || '(empty query)'}"</span>
+          <span>{toolDetail(truncateLine(q, 60) ? `"${truncateLine(q, 60)}"` : '', tool.summary, '(empty query)')}</span>
         </span>
         {count != null && (
           <span style={{ flexShrink: 0, fontSize: '0.6875rem', color: 'var(--text-muted)' }}>

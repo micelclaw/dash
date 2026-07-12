@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -60,7 +60,7 @@ export function EditToolBlock({ tool }: Props) {
         <span style={ICON_STYLE}>{icon}</span>
         <span style={SUMMARY_STYLE}>
           <span style={{ color: 'var(--text-dim)' }}>{verb} · </span>
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>{basename(path) || '(unknown)'}</span>
+          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>{toolDetail(basename(path), tool.summary)}</span>
         </span>
         {(added > 0 || removed > 0) && (
           <span style={{ flexShrink: 0, fontSize: '0.6875rem', fontFamily: 'var(--font-mono, monospace)' }}>

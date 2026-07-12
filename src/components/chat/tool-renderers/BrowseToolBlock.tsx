@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -67,7 +67,7 @@ export function BrowseToolBlock({ tool }: Props) {
         <span style={ICON_STYLE}>🌐</span>
         <span style={SUMMARY_STYLE}>
           <span style={{ color: 'var(--text-dim)' }}>{action ? `${action} · ` : 'browse · '}</span>
-          <span>{hostname(url) || truncateLine(url, 50) || '(no url)'}</span>
+          <span>{toolDetail(hostname(url) || truncateLine(url, 50), tool.summary, '(no url)')}</span>
         </span>
         {status != null && (
           <span style={{ flexShrink: 0, fontSize: '0.6875rem', color: statusColor(status) }}>{status}</span>

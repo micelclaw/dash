@@ -97,3 +97,22 @@ export function asString(v: unknown): string {
   if (typeof v === 'string') return v;
   try { return JSON.stringify(v, null, 2); } catch { return String(v); }
 }
+
+/**
+ * Detail text for a collapsed tool pill, with a LIVE-streaming fallback.
+ *
+ * During live streaming the tool event carries only `summary` (e.g.
+ * "from skills/x/SKILL.md", "query foo") and NO structured `input` — the
+ * full input is merged post-turn from the session JSONL. So the per-tool
+ * renderers must fall back to `summary`; otherwise the pill reads
+ * "(unknown)" while the tool runs, even though OpenClaw's native UI shows
+ * the summary from the start (the recurring "tools se ven incompletas"
+ * complaint). Pass the input-derived detail first; when it's empty (no
+ * input yet), the summary is shown instead.
+ */
+export function toolDetail(inputDerived: string | undefined | null, summary: unknown, fallback = '(unknown)'): string {
+  const derived = (inputDerived ?? '').trim();
+  if (derived) return derived;
+  const s = truncateLine(asString(summary), 80);
+  return s || fallback;
+}

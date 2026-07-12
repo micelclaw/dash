@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import type { ToolCallRecord } from '@/types/chat';
-import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine } from './shared';
+import { PILL_BASE_STYLE, ICON_STYLE, SUMMARY_STYLE, EXPANDED_BODY_STYLE, asString, truncateLine, toolDetail } from './shared';
 
 interface Props { tool: ToolCallRecord }
 
@@ -65,7 +65,7 @@ export function BashToolBlock({ tool }: Props) {
         <span style={ICON_STYLE}>💻</span>
         <span style={{ ...SUMMARY_STYLE, fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>
           <span style={{ color: 'var(--text-muted)' }}>$ </span>
-          {truncateLine(cmd, 70) || tool.tool}
+          {toolDetail(truncateLine(cmd, 70), tool.summary, tool.tool)}
         </span>
         {exitBadge}
         {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
