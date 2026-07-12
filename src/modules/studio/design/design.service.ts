@@ -52,11 +52,58 @@ export async function listDesignPages(projectId: string): Promise<DesignPagesRes
 
 export async function generateInitialVariants(projectId: string, body: {
   prompt?: string; feel?: string; brand_colors?: string; design_system?: string;
+  brief_answers?: Record<string, string>; direction_count?: number; critique?: boolean;
 }): Promise<{ pages: DesignPage[]; design_mds: Array<{ page_id?: string; design_md: string | null }> }> {
   const res = await api.post<Envelope<{ pages: DesignPage[]; design_mds: Array<{ page_id?: string; design_md: string | null }> }>>(
     `/studio/projects/${projectId}/design/generate`, body, { timeout: GEN_TIMEOUT },
   );
   return res.data;
+}
+
+// ─── Design brief (Claude-Design-style questionnaire) ────────────────
+
+export interface DesignBriefQuestion {
+  id: string;
+  question: string;
+  options?: string[];
+  multi?: boolean;
+  rationale?: string;
+}
+
+export interface DesignTemplateMeta {
+  slug: string;
+  name: string;
+  icon: string;
+  description: string;
+  suggested_screens: string[];
+  /** First-party template (e.g. "Micelclaw Module") — the backend lists
+   *  these first; the intro also pins them to the front of the row. */
+  first_party?: boolean;
+}
+
+/** Structural template catalog ("Start with a template…"). */
+export async function fetchDesignTemplates(): Promise<DesignTemplateMeta[]> {
+  const res = await api.get<Envelope<{ templates: DesignTemplateMeta[] }>>('/studio/design-templates');
+  return res.data.templates ?? [];
+}
+
+/** Full template incl. the curated starter page (for instant preview). */
+export async function fetchDesignTemplate(slug: string): Promise<DesignTemplateMeta & { starter_html: string | null; brief_hint: string }> {
+  const res = await api.get<Envelope<{ template: DesignTemplateMeta & { starter_html: string | null; brief_hint: string } }>>(
+    `/studio/design-templates/${encodeURIComponent(slug)}`,
+  );
+  return res.data.template;
+}
+
+/** LLM-tailored questionnaire (visual questions + the fixed functional
+ *  block). Can take ~15-30s — the caller shows a skeleton. */
+export async function fetchBriefQuestions(projectId: string, template?: string | null): Promise<DesignBriefQuestion[]> {
+  const res = await api.post<Envelope<{ questions: DesignBriefQuestion[] }>>(
+    `/studio/projects/${projectId}/design/brief-questions`,
+    { template: template ?? undefined },
+    { timeout: GEN_TIMEOUT },
+  );
+  return res.data.questions ?? [];
 }
 
 export async function selectDesignVariant(projectId: string, pageId: string, designMd?: string | null): Promise<DesignPage[]> {
@@ -139,8 +186,20 @@ export async function fetchProjectTokensCss(projectId: string): Promise<string |
   }
 }
 
-export async function continueBuildInStudio(projectId: string): Promise<void> {
-  await api.post(`/studio/projects/${projectId}/design/continue-build`, {});
+export type ConvertTarget = 'micelclaw_app' | 'website' | 'webapp' | 'mobile';
+
+/** Convert the design into a buildable project of the chosen target.
+ *  micelclaw_app → Foundation (full app w/ backend); website → Packaging
+ *  (pages ARE the site, publish directly); webapp/mobile → Build (the
+ *  pages become a React SPA / installable PWA). Can take 30-90s (one-shot
+ *  concept derivation) — callers show progress. */
+export async function continueBuildInStudio(projectId: string, target: ConvertTarget = 'micelclaw_app'): Promise<{ status: string }> {
+  const res = await api.post<Envelope<{ status: string }>>(
+    `/studio/projects/${projectId}/design/continue-build`,
+    { target },
+    { timeout: GEN_TIMEOUT },
+  );
+  return res.data;
 }
 
 // ─── Publishing (T2 — static vhost via Caddy + PowerDNS wildcard) ────

@@ -22,9 +22,9 @@
 // supply (a) the docKey, (b) the trigger callbacks, and (c) the copy.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2, Search, Palette } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertCircle, CheckCircle2, Palette } from 'lucide-react';
 import { toast } from 'sonner';
-import { useStudioStore, type StudioProject, type StudioProjectStatus, type StudioDesignSystem } from '@/stores/studio.store';
+import { useStudioStore, type StudioProject, type StudioProjectStatus } from '@/stores/studio.store';
 import { useStudioStream } from '../hooks/useStudioStream';
 import { StreamingMarkdown } from '../components/StreamingMarkdown';
 import { QuestionCardsPanel } from '../components/QuestionCardsPanel';
@@ -32,13 +32,15 @@ import { RewindButton } from '../components/RewindButton';
 import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
 import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
-import { DesignPreview } from '../components/DesignPreview';
+import { DesignSystemPicker } from '../components/DesignSystemPicker';
 import { FichaView } from '../components/FichaView';
 import { WireframeView } from '../components/WireframeView';
 import { MockupPreview } from '../components/MockupPreview';
 import { parseFicha, fichaHasContent } from '../lib/ficha';
 import { parseVisuals, hasWireframes, hasMockups, defaultTokensFromFeel } from '../lib/mockups';
 import { useStudioMode } from '../hooks/useStudioMode';
+import { listDesignPages } from '../design/design.service';
+import { ViewDesignModal } from '../design/ViewDesignModal';
 
 // Frontend "feel" moods (§3.4) — each maps to a short hint folded into
 // the generation context so the DESIGN.md comes out in that character.
@@ -148,10 +150,6 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // first-turn user context. Only shown for phase==='frontend' + guided.
   const [feel, setFeel] = useState<string | null>(null);
   const [brandColors, setBrandColors] = useState('');
-  // S4: "start from a known design" — catalog picker (Frontend, Guided).
-  const [dsQuery, setDsQuery] = useState('');
-  const [dsResults, setDsResults] = useState<StudioDesignSystem[]>([]);
-  const [dsLoading, setDsLoading] = useState(false);
   // S4 Fase C: live color tweaks on the chosen system ({ primary: "#…" }).
   // Folded into the Frontend generation context (no persistence — the
   // emitted DESIGN.md bakes them in). Reset when the base system changes.
@@ -167,10 +165,14 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // not the generic feel default. '' when the doc has no DESIGN.md yet.
   const [projectTokensCss, setProjectTokensCss] = useState<string>('');
   const [generatingMockups, setGeneratingMockups] = useState(false);
+  // "View design" pill: when the project already has settled Design-mode
+  // pages (no variant_group = chosen, not A/B candidates), surface a small
+  // peek button in the toolbar of the Concept/Foundation phases.
+  const [hasDesignPages, setHasDesignPages] = useState(false);
+  const [showDesignModal, setShowDesignModal] = useState(false);
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
-  const searchDesignSystems = useStudioStore((s) => s.searchDesignSystems);
   const setDesignSystem = useStudioStore((s) => s.setDesignSystem);
   const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
   const generateMockups = useStudioStore((s) => s.generateMockups);
@@ -224,21 +226,21 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id, phase]);
 
-  // S4: load the catalog for the Frontend picker (debounced on query).
-  // Only fetches while the picker is on screen (frontend + guided + no doc).
-  const showPicker = !isPast && guided && phase === 'frontend';
+  // "View design" pill probe — fires ONCE per (project, phase) mount, only
+  // on the Concept/Foundation phases. If the project has Design-mode pages
+  // that are already settled (no variant_group), the pill shows up so the
+  // user can peek at the chosen design while reading the docs.
   useEffect(() => {
-    if (!showPicker) return;
+    if (phase !== 'concept' && phase !== 'foundation') return;
     let cancelled = false;
-    setDsLoading(true);
-    const timer = setTimeout(() => {
-      searchDesignSystems(dsQuery.trim() || undefined)
-        .then((rows) => { if (!cancelled) setDsResults(rows.slice(0, 12)); })
-        .catch(() => { if (!cancelled) setDsResults([]); })
-        .finally(() => { if (!cancelled) setDsLoading(false); });
-    }, dsQuery ? 250 : 0);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [showPicker, dsQuery, searchDesignSystems]);
+    listDesignPages(project.id)
+      .catch(() => null)
+      .then((res) => {
+        if (cancelled || !res) return;
+        setHasDesignPages(res.pages.some((p) => !p.variant_group));
+      });
+    return () => { cancelled = true; };
+  }, [phase, project.id]);
 
   async function pickSystem(slug: string | null) {
     try {
@@ -426,6 +428,15 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           {guided ? gc.title : title}
         </h2>
         <div style={{ flex: 1 }} />
+        {hasDesignPages && (phase === 'concept' || phase === 'foundation') && (
+          <button
+            type="button"
+            onClick={() => setShowDesignModal(true)}
+            style={toolbarBtnGhost}
+          >
+            <Palette size={12} /> View design
+          </button>
+        )}
         {state.tokensUsed > 0 && !isPast && !guided && (
           <span style={{
             fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
@@ -531,7 +542,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                   <input
                     value={brandColors}
                     onChange={(e) => setBrandColors(e.target.value)}
-                    placeholder="Tus colores o tu logo (opcional): ej. 'rosa y dorado'"
+                    placeholder="Your colors or logo (optional): e.g. 'pink and gold'"
                     style={{
                       marginTop: 10, width: '100%', boxSizing: 'border-box', padding: '8px 10px',
                       fontSize: '0.8rem', background: 'var(--surface)', color: 'var(--text)',
@@ -545,74 +556,14 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                     <Palette size={14} style={{ color: 'var(--text-muted)' }} />
                     …o parte de un diseño que ya te guste
                   </div>
-                  <div style={{ position: 'relative', marginTop: 8 }}>
-                    <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input
-                      value={dsQuery}
-                      onChange={(e) => setDsQuery(e.target.value)}
-                      placeholder="Buscar: stripe, notion, material…"
-                      style={{
-                        width: '100%', boxSizing: 'border-box', padding: '8px 10px 8px 32px',
-                        fontSize: '0.8rem', background: 'var(--surface)', color: 'var(--text)',
-                        border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                        fontFamily: 'var(--font-sans)',
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 8 }}>
-                    {dsResults.map((ds) => {
-                      const sel = selectedSystem === ds.slug;
-                      return (
-                        <button
-                          key={ds.slug}
-                          type="button"
-                          onClick={() => pickSystem(sel ? null : ds.slug)}
-                          title={ds.has_brand ? `${ds.name} (inspirado en — solo tokens)` : ds.name}
-                          style={{
-                            display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 10px', textAlign: 'left',
-                            background: sel ? 'color-mix(in srgb, var(--amber) 12%, var(--card))' : 'var(--card)',
-                            border: `1.5px solid ${sel ? 'var(--amber)' : 'var(--border)'}`,
-                            borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                            color: 'var(--text)', minWidth: 0,
-                          }}
-                        >
-                          <span style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ds.name}</span>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                            {ds.has_brand ? 'inspirado en' : ds.category}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {dsLoading && dsResults.length === 0 && (
-                    <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Buscando…</div>
-                  )}
-                  {selectedSystem ? (
-                    <>
-                      <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        Diseño base: <strong style={{ color: 'var(--text)' }}>{selectedSystem}</strong>
-                        {' · '}
-                        <button
-                          type="button"
-                          onClick={() => pickSystem(null)}
-                          style={{ background: 'none', border: 'none', color: 'var(--amber)', cursor: 'pointer', padding: 0, font: 'inherit' }}
-                        >
-                          quitar
-                        </button>
-                      </div>
-                      <DesignPreview
-                        slug={selectedSystem}
-                        overrides={colorOverrides}
-                        onOverride={(name, value) => setColorOverrides((prev) => ({ ...prev, [name]: value }))}
-                        onResetOverrides={() => setColorOverrides({})}
-                      />
-                    </>
-                  ) : (
-                    /* A3: ALWAYS-ON brand preview — even with no system
-                       picked, the user sees how their "feel" + colors look.
-                       Feel-derived tokens, no fetch (tokensCssOverride). */
-                    <DesignPreview tokensCssOverride={feelTokensCss} />
-                  )}
+                  <DesignSystemPicker
+                    value={selectedSystem}
+                    onSelect={(slug) => { void pickSystem(slug); }}
+                    previewOverrides={colorOverrides}
+                    onPreviewOverride={(name, value) => setColorOverrides((prev) => ({ ...prev, [name]: value }))}
+                    onResetPreviewOverrides={() => setColorOverrides({})}
+                    fallbackTokensCss={feelTokensCss}
+                  />
                   <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                     Siempre incluyo accesibilidad, responsive, buenos nombres y patrones de componentes.
                   </div>
@@ -628,7 +579,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                   <label style={{
                     fontSize: '0.75rem', color: 'var(--text)', fontWeight: 500,
                   }}>
-                    {guided ? gc.contextLabel : initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>{guided ? '(opcional)' : '(optional)'}</span>
+                    {guided ? gc.contextLabel : initialContextLabel} <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
                   </label>
                   <textarea
                     value={initialContext}
@@ -670,7 +621,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                     fontSize: '0.6875rem', color: 'var(--text-muted)',
                     marginTop: 4,
                   }}>
-                    {guided ? 'Si lo dejas en blanco, uso lo que ya me contaste.' : 'If you leave it blank, only the scope info will be used.'}
+                    {guided ? "If you leave it blank, I'll use what you already told me." : 'If you leave it blank, only the scope info will be used.'}
                   </div>
                 </div>
               )}
@@ -889,6 +840,10 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
         )}
       </div>
 
+      {showDesignModal && (
+        <ViewDesignModal projectId={project.id} onClose={() => setShowDesignModal(false)} />
+      )}
+
       <StreamDebugOverlay
         state={state}
         debug={debug}
@@ -903,6 +858,15 @@ const toolbarBtnSecondary: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '6px 12px', background: 'var(--surface)',
   border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+  color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer',
+  fontFamily: 'var(--font-sans)',
+};
+
+/** Small ghost button for the toolbar (e.g. the "View design" pill). */
+const toolbarBtnGhost: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6,
+  padding: '6px 10px', background: 'transparent',
+  border: 'none', borderRadius: 'var(--radius-md)',
   color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer',
   fontFamily: 'var(--font-sans)',
 };

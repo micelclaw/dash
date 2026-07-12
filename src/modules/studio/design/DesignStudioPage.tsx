@@ -41,13 +41,24 @@ import {
   listDesignPages, generateInitialVariants, selectDesignVariant,
   createDesignPage, editDesignPage, saveDeterministicVersion,
   listDesignVersions, revertDesignVersion, deleteDesignPage,
-  updateDesignTokens, fetchProjectTokensCss, continueBuildInStudio,
+  updateDesignTokens, fetchProjectTokensCss,
   patchElementText, listUserDomains, getProjectSite, publishProjectSite,
   unpublishSite, fetchScreenSuggestions,
+  fetchDesignTemplates, fetchDesignTemplate, fetchBriefQuestions,
   type DesignPage, type SystemDomainOption, type PublishedSiteInfo,
+  type DesignBriefQuestion, type DesignTemplateMeta,
 } from './design.service';
 import { DesignCanvas, type CanvasSelection, type DesignCanvasHandle } from './DesignCanvas';
 import { useStudioStreamsStore } from '../streams/studio-generation-streams';
+import { useStudioStore } from '@/stores/studio.store';
+import { BriefQuestionnaire } from './BriefQuestionnaire';
+import { ConvertDesignModal } from './ConvertDesignModal';
+import { TourStrip } from '../components/TourStrip';
+import { DesignSystemPicker } from '../components/DesignSystemPicker';
+import { DesignSystemGalleryModal } from '../components/DesignSystemGalleryModal';
+import { DesignPreview } from '../components/DesignPreview';
+import { templateIcon } from './template-icons';
+import { downloadAuthed } from '@/lib/file-download';
 
 export interface DesignWorkbenchProps {
   project: StudioProject;
@@ -63,6 +74,10 @@ export interface DesignWorkbenchProps {
   /** Fires whenever the page set changes — lets the embedding phase know
    *  whether a direction is picked (enables its Approve). */
   onPagesChanged?: (pages: DesignPage[]) => void;
+  /** Read-only surface (past views): no instruction bar, no knobs, no
+   *  add/delete/history — just look at the design. UX affordance only;
+   *  the server-side phase guard remains the real write barrier. */
+  readOnly?: boolean;
 }
 
 const FEELS = [
@@ -86,7 +101,7 @@ export function DesignStudioPage(props: Omit<DesignWorkbenchProps, 'chrome' | 'a
   return <DesignWorkbench {...props} chrome="design" />;
 }
 
-export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'design', actions, onPagesChanged }: DesignWorkbenchProps) {
+export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'design', actions, onPagesChanged, readOnly = false }: DesignWorkbenchProps) {
   const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
   const canvasRef = useRef<DesignCanvasHandle | null>(null);
@@ -102,6 +117,54 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
   const [brandColors, setBrandColors] = useState('');
   const [generating, setGenerating] = useState(false);
 
+  // Two-axis composer + brief questionnaire (design chrome only — the
+  // frontend-phase intro keeps the classic feel/colors, its "brief" is
+  // the approved concept).
+  const [introStep, setIntroStep] = useState<'compose' | 'questions'>('compose');
+  const [dTemplates, setDTemplates] = useState<DesignTemplateMeta[]>([]);
+  const [templateSlug, setTemplateSlug] = useState<string | null>(null);
+  const [starterHtml, setStarterHtml] = useState<string | null>(null);
+  const [designSystemSlug, setDesignSystemSlug] = useState<string | null>(project.design_system ?? null);
+  const [previewTokens, setPreviewTokens] = useState<string | null>(null);
+  const [briefQuestions, setBriefQuestions] = useState<DesignBriefQuestion[]>([]);
+  const [briefAnswers, setBriefAnswers] = useState<Record<string, string>>({});
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
+  // How many creative directions to generate (1 / 3 / 5) — like Open Design.
+  const [directionCount, setDirectionCount] = useState<1 | 3 | 5>(3);
+  // Opt-in self-critique (extra LLM pass per variant → OFF by default here:
+  // this box's free models can go silent, and each pass adds that risk).
+  const [autoRefine, setAutoRefine] = useState(false);
+  const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
+
+  const designChromeIntro = chrome === 'design';
+  useEffect(() => {
+    if (!designChromeIntro) return;
+    let cancelled = false;
+    fetchDesignTemplates().then((t) => { if (!cancelled) setDTemplates(t); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [designChromeIntro]);
+
+  // Instant preview: the chosen template's starter themed by the chosen
+  // design system's tokens — zero LLM, the "see something now" effect.
+  useEffect(() => {
+    if (!templateSlug) { setStarterHtml(null); return; }
+    let cancelled = false;
+    fetchDesignTemplate(templateSlug)
+      .then((t) => { if (!cancelled) setStarterHtml(t.starter_html); })
+      .catch(() => { if (!cancelled) setStarterHtml(null); });
+    return () => { cancelled = true; };
+  }, [templateSlug]);
+  useEffect(() => {
+    if (!designSystemSlug) { setPreviewTokens(null); return; }
+    let cancelled = false;
+    fetchDesignSystemTokens(designSystemSlug)
+      .then((css) => { if (!cancelled) setPreviewTokens(css); })
+      .catch(() => { if (!cancelled) setPreviewTokens(null); });
+    return () => { cancelled = true; };
+  }, [designSystemSlug, fetchDesignSystemTokens]);
+
   // Live generation progress: the 3 directions generate SEQUENTIALLY and
   // each streams `studio.generation.*` events (phase design_page) into the
   // global streams store — surface them so the skeleton never looks frozen.
@@ -111,7 +174,7 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
   useEffect(() => {
     const st = genStream?.status;
     if (generating && st === 'done' && prevGenStatus.current !== 'done') {
-      setDoneDirections((n) => Math.min(3, n + 1));
+      setDoneDirections((n) => Math.min(directionCount, n + 1));
     }
     prevGenStatus.current = st;
   }, [genStream?.status, generating]);
@@ -124,12 +187,21 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
   const [applyAll, setApplyAll] = useState(false);
   const [editing, setEditing] = useState(false);
   const [addingPage, setAddingPage] = useState(false);
+  const [addingPageName, setAddingPageName] = useState<string | null>(null);
+  // Inline "Add screen" mini-form (window.prompt is dead: it gave zero
+  // progress feedback and can't be styled/cancelled consistently).
+  const [addFormOpen, setAddFormOpen] = useState(false);
+  const [addFormName, setAddFormName] = useState('');
   const [showKnobs, setShowKnobs] = useState(false);
   const [knobColors, setKnobColors] = useState<Record<string, string>>({});
   const [showHistory, setShowHistory] = useState(false);
   const [versions, setVersions] = useState<Array<{ version: number; source: string; instruction: string | null; created_at: string }>>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const exportBaseName = useMemo(
+    () => (project.name || 'design').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'design',
+    [project.name],
+  );
   const [showConnect, setShowConnect] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
   const [domains, setDomains] = useState<SystemDomainOption[]>([]);
@@ -203,17 +275,48 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
 
   // ─── Actions ─────────────────────────────────────────────────────
 
+  // Kick off the questionnaire: the LLM tailors visual questions to the
+  // description/template (+ the fixed functional block). Server-side
+  // fallback bank guarantees questions even when the model fails.
+  async function startQuestions() {
+    if (!prompt.trim()) {
+      toast.message('Describe what we\'re designing first.');
+      return;
+    }
+    setIntroStep('questions');
+    setLoadingQuestions(true);
+    try {
+      const qs = await fetchBriefQuestions(project.id, templateSlug);
+      setBriefQuestions(qs);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t prepare the questions');
+      setBriefQuestions([]);
+    } finally {
+      setLoadingQuestions(false);
+    }
+  }
+
   async function handleGenerate() {
     if (!prompt.trim() || generating) return;
     setGenerating(true);
     setDoneDirections(0);
     try {
-      const res = await generateInitialVariants(project.id, {
-        prompt: prompt.trim(),
-        feel,
-        brand_colors: brandColors.trim() || undefined,
-        design_system: project.design_system ?? undefined,
-      });
+      const res = await generateInitialVariants(project.id, designChromeIntro
+        ? {
+          prompt: prompt.trim(),
+          design_system: designSystemSlug ?? project.design_system ?? undefined,
+          brief_answers: briefAnswers,
+          direction_count: directionCount,
+          critique: autoRefine,
+        }
+        : {
+          prompt: prompt.trim(),
+          feel,
+          brand_colors: brandColors.trim() || undefined,
+          design_system: project.design_system ?? undefined,
+          direction_count: directionCount,
+          critique: autoRefine,
+        });
       setPages(res.pages);
       const map: Record<string, string | null> = {};
       for (const d of res.design_mds) if (d.page_id) map[d.page_id] = d.design_md;
@@ -286,22 +389,18 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
 
   async function addPageNamed(name: string) {
     setAddingPage(true);
+    setAddingPageName(name);
     try {
       const res = await createDesignPage(project.id, name);
       setPages(res.pages);
       setActivePageId(res.page_id);
-      if (res.fallback) toast.message('The engine struggled with that screen — a placeholder was added, try editing it.');
+      if (res.fallback) toast.message('The engine struggled with that screen — a template placeholder was added, try editing it.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to add the screen');
     } finally {
       setAddingPage(false);
+      setAddingPageName(null);
     }
-  }
-
-  async function handleAddPage() {
-    const name = window.prompt('Name of the new screen (e.g. "Pricing", "Settings"):')?.trim();
-    if (!name) return;
-    await addPageNamed(name);
   }
 
   async function handleDeletePage(page: DesignPage) {
@@ -410,24 +509,8 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
     }
   }
 
-  async function handleContinueBuild() {
-    const ok = await confirm({
-      title: 'Continue building this in Studio?',
-      body: 'Your design gets pinned and the project becomes a buildable app — you\'ll go through a quick scoping and the Builder implements these screens for real.',
-      confirmLabel: 'Continue in Studio',
-    });
-    if (!ok) return;
-    setBusyAction('continue');
-    try {
-      await continueBuildInStudio(project.id);
-      toast.success('Design pinned — let\'s build it');
-      onProjectChanged?.();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Conversion failed');
-    } finally {
-      setBusyAction(null);
-    }
-  }
+  // "Build it…" opens the conversion modal (app vs website) — the modal
+  // owns the POST and its 30-90s derive progress.
 
   // ─── Render ──────────────────────────────────────────────────────
 
@@ -439,51 +522,208 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
     );
   }
 
-  // 1 — Intro (no pages yet)
+  // 1 — Intro (no pages yet). Design chrome = two-step composer (template
+  // + design system + description → LLM questionnaire → generate); the
+  // frontend-phase keeps the classic single-step intro (its brief is the
+  // approved concept).
   if (pages.length === 0) {
+    const themedStarter = starterHtml
+      ? (previewTokens
+        ? (/<head[^>]*>/i.test(starterHtml)
+          ? starterHtml.replace(/<head([^>]*)>/i, `<head$1><style>${previewTokens}</style>`)
+          : `<style>${previewTokens}</style>${starterHtml}`)
+        : starterHtml)
+      : null;
     return (
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 16px', fontFamily: 'var(--font-sans)' }}>
+      <div style={{ maxWidth: designChrome ? 760 : 640, margin: '0 auto', padding: '32px 16px', fontFamily: 'var(--font-sans)' }}>
         {designChrome && <button onClick={onExit} style={ghostBtn}><ChevronLeft size={14} /> Back to my apps</button>}
-        <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text)', margin: '18px 0 4px' }}>
-          {designChrome ? 'What are we designing?' : "Let's design your screens"}
-        </h1>
-        <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', margin: '0 0 16px' }}>
-          {designChrome
-            ? "Describe it and I'll propose three visual directions. You pick one and refine it on the canvas."
-            : "I'll propose three visual directions based on what we agreed in the concept. You pick one and refine every screen on the canvas."}
-        </p>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          rows={3}
-          disabled={generating}
-          placeholder={'E.g.: "A landing page for my dog-grooming studio, with prices and a booking form"'}
-          style={textArea}
-        />
-        <div style={{ display: 'flex', gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
-          {FEELS.map((f) => (
-            <button key={f.id} onClick={() => setFeel(f.id)} disabled={generating} style={chip(feel === f.id)}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <input
-          value={brandColors}
-          onChange={(e) => setBrandColors(e.target.value)}
-          disabled={generating}
-          placeholder='Brand colors (optional): "deep green and cream", #16a34a…'
-          style={{ ...textArea, minHeight: 0, height: 38, resize: 'none' as const }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={() => { void handleGenerate(); }} disabled={!prompt.trim() || generating} style={primaryBtn(!prompt.trim() || generating)}>
-            {generating
-              ? <><Loader2 size={14} className="spin" /> Designing 3 directions… usually 1–2 min</>
-              : <><Sparkles size={14} /> {designChrome ? 'Design it' : 'Explore 3 directions'}</>}
-          </button>
-        </div>
+
+        {designChrome && introStep === 'questions' ? (
+          <>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text)', margin: '18px 0 4px' }}>
+              A few quick questions
+            </h1>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', margin: '0 0 16px' }}>
+              So the three directions fit you rather than a generic template.
+            </p>
+            {loadingQuestions ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '22px 0', color: 'var(--text-dim)', fontSize: '0.82rem' }}>
+                <Loader2 size={15} className="spin" style={{ color: 'var(--amber)' }} />
+                Preparing a few questions for you… usually ~15s
+              </div>
+            ) : (
+              <BriefQuestionnaire
+                questions={briefQuestions}
+                answers={briefAnswers}
+                onChange={setBriefAnswers}
+                disabled={generating}
+              />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, gap: 12, flexWrap: 'wrap' }}>
+              <button onClick={() => setIntroStep('compose')} disabled={generating} style={ghostBtn}>
+                <ChevronLeft size={13} /> Back
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+                <label title="Extra AI review+polish pass per option (slower)" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', color: 'var(--text-dim)', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={autoRefine} onChange={(e) => setAutoRefine(e.target.checked)} disabled={generating} style={{ accentColor: 'var(--amber)' }} />
+                  Auto-refine
+                </label>
+                <DirectionToggle value={directionCount} onChange={setDirectionCount} disabled={generating} />
+                <button onClick={() => { void handleGenerate(); }} disabled={generating || loadingQuestions} style={primaryBtn(generating || loadingQuestions)}>
+                  {generating
+                    ? <><Loader2 size={14} className="spin" /> Designing {directionCount} direction{directionCount > 1 ? 's' : ''}… usually 1–2 min</>
+                    : <><Sparkles size={14} /> Generate {directionCount} direction{directionCount > 1 ? 's' : ''}</>}
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text)', margin: '18px 0 4px' }}>
+              {designChrome ? 'What are we designing?' : "Let's design your screens"}
+            </h1>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-dim)', margin: '0 0 16px' }}>
+              {designChrome
+                ? "Describe it, pick a starting point, and I'll ask a few quick questions before proposing three directions."
+                : "I'll propose three visual directions based on what we agreed in the concept. You pick one and refine every screen on the canvas."}
+            </p>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={3}
+              disabled={generating}
+              placeholder={'E.g.: "A landing page for my dog-grooming studio, with prices and a booking form"'}
+              style={textArea}
+            />
+
+            {designChrome ? (
+              <>
+                {/* Eje 1 — Start with a template… (structural) */}
+                {dTemplates.length > 0 && (
+                  <div style={{ margin: '14px 0 0' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 8 }}>
+                      Start with a template…
+                    </div>
+                    {/* Grid that WRAPS (no horizontal scroll) — all patterns visible at once. */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 8 }}>
+                      {dTemplates.map((t) => {
+                        const active = templateSlug === t.slug;
+                        const Icon = templateIcon(t.slug);
+                        return (
+                          <button
+                            key={t.slug}
+                            type="button"
+                            onClick={() => {
+                              const next = active ? null : t.slug;
+                              setTemplateSlug(next);
+                              // First-party pairing: "Micelclaw Module" belongs with
+                              // the "Micelclaw OS" style — auto-select it when the user
+                              // hasn't picked a system yet (never override a choice).
+                              if (next === 'micelclaw-module' && !designSystemSlug) {
+                                setDesignSystemSlug('micelclaw-os');
+                              }
+                            }}
+                            disabled={generating}
+                            title={t.description}
+                            style={{
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                              padding: '12px 8px',
+                              background: active ? 'color-mix(in srgb, var(--amber) 8%, var(--card))' : 'var(--card)',
+                              border: `1px solid ${active ? 'var(--amber)' : 'var(--border)'}`,
+                              borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                            }}
+                          >
+                            <Icon size={20} strokeWidth={1.6} style={{ color: active ? 'var(--amber)' : 'var(--text-dim)' }} />
+                            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text)', textAlign: 'center' }}>{t.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Eje 2 — Design system (visual language, catálogo S4) */}
+                <div style={{ margin: '14px 0 0' }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-dim)' }}>
+                      Design system <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — a known visual language as base)</span>
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowGallery(true)}
+                      disabled={generating}
+                      style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--amber)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', padding: 0 }}
+                    >
+                      Browse all →
+                    </button>
+                  </div>
+                  <DesignSystemPicker
+                    value={designSystemSlug}
+                    onSelect={setDesignSystemSlug}
+                    disabled={generating}
+                    compact
+                    hidePreview
+                  />
+                </div>
+
+                {/* Single prominent preview — reflects the CURRENT selection:
+                    the template's structure × the design system's tokens (the
+                    key ask: "blog" previews differently than "landing"). Falls
+                    back to the system's own sample when no template is picked. */}
+                {(themedStarter || designSystemSlug) && (
+                  <div style={{ margin: '16px 0 0' }}>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 6 }}>
+                      Preview <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>
+                        {templateSlug ? '— this template, themed by your design system (the directions personalize the content)' : '— your design system (pick a template to preview its structure)'}
+                      </span>
+                    </div>
+                    {themedStarter ? (
+                      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', background: '#fff' }}>
+                        <iframe title="Template preview" sandbox="" srcDoc={themedStarter} style={{ width: '100%', height: 340, border: 'none', display: 'block' }} />
+                      </div>
+                    ) : (
+                      <DesignPreview slug={designSystemSlug!} />
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                  <button onClick={() => { void startQuestions(); }} disabled={!prompt.trim() || generating} style={primaryBtn(!prompt.trim() || generating)}>
+                    Continue <ArrowRight size={13} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, margin: '12px 0', flexWrap: 'wrap' }}>
+                  {FEELS.map((f) => (
+                    <button key={f.id} onClick={() => setFeel(f.id)} disabled={generating} style={chip(feel === f.id)}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  value={brandColors}
+                  onChange={(e) => setBrandColors(e.target.value)}
+                  disabled={generating}
+                  placeholder='Brand colors (optional): "deep green and cream", #16a34a…'
+                  style={{ ...textArea, minHeight: 0, height: 38, resize: 'none' as const }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                  <button onClick={() => { void handleGenerate(); }} disabled={!prompt.trim() || generating} style={primaryBtn(!prompt.trim() || generating)}>
+                    {generating
+                      ? <><Loader2 size={14} className="spin" /> Designing 3 directions… usually 1–2 min</>
+                      : <><Sparkles size={14} /> Explore 3 directions</>}
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
         {generating && (
-          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-            {(['A', 'B', 'C'] as const).map((l, i) => {
+          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: `repeat(${Math.min(directionCount, 3)}, 1fr)`, gap: 10 }}>
+            {['A', 'B', 'C', 'D', 'E'].slice(0, directionCount).map((l, i) => {
               const isDone = i < doneDirections;
               const isActive = i === doneDirections;
               const chars = isActive ? (genStream?.text?.length ?? 0) : 0;
@@ -517,6 +757,13 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
             })}
           </div>
         )}
+        {showGallery && (
+          <DesignSystemGalleryModal
+            value={designSystemSlug}
+            onSelect={setDesignSystemSlug}
+            onClose={() => setShowGallery(false)}
+          />
+        )}
         {confirmDialog}
       </div>
     );
@@ -531,7 +778,10 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
           <strong style={{ color: 'var(--text)', fontSize: '0.9rem' }}>Pick a direction</strong>
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>view each one, then "Use this design"</span>
           <div style={{ flex: 1 }} />
-          <button onClick={() => { setPages([]); }} style={ghostBtn}>Start over</button>
+          <button
+            onClick={() => { setPages([]); setActivePageId(null); setIntroStep('compose'); setDoneDirections(0); }}
+            style={ghostBtn}
+          >Start over</button>
         </div>
         <div style={{ display: 'flex', gap: 8, padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
           {variants.map((v) => (
@@ -578,49 +828,64 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
         <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 999, padding: '1px 8px' }}>
           {designChrome ? 'Design' : 'Frontend'}
         </span>
+        {readOnly && (
+          <span style={{ fontSize: '0.68rem', color: 'var(--amber)', border: '1px solid var(--amber)', borderRadius: 999, padding: '1px 8px' }}>
+            read-only
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         <div style={segmented}>
           <button onClick={() => setDevice('desktop')} style={segBtn(device === 'desktop')} aria-label="Desktop"><Monitor size={13} /></button>
           <button onClick={() => setDevice('mobile')} style={segBtn(device === 'mobile')} aria-label="Mobile"><Smartphone size={13} /></button>
         </div>
-        <button onClick={() => setShowKnobs((v) => !v)} style={ghostBtn} title="Brand colors"><Palette size={13} /> Colors</button>
-        <button onClick={() => { void openHistory(); }} style={ghostBtn} title="Version history"><History size={13} /> History</button>
+        {!readOnly && <button onClick={() => setShowKnobs((v) => !v)} style={ghostBtn} title="Brand colors"><Palette size={13} /> Colors</button>}
+        {!readOnly && <button onClick={() => { void openHistory(); }} style={ghostBtn} title="Version history"><History size={13} /> History</button>}
         <button
           onClick={() => navigate(`/studio`)}
           style={{ display: 'none' }}
           aria-hidden
         />
-        {designChrome && (
-        <button onClick={() => { void handleContinueBuild(); }} disabled={busyAction === 'continue'} style={primaryBtn(false)}>
-          {busyAction === 'continue' ? <Loader2 size={13} className="spin" /> : <Hammer size={13} />} Build this app
+        {designChrome && !readOnly && (
+        <button onClick={() => setShowConvert(true)} style={primaryBtn(false)}>
+          <Hammer size={13} /> Build it…
         </button>
         )}
         {actions}
-        {designChrome && (
+        {designChrome && !readOnly && (
         <div style={{ position: 'relative' }}>
           <button onClick={() => setShowExport((v) => !v)} style={ghostBtn} title="Export">
             <Download size={13} /> Export
           </button>
           {showExport && (
             <div style={{ ...popover, top: 34, right: 0, width: 280, position: 'absolute' }}>
-              <a
-                href={`/api/v1/studio/projects/${project.id}/design/export?format=zip`}
-                download
-                onClick={() => setShowExport(false)}
-                style={exportItem}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExport(false);
+                  void downloadAuthed(
+                    `/api/v1/studio/projects/${project.id}/design/export?format=zip`,
+                    `${exportBaseName}.zip`,
+                  );
+                }}
+                style={{ ...exportItem, width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               >
                 <strong>Download ZIP</strong>
                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Self-contained HTML pages + an index — open anywhere.</span>
-              </a>
-              <a
-                href={`/api/v1/studio/projects/${project.id}/design/export?format=open-design`}
-                download
-                onClick={() => setShowExport(false)}
-                style={exportItem}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExport(false);
+                  void downloadAuthed(
+                    `/api/v1/studio/projects/${project.id}/design/export?format=open-design`,
+                    `${exportBaseName}-open-design.zip`,
+                  );
+                }}
+                style={{ ...exportItem, width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               >
                 <strong>Export for Open Design</strong>
                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>DESIGN.md + tokens.css + pages/ — the open standard layout.</span>
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={() => { setShowExport(false); setShowConnect(true); }}
@@ -702,6 +967,14 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
           onClose={() => setShowConnect(false)}
         />
       )}
+      {showConvert && (
+        <ConvertDesignModal
+          projectId={project.id}
+          needsBackend={designNeedsBackend(project)}
+          onClose={() => setShowConvert(false)}
+          onConverted={() => { setShowConvert(false); onProjectChanged?.(); }}
+        />
+      )}
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
         {/* Pages rail */}
@@ -723,7 +996,7 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
               >
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>v{p.version}</span>
-                {realPages.length > 1 && (
+                {realPages.length > 1 && !readOnly && (
                   <button
                     onClick={(e) => { e.stopPropagation(); void handleDeletePage(p); }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, display: 'flex' }}
@@ -735,8 +1008,27 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
               </div>
             ))}
           </div>
+          {/* Live progress placeholder while a new screen generates —
+              reads the same design_page stream as the intro skeleton. */}
+          {addingPage && (
+            <div style={{
+              margin: '4px 10px', padding: '8px 10px',
+              border: '1px solid var(--amber)', borderRadius: 'var(--radius-sm)',
+              display: 'flex', flexDirection: 'column', gap: 3,
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--text)', fontWeight: 600 }}>
+                <Loader2 size={11} className="spin" style={{ color: 'var(--amber)' }} />
+                {addingPageName ?? 'New screen'}
+              </span>
+              <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)' }}>
+                {(genStream?.text?.length ?? 0) > 0
+                  ? `drawing… ${((genStream?.text?.length ?? 0) / 1000).toFixed(1)}k chars`
+                  : (genStream?.reasoning?.length ?? 0) > 0 ? 'thinking…' : 'starting…'}
+              </span>
+            </div>
+          )}
           {/* One-click suggestions from the concept (frontend phase). */}
-          {screenSuggestions.length > 0 && (
+          {screenSuggestions.length > 0 && !readOnly && (
             <div style={{ padding: '0 10px 4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--text-muted)' }}>
                 From your concept
@@ -753,13 +1045,67 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
               ))}
             </div>
           )}
-          <button onClick={() => { void handleAddPage(); }} disabled={addingPage} style={{ ...ghostBtn, margin: 10, justifyContent: 'center' }}>
-            {addingPage ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add screen
-          </button>
+          {/* Inline add-screen mini-form (Enter = create, Esc = cancel). */}
+          {!readOnly && (addFormOpen ? (
+            <div style={{ margin: 10, display: 'flex', gap: 6 }}>
+              <input
+                autoFocus
+                value={addFormName}
+                onChange={(e) => setAddFormName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && addFormName.trim()) {
+                    setAddFormOpen(false);
+                    void addPageNamed(addFormName.trim());
+                    setAddFormName('');
+                  }
+                  if (e.key === 'Escape') { setAddFormOpen(false); setAddFormName(''); }
+                }}
+                placeholder='e.g. "Pricing"'
+                disabled={addingPage}
+                style={{
+                  flex: 1, minWidth: 0, padding: '5px 8px', fontSize: '0.72rem',
+                  background: 'var(--surface)', color: 'var(--text)',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  fontFamily: 'var(--font-sans)', outline: 'none',
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (!addFormName.trim()) return;
+                  setAddFormOpen(false);
+                  void addPageNamed(addFormName.trim());
+                  setAddFormName('');
+                }}
+                disabled={addingPage || !addFormName.trim()}
+                style={{ ...ghostBtn, padding: '5px 8px' }}
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setAddFormOpen(true)} disabled={addingPage} style={{ ...ghostBtn, margin: 10, justifyContent: 'center' }}>
+              {addingPage ? <Loader2 size={12} className="spin" /> : <Plus size={12} />} Add screen
+            </button>
+          ))}
         </div>
 
         {/* Canvas */}
-        <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          {!readOnly && (
+            <div style={{ padding: '8px 10px 0' }}>
+              <TourStrip
+                storageKey="claw-design-canvas-tour-seen"
+                steps={[
+                  'Click any element to select it — you can edit its text in place.',
+                  'Type an instruction below to redesign the selection (or the whole screen).',
+                  designChrome
+                    ? 'Add screens as you go; when you like it, hit "Build it…".'
+                    : 'Add screens as you go; when you like it, hit Approve.',
+                ]}
+              />
+            </div>
+          )}
+          <div style={{ flex: 1, minHeight: 0 }}>
           {activePage && (
             <DesignCanvas
               ref={canvasRef}
@@ -767,10 +1113,11 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
               tokensCss={effectiveTokens}
               overridesCss={overridesCss}
               device={device}
-              onSelect={setSelection}
-              onTextEdited={handleTextEdited}
+              onSelect={readOnly ? () => {} : setSelection}
+              onTextEdited={readOnly ? () => {} : handleTextEdited}
             />
           )}
+          </div>
 
           {/* Brand knobs popover */}
           {showKnobs && (
@@ -826,11 +1173,12 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
         </div>
       </div>
 
-      {/* Instruction bar */}
+      {/* Instruction bar (hidden entirely in read-only surfaces) */}
+      {!readOnly && (
       <div style={{ borderTop: '1px solid var(--border)', background: 'var(--card)', padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        {/* Frontend phase: the instruction bar absorbs "Iterate on the
-            document" — one-click starters a non-technical user can tap. */}
-        {!designChrome && !selection && !instruction && (
+        {/* One-click iteration starters (both chromes — they orient a
+            first-time user just as much on a pure design project). */}
+        {!selection && !instruction && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {CANVAS_SUGGESTIONS.map((s) => (
               <button key={s} onClick={() => setInstruction(s)} disabled={editing} style={{ ...ghostBtn, borderRadius: 999, fontSize: '0.68rem', padding: '3px 10px' }}>
@@ -884,6 +1232,7 @@ export function DesignWorkbench({ project, onExit, onProjectChanged, chrome = 'd
           </button>
         </div>
       </div>
+      )}
       {confirmDialog}
     </div>
   );
@@ -901,6 +1250,41 @@ const ghostBtn: React.CSSProperties = {
   border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
   fontFamily: 'var(--font-sans)',
 };
+
+/** Does the design need a backend? Reads the brief's functional answers
+ *  (fn_data / fn_integrations): any "Yes …" means it stores data or talks
+ *  to a service → only the micelclaw_app target gives it a backend. */
+function designNeedsBackend(project: StudioProject): boolean {
+  const a = (project.design_brief?.answers ?? {}) as Record<string, string>;
+  return /^\s*yes/i.test(a.fn_data ?? '') || /^\s*yes/i.test(a.fn_integrations ?? '');
+}
+
+/** Segmented 1/3/5 control — how many directions to generate (Open Design uses 5). */
+function DirectionToggle({ value, onChange, disabled }: { value: 1 | 3 | 5; onChange: (v: 1 | 3 | 5) => void; disabled?: boolean }) {
+  return (
+    <div title="How many design options to generate" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: 2, background: 'var(--card)' }}>
+      <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', padding: '0 6px' }}>Options</span>
+      {([1, 3, 5] as const).map((n) => {
+        const active = value === n;
+        return (
+          <button
+            key={n}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(n)}
+            style={{
+              width: 26, height: 24, borderRadius: 'var(--radius-full)', border: 'none',
+              fontSize: '0.74rem', fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
+              fontFamily: 'var(--font-sans)',
+              background: active ? 'var(--amber)' : 'transparent',
+              color: active ? '#000' : 'var(--text-dim)',
+            }}
+          >{n}</button>
+        );
+      })}
+    </div>
+  );
+}
 const primaryBtn = (off: boolean): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px',
   fontSize: '0.78rem', fontWeight: 600,

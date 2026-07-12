@@ -73,6 +73,39 @@ export async function downloadVfsFile(vfsPath: string, filename: string): Promis
   }
 }
 
+/**
+ * Download any authenticated Core endpoint as a blob and save it.
+ * `path` is app-relative (e.g. `/api/v1/studio/projects/:id/design/export?format=zip`).
+ * Unlike a raw <a href>, this sends the Bearer token and resolves BASE_URL, so it
+ * survives a cross-origin dash and an expired session cookie (no HTML/401 saved as .zip).
+ */
+export async function downloadAuthed(path: string, filename: string): Promise<void> {
+  try {
+    const token = useAuthStore.getState().tokens?.accessToken;
+    const res = await fetch(`${BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Download failed: ${res.status} ${body}`);
+    }
+    const blob = await res.blob();
+    if (blob.size === 0) {
+      throw new Error('Downloaded file is empty');
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : 'Download failed');
+  }
+}
+
 export async function downloadBatch(ids: string[], filename = 'download.zip'): Promise<void> {
   try {
     const token = useAuthStore.getState().tokens?.accessToken;

@@ -21,7 +21,7 @@
 // Re-running the build is allowed at any time (the packager is idempotent).
 
 import { useState } from 'react';
-import { Package, Loader2, Download, Rocket, Shield, RefreshCw } from 'lucide-react';
+import { Package, Loader2, Download, Rocket, Shield, RefreshCw, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   useStudioStore,
@@ -32,6 +32,7 @@ import {
 import { SafetyScannerReport } from '../components/SafetyScannerReport';
 import { RewindButton } from '../components/RewindButton';
 import { PhaseSidebar } from '../components/PhaseSidebar';
+import { StaticPublishPanel } from '../components/StaticPublishPanel';
 import { useStudioMode } from '../hooks/useStudioMode';
 
 interface Props {
@@ -49,10 +50,14 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
 
   const [busy, setBusy] = useState<'build' | 'install' | null>(null);
   const [latest, setLatest] = useState<StudioPackageResult | null>(null);
+  const [showPublish, setShowPublish] = useState(false);
   const [studioMode] = useStudioMode();
   const guided = studioMode === 'guided';
 
   const isPackaged = project.status === 'packaged' && project.package_path;
+  // Static targets (website/webapp/mobile) produce a ZIP + a published site,
+  // NOT a .claw installed module. Their terminal is Download ZIP / Publish.
+  const isStatic = project.target !== 'micelclaw_app';
 
   async function handleBuild() {
     setBusy('build');
@@ -104,7 +109,46 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
 
       <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', justifyContent: 'center' }}>
         <div style={{ maxWidth: 720, width: '100%', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Checklist + build CTA */}
+
+          {/* ── Static targets (website/webapp/mobile): ZIP + Publish, no .claw/install ── */}
+          {isStatic && (
+            <div style={cardStyle}>
+              <h3 style={cardTitle}>
+                <Globe size={14} style={{ color: 'var(--amber)' }} />
+                {project.target === 'mobile' ? 'Your mobile app is ready' : project.target === 'webapp' ? 'Your web app is ready' : 'Your website is ready'}
+              </h3>
+              <p style={{ margin: '0 0 12px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                {project.target === 'mobile'
+                  ? 'Publish it to your domain and open it on your phone to install it on the home screen (PWA). Or download a standalone ZIP.'
+                  : project.target === 'webapp'
+                    ? 'Publish it live at your own domain, or download a self-contained ZIP to host anywhere.'
+                    : 'Publish it live at your own domain in one click, or download a self-contained ZIP to host anywhere.'}
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!isPast && (
+                  <button type="button" onClick={() => setShowPublish(true)} style={primaryBtn(false)}>
+                    <Rocket size={14} /> Publish
+                  </button>
+                )}
+                {!isPast && (
+                  <button type="button" onClick={handleBuild} disabled={busy !== null} style={secondaryBtn(busy === 'build')}>
+                    {busy === 'build'
+                      ? <><Loader2 size={14} className="animate-spin" /> Packaging…</>
+                      : <><Package size={14} /> {isPackaged ? 'Rebuild ZIP' : 'Prepare ZIP'}</>}
+                  </button>
+                )}
+                {isPackaged && !isPast && (
+                  <a href={packageDownloadUrl(project.id)} download style={secondaryLink}>
+                    <Download size={14} /> Download ZIP
+                  </a>
+                )}
+                {isPast && <RewindButton projectId={project.id} target="frontend" label={guided ? undefined : 'Rewind to design'} guided={guided} />}
+              </div>
+            </div>
+          )}
+
+          {/* Checklist + build CTA (micelclaw_app only) */}
+          {!isStatic && (<>
           <div style={cardStyle}>
             <h3 style={cardTitle}>
               <Shield size={14} style={{ color: 'var(--amber)' }} /> {guided ? 'Dejar tu app lista' : 'Build the .claw'}
@@ -193,8 +237,18 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
               </p>
             </div>
           )}
+          </>)}
         </div>
       </div>
+
+      {showPublish && (
+        <StaticPublishPanel
+          projectId={project.id}
+          projectName={project.name}
+          installable={project.target === 'mobile'}
+          onClose={() => setShowPublish(false)}
+        />
+      )}
     </div>
   );
 }
@@ -247,3 +301,14 @@ const secondaryLink: React.CSSProperties = {
   textDecoration: 'none',
   fontFamily: 'var(--font-sans)',
 };
+const secondaryBtn = (busy: boolean): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '10px 18px',
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+  borderRadius: 'var(--radius-md)',
+  fontSize: '0.8125rem', fontWeight: 600,
+  cursor: busy ? 'wait' : 'pointer',
+  fontFamily: 'var(--font-sans)',
+});

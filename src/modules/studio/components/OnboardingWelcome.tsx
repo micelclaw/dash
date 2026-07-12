@@ -23,12 +23,13 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Loader2, Lock, Sparkles, X } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudioStore, type StudioTemplateMeta, type StudioEngineId, type StudioTarget } from '@/stores/studio.store';
 import { api } from '@/services/api';
 import { EnginePicker } from './EnginePicker';
 import { ConnectExternalEngineModal } from './v2/ConnectExternalEngineModal';
+import { TourStrip } from './TourStrip';
 import { useStudioEngines } from '../hooks/useStudioEngines';
 import { TARGET_CARDS } from '../lib/target-cards';
 
@@ -42,7 +43,6 @@ interface Props {
   onBack?: () => void;
 }
 
-const TOUR_KEY = 'claw-studio-tour-seen';
 const TOUR_STEPS = [
   'Tell me your idea in your own words — no need to be technical.',
   'I build it step by step and you watch it take shape live.',
@@ -84,10 +84,6 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   const engineTouched = useRef(false);
   const { engines, defaultEngine } = useStudioEngines();
   const navigate = useNavigate();
-  const [tourSeen, setTourSeen] = useState(() => {
-    try { return localStorage.getItem(TOUR_KEY) === '1'; } catch { return true; }
-  });
-  const [tourStep, setTourStep] = useState(0);
   const ideaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -137,11 +133,6 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
   }
 
   useEffect(() => { ideaRef.current?.focus(); }, []);
-
-  function dismissTour() {
-    setTourSeen(true);
-    try { localStorage.setItem(TOUR_KEY, '1'); } catch { /* private mode */ }
-  }
 
   async function continueFromIdea(opts?: { byo?: boolean }) {
     if (creating) return;
@@ -234,23 +225,7 @@ export function OnboardingWelcome({ onCreated, onProMode, onBack }: Props) {
       )}
 
       {/* Skippable tour — seeds the mental model (§3.1) */}
-      {!tourSeen && (
-        <div style={tourStrip}>
-          <Sparkles size={15} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-          <span style={{ flex: 1, fontSize: '0.82rem', color: 'var(--text)', lineHeight: 1.4 }}>
-            {TOUR_STEPS[tourStep]}
-          </span>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tourStep + 1}/3</span>
-          {tourStep < TOUR_STEPS.length - 1 ? (
-            <button onClick={() => setTourStep((s) => s + 1)} style={tourNext}>Next</button>
-          ) : (
-            <button onClick={dismissTour} style={tourNext}>Got it!</button>
-          )}
-          <button onClick={dismissTour} style={tourSkip} aria-label="Skip">
-            <X size={13} />
-          </button>
-        </div>
-      )}
+      <TourStrip storageKey="claw-studio-tour-seen" steps={TOUR_STEPS} />
 
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)', margin: '8px 0 2px', textAlign: 'center' }}>
         What would you like to build today?
@@ -447,21 +422,6 @@ const backBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px',
   background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)',
   borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-};
-const tourStrip: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 18,
-  background: 'color-mix(in srgb, var(--amber) 8%, var(--card))',
-  border: '1px solid color-mix(in srgb, var(--amber) 30%, var(--border))',
-  borderRadius: 'var(--radius-md)',
-};
-const tourNext: React.CSSProperties = {
-  padding: '4px 10px', fontSize: '0.72rem', fontWeight: 600,
-  background: 'var(--amber)', color: '#000', border: 'none',
-  borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font-sans)', flexShrink: 0,
-};
-const tourSkip: React.CSSProperties = {
-  display: 'flex', padding: 2, background: 'transparent', border: 'none',
-  color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0,
 };
 const ideaCard: React.CSSProperties = {
   background: 'var(--card)', border: '1px solid var(--border)',

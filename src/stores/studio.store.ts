@@ -78,6 +78,15 @@ export interface StudioProject {
    *  (null for blank projects). Used to look up template-specific
    *  placeholders for phase context textareas. */
   template_slug: string | null;
+  /** Design brief (Claude-Design-style questionnaire): chosen structural
+   *  template + LLM-tailored questions + the user's answers. `{}` until
+   *  the design intro runs. */
+  design_brief: {
+    template?: string | null;
+    questions?: Array<{ id: string; question: string; options?: string[]; multi?: boolean }>;
+    answers?: Record<string, string>;
+    generated_at?: string;
+  };
   doc_concept: string | null;
   doc_frontend: string | null;
   doc_foundation: string | null;
@@ -148,6 +157,9 @@ export interface StudioDesignSystem {
   category: string;
   has_brand: boolean;
   n_colors: number;
+  /** First-party system (e.g. "Micelclaw OS") — pinned to the front of
+   *  the picker grid. */
+  first_party?: boolean;
 }
 
 /** The engines that can RUN a governed Studio build (GET /studio/engines).

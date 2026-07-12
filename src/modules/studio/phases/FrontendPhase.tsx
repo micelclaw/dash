@@ -50,22 +50,22 @@ export function FrontendPhase({ project, viewMode, onSelectPhase }: Props) {
   const approvePhase = useStudioStore((s) => s.approvePhase);
   const isPast = viewMode === 'past';
 
-  // null = still loading. Past views never fetch (the /design routes 409
-  // outside the frontend phase by design — the classic view is enough).
-  const [pages, setPages] = useState<DesignPage[] | null>(isPast ? [] : null);
+  // null = still loading. Past views ALSO fetch now (the /design GETs are
+  // readable from any phase) — a project designed on the canvas shows its
+  // real screens read-only instead of the derived markdown.
+  const [pages, setPages] = useState<DesignPage[] | null>(null);
   const [forceCanvas, setForceCanvas] = useState(false);
   const [livePages, setLivePages] = useState<DesignPage[]>([]);
   const [approving, setApproving] = useState(false);
   const [showSpec, setShowSpec] = useState(false);
 
   useEffect(() => {
-    if (isPast) return;
     let cancelled = false;
     listDesignPages(project.id)
       .then((res) => { if (!cancelled) setPages(res.pages); })
       .catch(() => { if (!cancelled) setPages([]); });
     return () => { cancelled = true; };
-  }, [project.id, isPast]);
+  }, [project.id]);
 
   const onPagesChanged = useCallback((p: DesignPage[]) => setLivePages(p), []);
   const hasPicked = livePages.some((p) => !p.variant_group);
@@ -85,9 +85,29 @@ export function FrontendPhase({ project, viewMode, onSelectPhase }: Props) {
     }
   }
 
+  // ─── Read-only PAST view with real pages: the canvas, frozen ───────
+  const pickedPages = (pages ?? []).filter((p) => !p.variant_group);
+  if (isPast && pages !== null && pickedPages.length > 0) {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ padding: '10px 24px 0', flexShrink: 0 }}>
+          <PhaseSidebar project={project} viewedPhase="frontend" onSelect={onSelectPhase} guided={guided} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <DesignWorkbench
+            project={project}
+            chrome="frontend-phase"
+            readOnly
+            onExit={() => { /* the page header owns navigation */ }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // ─── Classic (legacy / past) view ─────────────────────────────────
   const legacy = !isPast && pages !== null && pages.length === 0 && !!project.doc_frontend && !forceCanvas;
-  if (isPast || legacy) {
+  if ((isPast && pages !== null) || legacy) {
     return (
       <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {legacy && (

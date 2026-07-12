@@ -17,7 +17,7 @@
 // Mathesar). Ruta catch-all /app/:appName; el módulo viene del ui-modules store
 // (ya filtrado por instalada+activa+cargada+concedida).
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router';
 import { PackageOpen, Loader2 } from 'lucide-react';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
@@ -25,6 +25,28 @@ import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useSettingsStore } from '@/stores/settings.store';
+
+// ─── OS theme bridge ─────────────────────────────────────────────────
+// A module built with the "Micelclaw OS" design system carries a sentinel
+// token (`--color-claw-theme-follow: 1`) in its bundled tokens.css. When
+// such a module is embedded here (same-origin iframe) we map the dash's
+// LIVE theme vars onto the module's `--color-*` so it tracks the user's
+// chosen theme + accent. Standalone (export/web) the module has no sentinel
+// and its static tokens render the default OS look. Apps built with ANY
+// other design system lack the sentinel → this is a no-op for them.
+const OS_THEME_MAP: ReadonlyArray<readonly [appVar: string, dashVar: string]> = [
+  ['--color-primary', '--amber'],
+  ['--color-accent', '--amber-hover'],
+  ['--color-background', '--bg'],
+  ['--color-surface', '--surface'],
+  ['--color-card', '--card'],
+  ['--color-surface-hover', '--surface-hover'],
+  ['--color-text', '--text'],
+  ['--color-text-dim', '--text-dim'],
+  ['--color-text-muted', '--text-muted'],
+  ['--color-border', '--border'],
+];
 
 export function Component() {
   const { appName } = useParams<{ appName: string }>();
@@ -65,6 +87,32 @@ export function Component() {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   useEffect(() => { setIframeLoaded(false); }, [mod?.app_name]);
 
+  // ─── OS theme bridge (see OS_THEME_MAP above) ────────────────────
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const themeName = useSettingsStore((s) => s.settings?.dash?.theme);
+  const accentColor = useSettingsStore((s) => s.settings?.dash?.accent_color);
+  const bgChoice = useSettingsStore((s) => s.settings?.dash?.background);
+  const pushOsTheme = useCallback(() => {
+    let doc: Document | null = null;
+    try { doc = iframeRef.current?.contentDocument ?? null; } catch { doc = null; } // cross-origin → bail
+    const appRoot = doc?.documentElement;
+    if (!appRoot) return;
+    // Opt-in: only OS-styled modules carry this sentinel token.
+    if (getComputedStyle(appRoot).getPropertyValue('--color-claw-theme-follow').trim() !== '1') return;
+    const dash = getComputedStyle(document.documentElement);
+    for (const [appVar, dashVar] of OS_THEME_MAP) {
+      const v = dash.getPropertyValue(dashVar).trim();
+      if (v) appRoot.style.setProperty(appVar, v);
+    }
+  }, []);
+  // Re-push after the dash applies a theme change (applyTheme runs in its
+  // own effect on the same settings change; rAF guarantees we read the
+  // updated values, not stale ones).
+  useEffect(() => {
+    const id = requestAnimationFrame(pushOsTheme);
+    return () => cancelAnimationFrame(id);
+  }, [themeName, accentColor, bgChoice, mod?.app_name, pushOsTheme]);
+
   // App no disponible (no instalada / no concedida / aún cargando los módulos).
   if (!mod) {
     return (
@@ -103,10 +151,11 @@ export function Component() {
         </div>
       )}
       <iframe
+        ref={iframeRef}
         key={mod.app_name}
         src={iframeSrc}
         title={mod.label}
-        onLoad={() => setIframeLoaded(true)}
+        onLoad={() => { setIframeLoaded(true); requestAnimationFrame(pushOsTheme); }}
         style={{ width: '100%', height: '100%', border: 'none', background: 'var(--bg)', display: 'block' }}
         allow="clipboard-read; clipboard-write"
       />
