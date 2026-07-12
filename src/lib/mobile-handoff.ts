@@ -29,6 +29,7 @@ interface HandoffPayload {
   refreshToken?: string;
   refreshTokenId?: string;
   user?: User;
+  remember?: boolean;
 }
 
 export function consumeMobileHandoff(): void {
@@ -39,6 +40,10 @@ export function consumeMobileHandoff(): void {
   try {
     const payload = JSON.parse(b64urlDecode(m[1])) as HandoffPayload;
     if (payload?.accessToken && payload?.user) {
+      // Propaga la elección "recordar" del onboarding a la persistencia del dash
+      // (claw-remember): true → localStorage (30d), false → sessionStorage. Debe
+      // fijarse ANTES de setAuth (el storage del auth store lo lee al persistir).
+      try { localStorage.setItem('claw-remember', payload.remember === false ? '0' : '1'); } catch { /* no-op */ }
       const tokens: AuthTokens = {
         accessToken: payload.accessToken,
         refreshToken: payload.refreshToken ?? '',

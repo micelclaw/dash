@@ -11,9 +11,35 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type { User, AuthTokens, Tier } from '@/types/auth';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
+
+/**
+ * "Recordar usuario": si está activo (default), la sesión se guarda en
+ * localStorage y sobrevive al cierre de la app (hasta 30 días, la vida del
+ * refresh token). Si el usuario lo desmarca, se guarda en sessionStorage y se
+ * borra al cerrar. El flag lo escribe la LoginPage en `claw-remember` ANTES de
+ * autenticar; este storage lo lee para decidir dónde persistir.
+ */
+export const REMEMBER_KEY = 'claw-remember';
+function rememberEnabled(): boolean {
+  try { return localStorage.getItem(REMEMBER_KEY) !== '0'; } catch { return true; }
+}
+const authStorage: StateStorage = {
+  getItem: (name) => {
+    try { return localStorage.getItem(name) ?? sessionStorage.getItem(name); } catch { return null; }
+  },
+  setItem: (name, value) => {
+    try {
+      if (rememberEnabled()) { localStorage.setItem(name, value); sessionStorage.removeItem(name); }
+      else { sessionStorage.setItem(name, value); localStorage.removeItem(name); }
+    } catch { /* almacenamiento no disponible */ }
+  },
+  removeItem: (name) => {
+    try { localStorage.removeItem(name); sessionStorage.removeItem(name); } catch { /* no-op */ }
+  },
+};
 
 /**
  * Pending 2FA challenge state. Set by `login()` when the backend
@@ -145,8 +171,17 @@ export const useAuthStore = create<AuthStore>()(
                 refreshTokenId: d.refresh_token_id as string | undefined,
               },
             });
-          } catch {
-            get().logout();
+          } catch (err) {
+            // Solo cerrar sesión si el servidor RECHAZA el refresh token (401/403 =
+            // token inválido/revocado/caducado). Un fallo transitorio (red caída, Core
+            // reiniciándose, VPN parpadeando, 5xx) NO debe desloguear: el access token
+            // vigente (24h) sigue sirviendo y reintentaremos. Esto arregla el
+            // "me desloguea cada vez que reabro la app".
+            const status = err instanceof ApiError ? err.status : undefined;
+            if (status === 401 || status === 403) {
+              get().logout();
+            }
+            // else: mantener la sesión; el caller sigue con el token actual.
           }
         })();
 
@@ -167,6 +202,7 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'claw-auth',
+      storage: createJSONStorage(() => authStorage),
       partialize: (state) => ({
         tokens: state.tokens,
         user: state.user,

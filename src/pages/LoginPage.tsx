@@ -12,7 +12,7 @@
 
 import { useState, useEffect, type FormEvent, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
-import { useAuthStore } from '@/stores/auth.store';
+import { useAuthStore, REMEMBER_KEY } from '@/stores/auth.store';
 import { getMockUser } from '@/services/mock';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 
@@ -47,6 +47,9 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
+  const [remember, setRemember] = useState(() => {
+    try { return localStorage.getItem(REMEMBER_KEY) !== '0'; } catch { return true; }
+  });
   const [checkingAutoLogin, setCheckingAutoLogin] = useState(true);
   const [vw, setVw] = useState(() => window.innerWidth);
   const login = useAuthStore((s) => s.login);
@@ -102,6 +105,10 @@ export function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    // Persistir la preferencia "recordar usuario" ANTES de autenticar: el storage
+    // del auth store la lee para decidir localStorage (recordado, 30d) vs sessionStorage.
+    try { localStorage.setItem(REMEMBER_KEY, remember ? '1' : '0'); } catch { /* no-op */ }
 
     try {
       const useMock = import.meta.env.VITE_MOCK_API === 'true';
@@ -345,6 +352,24 @@ export function LoginPage() {
               Forgot password?
             </button>
           </div>
+
+          <label
+            htmlFor="remember"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              marginBottom: 16, cursor: 'pointer',
+              fontSize: '0.9375rem', color: 'var(--text-muted)',
+            }}
+          >
+            <input
+              id="remember"
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
+            />
+            Recordar este usuario en este dispositivo (30 días)
+          </label>
 
           <button
             type="submit"
