@@ -20,6 +20,7 @@ import { api } from '@/services/api';
 import { useEmbedFullscreen } from '@/hooks/use-embed-fullscreen';
 import { EmbedActions } from '@/components/shared/EmbedActions';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
+import { useServiceUrl } from '@/config/service-urls';
 
 interface StirlingStatus {
   installed: boolean;
@@ -43,6 +44,12 @@ export function Component() {
   const loadServiceUrls = useServiceUrlsStore((s) => s.load);
   useEffect(() => { void loadServiceUrls(); }, [loadServiceUrls]);
   const dashOrigin = primaryDomain ? `https://${primaryDomain}` : window.location.origin;
+
+  // src del iframe: Stirling sirve su API en /api/v1/* ABSOLUTO → un proxy same-origin
+  // chocaría con el /api/v1 de Core. Por eso se embebe por SUBDOMINIO (pdf.<dom>, ya
+  // aprovisionado por system-domain con strip de X-Frame/CSP), alcanzable desde el móvil.
+  // resolve → https://pdf.<dom> si está expuesto; si no (dev/sin dominio), el loopback status.url.
+  const embedUrl = useServiceUrl('stirling-pdf', status?.url ?? '');
 
   const checkAndStart = useCallback(async () => {
     try {
@@ -108,13 +115,13 @@ export function Component() {
           <span style={{ color: 'var(--text-muted)' }}>PDF Tools</span>
           <div style={{ flex: 1 }} />
           <EmbedActions
-            slug="stirling-pdf" fallbackUrl={status.url} ramMb={status.ram_mb}
+            slug="stirling-pdf" fallbackUrl={embedUrl} ramMb={status.ram_mb}
             openUrl={`${dashOrigin}/office/pdf/tools?fullscreen=1`}
             fullscreen={fullscreen} onToggleFullscreen={toggle}
           />
         </div>
         <iframe
-          src={status.url}
+          src={embedUrl}
           title="Stirling PDF Tools"
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"

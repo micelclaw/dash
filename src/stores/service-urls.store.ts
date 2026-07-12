@@ -25,6 +25,8 @@ interface ServiceUrlsState {
   urls: Record<string, string | null>; // slug → url pública (o null)
   status: 'idle' | 'loading' | 'ready' | 'error';
   load: (force?: boolean) => Promise<void>;
+  /** Espera a que el catálogo esté resuelto ('ready' o 'error'); dispara la carga si está en 'idle'. */
+  ensureLoaded: () => Promise<void>;
   /** URL del servicio por nombre, con respaldo si no hay dominio configurado. */
   resolve: (slug: string, fallback: string) => string;
 }
@@ -46,6 +48,23 @@ export const useServiceUrlsStore = create<ServiceUrlsState>()((set, get) => ({
     } catch {
       set({ status: 'error' });
     }
+  },
+
+  ensureLoaded: async () => {
+    const { status, load } = get();
+    if (status === 'idle') void load();
+    const settled = (s: ServiceUrlsState['status']) => s === 'ready' || s === 'error';
+    if (settled(get().status)) return;
+    // Espera a la primera transición a 'ready'/'error'. La suscripción se autolimpia al resolver;
+    // load() siempre acaba en uno de los dos estados (try/catch), así que nunca queda colgada.
+    await new Promise<void>((resolve) => {
+      const unsub = useServiceUrlsStore.subscribe((state) => {
+        if (settled(state.status)) {
+          unsub();
+          resolve();
+        }
+      });
+    });
   },
 
   resolve: (slug, fallback) => {

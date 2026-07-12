@@ -43,6 +43,17 @@ function ts(): string {
   return new Date().toLocaleTimeString('es-ES', { hour12: false });
 }
 
+// ¿La base resuelta apunta al loopback (el PROPIO dispositivo)? En remoto eso significa que el
+// document server no es alcanzable desde aquí — no tiene sentido reintentar contra él.
+function isLoopbackBase(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '[::1]';
+  } catch {
+    return true; // no parseable → trátalo como no alcanzable
+  }
+}
+
 export function Component() {
   const { fileId } = useParams<{ fileId: string }>();
   const navigate = useNavigate();
@@ -73,6 +84,8 @@ export function Component() {
   // por su nombre y no al origen actual (que en dev es 127.0.0.1:7100). Fallback al origen.
   const primaryDomain = useServiceUrlsStore((s) => s.primaryDomain);
   const loadServiceUrls = useServiceUrlsStore((s) => s.load);
+  const ensureServiceUrls = useServiceUrlsStore((s) => s.ensureLoaded);
+  const resolveServiceUrl = useServiceUrlsStore((s) => s.resolve);
   useEffect(() => { void loadServiceUrls(); }, [loadServiceUrls]);
   const dashOrigin = primaryDomain ? `https://${primaryDomain}` : window.location.origin;
 
@@ -145,19 +158,8 @@ export function Component() {
   }, []);
 
   // ─── Load the ONLYOFFICE JS API script (with retries) ───────────────
-  const loadApiScript = useCallback(async (log: (msg: string) => void): Promise<boolean> => {
+  const loadApiScript = useCallback(async (onlyofficeBase: string, log: (msg: string) => void): Promise<boolean> => {
     if ((window as any).DocsAPI) return true;
-
-    // El document server SIEMPRE se carga por http://127.0.0.1:8080 (ONLYOFFICE_FALLBACK_URL),
-    // incluso desde una página https (victor.claw):
-    //  - `http://127.0.0.1` es "potentially trustworthy" (Secure Contexts spec) → los navegadores
-    //    NO lo bloquean como contenido mixto, ni el script ni el WebSocket del editor.
-    //  - Es alcanzable desde el navegador del usuario en la misma máquina (WSL2 mirrored comparte
-    //    loopback) y es directo (~3ms) vs el proxy Caddy (handshake TLS + más lento).
-    //  - El subdominio `office.<dom>` NO está aprovisionado en Caddy (sin ruta ni cert) → cargar
-    //    api.js de ahí daba "TLS internal error" y el bucle "attempt N/40". (Acceso remoto al
-    //    editor = pendiente: requiere proxypear el document server; ver pending-debt.)
-    const onlyofficeBase = ONLYOFFICE_FALLBACK_URL.replace(/\/$/, '');
 
     const SRC = `${onlyofficeBase}/web-apps/apps/api/documents/api.js`;
 
@@ -291,8 +293,43 @@ export function Component() {
       if (!alive()) return;
       addLog('Session created. Loading ONLYOFFICE editor script...');
 
+      // 3b. Resolver la base del document server. ANTES de leerla hay que ESPERAR a que el
+      // catálogo de service-urls esté resuelto: initEditor puede arrancar antes que el store, y
+      // resolveServiceUrl caería SILENCIOSAMENTE al loopback http://127.0.0.1:8080 — que en un
+      // móvil/remoto es el PROPIO dispositivo → api.js nunca carga → bucle "attempt N/40".
+      await ensureServiceUrls();
+      if (!alive()) return;
+
+      // LOCAL (dev / misma máquina): el document server se carga por http://127.0.0.1:8080
+      // (ONLYOFFICE_FALLBACK_URL) — `http://127.0.0.1` es "potentially trustworthy" (no mixed-content),
+      // directo y rápido, alcanzable por WSL2 mirrored.
+      // REMOTO (móvil vía victor.claw / otro PC): 127.0.0.1 es el PROPIO dispositivo → no existe el DS
+      // ahí. Por eso, solo en remoto, se carga por el subdominio `office.<dom>` (aprovisionado en Caddy
+      // con WS del editor + cert CA interna; ver exposable-services.ts). El gate isRemote preserva local
+      // intacto (evita el revert 742dc92, que hacía esto INCONDICIONAL y rompía local).
+      const isRemoteClient = window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost';
+      const onlyofficeBase = (isRemoteClient
+        ? resolveServiceUrl('onlyoffice', ONLYOFFICE_FALLBACK_URL)
+        : ONLYOFFICE_FALLBACK_URL).replace(/\/$/, '');
+      addLog(`Document server base: ${onlyofficeBase} (${isRemoteClient ? 'remote' : 'local'}).`);
+
+      // En remoto, si la base resuelta SIGUE apuntando al loopback, el subdominio office.<dom> no es
+      // alcanzable (no expuesto, o se ha entrado por IP): no reintentar 40 veces contra un servidor
+      // que no existe en este dispositivo — dar un error accionable en vez de un fallo silencioso.
+      if (isRemoteClient && isLoopbackBase(onlyofficeBase)) {
+        const domain = useServiceUrlsStore.getState().primaryDomain;
+        const domainHint = domain ? `office.${domain}` : 'office.<tu-dominio>';
+        const accessHint = domain ? `https://${domain}` : 'https://<tu-dominio>';
+        const msg = `No se puede alcanzar el servidor de documentos (${domainHint}). `
+          + `Revisa tu método de acceso: conéctate por ${accessHint} (no por IP).`;
+        addLog(`ERROR: ${msg}`);
+        setError(msg);
+        setPhase('error');
+        return;
+      }
+
       // 4. Load ONLYOFFICE JS API (retries until ONLYOFFICE internal services are ready)
-      const apiLoaded = await loadApiScript(addLog);
+      const apiLoaded = await loadApiScript(onlyofficeBase, addLog);
       if (!alive()) return;
       if (!apiLoaded) {
         addLog('ERROR: Could not load ONLYOFFICE editor script after 40 attempts.');
@@ -312,7 +349,7 @@ export function Component() {
       setError(msg);
       setPhase('error');
     }
-  }, [fileId, createSession, waitForOnlyOffice, loadApiScript, addLog]);
+  }, [fileId, createSession, waitForOnlyOffice, loadApiScript, addLog, ensureServiceUrls, resolveServiceUrl]);
 
   // ─── Create editor once phase=ready and container div is in the DOM ──
   useEffect(() => {
