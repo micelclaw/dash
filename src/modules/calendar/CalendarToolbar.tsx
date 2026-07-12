@@ -10,8 +10,9 @@
  * https://micelclaw.com
  */
 
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Menu } from 'lucide-react';
 import { formatRangeLabel, navigateDate } from '@/lib/date-helpers';
+import { CalendarPeriodPicker } from './CalendarPeriodPicker';
 import type { CalendarView } from './types';
 
 interface CalendarToolbarProps {
@@ -20,6 +21,8 @@ interface CalendarToolbarProps {
   currentDate: Date;
   onDateChange: (date: Date) => void;
   onCreateEvent: () => void;
+  /** Mobile only: open the calendars side panel (hamburger). Absent on desktop. */
+  onOpenSidebar?: () => void;
 }
 
 const VIEW_OPTIONS: { key: CalendarView; label: string }[] = [
@@ -35,10 +38,15 @@ export function CalendarToolbar({
   currentDate,
   onDateChange,
   onCreateEvent,
+  onOpenSidebar,
 }: CalendarToolbarProps) {
   const goToday = () => onDateChange(new Date());
   const goPrev = () => onDateChange(navigateDate(view, currentDate, -1));
   const goNext = () => onDateChange(navigateDate(view, currentDate, 1));
+  const rangeLabel = formatRangeLabel(view, currentDate);
+  // Agenda has no meaningful period to jump to → plain title; the rest get a
+  // tap-to-pick popover (month grid / ISO-week list / mini-month day picker).
+  const titlePickable = view !== 'agenda';
 
   return (
     <div
@@ -54,6 +62,13 @@ export function CalendarToolbar({
         flexWrap: 'wrap',
       }}
     >
+      {/* Hamburger (mobile only) — opens the calendars side panel */}
+      {onOpenSidebar && (
+        <button onClick={onOpenSidebar} style={iconButton} title="Calendars" aria-label="Calendars">
+          <Menu size={16} />
+        </button>
+      )}
+
       {/* Today button */}
       <button
         onClick={goToday}
@@ -75,18 +90,26 @@ export function CalendarToolbar({
         <ChevronRight size={16} />
       </button>
 
-      {/* Range label */}
-      <span
-        style={{
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          color: 'var(--text)',
-          marginLeft: 4,
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {formatRangeLabel(view, currentDate)}
-      </span>
+      {/* Range label — tappable period picker (month/week/day), plain for agenda */}
+      {titlePickable ? (
+        <CalendarPeriodPicker view={view} currentDate={currentDate} onDateChange={onDateChange}>
+          <button style={titleButton} aria-label="Jump to a period">
+            {rangeLabel}
+          </button>
+        </CalendarPeriodPicker>
+      ) : (
+        <span
+          style={{
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: 'var(--text)',
+            marginLeft: 4,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {rangeLabel}
+        </span>
+      )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
@@ -155,4 +178,18 @@ const iconButton: React.CSSProperties = {
   width: 28,
   height: 28,
   padding: 0,
+};
+
+const titleButton: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '0.875rem',
+  fontWeight: 600,
+  color: 'var(--text)',
+  marginLeft: 4,
+  padding: '2px 6px',
+  borderRadius: 'var(--radius-sm)',
+  whiteSpace: 'nowrap',
+  fontFamily: 'var(--font-sans)',
 };

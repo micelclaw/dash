@@ -24,6 +24,8 @@ export interface EventFormState {
   description: string;
   attendeesStr: string;
   tags: string[];
+  /** Reminder offsets (minutes before start). Delivered by the calendar-reminders job. */
+  reminders: { type: string; minutes_before: number }[];
 }
 
 export function toLocalDatetime(iso: string): string {
@@ -45,6 +47,7 @@ export function eventToFormState(event: CalendarEvent): EventFormState {
     description: event.description || '',
     attendeesStr: event.attendees?.map((a) => a.email).join(', ') ?? '',
     tags: event.tags ?? [],
+    reminders: event.reminders ?? [],
   };
 }
 
@@ -66,6 +69,7 @@ export function createFormState(defaultDate?: Date | null): EventFormState {
     description: '',
     attendeesStr: '',
     tags: [],
+    reminders: [],
   };
 }
 
@@ -83,6 +87,7 @@ export function formStateToInput(form: EventFormState): EventCreateInput {
       ? form.attendeesStr.split(',').map((e) => ({ email: e.trim() }))
       : [],
     tags: form.tags,
+    reminders: form.reminders,
   };
 }
 

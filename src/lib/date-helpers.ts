@@ -178,6 +178,26 @@ export function navigateDate(
   }
 }
 
+/** ISO-8601 week number (1..53) of a date. Week 1 is the week containing Jan 4. */
+export function getISOWeek(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7; // Sun=7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum); // nearest Thursday
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+}
+
+/** Number of ISO weeks in a year (52 or 53). */
+export function getISOWeeksInYear(year: number): number {
+  return getISOWeek(new Date(year, 11, 28)); // Dec 28 is always in the last ISO week
+}
+
+/** Monday (00:00) of a given ISO week in a given year. */
+export function mondayOfISOWeek(week: number, year: number): Date {
+  const week1Monday = startOfWeek(new Date(year, 0, 4), 1); // Monday of the week containing Jan 4 = week 1
+  return addDays(week1Monday, (week - 1) * 7);
+}
+
 export function isYesterday(d: Date): boolean {
   const y = new Date();
   y.setDate(y.getDate() - 1);

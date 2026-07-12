@@ -28,6 +28,8 @@ interface EventBlockProps {
   /** Enable drag-and-drop move */
   draggable?: boolean;
   onDragStart?: (e: React.DragEvent, event: CalendarEvent) => void;
+  /** Inicio de arrastre táctil por pulsación larga (móvil, ver CalendarGrid) */
+  onTouchDragStart?: (event: CalendarEvent, clientX: number, clientY: number) => void;
   /** Enable bottom-edge resize */
   resizable?: boolean;
   onResizeStart?: (event: CalendarEvent, clientY: number) => void;
@@ -35,7 +37,7 @@ interface EventBlockProps {
   calendarColorMap?: Record<string, string>;
 }
 
-export function EventBlock({ event, onClick, onDelete, style, heightPx, draggable, onDragStart, resizable, onResizeStart, calendarColorMap }: EventBlockProps) {
+export function EventBlock({ event, onClick, onDelete, style, heightPx, draggable, onDragStart, onTouchDragStart, resizable, onResizeStart, calendarColorMap }: EventBlockProps) {
   const [hovered, setHovered] = useState(false);
   const color = getCalendarColor(event.calendar_name, calendarColorMap);
   const lines = heightPx ? Math.floor(heightPx / 18) : 1;
@@ -71,6 +73,10 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
     <div
       draggable={draggable}
       onDragStart={draggable ? handleDragStart : undefined}
+      onTouchStart={draggable && onTouchDragStart ? (e) => {
+        const t = e.touches[0];
+        if (t) onTouchDragStart(event, t.clientX, t.clientY);
+      } : undefined}
       onClick={(e) => {
         e.stopPropagation();
         onClick(event);

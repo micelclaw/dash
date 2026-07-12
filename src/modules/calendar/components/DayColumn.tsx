@@ -61,6 +61,8 @@ interface DayColumnProps {
   onEventClick: (event: CalendarEvent) => void;
   onEventDelete?: (id: string) => void;
   onEventDragStart: (e: React.DragEvent, event: CalendarEvent) => void;
+  /** Inicio de arrastre táctil por pulsación larga (móvil) */
+  onEventTouchStart?: (event: CalendarEvent, clientX: number, clientY: number) => void;
   onResizeStart: (event: CalendarEvent, clientY: number) => void;
   calendarColorMap?: Record<string, string>;
 }
@@ -83,11 +85,13 @@ export function DayColumn({
   onEventClick,
   onEventDelete,
   onEventDragStart,
+  onEventTouchStart,
   onResizeStart,
   calendarColorMap,
 }: DayColumnProps) {
   return (
     <div
+      data-day-col={colIndex}
       onClick={(e) => onSlotClick(colIndex, e)}
       onDragOver={(e) => onDragOver(colIndex, e)}
       onDrop={(e) => onDrop(colIndex, e)}
@@ -205,6 +209,7 @@ export function DayColumn({
             heightPx={blockHeight}
             draggable={editable}
             onDragStart={onEventDragStart}
+            onTouchDragStart={onEventTouchStart}
             resizable={editable}
             onResizeStart={onResizeStart}
             calendarColorMap={calendarColorMap}

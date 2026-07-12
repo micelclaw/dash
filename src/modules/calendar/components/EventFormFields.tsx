@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useState } from 'react';
+import { Bell, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -23,6 +25,16 @@ import { TagInput } from '@/components/shared/TagInput';
 import { DEFAULT_CALENDAR_COLORS } from '../types';
 import { AttendeesField } from './AttendeesField';
 import { fieldLabelStyle, type EventFormState } from './event-form';
+
+type Reminder = { type: string; minutes_before: number };
+const REMINDER_PRESETS = [0, 15, 30, 60, 120, 1440];
+
+function reminderLabel(m: number): string {
+  if (m <= 0) return 'At start';
+  if (m % 1440 === 0) { const d = m / 1440; return `${d} day${d > 1 ? 's' : ''} before`; }
+  if (m % 60 === 0) { const h = m / 60; return `${h} hour${h > 1 ? 's' : ''} before`; }
+  return `${m} min before`;
+}
 
 interface EventFormFieldsProps {
   form: EventFormState;
@@ -113,6 +125,14 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
         </Select>
       </div>
 
+      {/* Reminders */}
+      <div>
+        <label style={{ ...fieldLabelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Bell size={13} /> Reminders
+        </label>
+        <ReminderField value={form.reminders} onChange={(reminders) => onChange({ reminders })} />
+      </div>
+
       {/* Description */}
       <div>
         <label style={fieldLabelStyle}>Description</label>
@@ -150,4 +170,93 @@ export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * Reminder offsets editor: preset toggle chips (At start / 15m / 30m / 1h / 2h /
+ * 1 day) + a custom adder (number × min/hours/days). Selected custom values that
+ * aren't presets show as removable chips. Emits `{ type: 'notification',
+ * minutes_before }[]` — delivered by the calendar-reminders job.
+ */
+function ReminderField({ value, onChange }: { value: Reminder[]; onChange: (r: Reminder[]) => void }) {
+  const [customVal, setCustomVal] = useState('10');
+  const [customUnit, setCustomUnit] = useState<'min' | 'hours' | 'days'>('min');
+
+  const has = (m: number) => value.some((r) => r.minutes_before === m);
+  const add = (m: number) => {
+    if (has(m)) return;
+    onChange([...value, { type: 'notification', minutes_before: m }].sort((a, b) => a.minutes_before - b.minutes_before));
+  };
+  const remove = (m: number) => onChange(value.filter((r) => r.minutes_before !== m));
+  const toggle = (m: number) => (has(m) ? remove(m) : add(m));
+  const addCustom = () => {
+    const n = parseInt(customVal, 10);
+    if (!Number.isFinite(n) || n < 0) return;
+    const factor = customUnit === 'days' ? 1440 : customUnit === 'hours' ? 60 : 1;
+    add(n * factor);
+  };
+  const customs = value.map((r) => r.minutes_before).filter((m) => !REMINDER_PRESETS.includes(m));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Preset toggle chips */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {REMINDER_PRESETS.map((m) => {
+          const active = has(m);
+          return (
+            <button key={m} type="button" onClick={() => toggle(m)} style={chip(active)}>
+              {reminderLabel(m)}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Custom offset adder */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Input
+          type="number"
+          min={0}
+          value={customVal}
+          onChange={(e) => setCustomVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustom(); } }}
+          style={{ width: 72 }}
+        />
+        <Select value={customUnit} onValueChange={(v) => setCustomUnit(v as 'min' | 'hours' | 'days')}>
+          <SelectTrigger style={{ width: 100 }}><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="min">minutes</SelectItem>
+            <SelectItem value="hours">hours</SelectItem>
+            <SelectItem value="days">days</SelectItem>
+          </SelectContent>
+        </Select>
+        <button type="button" onClick={addCustom} style={{ ...chip(false), fontWeight: 600 }}>Add</button>
+      </div>
+
+      {/* Selected custom offsets (presets already show active state above) */}
+      {customs.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {customs.map((m) => (
+            <span key={m} style={{ ...chip(true), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {reminderLabel(m)}
+              <X size={12} style={{ cursor: 'pointer' }} onClick={() => remove(m)} />
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function chip(active: boolean): React.CSSProperties {
+  return {
+    padding: '4px 10px',
+    fontSize: '0.75rem',
+    borderRadius: 'var(--radius-full)',
+    border: `1px solid ${active ? 'var(--amber)' : 'var(--border)'}`,
+    background: active ? 'var(--amber-dim)' : 'transparent',
+    color: active ? 'var(--amber)' : 'var(--text-dim)',
+    cursor: 'pointer',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'nowrap',
+  };
 }

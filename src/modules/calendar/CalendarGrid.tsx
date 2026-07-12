@@ -348,6 +348,112 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
     };
   }, [resizeState, events, onEventUpdate]);
 
+  // ─── Drag táctil por PULSACIÓN LARGA (móvil) ──────────────────────
+  // El drag nativo HTML5 (handleEventDragStart/DragOver/Drop) NO dispara en táctil, así
+  // que en móvil no se podían mover eventos. Aquí replicamos el mismo comportamiento con
+  // eventos touch: mantener pulsado 250ms sobre un evento entra en modo arrastre; luego
+  // el dedo mueve el evento entre columnas/horas (misma matemática de slot). Un toque
+  // corto no arranca drag (deja el onClick para abrir el evento) y un arrastre temprano
+  // (>10px antes del delay) se interpreta como scroll y cancela.
+  const touchDragRef = useRef<{ eventId: string; started: boolean } | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimer.current != null) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleEventTouchStart = useCallback((event: CalendarEvent, clientX: number, clientY: number) => {
+    if (!onEventUpdate) return;
+    touchStartPos.current = { x: clientX, y: clientY };
+    touchDragRef.current = { eventId: event.id, started: false };
+    clearLongPress();
+    longPressTimer.current = window.setTimeout(() => {
+      touchDragRef.current = { eventId: event.id, started: true };
+      setDragEventId(event.id);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(10);
+    }, 250);
+  }, [onEventUpdate, clearLongPress]);
+
+  useEffect(() => {
+    // Localiza la columna-día bajo el dedo y calcula el slot horario (idéntico a
+    // handleColumnDragOver/Drop, pero desde coordenadas touch).
+    const columnAt = (clientX: number, clientY: number) => {
+      const el = document.elementFromPoint(clientX, clientY);
+      const col = el?.closest('[data-day-col]') as HTMLElement | null;
+      if (!col) return null;
+      const colIndex = Number(col.dataset.dayCol);
+      const rect = col.getBoundingClientRect();
+      const totalMinutes = snapMinutes(Math.floor(((clientY - rect.top) / TOTAL_HEIGHT) * 1440));
+      return { colIndex, totalMinutes };
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const td = touchDragRef.current;
+      if (!td) return;
+      const t = e.touches[0];
+      if (!t) return;
+      if (!td.started) {
+        // Aún en el delay: si el dedo se mueve > 10px es scroll → cancelar long-press.
+        const sp = touchStartPos.current;
+        if (sp && Math.hypot(t.clientX - sp.x, t.clientY - sp.y) > 10) {
+          clearLongPress();
+          touchDragRef.current = null;
+        }
+        return;
+      }
+      e.preventDefault(); // en modo drag bloqueamos el scroll y suprimimos el click/callout
+      const hit = columnAt(t.clientX, t.clientY);
+      if (!hit) return;
+      const ev = events.find((x) => x.id === td.eventId);
+      if (!ev) return;
+      const evStart = new Date(ev.start_at);
+      const evEnd = ev.end_at ? new Date(ev.end_at) : new Date(evStart.getTime() + 60 * 60 * 1000);
+      const durationMin = Math.max((evEnd.getTime() - evStart.getTime()) / 60000, 15);
+      setDragPreview({
+        col: hit.colIndex,
+        top: (hit.totalMinutes / 1440) * TOTAL_HEIGHT,
+        height: (durationMin / 1440) * TOTAL_HEIGHT,
+      });
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      clearLongPress();
+      const td = touchDragRef.current;
+      touchDragRef.current = null;
+      touchStartPos.current = null;
+      if (!td || !td.started) return;
+      setDragPreview(null);
+      setDragEventId(null);
+      const t = e.changedTouches[0];
+      if (!t || !onEventUpdate) return;
+      const hit = columnAt(t.clientX, t.clientY);
+      if (!hit) return;
+      const ev = events.find((x) => x.id === td.eventId);
+      if (!ev) return;
+      const evStart = new Date(ev.start_at);
+      const evEnd = ev.end_at ? new Date(ev.end_at) : new Date(evStart.getTime() + 60 * 60 * 1000);
+      const durationMs = evEnd.getTime() - evStart.getTime();
+      const targetDay = new Date(days[hit.colIndex]!);
+      const newStart = new Date(targetDay);
+      newStart.setHours(Math.floor(hit.totalMinutes / 60), hit.totalMinutes % 60, 0, 0);
+      const newEnd = new Date(newStart.getTime() + durationMs);
+      onEventUpdate(ev.id, { start_at: newStart.toISOString(), end_at: newEnd.toISOString() });
+    };
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [events, days, onEventUpdate, clearLongPress]);
+
   return (
     <div
       onDragEnd={handleDragEnd}
@@ -412,6 +518,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
               onEventClick={onEventClick}
               onEventDelete={onEventDelete}
               onEventDragStart={handleEventDragStart}
+              onEventTouchStart={handleEventTouchStart}
               onResizeStart={handleResizeStart}
               calendarColorMap={calendarColorMap}
             />

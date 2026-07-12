@@ -14,10 +14,14 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
+import { useSwipe } from '@/hooks/use-swipe';
 import { useSettingsStore } from '@/stores/settings.store';
+import { useCalendarUiStore } from '@/stores/calendar-ui.store';
 import { api } from '@/services/api';
-import { getDateRange } from '@/lib/date-helpers';
+import { getDateRange, navigateDate } from '@/lib/date-helpers';
 import { useEvents } from './hooks/use-events';
 import { useEventLinks } from './hooks/use-event-links';
 import { CalendarToolbar } from './CalendarToolbar';
@@ -39,8 +43,15 @@ export function Component() {
   // Borrado rápido de evento desde la rejilla: confirma (el EventModal ya
   // tiene su propio confirm two-click; esto cubre el menú/X de la rejilla).
   const [confirmDeleteEventId, setConfirmDeleteEventId] = useState<string | null>(null);
-  const [view, setView] = useState<CalendarView>(isMobile ? 'agenda' : defaultView);
+  // Última vista USADA (persistida per-browser). Cae al default del servidor
+  // (o agenda en móvil la 1ª vez) mientras el usuario no elija ninguna. Así
+  // salir del calendario y volver conserva la vista (#2).
+  const persistedView = useCalendarUiStore((s) => s.view);
+  const setView = useCalendarUiStore((s) => s.setView);
+  const view = persistedView ?? (isMobile ? 'agenda' : defaultView);
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
+  // Mobile calendars side panel (hamburger → Sheet), mirrors Mail (#5).
+  const [mobileNav, setMobileNav] = useState(false);
 
   // Modal state
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -191,12 +202,18 @@ export function Component() {
     }
   }, [searchParams, setSearchParams, events]);
 
-  // Switch to agenda on mobile
-  useEffect(() => {
-    if (isMobile && view !== 'agenda') {
-      setView('agenda');
-    }
-  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+  // (Mobile ya no fuerza 'agenda': la vista recordada manda; agenda es solo el
+  // default de primera vez en móvil — resuelto en `view` arriba. Así el usuario
+  // puede quedarse en día/semana/mes en el móvil con swipe + pickers.)
+
+  // Swipe horizontal en la rejilla → avanza/retrocede intervalo (= flechas). Solo
+  // móvil; touchstart/touchend puros → no pelean con el scroll ni con el
+  // long-press-drag de TimeGrid (#4).
+  const swipe = useSwipe({
+    onSwipeLeft: () => setCurrentDate(navigateDate(view, currentDate, 1)),
+    onSwipeRight: () => setCurrentDate(navigateDate(view, currentDate, -1)),
+    disabled: !isMobile,
+  });
 
   const handleEventClick = useCallback((event: CalendarEvent) => {
     // Kanban events: navigate to the board and open the card
@@ -239,6 +256,12 @@ export function Component() {
     setCreateDate(null);
   }, []);
 
+  // Back jerárquico en móvil: el botón atrás cierra el overlay actual (de más
+  // interno a más externo) en vez de salir del módulo.
+  useBackGuard(modalOpen, () => handleCloseModal(), isMobile);
+  useBackGuard(addCalendarOpen, () => setAddCalendarOpen(false), isMobile);
+  useBackGuard(mobileNav, () => setMobileNav(false), isMobile);
+
   // Toolbar + Grid combined as the main content area
   const mainContent = (
     <div
@@ -255,41 +278,44 @@ export function Component() {
         currentDate={currentDate}
         onDateChange={setCurrentDate}
         onCreateEvent={handleCreateEvent}
+        onOpenSidebar={isMobile ? () => setMobileNav(true) : undefined}
       />
-      {loading && events.length === 0 ? (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flex: 1,
-            color: 'var(--text-dim)',
-            fontFamily: 'var(--font-sans)',
-            fontSize: '0.8125rem',
-          }}
-        >
-          Loading events...
-        </div>
-      ) : (
-        <CalendarGrid
-          view={view}
-          currentDate={currentDate}
-          events={events}
-          hiddenCalendars={hiddenCalendars}
-          onEventClick={handleEventClick}
-          onSlotClick={handleSlotClick}
-          onEventUpdate={updateEvent}
-          onEventDelete={(id) => setConfirmDeleteEventId(id)}
-          calendarColorMap={calendarColorMap}
-        />
-      )}
+      <div {...swipe} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {loading && events.length === 0 ? (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 1,
+              color: 'var(--text-dim)',
+              fontFamily: 'var(--font-sans)',
+              fontSize: '0.8125rem',
+            }}
+          >
+            Loading events...
+          </div>
+        ) : (
+          <CalendarGrid
+            view={view}
+            currentDate={currentDate}
+            events={events}
+            hiddenCalendars={hiddenCalendars}
+            onEventClick={handleEventClick}
+            onSlotClick={handleSlotClick}
+            onEventUpdate={updateEvent}
+            onEventDelete={(id) => setConfirmDeleteEventId(id)}
+            calendarColorMap={calendarColorMap}
+          />
+        )}
+      </div>
     </div>
   );
 
   const sidebar = (
     <CalendarMiniSidebar
       currentDate={currentDate}
-      onDateChange={setCurrentDate}
+      onDateChange={(d) => { setCurrentDate(d); setMobileNav(false); }}
       hiddenCalendars={hiddenCalendars}
       onToggleCalendar={handleToggleCalendar}
       events={events}
@@ -303,8 +329,20 @@ export function Component() {
   return (
     <>
       {isMobile ? (
-        // Mobile: no sidebar, just the main grid (defaults to agenda view)
-        mainContent
+        // Mobile: main grid + calendars in a left Sheet drawer (hamburger), same
+        // pattern as Mail. Desktop keeps the pinned SplitPane sidebar untouched.
+        <>
+          {mainContent}
+          <Sheet open={mobileNav} onOpenChange={setMobileNav}>
+            <SheetContent
+              side="left"
+              style={{ width: 280, padding: 0, paddingTop: 'env(safe-area-inset-top, 0px)', overflow: 'auto' }}
+              aria-describedby={undefined}
+            >
+              {sidebar}
+            </SheetContent>
+          </Sheet>
+        </>
       ) : (
         <SplitPane
           defaultSizes={[20, 80]}
