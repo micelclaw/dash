@@ -68,7 +68,7 @@ interface EmailAccountOption {
 }
 
 export function DigestSection() {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [config, setConfig] = useState<DigestConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [emailAccounts, setEmailAccounts] = useState<EmailAccountOption[]>([]);

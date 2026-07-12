@@ -189,7 +189,7 @@ function DefaultSearchModeRow() {
   const settings = useSettingsStore((s) => s.settings);
   const updateSection = useSettingsStore((s) => s.updateSection);
   const tier = useAuthStore((s) => s.user?.tier ?? 'free');
-  const isPro = tier === 'pro';
+  const isPro = tier !== 'free'; // pro OR plus
 
   if (!settings) return null;
   const current = settings.general?.default_search_mode ?? 'auto';
@@ -361,9 +361,9 @@ function WebSearchConfig() {
       {/* Brave (Pro) */}
       <SettingRow
         label="Brave Search"
-        description={tier === 'pro' ? 'Pre-configured with Claw Credits' : 'Available with Pro subscription'}
+        description={tier !== 'free' ? 'Pre-configured with Claw Credits' : 'Available with Pro subscription'}
       >
-        {tier === 'pro' ? (
+        {tier !== 'free' ? (
           <span style={{ fontSize: '0.75rem', color: '#22c55e', fontFamily: 'var(--font-sans)' }}>
             <CheckCircle size={14} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
             Configured

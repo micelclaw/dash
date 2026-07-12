@@ -24,7 +24,7 @@ interface PhotosDejaVuProps {
 }
 
 export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [collections, setCollections] = useState<DejaVuCollection[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);

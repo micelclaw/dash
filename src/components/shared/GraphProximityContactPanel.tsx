@@ -53,7 +53,7 @@ const DOMAIN_MENTION_BASE: Record<string, string> = {
 
 export function GraphProximityContactPanel({ contactId, onOpenGraph }: GraphProximityContactPanelProps) {
   const navigate = useNavigate();
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [mentions, setMentions] = useState<MentionCount[]>([]);
   const [entities, setEntities] = useState<ConnectedEntity[]>([]);
   const [loading, setLoading] = useState(false);

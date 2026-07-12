@@ -30,7 +30,7 @@ interface SimilarContentPanelProps {
 
 export function SimilarContentPanel({ sourceType, sourceId }: SimilarContentPanelProps) {
   const navigate = useNavigate();
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const fetchSimilar = useIntelligenceStore(s => s.fetchSimilar);
   const [items, setItems] = useState<SimilarItem[]>([]);
   const [loading, setLoading] = useState(false);

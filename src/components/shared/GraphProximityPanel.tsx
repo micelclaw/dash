@@ -35,7 +35,7 @@ const TYPE_ICONS: Record<string, { icon: LucideIcon; color: string }> = {
 const MAX_VISIBLE = 3;
 
 export function GraphProximityPanel({ sourceType, sourceId, onOpenGraph }: GraphProximityPanelProps) {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const fetchGraphProximity = useIntelligenceStore(s => s.fetchGraphProximity);
   const [entities, setEntities] = useState<GraphProximityItem[]>([]);
   const [loading, setLoading] = useState(false);

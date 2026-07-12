@@ -56,7 +56,7 @@ interface DiaryEditorProps {
 export function DiaryEditor({ entry, onUpdate, onBack }: DiaryEditorProps) {
   useCoNavigation('diary', entry.id);
   const { links, loading: linksLoading } = useDiaryLinks(entry.id);
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const dayCtx = useDayContext(entry.entry_date);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);

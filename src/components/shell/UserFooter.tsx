@@ -70,8 +70,8 @@ export function UserFooter({ collapsed }: UserFooterProps) {
               <span style={{ fontSize: '0.8125rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user.display_name ?? user.email}
               </span>
-              <Badge variant={user.tier === 'pro' ? 'default' : 'secondary'} className="text-[10px] px-1.5 py-0">
-                {user.tier === 'pro' ? 'Pro' : 'Free'}
+              <Badge variant={user.tier === 'free' ? 'secondary' : 'default'} className="text-[10px] px-1.5 py-0">
+                {user.tier === 'plus' ? 'Plus' : user.tier === 'pro' ? 'Pro' : 'Free'}
               </Badge>
             </div>
           )}

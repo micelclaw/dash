@@ -37,7 +37,7 @@ const radioStyle: React.CSSProperties = {
 };
 
 export function RankingPanel() {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const sortBy = useSearchStore(s => s.sortBy);
   const weights = useSearchStore(s => s.weights);
   const setSortBy = useSearchStore(s => s.setSortBy);

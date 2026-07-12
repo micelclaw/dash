@@ -20,7 +20,7 @@ import { ProUpsellPanel } from '@/components/shared/ProUpsellPanel';
 const MAX_VISIBLE = 20;
 
 export function GraphHealthSection() {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const stats = useIntelligenceStore(s => s.graphStats);
   const statsLoading = useIntelligenceStore(s => s.graphStatsLoading);
   const fetchStats = useIntelligenceStore(s => s.fetchGraphStats);

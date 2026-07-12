@@ -43,7 +43,7 @@ export function ProLockBanner({
   upgradeUrl = PRICING_URL,
 }: ProLockBannerProps) {
   const tier = useAuthStore((s) => s.user?.tier ?? 'free');
-  if (tier === 'pro') return null;
+  if (tier !== 'free') return null; // any paid tier (pro or plus) unlocks it
 
   return (
     <div
@@ -84,5 +84,6 @@ export function ProLockBanner({
  * accept a `disabled` prop) prefer this to wrapping the children.
  */
 export function useIsPro(): boolean {
-  return useAuthStore((s) => s.user?.tier ?? 'free') === 'pro';
+  // Any paid tier (pro OR plus) counts as Pro; only 'free' is gated.
+  return (useAuthStore((s) => s.user?.tier ?? 'free')) !== 'free';
 }

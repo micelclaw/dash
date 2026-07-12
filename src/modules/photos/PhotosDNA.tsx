@@ -21,7 +21,7 @@ import type { PhotoDNASnapshot, PhotoDNAComparison } from './types';
 type PeriodType = 'month' | 'quarter' | 'year';
 
 export function PhotosDNA() {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
   const [snapshots, setSnapshots] = useState<PhotoDNASnapshot[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodType, setPeriodType] = useState<PeriodType>('month');

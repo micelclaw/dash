@@ -18,7 +18,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useExtractionStore, type ExtractionLogEntry } from '@/stores/extraction.store';
 
 export function EntityExtractionConfig() {
-  const isPro = useAuthStore(s => s.user?.tier === 'pro');
+  const isPro = useAuthStore(s => s.user?.tier !== 'free');
 
   const running = useExtractionStore(s => s.running);
   const paused = useExtractionStore(s => s.paused);
