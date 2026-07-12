@@ -35,17 +35,21 @@ export function Component() {
   const loading = useSearchStore(s => s.loading);
   const results = useSearchStore(s => s.results);
   const error = useSearchStore(s => s.error);
-  // Sync query param → store on mount
+  // Sync query param → store on mount (la búsqueda la dispara el debounce de abajo)
   useEffect(() => {
     const q = searchParams.get('q');
-    if (q && q !== query) {
-      setQuery(q);
-      setTimeout(() => {
-        useSearchStore.getState().searchAdvanced();
-      }, 0);
-    }
+    if (q && q !== query) setQuery(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Búsqueda EN VIVO con debounce: al teclear o cambiar los filtros de dominio,
+  // busca sola tras 350ms (antes solo con Enter → parecía "no busca"). El
+  // searchAdvanced cae a `/search` básico en Free (fix TIER_REQUIRED).
+  useEffect(() => {
+    if (!query.trim()) return;
+    const t = setTimeout(() => { void useSearchStore.getState().searchAdvanced(); }, 350);
+    return () => clearTimeout(t);
+  }, [query, domains]);
 
   // Focus input on mount
   useEffect(() => {
@@ -61,11 +65,8 @@ export function Component() {
   const toggleDomain = useCallback((d: string) => {
     const next = domains.includes(d) ? domains.filter(x => x !== d) : [...domains, d];
     setDomains(next);
-    // Auto-trigger search when filters change and there's an active query
-    if (query.trim()) {
-      setTimeout(() => useSearchStore.getState().searchAdvanced(), 0);
-    }
-  }, [domains, setDomains, query]);
+    // El debounce de arriba (deps: domains) re-dispara la búsqueda.
+  }, [domains, setDomains]);
 
   return (
     <div style={{
@@ -139,9 +140,34 @@ export function Component() {
           <div style={{
             display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8,
           }}>
+            {/* "All" = domains vacío []; el backend solo filtra si llega ?domains=.
+               No seleccionamos cada id (excluiría la federación multimedia y sería redundante). */}
+            {(() => {
+              const active = domains.length === 0;
+              return (
+                <button
+                  onClick={() => setDomains([])}
+                  style={{
+                    padding: '2px 10px',
+                    borderRadius: 'var(--radius-full)',
+                    border: `1px solid ${active ? 'var(--amber)' : 'var(--border)'}`,
+                    background: active ? 'var(--amber-dim)' : 'transparent',
+                    color: active ? 'var(--amber)' : 'var(--text-muted)',
+                    fontSize: '0.6875rem',
+                    fontFamily: 'var(--font-sans)',
+                    cursor: 'pointer',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                >
+                  All
+                </button>
+              );
+            })()}
             {SEARCHABLE_DOMAINS.map(d => {
               const id = d.domains.join(',');
-              const active = domains.length === 0 || domains.includes(id);
+              // Solo resaltado el que está realmente en el filtro. Antes, con
+              // `domains` vacío salían TODOS activos y no se distinguía el filtro.
+              const active = domains.includes(id);
               return (
                 <button
                   key={d.key}

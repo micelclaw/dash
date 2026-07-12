@@ -11,7 +11,7 @@
  */
 
 import { create } from 'zustand';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import type { SearchResult, SearchWeights } from '@/types/search';
 import { DEFAULT_SEARCH_WEIGHTS } from '@/types/search';
 
@@ -142,7 +142,14 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
         queryTimeMs: (res as any).meta?.query_time_ms ?? null,
         loading: false,
       });
-    } catch {
+    } catch (err) {
+      // La fusión ponderada (`/search/advanced`) es tier Pro; los usuarios Free
+      // recibían TIER_REQUIRED → "Search failed". Caemos al buscador básico
+      // `/search` (RRF, disponible en Free), que respeta el filtro de dominios.
+      if (err instanceof ApiError && err.code === 'TIER_REQUIRED') {
+        await get().search();
+        return;
+      }
       set({ error: 'Search failed', loading: false });
     }
   },
