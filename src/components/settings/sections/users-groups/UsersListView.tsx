@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Download, Search, MoreVertical, KeyRound, Link2, Ban, RotateCcw, LogOut, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Search, MoreVertical, KeyRound, Link2, Ban, RotateCcw, LogOut, ShieldCheck, Loader2 } from 'lucide-react';
 import { useUsersStore } from '@/stores/users.store';
 import { useAuthStore } from '@/stores/auth.store';
 import type { AdminUser } from '@/types/users';
@@ -28,6 +28,12 @@ import { CreateUserDialog, SetPasswordDialog, ResetLinkDialog } from './dialogs'
 const initials = (n: string) => n.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 const ROLE_LABEL: Record<string, string> = { owner: 'Propietario', admin: 'Administrador', user: 'Usuario' };
 
+// UA2: el alta responde al instante pero los agentes tardan minutos en
+// provisionarse (cola del Gateway) — el estado se deriva del backend.
+const isProvisioningAgents = (u: AdminUser) =>
+  typeof u.agents_provisioned === 'number' && typeof u.agents_expected === 'number'
+  && u.agents_provisioned < u.agents_expected;
+
 export function UsersListView() {
   const { users, loading, fetchUsers, suspendUser, reactivateUser, deleteUser } = useUsersStore();
   const selfId = useAuthStore((s) => s.user?.id);
@@ -40,6 +46,15 @@ export function UsersListView() {
   const [confirm, setConfirm] = useState<{ kind: 'delete' | 'suspend' | 'reactivate'; user: AdminUser } | null>(null);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  // Mientras algún usuario tenga agentes a medio provisionar, refresco ligero
+  // cada 10s (sin tocar `loading`, para no parpadear la tabla).
+  const anyProvisioning = users.some(isProvisioningAgents);
+  useEffect(() => {
+    if (!anyProvisioning) return;
+    const t = setInterval(() => { void useUsersStore.getState().refreshUsersSilently(); }, 10_000);
+    return () => clearInterval(t);
+  }, [anyProvisioning]);
 
   const rows = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -75,6 +90,11 @@ export function UsersListView() {
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface)] text-[0.65rem] font-semibold text-[var(--text-dim)]">{initials(u.display_name)}</span>
           <span className="text-[var(--text)]">{u.display_name}</span>
           {u.id === selfId && <span className="text-xs text-[var(--text-dim)]">(tú)</span>}
+          {isProvisioningAgents(u) && (
+            <Badge variant="outline" className="gap-1 whitespace-nowrap border-[var(--amber,#d4a017)]/40 text-[var(--amber,#d4a017)]" title="El usuario ya puede iniciar sesión; sus agentes se están creando en segundo plano">
+              <Loader2 className="h-3 w-3 animate-spin" /> Provisionando agentes {u.agents_provisioned}/{u.agents_expected}…
+            </Badge>
+          )}
         </div>
       ),
     },

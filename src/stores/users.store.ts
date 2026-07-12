@@ -20,6 +20,8 @@ interface UsersStore {
   error: string | null;
 
   fetchUsers: () => Promise<void>;
+  /** Recarga sin tocar `loading` — para el polling del badge de provisioning (UA2). */
+  refreshUsersSilently: () => Promise<void>;
   createUser: (payload: CreateUserPayload) => Promise<AdminUser>;
   updateUser: (id: string, payload: UpdateUserPayload) => Promise<AdminUser>;
   setPassword: (id: string, newPassword: string) => Promise<void>;
@@ -45,6 +47,15 @@ export const useUsersStore = create<UsersStore>()((set, get) => ({
         error: err instanceof Error ? err.message : 'Failed to load users',
         loading: false,
       });
+    }
+  },
+
+  refreshUsersSilently: async () => {
+    try {
+      const users = await usersService.listUsers();
+      set({ users });
+    } catch {
+      // Silencioso: el próximo tick del polling reintenta.
     }
   },
 
