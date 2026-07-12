@@ -39,6 +39,8 @@ export interface DnsCheckResult {
 export interface MailServerStatus {
   installed: boolean;
   running: boolean;
+  /** Estado degradado detectado por Core (front sin redes Docker / API admin muda). */
+  degraded: 'network_detached' | 'admin_api_unreachable' | null;
   hostname: string;
   domains: string[];
   mailboxes_count: number;

@@ -174,6 +174,8 @@ function copyToClipboard(text: string) {
 export function MailServerSection() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<MailServerStatus | null>(null);
+  /** El último fetch de status FALLÓ (red/timeout) — no confundir con "no instalado". */
+  const [statusError, setStatusError] = useState(false);
   const [dnsResult, setDnsResult] = useState<DnsCheckResult | null>(null);
   const [relay, setRelay] = useState<RelayConfig>({ enabled: false, host: '', port: 587, username: '', password: '', encryption: 'starttls' });
   const [presets, setPresets] = useState<RelayPreset[]>([]);
@@ -219,14 +221,26 @@ export function MailServerSection() {
     try {
       const s = await mailSvc.getStatus();
       setStatus(s);
+      setStatusError(false);
       if (s.hostname && !hostnameInput) setHostnameInput(s.hostname);
       if (s.last_dns_check) setDnsResult(s.last_dns_check);
     } catch {
-      // Server may not have mail server routes if not configured
+      // Error de red/timeout ≠ "no instalado" (incidente 2026-07-12: un status
+      // lento hacía aparecer el CTA de instalación sobre un Mailu vivo). Se
+      // marca el error y el render muestra "Reintentar", NUNCA el CTA.
+      setStatusError(true);
     } finally {
       setLoading((l) => ({ ...l, status: false }));
     }
   }, []);
+
+  // Reintento automático al volver el foco a la ventana (el falso estado no
+  // debe quedarse pegado hasta un F5).
+  useEffect(() => {
+    const onFocus = () => { void fetchStatus(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchStatus]);
 
   const fetchServicesOnce = useServicesStore((s) => s.fetchServices);
   useEffect(() => {
@@ -446,6 +460,34 @@ export function MailServerSection() {
     );
   }
 
+  // ─── Status unreachable (≠ no instalado) ──────────────────
+  // Sin respuesta del endpoint NO se puede afirmar que Mailu no exista — jamás
+  // mostrar el CTA de instalación sobre un servidor posiblemente vivo.
+
+  if (!status && statusError) {
+    return (
+      <SettingSection title="Mail Server" description="Self-hosted email server (Mailu).">
+        <div style={{ ...S.card, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 32, textAlign: 'center' }}>
+          <AlertTriangle size={28} style={{ color: 'var(--amber)' }} />
+          <div>
+            <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', margin: '0 0 4px 0', fontFamily: 'var(--font-sans)' }}>
+              Couldn't reach the mail server status
+            </p>
+            <p style={S.muted}>
+              This does not mean it's uninstalled — the status request failed or timed out.
+            </p>
+          </div>
+          <button
+            style={S.btnPrimary}
+            onClick={() => { setLoading((l) => ({ ...l, status: true })); void fetchStatus(); }}
+          >
+            <RefreshCw size={14} /> Retry
+          </button>
+        </div>
+      </SettingSection>
+    );
+  }
+
   // ─── Not installed CTA ────────────────────────────────────
 
   if (!status || !status.installed) {
@@ -647,6 +689,35 @@ export function MailServerSection() {
               </span>
             )}
           </div>
+
+          {/* Estado degradado detectado por Core (p.ej. front sin redes Docker
+              tras un reinicio del daemon): el correo no fluye aunque el
+              contenedor exista. Core intenta auto-curarse; ofrecer el recreate. */}
+          {status.degraded && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+              padding: '8px 12px', borderRadius: 'var(--radius-md)',
+              background: 'color-mix(in srgb, var(--amber) 12%, transparent)',
+              border: '1px solid var(--amber)',
+            }}>
+              <AlertTriangle size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.75rem', color: 'var(--text)', fontFamily: 'var(--font-sans)', flex: 1 }}>
+                {status.degraded === 'network_detached'
+                  ? 'The mail container lost its Docker networks (mail is down). Auto-repair is running — you can also recreate it now.'
+                  : 'Mailu is running but its admin API is not responding — domains and mailbox counts may be incomplete.'}
+              </span>
+              {status.degraded === 'network_detached' && (
+                <button
+                  style={{ ...S.btn, padding: '4px 10px', fontSize: '0.75rem' }}
+                  onClick={handleRecreate}
+                  disabled={loading.recreate}
+                >
+                  {loading.recreate ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Recreate
+                </button>
+              )}
+            </div>
+          )}
 
           <div style={S.row}>
             <span style={S.label}>Hostname</span>
