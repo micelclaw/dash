@@ -46,7 +46,7 @@ export function VideoPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
-    void useVideoStore.getState().checkStatus();
+    void useVideoStore.getState().ensureRunning();
   }, []);
 
   // Deep-link desde el search global: ?item=<jellyfinItemId>.

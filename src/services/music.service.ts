@@ -105,6 +105,12 @@ export const musicService = {
     return res.data;
   },
 
+  /** On-demand start of the shared Navidrome container (user-accessible). */
+  async start(): Promise<MusicStatus> {
+    const res = await api.post<{ data: MusicStatus }>('/music/start');
+    return res.data;
+  },
+
   async getAlbums(opts?: {
     type?: AlbumListType;
     size?: number;

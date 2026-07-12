@@ -14,6 +14,7 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { Search } from 'lucide-react';
 import { AI_MEDIA_ENABLED } from './flags';
 import { AiSearchToggle } from './AiSearchToggle';
+import { useIsMobile } from '@/hooks/use-media-query';
 
 interface MediaToolbarProps {
   search?: string;
@@ -52,6 +53,10 @@ export function MediaToolbar({
 }: MediaToolbarProps) {
   const [localSearch, setLocalSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const isMobile = useIsMobile();
+  // On mobile the search box collapses to a magnifier icon so it stops hogging
+  // the row and starving the tabs; tapping it expands the input inline.
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     setLocalSearch(search);
@@ -89,35 +94,65 @@ export function MediaToolbar({
       {left}
 
       {onSearchChange && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: 'var(--surface)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '4px 10px',
-            minWidth: 200,
-          }}
-        >
-          <Search size={14} style={{ color: aiActive ? 'var(--amber)' : 'var(--text-muted)', flexShrink: 0 }} />
-          <input
-            type="text"
-            placeholder={aiActive && aiPlaceholder ? aiPlaceholder : searchPlaceholder}
-            value={localSearch}
-            onChange={(e) => handleSearchInput(e.target.value)}
+        // Collapsed on mobile until tapped (keeps the tabs from being crowded
+        // out); always expanded on desktop or while it has a query.
+        !isMobile || searchOpen || !!localSearch ? (
+          <div
             style={{
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              color: 'var(--text)',
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-sans)',
-              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--surface)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '4px 10px',
+              minWidth: isMobile ? 160 : 200,
             }}
-          />
-          {aiSlot && AI_MEDIA_ENABLED && <AiSearchToggle active={aiActive} onToggle={onAiToggle} />}
-        </div>
+          >
+            <Search size={14} style={{ color: aiActive ? 'var(--amber)' : 'var(--text-muted)', flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder={aiActive && aiPlaceholder ? aiPlaceholder : searchPlaceholder}
+              value={localSearch}
+              autoFocus={isMobile && searchOpen}
+              onChange={(e) => handleSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  handleSearchInput('');
+                  setSearchOpen(false);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              onBlur={() => { if (isMobile && !localSearch.trim()) setSearchOpen(false); }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: 'var(--text)',
+                fontSize: '0.75rem',
+                fontFamily: 'var(--font-sans)',
+                width: '100%',
+              }}
+            />
+            {aiSlot && AI_MEDIA_ENABLED && <AiSearchToggle active={aiActive} onToggle={onAiToggle} />}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              title="Search"
+              aria-label="Search"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--surface)', border: 'none', borderRadius: 'var(--radius-sm)',
+                padding: 6, cursor: 'pointer', color: 'var(--text-muted)',
+              }}
+            >
+              <Search size={16} />
+            </button>
+            {aiSlot && AI_MEDIA_ENABLED && <AiSearchToggle active={aiActive} onToggle={onAiToggle} />}
+          </div>
+        )
       )}
 
       {right}

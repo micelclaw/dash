@@ -55,8 +55,12 @@ interface BooksState {
   loadingAudio: boolean;
   selectedAudiobook: AudioItemDetail | null;
   loadingAudioDetail: boolean;
-  /** Audiobookshelf not installed / not running (503 ABS_UNAVAILABLE). */
+  /** Audiobookshelf not usable right now (not installed OR not running). */
   absUnavailable: boolean;
+  /** ABS on-demand start in progress. */
+  absStarting: boolean;
+  /** Last ABS start error (timeout / RAM budget / etc.), null while OK. */
+  absStartError: string | null;
 
   /** Full playable queue of the audiobook currently in the player (chapter jumps). */
   audioQueue: PlayableItem[];
@@ -68,6 +72,10 @@ interface BooksState {
   toggleAiSearch: () => void;
   runSearch: (q: string) => Promise<void>;
   loadStatus: () => Promise<void>;
+  /** Refresh ABS status and, if installed-but-stopped, auto-start + poll then load. */
+  ensureAbsRunning: () => Promise<void>;
+  /** Start Audiobookshelf on-demand and poll until running (fast transition). */
+  startAbsAndWait: () => Promise<void>;
   loadBooks: () => Promise<void>;
   openBook: (book: ReadingBook) => void;
   closeBook: () => void;
@@ -87,6 +95,11 @@ function isAbsUnavailableError(err: unknown): boolean {
 function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Poll cadence + cap while a container boots (fast so the UI flips ASAP). */
+const START_POLL_MS = 1000;
+const START_TIMEOUT_MS = 90_000;
 
 /** Map an ABS track to the global player's PlayableItem. */
 function trackToPlayable(
@@ -178,6 +191,8 @@ export const useBooksStore = create<BooksState>()((set, get) => ({
   selectedAudiobook: null,
   loadingAudioDetail: false,
   absUnavailable: false,
+  absStarting: false,
+  absStartError: null,
 
   audioQueue: [],
   playingAudiobookId: null,
@@ -228,6 +243,44 @@ export const useBooksStore = create<BooksState>()((set, get) => ({
       });
     } catch {
       /* non-blocking — views degrade on their own */
+    }
+  },
+
+  ensureAbsRunning: async () => {
+    await get().loadStatus();
+    const abs = get().status?.abs;
+    // Installed but stopped → start it on-demand (no admin/Servarr detour).
+    if (abs && abs.installed && !abs.running && !get().absStarting) {
+      await get().startAbsAndWait();
+    } else {
+      void get().loadAudio();
+    }
+  },
+
+  startAbsAndWait: async () => {
+    if (get().absStarting) return;
+    set({ absStarting: true, absStartError: null });
+    try {
+      let st = await booksService.startAbs();
+      const deadline = Date.now() + START_TIMEOUT_MS;
+      while (!st.running && Date.now() < deadline) {
+        await sleep(START_POLL_MS);
+        const full = await booksService.status();
+        set({ status: full });
+        st = { installed: full.abs.installed, running: full.abs.running };
+      }
+      if (st.running) {
+        set({ absStarting: false, absUnavailable: false });
+        await get().loadAudio();
+      } else {
+        set({ absStarting: false, absStartError: 'Audiobookshelf tardó demasiado en arrancar' });
+      }
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      set({
+        absStarting: false,
+        absStartError: code === 'NOT_INSTALLED' ? null : errMessage(err, 'No se pudo arrancar Audiobookshelf'),
+      });
     }
   },
 

@@ -11,33 +11,34 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router';
 import { Headphones } from 'lucide-react';
-import { MediaCard, MediaGrid } from '@/components/media';
+import { MediaCard, MediaGrid, MediaUnavailable } from '@/components/media';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useBooksStore } from '@/stores/books.store';
 import { audioCoverUrl } from '@/services/books.service';
 import { AudiobookDetail } from './AudiobookDetail';
 import { formatTotalDuration } from '../lib/format';
 
-/** Shown when Audiobookshelf is not installed or not running (503 from Core). */
+/**
+ * Shown when Audiobookshelf is not installed, not running, or starting
+ * on-demand. A user with Books access NEVER gets sent to the admin-only
+ * Servarr module — the container starts here (auto on entry; button as
+ * fallback).
+ */
 function AbsUnavailableState() {
-  const navigate = useNavigate();
+  const installed = useBooksStore((s) => s.status?.abs.installed ?? false);
+  const starting = useBooksStore((s) => s.absStarting);
+  const startError = useBooksStore((s) => s.absStartError);
   return (
-    <EmptyState
+    <MediaUnavailable
       icon={Headphones}
-      title="Audiobookshelf is not installed"
-      description="Audiobooks are served by Audiobookshelf. Install or start it from the Servarr module, then come back here."
-      actions={[
-        { label: 'Open Servarr', onClick: () => navigate('/multimedia'), variant: 'primary' },
-        {
-          label: 'Retry',
-          onClick: () => {
-            void useBooksStore.getState().loadAudio();
-          },
-          variant: 'secondary',
-        },
-      ]}
+      serviceName="Audiobookshelf"
+      mediaNoun="audiobooks"
+      installed={installed}
+      starting={starting}
+      startError={startError}
+      onStart={() => void useBooksStore.getState().startAbsAndWait()}
+      onRetry={() => void useBooksStore.getState().ensureAbsRunning()}
     />
   );
 }
@@ -56,7 +57,9 @@ export function AudiobooksView() {
   const search = useBooksStore((s) => s.search);
 
   useEffect(() => {
-    void useBooksStore.getState().loadAudio();
+    // Ensure ABS is running (auto-start on-demand if installed-but-stopped),
+    // then load the library.
+    void useBooksStore.getState().ensureAbsRunning();
   }, []);
 
   const query = search.trim().toLowerCase();

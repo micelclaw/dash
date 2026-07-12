@@ -52,7 +52,7 @@ export function MusicPage() {
 
   useEffect(() => {
     initScrobbleWatcher();
-    void useMusicStore.getState().checkStatus();
+    void useMusicStore.getState().ensureRunning();
   }, []);
 
   // Deep-link desde el search global: ?album=/?artist=/?playlist=<externalId>.

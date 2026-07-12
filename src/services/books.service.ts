@@ -161,6 +161,12 @@ export async function status(): Promise<BooksStatus> {
   return res.data;
 }
 
+/** On-demand start of the shared Audiobookshelf container (user-accessible). */
+export async function startAbs(): Promise<{ installed: boolean; running: boolean }> {
+  const res = await api.post<{ data: { installed: boolean; running: boolean } }>('/books/audio/start');
+  return res.data;
+}
+
 export async function listBooks(): Promise<Book[]> {
   const res = await api.get<{ data: { books: Book[] } }>('/books');
   return res.data.books;
@@ -240,6 +246,7 @@ export async function closeSession(id: string, body?: CloseSessionBody): Promise
 
 export const booksService = {
   status,
+  startAbs,
   listBooks,
   searchBooks,
   coverUrl,

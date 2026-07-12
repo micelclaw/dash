@@ -10,32 +10,29 @@
  * https://micelclaw.com
  */
 
-import { useNavigate } from 'react-router';
 import { Clapperboard } from 'lucide-react';
-import { EmptyState } from '@/components/shared/EmptyState';
+import { MediaUnavailable } from '@/components/media';
 import { useVideoStore } from '@/stores/video.store';
 
-/** Shown when Jellyfin is not installed or not running (503 from Core). */
+/**
+ * Shown when Jellyfin is not installed, not running, or starting on-demand.
+ * A user with Video access NEVER gets redirected to the admin-only Servarr
+ * module — the container starts here (auto on entry; button as fallback).
+ */
 export function UnavailableState() {
-  const navigate = useNavigate();
+  const installed = useVideoStore((s) => s.installed);
+  const starting = useVideoStore((s) => s.starting);
+  const startError = useVideoStore((s) => s.startError);
   return (
-    <EmptyState
+    <MediaUnavailable
       icon={Clapperboard}
-      title="Jellyfin is not running"
-      description="Movies and series are served by Jellyfin. Start it from the Servarr module, then come back here."
-      actions={[
-        { label: 'Open Servarr', onClick: () => navigate('/multimedia'), variant: 'primary' },
-        {
-          label: 'Retry',
-          onClick: () => {
-            const store = useVideoStore.getState();
-            void store.checkStatus().then(() => {
-              if (!useVideoStore.getState().unavailable) void store.loadHome();
-            });
-          },
-          variant: 'secondary',
-        },
-      ]}
+      serviceName="Jellyfin"
+      mediaNoun="movies and series"
+      installed={installed}
+      starting={starting}
+      startError={startError}
+      onStart={() => void useVideoStore.getState().startAndWait()}
+      onRetry={() => void useVideoStore.getState().ensureRunning()}
     />
   );
 }

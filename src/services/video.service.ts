@@ -202,6 +202,12 @@ export const videoService = {
     return res.data;
   },
 
+  /** On-demand start of the shared Jellyfin container (user-accessible). */
+  async start(): Promise<VideoStatus> {
+    const res = await api.post<{ data: VideoStatus }>('/video/start');
+    return res.data;
+  },
+
   async getLibraries(): Promise<VideoLibrary[]> {
     const res = await api.get<{ data: { libraries: VideoLibrary[] } }>('/video/libraries');
     return res.data.libraries;

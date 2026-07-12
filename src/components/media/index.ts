@@ -18,6 +18,7 @@
 export { AI_MEDIA_ENABLED } from './flags';
 export { MediaShell } from './MediaShell';
 export { MediaToolbar } from './MediaToolbar';
+export { MediaUnavailable } from './MediaUnavailable';
 export { MediaGrid } from './MediaGrid';
 export { MediaCard } from './MediaCard';
 export { MediaRail } from './MediaRail';

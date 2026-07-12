@@ -74,13 +74,24 @@ function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Poll cadence + cap while a container boots (fast so the UI flips ASAP). */
+const START_POLL_MS = 1000;
+const START_TIMEOUT_MS = 90_000;
+
 interface VideoState {
   activeTab: VideoTab;
   search: string;
   /** Búsqueda en lenguaje natural (Fase 5 Slice A). */
   aiSearch: boolean;
-  /** Jellyfin not installed / not running (503 JELLYFIN_UNAVAILABLE). */
+  /** Jellyfin not usable right now (not installed OR not running). */
   unavailable: boolean;
+  /** Jellyfin container is installed (may still be stopped). */
+  installed: boolean;
+  /** On-demand start in progress (arranca bajo demanda + progreso). */
+  starting: boolean;
+  /** Last start error (timeout / RAM budget / etc.), null while OK. */
+  startError: string | null;
   /** Jellyseerr container absent/down (503 JELLYSEERR_UNAVAILABLE). */
   jellyseerrUnavailable: boolean;
 
@@ -124,6 +135,10 @@ interface VideoState {
   setSearch: (q: string) => void;
   toggleAiSearch: () => void;
   checkStatus: () => Promise<void>;
+  /** Check status and, if installed-but-stopped, auto-start + poll to running. */
+  ensureRunning: () => Promise<void>;
+  /** Start the container on-demand and poll /status until running (fast transition). */
+  startAndWait: () => Promise<void>;
   loadHome: () => Promise<void>;
   loadListing: (kind: 'movies' | 'series', opts?: { reset?: boolean }) => Promise<void>;
   loadMore: (kind: 'movies' | 'series') => Promise<void>;
@@ -173,6 +188,9 @@ export const useVideoStore = create<VideoState>()((set, get) => {
     search: '',
     aiSearch: false,
     unavailable: false,
+    installed: true,
+    starting: false,
+    startError: null,
     jellyseerrUnavailable: false,
 
     libraries: null,
@@ -230,11 +248,49 @@ export const useVideoStore = create<VideoState>()((set, get) => {
       try {
         const status = await videoService.getStatus();
         set({
+          installed: status.installed,
           unavailable: !status.running,
           jellyseerrUnavailable: !status.jellyseerr_available,
         });
       } catch (err) {
         handleError(err, 'Could not check video service status');
+      }
+    },
+
+    ensureRunning: async () => {
+      await get().checkStatus();
+      const { installed, unavailable, starting } = get();
+      // Installed but stopped → start it on-demand (no admin/Servarr detour).
+      // When it flips to running, the active view (HomeView/…) self-loads.
+      if (installed && unavailable && !starting) {
+        await get().startAndWait();
+      }
+    },
+
+    startAndWait: async () => {
+      if (get().starting) return;
+      set({ starting: true, startError: null });
+      try {
+        let status = await videoService.start();
+        set({ installed: status.installed });
+        const deadline = Date.now() + START_TIMEOUT_MS;
+        while (!status.running && Date.now() < deadline) {
+          await sleep(START_POLL_MS);
+          status = await videoService.getStatus();
+        }
+        if (status.running) {
+          // Flip to running → VideoPage re-renders the active view, which self-loads.
+          set({ starting: false, unavailable: false, installed: true, jellyseerrUnavailable: !status.jellyseerr_available });
+        } else {
+          set({ starting: false, startError: 'Jellyfin tardó demasiado en arrancar' });
+        }
+      } catch (err) {
+        const code = err instanceof ApiError ? err.code : undefined;
+        set({
+          starting: false,
+          installed: code === 'NOT_INSTALLED' ? false : get().installed,
+          startError: code === 'NOT_INSTALLED' ? null : errMessage(err, 'No se pudo arrancar Jellyfin'),
+        });
       }
     },
 

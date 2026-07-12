@@ -33,8 +33,14 @@ interface MusicState {
   search: string;
   /** Búsqueda en lenguaje natural (Fase 5 Slice A): toggle del sparkle. */
   aiSearch: boolean;
-  /** Navidrome not installed / not running (503 NAVIDROME_UNAVAILABLE). */
+  /** Navidrome not usable right now (not installed OR not running). */
   unavailable: boolean;
+  /** Navidrome container is installed (may still be stopped). */
+  installed: boolean;
+  /** On-demand start in progress. */
+  starting: boolean;
+  /** Last start error (timeout / RAM budget / etc.), null while OK. */
+  startError: string | null;
 
   // Home rails
   homeRails: { recent: AlbumSummary[]; frequent: AlbumSummary[]; newest: AlbumSummary[] } | null;
@@ -74,6 +80,10 @@ interface MusicState {
   setSearch: (q: string) => void;
   toggleAiSearch: () => void;
   checkStatus: () => Promise<void>;
+  /** Check status and, if installed-but-stopped, auto-start + poll to running. */
+  ensureRunning: () => Promise<void>;
+  /** Start the container on-demand and poll /status until running (fast transition). */
+  startAndWait: () => Promise<void>;
   loadHome: () => Promise<void>;
   loadAlbums: (opts?: { reset?: boolean }) => Promise<void>;
   loadMoreAlbums: () => Promise<void>;
@@ -103,6 +113,11 @@ function errMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Poll cadence + cap while a container boots (fast so the UI flips ASAP). */
+const START_POLL_MS = 1000;
+const START_TIMEOUT_MS = 90_000;
+
 /** Apply a starred flag to every cached copy of a track. */
 function patchTrackStar(tracks: Track[] | undefined, trackId: string, starred: boolean): Track[] | undefined {
   if (!tracks) return tracks;
@@ -129,6 +144,9 @@ export const useMusicStore = create<MusicState>()((set, get) => {
     search: '',
     aiSearch: false,
     unavailable: false,
+    installed: true,
+    starting: false,
+    startError: null,
 
     homeRails: null,
     loadingHome: false,
@@ -188,9 +206,46 @@ export const useMusicStore = create<MusicState>()((set, get) => {
     checkStatus: async () => {
       try {
         const status = await musicService.getStatus();
-        set({ unavailable: !status.running });
+        set({ installed: status.installed, unavailable: !status.running });
       } catch (err) {
         handleError(err, 'Could not check music service status');
+      }
+    },
+
+    ensureRunning: async () => {
+      await get().checkStatus();
+      const { installed, unavailable, starting } = get();
+      // Installed but stopped → start it on-demand (no admin/Servarr detour).
+      // When it flips to running, the active view (HomeView/…) self-loads.
+      if (installed && unavailable && !starting) {
+        await get().startAndWait();
+      }
+    },
+
+    startAndWait: async () => {
+      if (get().starting) return;
+      set({ starting: true, startError: null });
+      try {
+        let status = await musicService.start();
+        set({ installed: status.installed });
+        const deadline = Date.now() + START_TIMEOUT_MS;
+        while (!status.running && Date.now() < deadline) {
+          await sleep(START_POLL_MS);
+          status = await musicService.getStatus();
+        }
+        if (status.running) {
+          // Flip to running → MusicPage re-renders the active view, which self-loads.
+          set({ starting: false, unavailable: false, installed: true });
+        } else {
+          set({ starting: false, startError: 'Navidrome tardó demasiado en arrancar' });
+        }
+      } catch (err) {
+        const code = err instanceof ApiError ? err.code : undefined;
+        set({
+          starting: false,
+          installed: code === 'NOT_INSTALLED' ? false : get().installed,
+          startError: code === 'NOT_INSTALLED' ? null : errMessage(err, 'No se pudo arrancar Navidrome'),
+        });
       }
     },
 

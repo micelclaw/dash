@@ -100,6 +100,17 @@ export function getPreviewUrl(fileId: string, width?: number, noWait?: boolean):
 }
 
 /**
+ * Authenticated Range-capable stream URL for <video>/<audio> src
+ * (GET /files/:id/stream — same ?token= media-element auth as previews).
+ */
+export function getStreamUrl(fileId: string): string {
+  const token = useAuthStore.getState().tokens?.accessToken;
+  const params = new URLSearchParams();
+  if (token) params.set('token', token);
+  return `/api/v1/files/${fileId}/stream?${params.toString()}`;
+}
+
+/**
  * Preview URL for a VFS file (File Explorer) addressed by PATH, not UUID.
  * Backed by `GET /vfs/preview` (cached webp; images + PDF first page).
  */

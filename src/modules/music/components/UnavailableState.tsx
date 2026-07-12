@@ -10,32 +10,29 @@
  * https://micelclaw.com
  */
 
-import { useNavigate } from 'react-router';
 import { Music } from 'lucide-react';
-import { EmptyState } from '@/components/shared/EmptyState';
+import { MediaUnavailable } from '@/components/media';
 import { useMusicStore } from '@/stores/music.store';
 
-/** Shown when Navidrome is not installed or not running (503 from Core). */
+/**
+ * Shown when Navidrome is not installed, not running, or starting on-demand.
+ * A user with Music access NEVER gets redirected to the admin-only Servarr
+ * module — the container starts here (auto on entry; button as fallback).
+ */
 export function UnavailableState() {
-  const navigate = useNavigate();
+  const installed = useMusicStore((s) => s.installed);
+  const starting = useMusicStore((s) => s.starting);
+  const startError = useMusicStore((s) => s.startError);
   return (
-    <EmptyState
+    <MediaUnavailable
       icon={Music}
-      title="Navidrome is not running"
-      description="The music library is served by Navidrome. Start it from the Servarr module, then come back here."
-      actions={[
-        { label: 'Open Servarr', onClick: () => navigate('/multimedia'), variant: 'primary' },
-        {
-          label: 'Retry',
-          onClick: () => {
-            const store = useMusicStore.getState();
-            void store.checkStatus().then(() => {
-              if (!useMusicStore.getState().unavailable) void store.loadHome();
-            });
-          },
-          variant: 'secondary',
-        },
-      ]}
+      serviceName="Navidrome"
+      mediaNoun="music"
+      installed={installed}
+      starting={starting}
+      startError={startError}
+      onStart={() => void useMusicStore.getState().startAndWait()}
+      onRetry={() => void useMusicStore.getState().ensureRunning()}
     />
   );
 }
