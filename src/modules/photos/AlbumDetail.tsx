@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import Selecto from 'react-selecto';
 import {
   ChevronLeft, Share2, Trash2, Pencil, Image, Mail,
-  FolderMinus, Info, Download, ImageIcon, X, Star,
+  FolderMinus, Info, Download, ImageIcon, X, Star, Cpu,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
@@ -23,7 +24,10 @@ import { formatDateShort } from '@/lib/date-helpers';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useTouchDragSelect } from './hooks/use-touch-drag-select';
+import { groupPhotos } from './PhotosTimeline';
 import type { Album, Photo } from '@/types/files';
+import type { PhotoSortField } from './types';
 
 interface AlbumDetailProps {
   album: Album;
@@ -36,6 +40,7 @@ interface AlbumDetailProps {
   onEditAlbum: () => void;
   onRemoveFromAlbum: (fileId: string) => void;
   onViewExif: (photo: Photo) => void;
+  onProcessPhoto: (photo: Photo) => void;
   onDeletePhoto: (photoId: string) => void;
   onSetAsCover: (photoId: string) => void;
   selectedIds: Set<string>;
@@ -43,6 +48,10 @@ interface AlbumDetailProps {
   onBatchRemove?: () => void;
   onBatchDelete?: () => void;
   onClearSelection?: () => void;
+  /** Ordenación activa (misma toolbar unificada que el timeline). */
+  sortField: PhotoSortField;
+  onSetSelection: (ids: Set<string>) => void;
+  onApplyDelta: (added: string[], removed: string[]) => void;
 }
 
 function AlbumPhotoThumbnail({
@@ -51,6 +60,7 @@ function AlbumPhotoThumbnail({
   onClick,
   onRemove,
   onViewExif,
+  onProcessPhoto,
   onDelete,
   onSetAsCover,
   selected,
@@ -62,6 +72,7 @@ function AlbumPhotoThumbnail({
   onClick: () => void;
   onRemove: () => void;
   onViewExif: (photo: Photo) => void;
+  onProcessPhoto: (photo: Photo) => void;
   onDelete: (photoId: string) => void;
   onSetAsCover: (photoId: string) => void;
   selected?: boolean;
@@ -86,6 +97,7 @@ function AlbumPhotoThumbnail({
         { label: 'Remove from album', icon: FolderMinus, onClick: onRemove },
         { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
         { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+        { label: 'Process with AI', icon: Cpu, onClick: () => onProcessPhoto(photo) },
         { label: 'Set as cover', icon: ImageIcon, onClick: () => onSetAsCover(photo.id) },
         {
           label: 'Assign stars',
@@ -104,8 +116,11 @@ function AlbumPhotoThumbnail({
       ]}
       trigger={
         <div
+          data-photo-id={photo.id}
           onClick={(e) => {
             if ((e.target as HTMLElement).tagName === 'INPUT') return;
+            // En modo selección: tap = alternar (comportamiento de galería).
+            if (showCheckbox) { onToggleSelect?.(e.shiftKey); return; }
             onClick();
           }}
           onMouseEnter={() => setHovered(true)}
@@ -226,6 +241,7 @@ export function AlbumDetail({
   onEditAlbum,
   onRemoveFromAlbum,
   onViewExif,
+  onProcessPhoto,
   onDeletePhoto,
   onSetAsCover,
   selectedIds,
@@ -233,16 +249,39 @@ export function AlbumDetail({
   onBatchRemove,
   onBatchDelete,
   onClearSelection,
+  sortField,
+  onSetSelection,
+  onApplyDelta,
 }: AlbumDetailProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [coverImgLoaded, setCoverImgLoaded] = useState(false);
   const [coverImgError, setCoverImgError] = useState(false);
   const isMobile = useIsMobile();
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   const hue = simpleHash(album.id) % 360;
   const hasSelection = selectedIds.size > 0;
   const dateStr = album.created_at ? formatDateShort(new Date(album.created_at)) : '';
+
+  // Barrido táctil (long-press + arrastre) — mismo gesto que el timeline.
+  useTouchDragSelect({
+    container: scrollEl,
+    photoIds: photos.map((p) => p.id),
+    selectedIds,
+    setSelection: onSetSelection,
+    enabled: isMobile,
+  });
+
+  const groups = groupPhotos(photos, sortField);
+  const getGlobalIndex = useCallback((groupKey: string, localIndex: number) => {
+    let globalIdx = 0;
+    for (const g of groupPhotos(photos, sortField)) {
+      if (g.key === groupKey) return globalIdx + localIndex;
+      globalIdx += g.photos.length;
+    }
+    return 0;
+  }, [photos, sortField]);
 
   const actionBtnStyle = (
     id: string,
@@ -291,12 +330,13 @@ export function AlbumDetail({
           Back to Albums
         </button>
 
-        {/* Album info row */}
-        <div style={{ display: 'flex', gap: 16, alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
+        {/* Album info row — el título va con ellipsis (nunca pinta encima de
+            los botones) y en móvil las acciones bajan a su propia fila. */}
+        <div style={{ display: 'flex', gap: isMobile ? 10 : 16, alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
           {/* Cover photo */}
           <div style={{
-            width: isMobile ? 80 : 120,
-            height: isMobile ? 60 : 90,
+            width: isMobile ? 56 : 120,
+            height: isMobile ? 42 : 90,
             borderRadius: 'var(--radius-md)',
             overflow: 'hidden',
             flexShrink: 0,
@@ -326,30 +366,34 @@ export function AlbumDetail({
           {/* Title + metadata */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{
-              margin: 0, fontSize: '1.125rem', fontWeight: 600,
+              margin: 0, fontSize: isMobile ? '1rem' : '1.125rem', fontWeight: 600,
               color: 'var(--text)', fontFamily: 'var(--font-sans)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
               {album.name}
             </h2>
-            {album.description && (
+            {album.description && !isMobile && (
               <p style={{
                 margin: '2px 0 0', fontSize: '0.8125rem',
                 color: 'var(--text-dim)', fontFamily: 'var(--font-sans)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {album.description}
               </p>
             )}
             <div style={{
-              display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap',
+              marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)',
             }}>
-              {dateStr && <span>{dateStr}</span>}
-              <span>{album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}</span>
+              {dateStr && <>{dateStr} · </>}{album.photo_count} photo{album.photo_count !== 1 ? 's' : ''}
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+          {/* Action buttons — fila completa propia en móvil */}
+          <div style={{
+            display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0,
+            ...(isMobile ? { width: '100%', justifyContent: 'flex-end' } : {}),
+          }}>
             {hasSelection ? (
               <>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>
@@ -411,8 +455,11 @@ export function AlbumDetail({
         </div>
       </div>
 
-      {/* Photo grid */}
-      <div style={{ overflowY: 'auto', flex: 1, padding: 16 }}>
+      {/* Photo grid — agrupado por día (orden fecha) igual que el timeline */}
+      <div
+        ref={setScrollEl}
+        style={{ overflowY: 'auto', flex: 1, padding: '0 16px 16px' }}
+      >
         {loading ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)', fontSize: '0.75rem' }}>
             Loading...
@@ -422,31 +469,67 @@ export function AlbumDetail({
             This album is empty.
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile
-              ? 'repeat(auto-fill, minmax(100px, 1fr))'
-              : 'repeat(auto-fill, minmax(150px, 1fr))',
-            gap: 4,
-          }}>
-            {photos.map((photo, i) => (
-              <AlbumPhotoThumbnail
-                key={photo.id}
-                photo={photo}
-                albumId={album.id}
-                onClick={() => onPhotoClick(i)}
-                onRemove={() => onRemoveFromAlbum(photo.id)}
-                onViewExif={onViewExif}
-                onDelete={onDeletePhoto}
-                onSetAsCover={(photoId) => onSetAsCover(photoId)}
-                selected={selectedIds.has(photo.id)}
-                showCheckbox={hasSelection}
-                onToggleSelect={(shiftKey) => onToggleSelect(photo.id, shiftKey)}
-              />
-            ))}
-          </div>
+          groups.map((group) => (
+            <div key={group.key}>
+              {group.label && (
+                <div style={{
+                  position: 'sticky', top: 0, zIndex: 5,
+                  fontSize: '0.875rem', fontWeight: 600, color: 'var(--amber)',
+                  background: 'var(--surface)', padding: '8px 16px', margin: '0 -16px',
+                  fontFamily: 'var(--font-sans)',
+                }}>
+                  {group.label}
+                </div>
+              )}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile
+                  ? 'repeat(auto-fill, minmax(100px, 1fr))'
+                  : 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: 4,
+                marginTop: 8,
+                marginBottom: 16,
+              }}>
+                {group.photos.map((photo, i) => (
+                  <AlbumPhotoThumbnail
+                    key={photo.id}
+                    photo={photo}
+                    albumId={album.id}
+                    onClick={() => onPhotoClick(getGlobalIndex(group.key, i))}
+                    onRemove={() => onRemoveFromAlbum(photo.id)}
+                    onViewExif={onViewExif}
+                    onProcessPhoto={onProcessPhoto}
+                    onDelete={onDeletePhoto}
+                    onSetAsCover={(photoId) => onSetAsCover(photoId)}
+                    selected={selectedIds.has(photo.id)}
+                    showCheckbox={hasSelection}
+                    onToggleSelect={(shiftKey) => onToggleSelect(photo.id, shiftKey)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </div>
+
+      {/* Marquee de escritorio (mismo patrón que el timeline) */}
+      {!isMobile && scrollEl && (
+        <Selecto
+          dragContainer={scrollEl}
+          selectableTargets={['[data-photo-id]']}
+          hitRate={0}
+          selectByClick={false}
+          selectFromInside={false}
+          continueSelectWithoutDeselect
+          scrollOptions={{ container: scrollEl, throttleTime: 30, threshold: 30 }}
+          onScroll={({ direction }) => scrollEl.scrollBy(direction[0]! * 12, direction[1]! * 12)}
+          onSelect={(e) => {
+            const ids = (els: (HTMLElement | SVGElement)[]) =>
+              els.map((el) => (el as HTMLElement).dataset.photoId!).filter(Boolean);
+            onApplyDelta(ids(e.added), ids(e.removed));
+          }}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmOpen}

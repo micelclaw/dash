@@ -14,6 +14,10 @@ import type { Photo } from '@/types/files';
 
 export type PhotosView = 'timeline' | 'albums' | 'people' | 'dejavu' | 'dna';
 
+/** Ordenación compartida timeline + álbum (espejo del contrato ?sort=&order=). */
+export type PhotoSortField = 'date' | 'name' | 'size';
+export type PhotoSortDir = 'asc' | 'desc';
+
 export interface PhotoGroup {
   label: string;       // "February 2026"
   key: string;         // "2026-02"

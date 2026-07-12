@@ -28,10 +28,13 @@ import { ScannerModal, type ScanIntent } from './components/ScannerModal';
 import { ItemDrawer } from './components/ItemDrawer';
 import { ProfileSelector } from '@/components/profiles/ProfileSelector';
 import { useProfileStore } from '@/stores/profile.store';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 
 type InventoryTab = 'panel' | 'catalog' | 'locations' | 'stock' | 'lending' | 'maintenance' | 'reports';
 
 export function Component() {
+  const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   // Deep-link a ubicación (QR de bin/estante): fuerza la tab Locations y pasa el id.
   const locationParam = searchParams.get('location_id');
@@ -73,6 +76,9 @@ export function Component() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItemId]);
+
+  // Back jerárquico en móvil: el botón atrás cierra el ItemDrawer antes de salir del módulo.
+  useBackGuard(!!selectedItemId, () => selectItem(null), isMobile);
 
   // Sync bidireccional en vivo: si el estado de un item cambia desde el board
   // kanban (inventory.item.updated, emitido por kanban-sync) o lo muta un
@@ -121,17 +127,19 @@ export function Component() {
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 12, justifyContent: 'space-between' }}>
+      <div style={{ padding: '10px 16px 0', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'flex-start', gap: isMobile ? 8 : 12, justifyContent: isMobile ? undefined : 'space-between' }}>
         {/* La tira de tabs (7) no cabe a 393px: scroll horizontal DENTRO de su caja
-            (inner width:max-content evita que los tabs se compriman/apilen). En
+            (inner width:max-content evita que los tabs se compriman/apilen). En móvil
+            va en su PROPIA fila full-width (el ProfileSelector ya no le roba ancho); en
             desktop hay sitio de sobra → no aparece scroll y el layout no cambia. */}
-        <div style={{ flex: '1 1 auto', minWidth: 0, overflowX: 'auto' }}>
+        <div style={{ flex: '1 1 auto', minWidth: 0, width: isMobile ? '100%' : undefined, overflowX: 'auto' }}>
           <div style={{ width: 'max-content' }}>
             <Tabs tabs={tabs} activeTab={activeTab} onChange={setTab} variant="underline" />
           </div>
         </div>
-        {/* Selector de PERFIL ERP (multi-perfil) — comparte el perfil activo con Finanzas */}
-        <div style={{ paddingBottom: 8, flex: '0 0 auto' }}><ProfileSelector /></div>
+        {/* Selector de PERFIL ERP (multi-perfil) — comparte el perfil activo con Finanzas.
+            En móvil baja a su propia fila (alineado a la derecha) para no comprimir los tabs. */}
+        <div style={{ paddingBottom: 8, flex: '0 0 auto', alignSelf: isMobile ? 'flex-end' : undefined }}><ProfileSelector /></div>
       </div>
       <div key={activeProfileId ?? 'none'} style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>

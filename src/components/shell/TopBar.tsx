@@ -23,6 +23,7 @@ import { MODULES } from '@/config/modules';
 import { useAuthStore } from '@/stores/auth.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { lucideLookup } from '@/config/lucide-lookup';
+import { useIsPhone } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
 
 function PowerMenu() {
@@ -155,6 +156,9 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
   // Any paid tier (pro OR plus) unlocks Pro features; only 'free' is gated.
   const isPro = useAuthStore((s) => s.user)?.tier !== 'free';
+  // En la app móvil el buscador central tapaba el título del módulo → se oculta.
+  // La búsqueda sigue accesible desde la bottom-nav (slot Buscar) y ⌘K.
+  const isPhone = useIsPhone();
   const [graphOpen, setGraphOpen] = useState(false);
   const [centerEntityId, setCenterEntityId] = useState<string | undefined>();
   const [upsellOpen, setUpsellOpen] = useState(false);
@@ -190,8 +194,10 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
       style={{
         // Altura fija + inset de safe-area arriba: en el APK móvil (barra de estado
         // oculta/edge-to-edge) despeja el recorte de cámara y la barra transitoria
-        // al deslizar; en web/PWA/escritorio env()=0 → altura 48 sin cambios.
-        height: 'calc(48px + env(safe-area-inset-top, 0px))',
+        // al deslizar; en web/PWA/escritorio env()=0 → altura 42. Bajada de 48→42
+        // para eliminar el aire contra la hora/batería (bug 1); el 'top' fixed de
+        // los paneles desplegables usa este mismo 42px.
+        height: 'calc(42px + env(safe-area-inset-top, 0px))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -224,7 +230,8 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         </h2>
       </div>
 
-      {/* Center — search button */}
+      {/* Center — search button (oculto en la app móvil: tapaba el título) */}
+      {!isPhone && (
       <button
         onClick={onOpenCommandPalette}
         style={{
@@ -267,6 +274,7 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
           ⌘K
         </kbd>
       </button>
+      )}
 
       {/* Right zone */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>

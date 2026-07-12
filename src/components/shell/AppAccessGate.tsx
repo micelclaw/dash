@@ -16,6 +16,7 @@ import { MODULES } from '@/config/modules';
 import { DEFAULT_APP_KEYS } from '@/config/app-catalog';
 import { useAppAccessStore } from '@/stores/app-access.store';
 import { useAuthStore } from '@/stores/auth.store';
+import { useIsPhone } from '@/hooks/use-media-query';
 
 // Guard de un único punto (rediseño NAS, Fase 1): si el usuario navega por URL
 // directa a un módulo que NO tiene permitido (opt_in no concedida, o adminOnly
@@ -27,18 +28,21 @@ export function AppAccessGate({ children }: { children: ReactNode }) {
   const loaded = useAppAccessStore((s) => s.loaded);
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === 'admin' || role === 'owner';
+  const isPhone = useIsPhone();
 
-  if (loaded) {
-    const path = location.pathname;
-    const mod = MODULES
-      .filter((m) => m.path && (path === m.path || path.startsWith(m.path + '/')))
-      .sort((a, b) => b.path!.length - a.path!.length)[0];
-    if (mod) {
-      const denied = mod.adminOnly
-        ? !isAdmin
-        : !DEFAULT_APP_KEYS.includes(mod.id) && !allowed.has(mod.id);
-      if (denied) return <Navigate to="/chat" replace />;
-    }
+  const path = location.pathname;
+  const mod = MODULES
+    .filter((m) => m.path && (path === m.path || path.startsWith(m.path + '/')))
+    .sort((a, b) => b.path!.length - a.path!.length)[0];
+  // Módulos desktop-only (p.ej. Studio): en teléfono se redirigen aunque se
+  // navegue por URL directa. No depende de /me/app-access (evalúa siempre).
+  if (mod?.desktopOnly && isPhone) return <Navigate to="/chat" replace />;
+
+  if (loaded && mod) {
+    const denied = mod.adminOnly
+      ? !isAdmin
+      : !DEFAULT_APP_KEYS.includes(mod.id) && !allowed.has(mod.id);
+    if (denied) return <Navigate to="/chat" replace />;
   }
   return <>{children}</>;
 }

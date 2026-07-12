@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react';
 import { Copy, Trash2, ClipboardX } from 'lucide-react';
 import { toast } from 'sonner';
 import { useClipboardStore } from '@/stores/clipboard.store';
+import { useIsPhone } from '@/hooks/use-media-query';
 
 interface ClipboardPanelProps {
   open: boolean;
@@ -36,6 +37,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
   const copyToClipboard = useClipboardStore((s) => s.copyToClipboard);
   const deleteEntry = useClipboardStore((s) => s.deleteEntry);
   const clearAll = useClipboardStore((s) => s.clearAll);
+  const isPhone = useIsPhone();
   const ref = useRef<HTMLDivElement>(null);
 
   // Close on Esc
@@ -81,11 +83,25 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
     <div
       ref={ref}
       style={{
-        position: 'absolute',
-        top: '100%',
-        right: 0,
-        marginTop: 4,
-        width: 340,
+        // En móvil el panel se anclaba al borde del BOTÓN interior (absolute;
+        // right:0) → su borde izquierdo caía fuera de pantalla (bug 1). En móvil
+        // pasa a FIXED respecto al viewport, anclado a la derecha de la pantalla;
+        // en escritorio se conserva el anclaje al botón.
+        ...(isPhone
+          ? {
+              position: 'fixed',
+              top: 'calc(42px + env(safe-area-inset-top, 0px) + 4px)',
+              right: 8,
+              left: 'auto',
+              width: 'min(360px, calc(100vw - 16px))',
+            }
+          : {
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 4,
+              width: 'min(340px, calc(100vw - 16px))',
+            }),
         maxHeight: 420,
         background: 'var(--glass-75)',
         backdropFilter: 'blur(20px)',

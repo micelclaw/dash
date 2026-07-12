@@ -17,9 +17,10 @@ import { toast } from 'sonner';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import { RenameDialog } from '@/components/shared/RenameDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
-import { ShareModal } from '@/components/shared/ShareModal';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { SelectionMenuButton } from '@/components/shared/TileMoreButton';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { downloadFile, downloadBatch } from '@/lib/file-download';
@@ -31,8 +32,6 @@ import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveGrid } from '../DriveGrid';
 import { DriveList } from '../DriveList';
 import { DriveInspector } from '../components/inspector/DriveInspector';
-import { ShareWithUserModal } from '../components/ShareWithUserModal';
-import { ShareEmailModal } from '../components/ShareEmailModal';
 import { TagsModal } from '../components/TagsModal';
 import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
@@ -62,14 +61,11 @@ export function StarredView() {
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   const [folderPickerIds, setFolderPickerIds] = useState<string[] | null>(null);
   const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
-  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
-  const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
-  const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
+  const [shareTargets, setShareTargets] = useState<FileRecord[] | null>(null);
   const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
 
-  const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareFile
-    || !!shareUserFiles || !!shareEmailFile || !!tagsFiles || confirmDeleteIds !== null;
+  const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareTargets || !!tagsFiles || confirmDeleteIds !== null;
 
   const changeView = useCallback((v: DriveView) => {
     setView(v);
@@ -255,9 +251,7 @@ export function StarredView() {
         setInspectorOpen(true);
       },
       onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
-      onShare: (file) => setShareFile(file),
-      onShareUser: (targets) => setShareUserFiles(targets),
-      onShareEmail: (file) => setShareEmailFile(file),
+      onShare: (targets) => setShareTargets(targets),
       onCut: handleCut,
       onCopy: handleCopy,
       onMoveTo: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
@@ -285,6 +279,13 @@ export function StarredView() {
       : [file];
     return buildFileContextMenu(targets, menuCtx);
   }, [selectedIds, selectedFiles, menuCtx]);
+
+  // ⋮ único de la batch bar — el MISMO menú del builder aplicado a toda la
+  // selección (single completo con 1, batch con N).
+  const selectionMenuItems = useMemo(
+    () => buildFileContextMenu(selectedFiles, menuCtx),
+    [selectedFiles, menuCtx],
+  );
 
   // ─── Keyboard shortcuts (D4) ────────────────────────────
 
@@ -332,9 +333,14 @@ export function StarredView() {
   );
 
   // D5 — selection feeding the inspector
+  // Móvil: la multi-selección NO alimenta el inspector (sheet fijo que taparía
+  // el grid y el ⋮); solo el tap de preview o "Details" del menú.
   const inspectorFiles = useMemo(
-    () => (selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []),
-    [selectedFiles, selectedFile],
+    () => {
+      if (isMobile) return selectedFile ? [selectedFile] : [];
+      return selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : [];
+    },
+    [selectedFiles, selectedFile, isMobile],
   );
 
   if (!loading && files.length === 0) {
@@ -375,10 +381,11 @@ export function StarredView() {
           <div style={{ flex: 1 }} />
           <MiniButton icon={StarOff} label="Unstar" onClick={() => { void handleBulkStar(selectedFiles, false); }} />
           <MiniButton icon={Tags} label="Tags" onClick={() => setTagsFiles(selectedFiles)} />
-          <MiniButton icon={UserPlus} label="Share" onClick={() => setShareUserFiles(selectedFiles)} />
+          <MiniButton icon={UserPlus} label="Share" onClick={() => setShareTargets(selectedFiles)} />
           <MiniButton icon={FolderInput} label="Move" onClick={() => openFolderPicker([...selectedIds], 'move')} />
           <MiniButton icon={Download} label="Download" onClick={handleBatchDownload} />
           <MiniButton icon={Trash2} label="Delete" onClick={() => setConfirmDeleteIds(new Set(selectedIds))} danger />
+          <SelectionMenuButton items={selectionMenuItems} />
           <button
             onClick={() => setSelectedIds(new Set())}
             style={{
@@ -446,16 +453,18 @@ export function StarredView() {
       </div>
 
       {/* Modals */}
-      {shareFile && (
-        <ShareModal open={!!shareFile} file={shareFile} onClose={() => setShareFile(null)} />
-      )}
-      <ShareWithUserModal
-        open={shareUserFiles !== null}
-        files={shareUserFiles ?? []}
-        onClose={() => setShareUserFiles(null)}
-      />
-      {shareEmailFile && (
-        <ShareEmailModal open={!!shareEmailFile} file={shareEmailFile} onClose={() => setShareEmailFile(null)} />
+      {shareTargets && shareTargets.length > 0 && (
+        <EntityShareModal
+          open
+          entityType="file"
+          entityId={shareTargets[0]!.id}
+          entityIds={shareTargets.map(f => f.id)}
+          entityTitle={shareTargets.length === 1 ? shareTargets[0]!.filename : ''}
+          shareMeta={shareTargets.length === 1
+            ? { mime: shareTargets[0]!.mime_type ?? undefined, isDirectory: shareTargets[0]!.is_directory }
+            : undefined}
+          onClose={() => setShareTargets(null)}
+        />
       )}
       <TagsModal
         open={tagsFiles !== null}

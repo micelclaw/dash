@@ -18,6 +18,7 @@ import { SplitPane } from '@/components/shared/SplitPane';
 import { DropZone } from '@/components/shared/DropZone';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RenameDialog } from '@/components/shared/RenameDialog';
+import { SelectionMenuButton } from '@/components/shared/TileMoreButton';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { downloadFile, downloadBatch, downloadVfsFile } from '@/lib/file-download';
@@ -28,7 +29,7 @@ import { FileExplorerPreview } from './FileExplorerPreview';
 import { MountWizard } from './MountWizard';
 import { CrossSourcePicker } from './CrossSourcePicker';
 import { useFileExplorer, toVfsApiPath } from './hooks/use-file-explorer';
-import type { ExplorerMenuContext } from './context-menu';
+import { buildExplorerContextMenu, type ExplorerMenuContext } from './context-menu';
 import { api } from '@/services/api';
 import type { FileRecord } from '@/types/files';
 
@@ -78,6 +79,8 @@ export function Component() {
   const [mountWizardOpen, setMountWizardOpen] = useState(false);
   const [mountRefreshKey, setMountRefreshKey] = useState(0);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  /** Rename desde el ⋮ del header (los menús de fila usan el inline-rename de FileBrowser). */
+  const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   /** CrossSourcePicker state for Move to… / Copy to… (VFS paths). */
   const [picker, setPicker] = useState<{ action: 'copy' | 'move'; ids: string[] } | null>(null);
   const clipboard = useFileClipboard();
@@ -274,7 +277,9 @@ export function Component() {
     }
   }, [pendingDeleteIds, deleteFile, batchDelete]);
 
-  /** Menu context shared by row menus + background menu (FileBrowser injects onRename). */
+  /** Menu context shared by row menus + background menu + header ⋮ (FileBrowser
+   *  overrides onRename with its inline rename for the row menus; the header ⋮
+   *  uses the page-level RenameDialog). */
   const menuCtx: ExplorerMenuContext = useMemo(() => ({
     writable: isWritable,
     space: currentSpace,
@@ -291,6 +296,7 @@ export function Component() {
         onMoveTo: (targets: FileRecord[]) => setPicker({ action: 'move', ids: targets.map(f => f.id) }),
         onCopyTo: (targets: FileRecord[]) => setPicker({ action: 'copy', ids: targets.map(f => f.id) }),
       } : {}),
+      onRename: (file) => setRenameTarget(file),
       onDelete: (targets) => setPendingDeleteIds(targets.map(f => f.id)),
       onNewFolder: () => setNewFolderOpen(true),
       onUpload: handleUploadClick,
@@ -299,6 +305,17 @@ export function Component() {
     isWritable, currentSpace, clipboard.operation, clipboard.fileIds, clipboard.space, isVfs,
     handleItemDoubleClick, setSelectedFile, handleDownload, handleCut, handleCopy, handlePaste, handleUploadClick,
   ]);
+
+  // ⋮ único de la batch bar — el MISMO menú del builder aplicado a toda la
+  // selección (single completo con 1, batch con N).
+  const selectedFiles = useMemo(
+    () => files.filter(f => selectedIds.has(f.id)),
+    [files, selectedIds],
+  );
+  const selectionMenuItems = useMemo(
+    () => buildExplorerContextMenu(selectedFiles, menuCtx),
+    [selectedFiles, menuCtx],
+  );
 
   const fileBrowserBlock = (
     <>
@@ -383,6 +400,7 @@ export function Component() {
           {isWritable && (
             <BatchButton icon={Trash2} label="Delete" onClick={() => setPendingDeleteIds([...selectedIds])} variant="danger" />
           )}
+          <SelectionMenuButton items={selectionMenuItems} />
           <BatchButton icon={X} label="Clear" onClick={clearSelection} />
         </div>
       )}
@@ -481,6 +499,19 @@ export function Component() {
         variant="danger"
         onConfirm={() => { void confirmPendingDelete(); }}
         onClose={() => setPendingDeleteIds(null)}
+      />
+
+      {/* Rename desde el ⋮ del header (mismo commit que el inline rename) */}
+      <RenameDialog
+        open={!!renameTarget}
+        currentName={renameTarget?.filename ?? ''}
+        title="New name:"
+        onConfirm={(name) => {
+          if (renameTarget && name.trim() && name.trim() !== renameTarget.filename) {
+            renameFile(renameTarget.id, name.trim());
+          }
+        }}
+        onClose={() => setRenameTarget(null)}
       />
 
       {/* New folder (background context menu) */}

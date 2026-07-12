@@ -15,7 +15,8 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -259,7 +260,12 @@ export function KanbanBoard() {
   }, [boardColumnIds, boardId, columns]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    // Ratón: arranca el drag tras mover 5px (inmediato, sin delay).
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    // Táctil: PULSACIÓN LARGA (250ms) y luego arrastrar. Sin esto, el drag inmediato
+    // peleaba con el scroll de la lista en móvil. `tolerance` = px que el dedo puede
+    // moverse durante el delay sin cancelar el long-press (deja hacer scroll antes).
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     // Teclado: el tablero solo era operable con ratón. Con KeyboardSensor +
     // sortableKeyboardCoordinates se puede coger (Espacio), mover (flechas) y
     // soltar una tarjeta/columna sin ratón.

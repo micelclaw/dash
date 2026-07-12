@@ -14,10 +14,17 @@ import { useState, useCallback, useRef } from 'react';
 import { api, ApiError } from '@/services/api';
 import type { Photo } from '@/types/files';
 import type { ApiListResponse } from '@/types/api';
+import type { PhotoSortField, PhotoSortDir } from '../types';
 
 const PAGE_SIZE = 50;
 
-export function usePhotos(params: { search?: string; selectedStars?: Set<number>; inventory?: boolean }) {
+export function usePhotos(params: {
+  search?: string;
+  selectedStars?: Set<number>;
+  inventory?: boolean;
+  sortField?: PhotoSortField;
+  sortDir?: PhotoSortDir;
+}) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -45,6 +52,8 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
         search: params.search || undefined,
         stars: starsParam,
         zone: params.inventory ? 'inventory' : undefined,
+        sort: params.sortField ?? 'date',
+        order: params.sortDir ?? 'desc',
       });
 
       // If a newer fetch was started while we were awaiting, discard this result
@@ -67,7 +76,7 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
     } finally {
       if (id === fetchIdRef.current) setLoading(false);
     }
-  }, [params.search, params.selectedStars, params.inventory]);
+  }, [params.search, params.selectedStars, params.inventory, params.sortField, params.sortDir]);
 
   const loadMore = useCallback(() => {
     if (!loading && hasMore) {
@@ -86,7 +95,7 @@ export function usePhotos(params: { search?: string; selectedStars?: Set<number>
   }, []);
 
   const prependPhoto = useCallback((photo: Photo) => {
-    setPhotos(prev => [photo, ...prev]);
+    setPhotos(prev => (prev.some(p => p.id === photo.id) ? prev : [photo, ...prev]));
   }, []);
 
   return { photos, loading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto };

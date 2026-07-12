@@ -24,6 +24,7 @@ import { SlashCommandMenu } from './SlashCommandMenu';
 import { VoiceButton } from '@/components/voice/VoiceButton';
 import { SpeakingIndicator } from '@/components/voice/SpeakingIndicator';
 import { ThinkingLevelIndicator } from './ThinkingLevelIndicator';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
 import type { ChatAttachment } from '@/types/chat';
 
@@ -36,6 +37,9 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, compactAgent }: ChatInputProps) {
+  // En móvil el composer se apila en dos filas (textarea arriba, controles debajo) para
+  // que la textarea no quede contraída entre el selector de agente, slash, mic, clip, etc.
+  const isMobile = useIsMobile();
   const [text, setText] = useState('');
   const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -263,6 +267,10 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
         display: 'flex',
         alignItems: 'center',
         gap: 8,
+        // Móvil: permitir salto de fila; la textarea (flexBasis:100% + order:-1) ocupa
+        // la primera fila entera y el resto de controles fluyen a la segunda.
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        rowGap: isMobile ? 8 : 0,
         padding: '8px 16px',
         background: 'var(--surface)',
         borderTop: '1px solid var(--border)',
@@ -289,6 +297,9 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       <div
         style={{
           flex: 1,
+          // Móvil: fila propia a ancho completo (order:-1 la sube encima de los controles).
+          flexBasis: isMobile ? '100%' : undefined,
+          order: isMobile ? -1 : undefined,
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--card)',

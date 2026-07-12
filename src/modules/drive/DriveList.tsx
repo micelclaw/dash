@@ -16,6 +16,7 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useLongPress } from './use-long-press';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -262,6 +263,19 @@ function ListRow({
   const [hovered, setHovered] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const isDir = file.is_directory;
+  const hasSelection = selectedIds.size > 0;
+
+  // Móvil: long-press (~300ms quieto) alterna la selección de la fila — el
+  // menú contextual se abre con el ⋮ único de la batch bar (el long-press no lo abre).
+  const longPress = useLongPress(() => onToggleSelect(false), isMobile);
+
+  const handleClick = () => {
+    // El click que sigue a un long-press ya consumido no debe ni abrir ni re-toggle.
+    if (longPress.consumeFired()) return;
+    // Modo selección en móvil: tap = alternar selección (patrón galería).
+    if (isMobile && hasSelection) { onToggleSelect(false); return; }
+    onClick();
+  };
 
   // Drag-and-drop handlers
   const handleDragStart = (e: React.DragEvent) => {
@@ -314,11 +328,13 @@ function ListRow({
           onDragEnter={handleDragEnter}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={onClick}
-          onDoubleClick={onDoubleClick}
+          onClick={handleClick}
+          onDoubleClick={() => { if (isMobile && hasSelection) return; onDoubleClick(); }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
+          {...(isMobile ? longPress.handlers : {})}
           style={{
+            position: 'relative',
             display: 'grid',
             gridTemplateColumns: gridCols,
             gap: 8,

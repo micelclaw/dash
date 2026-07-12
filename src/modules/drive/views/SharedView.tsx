@@ -19,6 +19,8 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
+import { TileMoreButton } from '@/components/shared/TileMoreButton';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { downloadFile } from '@/lib/file-download';
@@ -503,6 +505,9 @@ function LinksSub() {
 
 function ShareRow({ children }: { children: React.ReactNode }) {
   const [hovered, setHovered] = useState(false);
+  // Shared no tiene modelo de selección → en móvil el ⋮ se muestra siempre
+  // (única vía de abrir el menú contextual sin long-press).
+  const isMobile = useIsMobile();
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -517,6 +522,8 @@ function ShareRow({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {/* ⋮ (móvil): abre el menú contextual de la fila */}
+      {isMobile && <TileMoreButton style={{ position: 'static', flexShrink: 0 }} />}
     </div>
   );
 }

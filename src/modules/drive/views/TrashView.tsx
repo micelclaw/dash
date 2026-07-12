@@ -18,6 +18,8 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { SelectionMenuButton } from '@/components/shared/TileMoreButton';
+import { useLongPress } from '../use-long-press';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { api } from '@/services/api';
@@ -168,6 +170,12 @@ export function TrashView() {
     return buildFileContextMenu(targets, menuCtx);
   }, [selectedIds, selectedFiles, menuCtx]);
 
+  // ⋮ único del header — menú (Restore / Delete forever) sobre TODA la selección.
+  const selectionMenuItems = useMemo(
+    () => buildFileContextMenu(selectedFiles, menuCtx),
+    [selectedFiles, menuCtx],
+  );
+
   // ─── Keyboard shortcuts (D4): Ctrl+A / Delete = forever / Esc ──
 
   useDriveShortcuts({
@@ -232,6 +240,7 @@ export function TrashView() {
           <>
             <ActionButton icon={RotateCcw} label={`Restore (${selectedIds.size})`} onClick={() => { void restoreSelected(); }} disabled={busy} />
             <ActionButton icon={X} label={`Delete (${selectedIds.size})`} onClick={() => setConfirm({ kind: 'selected' })} disabled={busy} danger />
+            <SelectionMenuButton items={selectionMenuItems} />
           </>
         )}
         <ActionButton icon={Trash2} label="Empty trash" onClick={() => setConfirm({ kind: 'all' })} disabled={busy || files.length === 0} danger />
@@ -276,6 +285,7 @@ export function TrashView() {
             file={file}
             checked={selectedIds.has(file.id)}
             selected={selectedFile?.id === file.id}
+            hasSelection={hasSelection}
             contextItems={getContextMenuItems(file)}
             onSelect={() => setSelectedFile(prev => prev?.id === file.id ? null : file)}
             onToggle={() => toggleSelection(file.id)}
@@ -294,7 +304,11 @@ export function TrashView() {
           Always rendered (footprint driven by the persisted open/collapsed
           toggle, not the selection) so clicks never reflow. */}
       <DriveInspector
-        files={selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []}
+        // Móvil: la multi-selección NO alimenta el inspector (sheet fijo que
+        // taparía la lista y el ⋮); solo la fila pulsada como preview.
+        files={isMobile
+          ? (selectedFile ? [selectedFile] : [])
+          : selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []}
         onClose={() => { setSelectedIds(new Set()); setSelectedFile(null); }}
         onRefetch={() => { void refetch(); }}
       />
@@ -313,10 +327,11 @@ export function TrashView() {
   );
 }
 
-function TrashRow({ file, checked, selected, contextItems, isMobile, gridCols, onSelect, onToggle, onRestore, onDeleteForever }: {
+function TrashRow({ file, checked, selected, hasSelection, contextItems, isMobile, gridCols, onSelect, onToggle, onRestore, onDeleteForever }: {
   file: FileRecord;
   checked: boolean;
   selected: boolean;
+  hasSelection: boolean;
   contextItems: ContextMenuItem[];
   isMobile: boolean;
   gridCols: string;
@@ -326,14 +341,22 @@ function TrashRow({ file, checked, selected, contextItems, isMobile, gridCols, o
   onDeleteForever: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  // Móvil: long-press alterna la selección; con selección activa, tap = toggle.
+  const longPress = useLongPress(onToggle, isMobile);
+  const handleClick = () => {
+    if (longPress.consumeFired()) return;
+    if (isMobile && hasSelection) { onToggle(); return; }
+    onSelect();
+  };
   return (
     <ContextMenu
       items={contextItems}
       trigger={
     <div
-      onClick={onSelect}
+      onClick={handleClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      {...(isMobile ? longPress.handlers : {})}
       style={{
         display: 'grid',
         gridTemplateColumns: gridCols,
@@ -371,7 +394,7 @@ function TrashRow({ file, checked, selected, contextItems, isMobile, gridCols, o
           {file.deleted_at ? formatRelative(new Date(file.deleted_at)) : '--'}
         </span>
       )}
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
         <ActionButton icon={RotateCcw} label={isMobile ? '' : 'Restore'} title="Restore" onClick={onRestore} />
         <ActionButton icon={X} label={isMobile ? '' : 'Delete forever'} title="Delete forever" onClick={onDeleteForever} danger />
       </div>

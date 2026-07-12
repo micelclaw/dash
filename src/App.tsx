@@ -15,6 +15,7 @@ import { Compass } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { useIsPhone } from '@/hooks/use-media-query';
 import { LoginPage } from '@/pages/LoginPage';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -188,7 +189,11 @@ const router = createBrowserRouter([
 
 export function App() {
   const notifSettings = useSettingsStore(s => s.settings?.notifications);
-  const toastPosition = notifSettings?.toast_position ?? 'bottom-right';
+  const isPhone = useIsPhone();
+  // En móvil el borde inferior lo tapa la MobileBottomNav + el FAB "+", así que
+  // los toasts abajo casi no se ven → forzamos top-center en teléfono. En
+  // escritorio respetamos la preferencia del usuario (bottom-right por defecto).
+  const toastPosition = isPhone ? 'top-center' : (notifSettings?.toast_position ?? 'bottom-right');
   const toastDuration = notifSettings?.toast_duration_ms ?? 5000;
 
   return (

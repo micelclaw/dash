@@ -19,6 +19,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { formatFileSize, getMimeLabel, canShowThumbnail } from '@/lib/file-utils';
 import { useThumbnailBatch, getPrefetchedThumb } from '@/lib/thumbnail-batch';
 import { formatRelative } from '@/lib/date-helpers';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { useLongPress } from '../drive/use-long-press';
 import { buildExplorerContextMenu, buildExplorerBackgroundMenu, type ExplorerMenuContext } from './context-menu';
 import type { FileRecord } from '@/types/files';
 
@@ -48,6 +50,9 @@ export function FileBrowser({
   onItemClick, onItemDoubleClick, onToggleSelect, onToggleAll, onRename, menuCtx,
 }: FileBrowserProps) {
   const compact = density === 'compact';
+  // Móvil: long-press = seleccionar, tap con selección activa = toggle, y el
+  // menú contextual se abre con el ⋮ único de la batch bar (mismo modelo que Drive).
+  const isMobile = useIsMobile();
 
   // Prefetch en lote de miniaturas de la carpeta (UN request, incluye VFS por
   // ruta); las celdas leen getPrefetchedThumb() → pintado simultáneo.
@@ -153,6 +158,7 @@ export function FileBrowser({
             <GridItem
               file={file}
               compact={compact}
+              isMobile={isMobile}
               isSelected={selectedFile?.id === file.id}
               checked={selectedIds.has(file.id)}
               showCheckbox={hasSelection}
@@ -216,8 +222,10 @@ export function FileBrowser({
           <ListRow
             file={file}
             compact={compact}
+            isMobile={isMobile}
             isSelected={selectedFile?.id === file.id}
             checked={selectedIds.has(file.id)}
+            hasSelection={hasSelection}
             isRenaming={renamingId === file.id}
             renameValue={renameValue}
             renameInputRef={renameInputRef}
@@ -236,9 +244,10 @@ export function FileBrowser({
 
 /* ── Grid Item ── */
 
-function GridItem({ file, compact, isSelected, checked, showCheckbox, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
+function GridItem({ file, compact, isMobile, isSelected, checked, showCheckbox, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
   file: FileRecord;
   compact: boolean;
+  isMobile: boolean;
   isSelected: boolean;
   checked: boolean;
   showCheckbox: boolean;
@@ -257,12 +266,21 @@ function GridItem({ file, compact, isSelected, checked, showCheckbox, isRenaming
   // Miniatura real solo en comfortable (imagen/PDF siempre; office solo indexado).
   const showThumb = !compact && !file.is_directory && canShowThumbnail(file.id, file.mime_type);
 
+  // Móvil: long-press (~300ms quieto) alterna la selección del tile.
+  const longPress = useLongPress(() => onToggleSelect(false), isMobile);
+  const handleClick = () => {
+    if (longPress.consumeFired()) return;
+    if (isMobile && showCheckbox) { onToggleSelect(false); return; }
+    onClick();
+  };
+
   return (
     <div
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
+      onClick={handleClick}
+      onDoubleClick={() => { if (isMobile && showCheckbox) return; onDoubleClick(); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      {...(isMobile ? longPress.handlers : {})}
       style={{
         position: 'relative',
         display: 'flex',
@@ -363,11 +381,13 @@ function GridItem({ file, compact, isSelected, checked, showCheckbox, isRenaming
 
 /* ── List Row ── */
 
-function ListRow({ file, compact, isSelected, checked, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
+function ListRow({ file, compact, isMobile, isSelected, checked, hasSelection, isRenaming, renameValue, renameInputRef, onRenameChange, onRenameCommit, onRenameCancel, onClick, onDoubleClick, onToggleSelect }: {
   file: FileRecord;
   compact: boolean;
+  isMobile: boolean;
   isSelected: boolean;
   checked: boolean;
+  hasSelection: boolean;
   isRenaming: boolean;
   renameValue: string;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
@@ -380,13 +400,23 @@ function ListRow({ file, compact, isSelected, checked, isRenaming, renameValue, 
 }) {
   const [hovered, setHovered] = useState(false);
 
+  // Móvil: long-press (~300ms quieto) alterna la selección de la fila.
+  const longPress = useLongPress(() => onToggleSelect(false), isMobile);
+  const handleClick = () => {
+    if (longPress.consumeFired()) return;
+    if (isMobile && hasSelection) { onToggleSelect(false); return; }
+    onClick();
+  };
+
   return (
     <div
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
+      onClick={handleClick}
+      onDoubleClick={() => { if (isMobile && hasSelection) return; onDoubleClick(); }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      {...(isMobile ? longPress.handlers : {})}
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: '32px 1fr 90px 120px 100px',
         gap: 8,

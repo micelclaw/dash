@@ -25,7 +25,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'search',   label: 'Search',        icon: Search,        color: 'var(--mod-search)',   path: '/search',   group: null },
   { id: 'agents',   label: 'Agents',        icon: Bot,           color: 'var(--mod-agents)',   path: '/agents',   group: null },
   { id: 'micelhub', label: 'MicelHub',      icon: Puzzle,        color: 'var(--mod-micelhub)', path: '/micelhub', group: null },
-  { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null },
+  { id: 'studio',   label: 'Studio',        icon: Hammer,        color: 'var(--mod-studio, var(--amber))', path: '/studio',   group: null, desktopOnly: true },
   { id: 'gateway',  label: 'Gateway',       icon: Radio,         color: 'var(--mod-gateway)',  path: '/gateway',  group: null, adminOnly: true },
   // MicelFlow retirado (2026-06-30): la automatización vive ahora en n8n (app `n8n-automation`,
   // módulo dinámico que aparece al instalarla). Ver docs/integrations/n8n.md.

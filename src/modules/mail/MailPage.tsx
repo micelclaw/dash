@@ -12,11 +12,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router';
-import { Mail, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Mail, PanelLeftClose, PanelLeftOpen, Menu, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { SplitPane } from '@/components/shared/SplitPane';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
@@ -57,6 +59,12 @@ export function Component() {
   const [search, setSearch] = useState('');
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(0);
+  // Móvil: drawer con el side panel de correo (cuentas + carpetas).
+  const [mobileNav, setMobileNav] = useState(false);
+
+  // Back jerárquico móvil: atrás cierra el overlay activo (composer/lectura) antes de salir.
+  useBackGuard(composerData?.mode === 'new', () => closeComposer(), isMobile);
+  useBackGuard(!!selectedEmailId, () => setSelectedEmailId(null), isMobile);
 
   // Reset page when folder/account/search changes
   useEffect(() => { setPage(0); }, [activeFolder, activeAccount, search]);
@@ -337,7 +345,40 @@ export function Component() {
       );
     }
     return (
-      <div style={{ height: '100%' }}>
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {/* Cabecera móvil: hamburguesa (cuentas/carpetas) + botón permanente "Nuevo email". */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setMobileNav(true)}
+            aria-label="Cuentas y carpetas"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 34, height: 34, flexShrink: 0,
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)', color: 'var(--text)', cursor: 'pointer',
+            }}
+          >
+            <Menu size={18} />
+          </button>
+          <div style={{ flex: 1 }} />
+          <button
+            type="button"
+            onClick={handleCompose}
+            aria-label="Nuevo email"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              height: 34, padding: '0 12px', flexShrink: 0,
+              background: 'var(--amber)', color: '#06060a', border: 'none',
+              borderRadius: 'var(--radius-md)', cursor: 'pointer',
+              fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <Pencil size={16} />
+            New
+          </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
         <MailList
           emails={emails}
           loading={loading}
@@ -370,6 +411,7 @@ export function Component() {
           total={meta?.total ?? 0}
           onPageChange={setPage}
         />
+        </div>
         {snoozeTarget && (
           <MailSnoozeMenu
             open
@@ -378,6 +420,26 @@ export function Component() {
             anchorEl={snoozeTarget.el}
           />
         )}
+        {/* Drawer con el side panel de correo (mismo MailSidebar que escritorio). */}
+        <Sheet open={mobileNav} onOpenChange={setMobileNav}>
+          <SheetContent side="left" style={{ width: 260, padding: 0, paddingTop: 'env(safe-area-inset-top, 0px)', overflow: 'hidden' }} aria-describedby={undefined}>
+            <MailSidebar
+              activeAccount={activeAccount}
+              activeFolder={activeFolder}
+              onAccountChange={(id) => { setActiveAccount(id); setMobileNav(false); }}
+              onFolderChange={(f) => { setActiveFolder(f); setMobileNav(false); }}
+              collapsed={false}
+              onCompose={() => { setMobileNav(false); handleCompose(); }}
+              onSync={handleSync}
+              syncing={syncing}
+              accounts={accounts}
+              emails={emails}
+              onUnsyncAccount={handleUnsyncAccount}
+              onChangeAccountColor={handleChangeAccountColor}
+              onExport={handleExport}
+            />
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }
@@ -404,6 +466,22 @@ export function Component() {
         />
       </div>
 
+      {composerData?.mode === 'new' && !selectedEmailId ? (
+        /* Compose NUEVO = ancho completo (solo descuenta el sidebar), consistente
+           para todos e independiente del arrastre persistido del SplitPane. Antes
+           se pintaba en el panel derecho (65% por defecto) salvo que el usuario
+           hubiera arrastrado el divisor a tope — por eso Víctor (divisor arrastrado)
+           lo veía full y María (fresh, 65%) no. */
+        <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          <MailComposer
+            data={composerData}
+            onClose={closeComposer}
+            onSend={sendEmail}
+            accounts={accounts}
+            inline
+          />
+        </div>
+      ) : (
       <SplitPane
         defaultSizes={listCollapsed ? [0, 100] : [35, 65]}
         minSizes={[200, 300]}
@@ -474,17 +552,7 @@ export function Component() {
           </button>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>
-          {composerData?.mode === 'new' ? (
-            <div style={{ padding: 16 }}>
-              <MailComposer
-                data={composerData}
-                onClose={closeComposer}
-                onSend={sendEmail}
-                accounts={accounts}
-                inline
-              />
-            </div>
-          ) : selectedEmailId ? (
+          {selectedEmailId ? (
             <MailReadingPane
               emailId={selectedEmailId}
               onReply={handleReply}
@@ -506,6 +574,7 @@ export function Component() {
         </div>
       </div>
       </SplitPane>
+      )}
 
       {/* Snooze menu */}
       {snoozeTarget && (

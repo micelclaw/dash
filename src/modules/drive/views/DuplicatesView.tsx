@@ -18,6 +18,8 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
+import { TileMoreButton } from '@/components/shared/TileMoreButton';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { formatFileSize } from '@/lib/file-utils';
 import { formatRelative } from '@/lib/date-helpers';
 import { downloadFile } from '@/lib/file-download';
@@ -251,6 +253,9 @@ export function DuplicatesView() {
 
 function DupRow({ file, onKeep, disabled }: { file: DupFile; onKeep: () => void; disabled?: boolean }) {
   const [hovered, setHovered] = useState(false);
+  // Duplicates no tiene modelo de selección → en móvil el ⋮ se muestra siempre
+  // (única vía de abrir el menú contextual sin long-press).
+  const isMobile = useIsMobile();
   return (
     <div
       onMouseEnter={() => setHovered(true)}
@@ -276,7 +281,7 @@ function DupRow({ file, onKeep, disabled }: { file: DupFile; onKeep: () => void;
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {formatRelative(new Date(file.created_at))}
       </span>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
         <button
           onClick={onKeep}
           disabled={disabled}
@@ -295,6 +300,8 @@ function DupRow({ file, onKeep, disabled }: { file: DupFile; onKeep: () => void;
           <CheckCircle2 size={12} />
           Keep this
         </button>
+        {/* ⋮ (móvil): abre el menú contextual de la copia */}
+        {isMobile && <TileMoreButton style={{ position: 'static', flexShrink: 0 }} />}
       </div>
     </div>
   );

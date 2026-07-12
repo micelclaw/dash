@@ -119,6 +119,16 @@ export function FloatingPanel({ id, title, icon, children }: FloatingPanelProps)
           position: 'fixed',
           inset: 0,
           zIndex: 300,
+          // El wrapper de FloatingPanelsLayer es pointer-events:none (para no bloquear
+          // el resto de la app con los paneles flotantes de escritorio). En móvil el
+          // overlay es a pantalla completa y DEBE recibir toques; sin esto los toques
+          // lo atravesaban y caían en el TopBar de detrás (abría la búsqueda rápida al
+          // tocar un input, y la X no cerraba). El branch desktop ya pone 'auto'.
+          pointerEvents: 'auto',
+          // Safe-area: despeja el notch/hora/batería arriba y la barra de navegación
+          // (gestos/3 botones) de Android abajo — el botón de grabar quedaba tapado.
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           background: 'color-mix(in srgb, var(--card) 85%, transparent)',
           backdropFilter: 'blur(25px)',
           WebkitBackdropFilter: 'blur(25px)',

@@ -70,7 +70,8 @@ const SheetContent = React.forwardRef<
       {children}
       <DialogPrimitive.Close
         className="absolute right-4 top-4 opacity-70 hover:opacity-100"
-        style={{ color: 'var(--text-dim)' }}
+        // En drawers laterales (móvil) la X quedaba bajo el notch → la bajamos por safe-area.
+        style={{ color: 'var(--text-dim)', ...(horizontal ? { top: 'calc(1rem + env(safe-area-inset-top, 0px))' } : {}) }}
       >
         <X size={16} />
       </DialogPrimitive.Close>

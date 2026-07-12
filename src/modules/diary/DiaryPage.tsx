@@ -13,6 +13,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { SplitPane } from '@/components/shared/SplitPane';
 import { DiaryTimeline } from './DiaryTimeline';
 import { DiaryEditor } from './DiaryEditor';
@@ -27,6 +28,9 @@ export function Component() {
   const isMobile = useIsMobile();
 
   const { entries, loading, error, fetchEntries, updateEntry, openToday } = useDiary({ search: search || undefined });
+
+  // Mobile back button closes the entry editor overlay instead of exiting the module
+  useBackGuard(!!selectedId, () => setSelectedId(null), isMobile);
 
   // Handle ?id=diaryId or ?date=YYYY-MM-DD from URL (e.g. from search deep-links)
   useEffect(() => {

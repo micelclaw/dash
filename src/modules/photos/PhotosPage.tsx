@@ -10,9 +10,9 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams } from 'react-router';
-import { Image, Lock } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams, useLocation, useNavigate } from 'react-router';
+import { Image, Lock, FolderPlus, FolderMinus, Download, Cpu, Star, Info, Trash2, Share2, Link2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { usePhotos } from './hooks/use-photos';
@@ -40,9 +40,14 @@ import { EditAlbumDialog } from './EditAlbumDialog';
 import { AlbumShareModal } from './AlbumShareModal';
 import { AlbumPickerDropdown } from './AlbumPickerDropdown';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { ShareModal } from '@/components/shared/ShareModal';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
+import { RelateModal } from '@/components/shared/RelateModal';
 import { getPreviewUrl } from '@/lib/file-utils';
-import type { PhotosView } from './types';
+import { downloadFile } from '@/lib/file-download';
+import type { ContextMenuItem } from '@/components/shared/ContextMenu';
+import { useBackGuard } from '@/hooks/use-back-guard';
+import { useIsMobile } from '@/hooks/use-media-query';
+import type { PhotosView, PhotoSortField, PhotoSortDir } from './types';
 import type { Photo, Album } from '@/types/files';
 
 const PHOTO_TABS: { id: PhotosView; label: string }[] = [
@@ -200,10 +205,15 @@ function SearchResultThumbnail({
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [view, setView] = useState<PhotosView>('timeline');
   const [search, setSearch] = useState('');
   const [selectedStars, setSelectedStars] = useState<Set<number>>(new Set());
   const [inventoryOnly, setInventoryOnly] = useState(false);
+  // Ordenación unificada timeline + álbum (default: fecha desc, agrupado por día).
+  const [sortField, setSortField] = useState<PhotoSortField>('date');
+  const [sortDir, setSortDir] = useState<PhotoSortDir>('desc');
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -213,6 +223,9 @@ export function Component() {
   const albumDeepLinkHandled = useRef(false);
   const clusterDeepLinkHandled = useRef(false);
   const sharedHandled = useRef(false);
+  // Optimistic insert of a photo just captured via the "+" sheet (nav state).
+  const uploadHandled = useRef(false);
+  const prevPhotosLoading = useRef(false);
 
   // Best Of state
   const [bestOfCount, setBestOfCount] = useState(0);
@@ -230,11 +243,13 @@ export function Component() {
   const selectCluster = usePhotoAiStore((s) => s.selectCluster);
   const isPro = useAuthStore((s) => s.user?.tier !== 'free');
 
-  // Detail panel collapse state + responsive
-  const [detailsCollapsed, setDetailsCollapsed] = useState(() => window.innerWidth < 1024);
+  // Photo Details: cerrado por defecto; se abre desde el lightbox (botón
+  // superpuesto) o desde "View details". La barra-rail vertical desapareció
+  // de las vistas grid (petición 2026-07-11).
+  const [detailsOpen, setDetailsOpen] = useState(false);
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth < 1024) setDetailsCollapsed(true);
+      if (window.innerWidth < 1024) setDetailsOpen(false);
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
@@ -245,6 +260,10 @@ export function Component() {
   const [deletePhotoId, setDeletePhotoId] = useState<string | null>(null);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchAlbumPicker, setBatchAlbumPicker] = useState<{ x: number; y: number } | null>(null);
+  // ⋮ header: Share/Relate sobre la selección + picker de "Set as cover" (1 foto, timeline).
+  const [shareSelectionOpen, setShareSelectionOpen] = useState(false);
+  const [relateSelectionOpen, setRelateSelectionOpen] = useState(false);
+  const [coverPickerPos, setCoverPickerPos] = useState<{ x: number; y: number } | null>(null);
   const [sharePhoto, setSharePhoto] = useState<Photo | null>(null);
   const [createAlbumOpen, setCreateAlbumOpen] = useState(false);
   const [editAlbum, setEditAlbum] = useState<Album | null>(null);
@@ -254,7 +273,12 @@ export function Component() {
   // Batch remove from album
   const [batchRemoveOpen, setBatchRemoveOpen] = useState(false);
 
-  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto } = usePhotos({ search, selectedStars, inventory: inventoryOnly });
+  // Back jerárquico en móvil: el botón atrás cierra overlays/sub-vistas (más interno primero)
+  const isMobile = useIsMobile();
+  useBackGuard(lightboxIndex !== null, () => setLightboxIndex(null), isMobile);
+  useBackGuard(selectedAlbumId !== null, () => setSelectedAlbumId(null), isMobile);
+
+  const { photos, loading: photosLoading, hasMore, loadMore, fetchPhotos, removePhotos, updatePhotoMetadata, prependPhoto } = usePhotos({ search, selectedStars, inventory: inventoryOnly, sortField, sortDir });
   const {
     albums, loading: albumsLoading,
     createAlbum, deleteAlbum,
@@ -262,13 +286,13 @@ export function Component() {
     setAlbumCover, updateAlbum,
   } = useAlbums();
 
-  // Album photos (only when viewing a specific album)
+  // Album photos (only when viewing a specific album) — misma ordenación/filtros
   const {
     photos: albumPhotos,
     loading: albumPhotosLoading,
     fetchPhotos: fetchAlbumPhotos,
     removePhotos: removeAlbumPhotos,
-  } = useAlbumPhotos(selectedAlbumId);
+  } = useAlbumPhotos(selectedAlbumId, { sortField, sortDir, selectedStars });
 
   // Multi-select
   const timelineSelection = usePhotoSelection(photos);
@@ -278,18 +302,60 @@ export function Component() {
   const isAlbumView = view === 'albums' && !!selectedAlbumId;
   const activeSelection = isAlbumView ? albumSelection : timelineSelection;
   const activePhotos = isAlbumView ? albumPhotos : photos;
+  /** Fotos seleccionadas en su orden visual (para el menú ⋮ del header). */
+  const selectedPhotos = useMemo(
+    () => activePhotos.filter(p => activeSelection.selectedIds.has(p.id)),
+    [activePhotos, activeSelection.selectedIds],
+  );
 
   // Initial load
   useEffect(() => {
     fetchPhotos(true);
   }, [fetchPhotos]);
 
-  // Auto-open ExifPanel with first photo when photos load
+  // Optimistic insert of a photo captured via the mobile "+" sheet. CaptureSheet
+  // navigates here with `state.uploadedPhoto`; show it INSTANTLY (prepend + a
+  // "processing" badge) instead of waiting for the worker + next fetch. We wait
+  // until the list is stable — the initial reset-fetch just settled (fresh mount)
+  // or the list is already populated (already on /photos) — so the prepend isn't
+  // clobbered by that fetch. The badge clears on photo.worker.photo_done.
   useEffect(() => {
-    if (!exifPhoto && photos.length > 0 && !photosLoading) {
-      setExifPhoto(photos[0] ?? null);
-    }
-  }, [photos, photosLoading]);
+    const uploaded = (location.state as { uploadedPhoto?: Photo } | null)?.uploadedPhoto;
+    const justFinishedLoad = prevPhotosLoading.current && !photosLoading;
+    prevPhotosLoading.current = photosLoading;
+    if (!uploaded || uploadHandled.current) return;
+    const listReady = justFinishedLoad || (!photosLoading && photos.length > 0);
+    if (!listReady) return;
+    uploadHandled.current = true;
+    const photo: Photo = { ...uploaded, taken_at: uploaded.taken_at ?? null, thumbnail_url: uploaded.thumbnail_url ?? '' };
+    prependPhoto(photo);
+    usePhotoProcessingStore.getState().setFilesPending([photo.id]);
+    // Anti-stuck fallback: if the worker deferred (GPU busy) and no clearing
+    // event/refetch cleared the 'pending' badge, drop it after a bound so the
+    // spinner never sticks forever (the photo is uploaded + viewable; the
+    // Processed/Unprocessed badge still reflects real AI state). Scoped to THIS
+    // captured id and only if it hasn't advanced to a real processing phase.
+    const capturedId = photo.id;
+    window.setTimeout(() => {
+      const st = usePhotoProcessingStore.getState();
+      if (st.processingFiles.get(capturedId)?.phase === 'pending') st.clearFile(capturedId);
+    }, 30_000);
+    // Clear the nav state so a remount doesn't re-insert it (keeps search params).
+    navigate(location.pathname + location.search, { replace: true });
+  }, [location.state, location.pathname, location.search, photosLoading, photos.length, prependPhoto, navigate]);
+
+  // Reconcile the "Loading…" (pending) badges against fetched photo data: as
+  // soon as a photo shows up processed (metadata.ai_processed_at) or viewable
+  // (real thumbnail_url), drop its pending badge. Covers the captured photo once
+  // the worker's `complete` refetch (or any refetch) includes it — and the race
+  // where photo_done landed before setFilesPending registered. Never touches
+  // active phases, so an in-flight reprocess spinner is left intact.
+  useEffect(() => {
+    const ready = photos
+      .filter((p) => (p.metadata as { ai_processed_at?: unknown } | null)?.ai_processed_at || (typeof p.thumbnail_url === 'string' && p.thumbnail_url.length > 0))
+      .map((p) => p.id);
+    if (ready.length) usePhotoProcessingStore.getState().clearProcessedPending(ready);
+  }, [photos]);
 
   // Deep-link: ?id=<photoId> → open lightbox + exif panel
   useEffect(() => {
@@ -300,7 +366,7 @@ export function Component() {
     if (idx >= 0) {
       setLightboxIndex(idx);
       setExifPhoto(photos[idx] ?? null);
-      setDetailsCollapsed(false);
+      setDetailsOpen(true);
       deepLinkHandled.current = true;
       setSearchParams({}, { replace: true });
     } else if (photos.length > 0) {
@@ -309,7 +375,7 @@ export function Component() {
         .then(res => {
           if (res.data) {
             setExifPhoto(res.data);
-            setDetailsCollapsed(false);
+            setDetailsOpen(true);
             // Open lightbox with index -1 (standalone), will show via exifPhoto
             setLightboxIndex(0);
           }
@@ -509,6 +575,14 @@ export function Component() {
     if (photo) setExifPhoto(photo);
   }, [activePhotos]);
 
+  // "View details" (menú contextual): abre el panel de detalles directamente
+  // (la barra-rail de las vistas grid desapareció — el panel se invoca aquí
+  // o desde el botón superpuesto del visor).
+  const handleViewDetails = useCallback((photo: Photo) => {
+    setExifPhoto(photo);
+    setDetailsOpen(true);
+  }, []);
+
   const handleAddToAlbum = useCallback(async (photoId: string, albumId: string) => {
     try {
       await addPhotosToAlbum(albumId, [photoId]);
@@ -601,7 +675,7 @@ export function Component() {
     }
   }, [activeSelection, fetchPhotos, selectedAlbumId, fetchAlbumPhotos, removePhotos, removeAlbumPhotos]);
 
-  const handleBatchProcess = useCallback(async () => {
+  const handleProcessPhotos = useCallback(async (ids: string[], clearAfter = false) => {
     // Guard: check model is selected and downloaded before calling API
     const settings = useSettingsStore.getState().settings;
     const modelId = settings?.ai?.local_models?.multimodal_model;
@@ -618,17 +692,96 @@ export function Component() {
       }
     } catch { /* if check fails, let backend handle it */ }
 
-    const ids = [...activeSelection.selectedIds];
     setFilesPending(ids);
     try {
       const res = await api.post('/photos/ai/reprocess-selected', { file_ids: ids }) as any;
       const data = res.data ?? res;
       toast.success(`${data.reset} photo${data.reset !== 1 ? 's' : ''} queued for processing`);
-      activeSelection.clearSelection();
+      if (clearAfter) activeSelection.clearSelection();
     } catch {
       toast.error('Failed to queue photos for processing');
     }
   }, [activeSelection, setFilesPending]);
+
+  const handleBatchProcess = useCallback(() => {
+    void handleProcessPhotos([...activeSelection.selectedIds], true);
+  }, [activeSelection, handleProcessPhotos]);
+
+  // ── ⋮ del header: menú contextual sobre TODA la selección ──────────
+  // Decisión 2026-07-11: sin ⋮ por tile; un único ⋮ en la batch bar abre el
+  // menú aplicado a los N seleccionados (añadir a álbum, descargar, estrellas…).
+
+  const handleBatchDownload = useCallback(() => {
+    const ids = [...activeSelection.selectedIds];
+    const byId = new Map(activePhotos.map(p => [p.id, p]));
+    ids.forEach((id, i) => {
+      const photo = byId.get(id);
+      if (!photo) return;
+      // Escalonado: los navegadores descartan ráfagas de descargas simultáneas.
+      window.setTimeout(() => downloadFile(photo.id, photo.filename), i * 350);
+    });
+  }, [activeSelection.selectedIds, activePhotos]);
+
+  const handleBatchStars = useCallback(async (value: number | null) => {
+    const ids = [...activeSelection.selectedIds];
+    try {
+      await Promise.all(ids.map(id => api.patch(`/files/${id}`, { custom_fields: { aesthetic_override: value } })));
+      toast.success(value === null
+        ? `AI score restored (${ids.length})`
+        : `${value} star${value === 1 ? '' : 's'} (${ids.length})`);
+    } catch {
+      toast.error('Failed to assign stars');
+    }
+  }, [activeSelection.selectedIds]);
+
+  // Espejo del menú de click derecho del tile, aplicado a la selección entera
+  // (petición 2026-07-12: "el menú del ⋮ debe ser el mismo que el del click
+  // derecho"). Con 1 seleccionada = idéntico; con N, las acciones por-registro
+  // (View details, Set as cover) se omiten y el resto opera sobre las N.
+  const batchMenuItems = useMemo<ContextMenuItem[]>(() => {
+    const n = activeSelection.selectedIds.size;
+    if (n === 0) return [];
+    const sfx = n > 1 ? ` (${n})` : '';
+    const single = n === 1 ? selectedPhotos[0] : undefined;
+    const items: ContextMenuItem[] = [
+      { label: `Add to album${sfx}`, icon: FolderPlus, onClick: handleBatchAddToAlbum },
+    ];
+    if (isAlbumView) {
+      items.push({ label: `Remove from album${sfx}`, icon: FolderMinus, onClick: () => setBatchRemoveOpen(true) });
+    }
+    if (single) items.push({ label: 'View details', icon: Info, onClick: () => handleViewDetails(single) });
+    items.push({ label: `Download${sfx}`, icon: Download, onClick: handleBatchDownload });
+    items.push({ label: `Process with AI${sfx}`, icon: Cpu, onClick: handleBatchProcess });
+    items.push({
+      label: `Assign stars${sfx}`,
+      icon: Star,
+      onClick: () => {},
+      subItems: [
+        ...[5, 4, 3, 2, 1, 0].map((v) => ({
+          label: `${'★'.repeat(v)}${'☆'.repeat(5 - v)}  ${v} star${v === 1 ? '' : 's'}`,
+          onClick: () => { void handleBatchStars(v); },
+        })),
+        { label: 'Auto (AI)', onClick: () => { void handleBatchStars(null); } },
+      ],
+    });
+    if (single) {
+      items.push({
+        label: 'Set as cover',
+        icon: Image,
+        onClick: () => {
+          // Dentro de un álbum: portada de ESTE álbum; en timeline: elegir álbum.
+          if (isAlbumView) void handleSetAsCoverForCurrentAlbum(single.id);
+          else setCoverPickerPos({ x: window.innerWidth / 2 - 110, y: 80 });
+        },
+      });
+    }
+    items.push({ label: '', separator: true, onClick: () => {} });
+    items.push({ label: `Share${sfx}`, icon: Share2, onClick: () => setShareSelectionOpen(true) });
+    items.push({ label: `Relate${sfx}`, icon: Link2, onClick: () => setRelateSelectionOpen(true) });
+    items.push({ label: '', separator: true, onClick: () => {} });
+    items.push({ label: `Delete${sfx}`, icon: Trash2, variant: 'danger', onClick: () => setBatchDeleteOpen(true) });
+    return items;
+  }, [activeSelection.selectedIds, selectedPhotos, isAlbumView, handleBatchAddToAlbum, handleBatchDownload, handleBatchProcess, handleBatchStars, handleViewDetails, handleSetAsCoverForCurrentAlbum]);
 
   const handleBatchRemoveFromAlbum = useCallback(async () => {
     if (!selectedAlbumId) return;
@@ -721,7 +874,12 @@ export function Component() {
           aiActive={aiSearch}
           onAiToggle={handleAiToggle}
           aiPlaceholder="Describe a photo…"
-          left={view === 'timeline' ? (
+          left={(view === 'timeline' || isAlbumView) && !(isMobile && activeSelection.selectedIds.size > 0) ? (
+            // Toolbar unificada (timeline Y dentro de álbum): estrellas en un
+            // solo botón + ordenación Date/Name/Size; Inventory solo en timeline.
+            // En móvil, la selección activa SUSTITUYE a los filtros: si ambos
+            // clusters conviven, el toolbar desborda los 393px y el contenedor
+            // queda scrolleado en X (el barrido táctil deja de encontrar tiles).
             <PhotosFilters
               selectedStars={selectedStars}
               onStarsToggle={(n) => setSelectedStars(prev => {
@@ -729,8 +887,12 @@ export function Component() {
                 s.has(n) ? s.delete(n) : s.add(n);
                 return s;
               })}
-              inventoryActive={inventoryOnly}
-              onInventoryToggle={() => setInventoryOnly(v => !v)}
+              onStarsClear={() => setSelectedStars(new Set())}
+              sortField={sortField}
+              sortDir={sortDir}
+              onSortChange={(field, dir) => { setSortField(field); setSortDir(dir); }}
+              inventoryActive={view === 'timeline' ? inventoryOnly : false}
+              onInventoryToggle={view === 'timeline' ? () => setInventoryOnly(v => !v) : undefined}
             />
           ) : undefined}
           right={
@@ -740,6 +902,7 @@ export function Component() {
               onBatchProcess={handleBatchProcess}
               onBatchDelete={() => setBatchDeleteOpen(true)}
               onClearSelection={activeSelection.clearSelection}
+              menuItems={batchMenuItems}
             />
           }
         />
@@ -756,6 +919,8 @@ export function Component() {
               currentIndex={lightboxIndex}
               onClose={handleLightboxClose}
               onNavigate={handleLightboxNavigate}
+              detailsOpen={detailsOpen}
+              onToggleDetails={() => setDetailsOpen(v => !v)}
             />
           )}
 
@@ -785,10 +950,14 @@ export function Component() {
                 onAddToAlbum={handleAddToAlbum}
                 onSetAsCover={handleSetAsCover}
                 onCreateAlbum={handleCreateAlbumInline}
-                onViewExif={(photo) => setExifPhoto(photo)}
+                onViewExif={handleViewDetails}
+                onProcessPhoto={(photo) => { void handleProcessPhotos([photo.id]); }}
                 onDeletePhoto={(id) => setDeletePhotoId(id)}
                 selectedIds={timelineSelection.selectedIds}
                 onToggleSelect={timelineSelection.toggleSelection}
+                onSetSelection={timelineSelection.setSelection}
+                onApplyDelta={timelineSelection.applyDelta}
+                sortField={sortField}
               />
             ) : null}
 
@@ -819,7 +988,8 @@ export function Component() {
                 onShareAlbum={() => setShareAlbum(selectedAlbum)}
                 onEditAlbum={() => setEditAlbum(selectedAlbum)}
                 onRemoveFromAlbum={handleRemoveFromAlbum}
-                onViewExif={(photo) => setExifPhoto(photo)}
+                onViewExif={handleViewDetails}
+                onProcessPhoto={(photo) => { void handleProcessPhotos([photo.id]); }}
                 onDeletePhoto={(id) => setDeletePhotoId(id)}
                 onSetAsCover={handleSetAsCoverForCurrentAlbum}
                 selectedIds={albumSelection.selectedIds}
@@ -827,6 +997,9 @@ export function Component() {
                 onBatchRemove={() => setBatchRemoveOpen(true)}
                 onBatchDelete={() => setBatchDeleteOpen(true)}
                 onClearSelection={albumSelection.clearSelection}
+                sortField={sortField}
+                onSetSelection={albumSelection.setSelection}
+                onApplyDelta={albumSelection.applyDelta}
               />
             )}
 
@@ -848,23 +1021,27 @@ export function Component() {
           </div>
         </div>
 
-        {/* ExifPanel sidebar */}
-        {exifPhoto && (
+        {/* ExifPanel sidebar — solo cuando se pide explícitamente (botón del
+            visor o "View details"); ya no hay rail vertical en las vistas grid */}
+        {exifPhoto && detailsOpen && (
           <ExifPanel
             photo={exifPhoto}
             onSaved={() => { fetchPhotos(true); if (selectedAlbumId) fetchAlbumPhotos(true); }}
-            collapsed={detailsCollapsed}
-            onToggleCollapse={() => setDetailsCollapsed(c => !c)}
+            collapsed={false}
+            onToggleCollapse={() => setDetailsOpen(false)}
           />
         )}
       </div>
     </MediaShell>
 
-      {/* Share photo modal */}
+      {/* Share photo modal (unificado) */}
       {sharePhoto && (
-        <ShareModal
+        <EntityShareModal
           open
-          file={sharePhoto}
+          entityType="photo"
+          entityId={sharePhoto.id}
+          entityTitle={sharePhoto.filename}
+          shareMeta={{ mime: sharePhoto.mime_type ?? undefined }}
           onClose={() => setSharePhoto(null)}
         />
       )}
@@ -912,6 +1089,44 @@ export function Component() {
           onSelect={handleBatchAddSelect}
           onCreate={handleCreateAlbumInline}
           onClose={() => setBatchAlbumPicker(null)}
+        />
+      )}
+
+      {/* ⋮ header: Set as cover (1 foto, timeline) — elegir álbum destino */}
+      {coverPickerPos && selectedPhotos.length === 1 && (
+        <AlbumPickerDropdown
+          open
+          anchorPos={coverPickerPos}
+          albums={albums}
+          title="Set as cover"
+          onSelect={(albumId) => {
+            const photoId = selectedPhotos[0]!.id;
+            setCoverPickerPos(null);
+            void handleSetAsCover(photoId, albumId);
+          }}
+          onCreate={handleCreateAlbumInline}
+          onClose={() => setCoverPickerPos(null)}
+        />
+      )}
+
+      {/* ⋮ header: Share/Relate sobre la selección (multi-entidad) */}
+      {shareSelectionOpen && selectedPhotos.length > 0 && (
+        <EntityShareModal
+          open
+          entityType="photo"
+          entityId={selectedPhotos[0]!.id}
+          entityIds={selectedPhotos.map(p => p.id)}
+          entityTitle={selectedPhotos.length === 1 ? (selectedPhotos[0]!.filename || 'Photo') : ''}
+          onClose={() => setShareSelectionOpen(false)}
+        />
+      )}
+      {relateSelectionOpen && selectedPhotos.length > 0 && (
+        <RelateModal
+          open
+          sourceType="photo"
+          sourceId={selectedPhotos[0]!.id}
+          sourceIds={selectedPhotos.map(p => p.id)}
+          onClose={() => setRelateSelectionOpen(false)}
         />
       )}
 

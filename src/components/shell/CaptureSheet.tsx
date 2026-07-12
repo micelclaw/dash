@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { Camera, ScanLine, StickyNote, Bookmark } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { api } from '@/services/api';
+import type { Photo } from '@/types/files';
 
 // Detección del puente nativo (lo inyecta el envoltorio Capacitor; el dash no
 // importa @capacitor/*). Si está, getPhoto abre la cámara in-app.
@@ -31,12 +32,12 @@ async function nativePhotoFile(): Promise<File | null> {
   } catch { return null; }
 }
 
-async function uploadToDrive(file: File, folder: string): Promise<string> {
+async function uploadToDrive(file: File, folder: string): Promise<Photo> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('parent_folder', folder);
-  const res = await api.upload<{ data: { id: string } }>('/files/upload', fd);
-  return res.data.id;
+  const res = await api.upload<{ data: Photo }>('/files/upload', fd);
+  return res.data;
 }
 
 export function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -49,14 +50,20 @@ export function CaptureSheet({ open, onOpenChange }: { open: boolean; onOpenChan
 
   const handlePhoto = async (file: File) => {
     setBusy('photo');
-    try { await uploadToDrive(file, '/Photos'); toast.success('Foto subida'); close(); navigate('/photos'); }
-    catch (e) { toast.error((e as Error).message ?? 'No se pudo subir'); setBusy(null); }
+    try {
+      const record = await uploadToDrive(file, '/Photos');
+      toast.success('Foto subida');
+      close();
+      // Pass the record so Photos shows it INSTANTLY (optimistic prepend + a
+      // "processing" badge) instead of waiting for the next timeline fetch.
+      navigate('/photos', { state: { uploadedPhoto: record } });
+    } catch (e) { toast.error((e as Error).message ?? 'No se pudo subir'); setBusy(null); }
   };
   const handleTicket = async (file: File) => {
     setBusy('ticket');
     try {
-      const fileId = await uploadToDrive(file, '/Inventory');
-      await api.post('/inventory/proposals/from-camera', { file_id: fileId });
+      const record = await uploadToDrive(file, '/Inventory');
+      await api.post('/inventory/proposals/from-camera', { file_id: record.id });
       toast.success('Ticket enviado a Inventario'); close(); navigate('/inventory');
     } catch (e) { toast.error((e as Error).message ?? 'No se pudo procesar el ticket'); setBusy(null); }
   };

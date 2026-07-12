@@ -20,8 +20,24 @@ import type { ApiListResponse } from '@/types/api';
 interface Attachment {
   filename: string;
   size: number;
-  path: string;
-  mime: string;
+  /** Contenido en base64 — el envío (smtp-sender.buildMailAttachments) lo lee
+   *  inline; NO una ruta de Drive (que el envío ignora). */
+  content: string;
+  content_type: string;
+}
+
+/** Lee un File como base64 (sin el prefijo `data:<mime>;base64,`). */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = String(reader.result);
+      const comma = res.indexOf(',');
+      resolve(comma >= 0 ? res.slice(comma + 1) : res);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 interface MailComposerProps {
@@ -139,24 +155,18 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
     if (!files || files.length === 0) return;
     for (const file of Array.from(files)) {
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        const res = await fetch('/api/v1/files/upload', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${localStorage.getItem('claw_token')}` },
-          body: formData,
-        });
-        if (!res.ok) throw new Error('Upload failed');
-        const json = await res.json();
-        const uploaded = json.data;
+        // El envío empaqueta el contenido base64 inline (buildMailAttachments).
+        // Antes se subía a Drive con un token inexistente (`claw_token`) → el
+        // upload fallaba y, aun subiendo, el envío ignoraba la ruta.
+        const content = await fileToBase64(file);
         setAttachments(prev => [...prev, {
-          filename: uploaded.filename ?? file.name,
-          size: uploaded.size ?? file.size,
-          path: uploaded.path ?? uploaded.id,
-          mime: uploaded.mime_type ?? file.type,
+          filename: file.name,
+          size: file.size,
+          content,
+          content_type: file.type || 'application/octet-stream',
         }]);
       } catch {
-        toast.error(`Failed to upload ${file.name}`);
+        toast.error(`No se pudo adjuntar ${file.name}`);
       }
     }
     // Reset input so same file can be selected again
@@ -202,7 +212,9 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
       setToRecipients(finalTo);
       setToInput('');
     }
-    if (finalTo.length === 0 || !subject) return;
+    // Solo el destinatario es obligatorio (el asunto NO bloquea el envío, estilo
+    // Gmail): antes `!subject` dejaba el botón inerte → parecía "no envía".
+    if (finalTo.length === 0) return;
     setSending(true);
     try {
       await onSend({
@@ -213,6 +225,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         subject,
         body_plain: body,
         in_reply_to: data.in_reply_to,
+        has_attachments: attachments.length > 0,
         attachments: attachments.length > 0 ? attachments : undefined,
       });
       toast.success('Email sent');
@@ -390,26 +403,25 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
         onSaveContact={handleSaveContact}
       />
 
-      {/* Cc/Bcc toggle */}
-      {!showCcBcc && (
-        <div style={{ padding: '0 12px 4px' }}>
-          <button
-            onClick={() => setShowCcBcc(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-dim)',
-              fontSize: '0.75rem',
-              fontFamily: 'var(--font-sans)',
-              cursor: 'pointer',
-              padding: 0,
-              textDecoration: 'underline',
-            }}
-          >
-            Add Cc/Bcc
-          </button>
-        </div>
-      )}
+      {/* Cc/Bcc toggle — colapsable en ambos sentidos (Cc/Bcc son OPCIONALES;
+          antes, al pulsarlo, no se podían volver a ocultar y parecían obligatorios). */}
+      <div style={{ padding: '0 12px 4px' }}>
+        <button
+          onClick={() => setShowCcBcc(v => !v)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-dim)',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-sans)',
+            cursor: 'pointer',
+            padding: 0,
+            textDecoration: 'underline',
+          }}
+        >
+          {showCcBcc ? 'Ocultar Cc/Bcc' : 'Añadir Cc/Bcc'}
+        </button>
+      </div>
 
       {/* Cc */}
       {showCcBcc && (
@@ -612,7 +624,7 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
 
         <button
           onClick={handleSend}
-          disabled={sending || (toRecipients.length === 0 && !toInput.trim()) || !subject}
+          disabled={sending || (toRecipients.length === 0 && !toInput.trim())}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -620,15 +632,15 @@ export function MailComposer({ data, onClose, onSend, accounts, inline = false }
             padding: '6px 16px',
             border: 'none',
             borderRadius: 'var(--radius-md)',
-            background: (sending || (toRecipients.length === 0 && !toInput.trim()) || !subject)
+            background: (sending || (toRecipients.length === 0 && !toInput.trim()))
               ? 'var(--amber-dim)'
               : 'var(--amber)',
             color: '#000',
             fontSize: '0.8125rem',
             fontWeight: 600,
             fontFamily: 'var(--font-sans)',
-            cursor: (sending || toRecipients.length === 0 || !subject) ? 'not-allowed' : 'pointer',
-            opacity: (sending || toRecipients.length === 0 || !subject) ? 0.5 : 1,
+            cursor: (sending || (toRecipients.length === 0 && !toInput.trim())) ? 'not-allowed' : 'pointer',
+            opacity: (sending || (toRecipients.length === 0 && !toInput.trim())) ? 0.5 : 1,
           }}
         >
           <Send size={14} />

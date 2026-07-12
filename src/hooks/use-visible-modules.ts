@@ -14,6 +14,7 @@ import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { DEFAULT_APP_KEYS } from '@/config/app-catalog';
 import { MODULES } from '@/config/modules';
 import { lucideLookup } from '@/config/lucide-lookup';
+import { useIsPhone } from '@/hooks/use-media-query';
 import type { ModuleConfig } from '@/types/modules';
 
 export interface ModuleGroup { name: string | null; modules: ModuleConfig[] }
@@ -21,12 +22,14 @@ export interface ModuleGroup { name: string | null; modules: ModuleConfig[] }
 export function useVisibleModules(): { ungrouped: ModuleConfig[]; groups: ModuleGroup[]; all: ModuleConfig[] } {
   const userRole = useAuthStore((s) => s.user?.role);
   const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const isPhone = useIsPhone();
   const appAllowed = useAppAccessStore((s) => s.allowed);
   const appLoaded = useAppAccessStore((s) => s.loaded);
   const dynamicModules = useUiModulesStore((s) => s.modules);
 
   return useMemo(() => {
     const staticVisible = MODULES.filter((m) => {
+      if (m.desktopOnly && isPhone) return false;
       if (m.adminOnly) return isAdmin;
       if (DEFAULT_APP_KEYS.includes(m.id)) return true;
       return !appLoaded || appAllowed.has(m.id);
@@ -49,5 +52,5 @@ export function useVisibleModules(): { ungrouped: ModuleConfig[]; groups: Module
     const groupNames = [...new Set(grouped.map((m) => m.group!))];
     const groups: ModuleGroup[] = groupNames.map((name) => ({ name, modules: grouped.filter((m) => m.group === name) }));
     return { ungrouped, groups, all: merged };
-  }, [isAdmin, appLoaded, appAllowed, dynamicModules]);
+  }, [isAdmin, isPhone, appLoaded, appAllowed, dynamicModules]);
 }

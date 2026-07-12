@@ -18,8 +18,8 @@ import { DropZone } from '@/components/shared/DropZone';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RenameDialog } from '@/components/shared/RenameDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
-import { ShareModal } from '@/components/shared/ShareModal';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { SelectionMenuButton } from '@/components/shared/TileMoreButton';
 import { useNotificationStore } from '@/stores/notification.store';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -42,8 +42,7 @@ import { DriveInspector } from '../components/inspector/DriveInspector';
 import { DriveLightbox } from '../components/DriveLightbox';
 import { TextPreviewModal } from '../components/TextPreviewModal';
 import { UploadQueuePanel } from '../components/UploadQueuePanel';
-import { ShareWithUserModal } from '../components/ShareWithUserModal';
-import { ShareEmailModal } from '../components/ShareEmailModal';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { TagsModal } from '../components/TagsModal';
 import type { FileRecord } from '@/types/files';
 
@@ -88,9 +87,7 @@ export function MyDriveView() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal states
-  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
-  const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
-  const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
+  const [shareTargets, setShareTargets] = useState<FileRecord[] | null>(null);
   const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
   const [folderPickerOpen, setFolderPickerOpen] = useState(false);
   const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
@@ -102,7 +99,7 @@ export function MyDriveView() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [textPreviewFile, setTextPreviewFile] = useState<FileRecord | null>(null);
 
-  const anyModalOpen = !!shareFile || !!shareUserFiles || !!shareEmailFile || !!tagsFiles
+  const anyModalOpen = !!shareTargets || !!tagsFiles
     || folderPickerOpen || confirmDeleteIds !== null || !!renameTarget || newFolderOpen
     || lightboxIndex !== null || !!textPreviewFile;
 
@@ -353,9 +350,7 @@ export function MyDriveView() {
       // Details/Properties → inspector on the Details tab (D5)
       onPreview: (file) => openInspector(file, 'details'),
       onToggleStar: (targets, starred) => { void handleBulkStar(targets, starred); },
-      onShare: (file) => setShareFile(file),
-      onShareUser: (targets) => setShareUserFiles(targets),
-      onShareEmail: (file) => setShareEmailFile(file),
+      onShare: (targets) => setShareTargets(targets),
       onCut: handleCut,
       onCopy: handleCopy,
       onPaste: (destFolder) => { void handlePaste(destFolder); },
@@ -387,6 +382,13 @@ export function MyDriveView() {
   }, [selectedIds, selectedFiles, menuCtx]);
 
   const backgroundItems = useMemo(() => buildBackgroundContextMenu(menuCtx), [menuCtx]);
+
+  // ⋮ único de la batch bar — el MISMO menú del builder aplicado a toda la
+  // selección (single completo con 1, batch con N).
+  const selectionMenuItems = useMemo(
+    () => buildFileContextMenu(selectedFiles, menuCtx),
+    [selectedFiles, menuCtx],
+  );
 
   // ─── Keyboard shortcuts (D4) ────────────────────────────
 
@@ -435,9 +437,15 @@ export function MyDriveView() {
 
   // D5 — the inspector reflects the selection: checked items win, otherwise
   // the clicked (preview) file.
+  // Móvil: la multi-selección (long-press/checkbox) NO alimenta el inspector —
+  // en <1024px es un sheet fijo que taparía el grid, la batch bar y el ⋮.
+  // Solo el tap de preview (selectedFile) o "Details" del menú lo abren.
   const inspectorFiles = useMemo(
-    () => (selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : []),
-    [selectedFiles, selectedFile],
+    () => {
+      if (isMobile) return selectedFile ? [selectedFile] : [];
+      return selectedFiles.length > 0 ? selectedFiles : selectedFile ? [selectedFile] : [];
+    },
+    [selectedFiles, selectedFile, isMobile],
   );
 
   return (
@@ -498,10 +506,11 @@ export function MyDriveView() {
             onClick={() => { void handleBulkStar(selectedFiles, !allSelectedStarred); }}
           />
           <BatchButton icon={Tags} label={isMobile ? '' : 'Tags'} onClick={() => setTagsFiles(selectedFiles)} />
-          <BatchButton icon={UserPlus} label={isMobile ? '' : 'Share'} onClick={() => setShareUserFiles(selectedFiles)} />
+          <BatchButton icon={UserPlus} label={isMobile ? '' : 'Share'} onClick={() => setShareTargets(selectedFiles)} />
           <BatchButton icon={FolderInput} label={isMobile ? '' : 'Move'} onClick={handleBatchMove} />
           <BatchButton icon={Download} label={isMobile ? '' : 'Download'} onClick={handleBatchDownload} />
           <BatchButton icon={Trash2} label={isMobile ? '' : 'Delete'} onClick={handleBatchDeleteClick} variant="danger" />
+          <SelectionMenuButton items={selectionMenuItems} />
 
           <button
             onClick={clearSelection}
@@ -593,28 +602,18 @@ export function MyDriveView() {
         />
       </div>
 
-      {/* Share modal (public link) */}
-      {shareFile && (
-        <ShareModal
-          open={!!shareFile}
-          file={shareFile}
-          onClose={() => setShareFile(null)}
-        />
-      )}
-
-      {/* Share with internal user (D4) */}
-      <ShareWithUserModal
-        open={shareUserFiles !== null}
-        files={shareUserFiles ?? []}
-        onClose={() => setShareUserFiles(null)}
-      />
-
-      {/* Share by email (D4) */}
-      {shareEmailFile && (
-        <ShareEmailModal
-          open={!!shareEmailFile}
-          file={shareEmailFile}
-          onClose={() => setShareEmailFile(null)}
+      {/* Compartir unificado (Fase A): fuera + 2ª acción + enlace público + personas + gestión */}
+      {shareTargets && shareTargets.length > 0 && (
+        <EntityShareModal
+          open
+          entityType="file"
+          entityId={shareTargets[0]!.id}
+          entityIds={shareTargets.map(f => f.id)}
+          entityTitle={shareTargets.length === 1 ? shareTargets[0]!.filename : ''}
+          shareMeta={shareTargets.length === 1
+            ? { mime: shareTargets[0]!.mime_type ?? undefined, isDirectory: shareTargets[0]!.is_directory }
+            : undefined}
+          onClose={() => setShareTargets(null)}
         />
       )}
 

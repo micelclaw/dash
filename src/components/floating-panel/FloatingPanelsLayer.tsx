@@ -10,8 +10,11 @@
  * https://micelclaw.com
  */
 
+import { useRef } from 'react';
 import { Calculator as CalculatorIcon, ArrowLeftRight, Timer, Mic } from 'lucide-react';
 import { useFloatingPanelsStore, type PanelId } from '@/stores/floating-panels.store';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { FloatingPanel } from './FloatingPanel';
 import { Calculator } from '@/modules/tools/calculator/Calculator';
 import { Converter } from '@/modules/tools/converter/Converter';
@@ -34,11 +37,21 @@ const PANEL_CONTENT: Record<PanelId, React.ReactNode> = {
 
 export function FloatingPanelsLayer() {
   const panels = useFloatingPanelsStore((s) => s.panels);
-
-  if (panels.size === 0) return null;
+  const closePanel = useFloatingPanelsStore((s) => s.closePanel);
+  const isMobile = useIsMobile();
 
   const entries = Array.from(panels.entries()).filter(([, p]) => !p.minimized);
-  if (entries.length === 0) return null;
+  const anyOpen = entries.length > 0;
+
+  // Botón "atrás" de Android/navegador cierra el overlay del tool (antes no hacía nada:
+  // los paneles son un store global, no rutas, así que el back navegaba por debajo y el
+  // overlay seguía encima). Se cierran todos los paneles visibles. Solo en móvil (donde el
+  // panel es overlay a pantalla completa). Mecanismo compartido en useBackGuard.
+  const visibleIdsRef = useRef<PanelId[]>([]);
+  visibleIdsRef.current = entries.map(([id]) => id);
+  useBackGuard(anyOpen, () => visibleIdsRef.current.forEach((id) => closePanel(id)), isMobile);
+
+  if (!anyOpen) return null;
 
   return (
     <div

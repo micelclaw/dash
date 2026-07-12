@@ -17,6 +17,7 @@ import { SplitPane } from '@/components/shared/SplitPane';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { api } from '@/services/api';
 import { useContacts } from './hooks/use-contacts';
 import { useContactLinks } from './hooks/use-contact-links';
@@ -38,6 +39,13 @@ export function Component() {
   });
   const [editMode, setEditMode] = useState(false);
   const [createMode, setCreateMode] = useState(false);
+
+  // Back jerárquico en móvil: atrás cierra el overlay/sub-vista de arriba (más
+  // interna → más externa) antes de salir del módulo. Cada onBack replica el
+  // cierre existente de esa capa (ver ContactForm.onCancel / ContactDetail.onBack).
+  useBackGuard(createMode, () => setCreateMode(false), isMobile);
+  useBackGuard(editMode, () => setEditMode(false), isMobile);
+  useBackGuard(selectedId !== null, () => { setSelectedId(null); setSearchParams({}, { replace: true }); }, isMobile);
 
   const {
     contacts, loading, error,

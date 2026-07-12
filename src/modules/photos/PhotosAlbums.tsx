@@ -14,6 +14,8 @@ import { useState } from 'react';
 import { Camera, Plus, Pencil, Upload, Share2, Trash2, Sparkles } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
+import { TileMoreButton } from '@/components/shared/TileMoreButton';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
 import type { Album } from '@/types/files';
 
@@ -49,6 +51,7 @@ function AlbumCard({
   const [hovered, setHovered] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const isMobileCard = useIsMobile();
   const hue = simpleHash(album.id) % 360;
 
   const contextItems: ContextMenuItem[] = [
@@ -88,6 +91,8 @@ function AlbumCard({
               overflow: 'hidden',
             }}
           >
+            {/* ⋮ (móvil): el long-press ya no abre el menú de la tarjeta */}
+            {isMobileCard && <TileMoreButton />}
             {album.cover_photo_id && !imgError ? (
               <img
                 src={getPreviewUrl(album.cover_photo_id, 400)}

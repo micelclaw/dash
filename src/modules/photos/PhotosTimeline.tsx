@@ -11,7 +11,8 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Star, Loader2, Clock, CheckCircle2, PauseCircle } from 'lucide-react';
+import Selecto from 'react-selecto';
+import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Star, Loader2, Clock, CheckCircle2, PauseCircle, Cpu } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
@@ -21,9 +22,9 @@ import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { simpleHash, getPreviewUrl } from '@/lib/file-utils';
 import { downloadFile } from '@/lib/file-download';
-import { formatMonthYear } from '@/lib/date-helpers';
+import { useTouchDragSelect } from './hooks/use-touch-drag-select';
 import type { Photo, Album } from '@/types/files';
-import type { PhotoGroup } from './types';
+import type { PhotoGroup, PhotoSortField } from './types';
 import { AlbumPickerDropdown } from './AlbumPickerDropdown';
 
 interface PhotosTimelineProps {
@@ -38,34 +39,41 @@ interface PhotosTimelineProps {
   onSetAsCover: (photoId: string, albumId: string) => void;
   onCreateAlbum: (name: string) => Promise<Album>;
   onViewExif: (photo: Photo) => void;
+  onProcessPhoto: (photo: Photo) => void;
   onDeletePhoto: (photoId: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (id: string, shiftKey: boolean) => void;
+  /** Selección por barrido (táctil) — reemplaza el set entero. */
+  onSetSelection: (ids: Set<string>) => void;
+  /** Marquee de escritorio (Selecto) — delta añadidos/quitados. */
+  onApplyDelta: (added: string[], removed: string[]) => void;
+  /** Campo de ordenación activo: 'date' agrupa por día; name/size = grid plano. */
+  sortField: PhotoSortField;
 }
 
-function groupPhotosByMonth(photos: Photo[]): PhotoGroup[] {
-  const map = new Map<string, Photo[]>();
-
-  for (const photo of photos) {
-    const dateStr = photo.taken_at || photo.created_at;
-    const d = new Date(dateStr);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const existing = map.get(key);
-    if (existing) {
-      existing.push(photo);
-    } else {
-      map.set(key, [photo]);
-    }
+/**
+ * Agrupación por DÍA (estilo galería del móvil: "8 Aug 2025") cuando se ordena
+ * por fecha; con name/size el orden no es cronológico → un solo grupo plano.
+ */
+export function groupPhotos(photos: Photo[], sortField: PhotoSortField): PhotoGroup[] {
+  if (sortField !== 'date') {
+    return photos.length ? [{ key: 'all', label: '', photos }] : [];
   }
-
+  const map = new Map<string, Photo[]>();
+  for (const photo of photos) {
+    const d = new Date(photo.taken_at || photo.created_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const existing = map.get(key);
+    if (existing) existing.push(photo);
+    else map.set(key, [photo]);
+  }
   const groups: PhotoGroup[] = [];
   for (const [key, groupPhotos] of map) {
-    const [year, month] = key.split('-');
-    const label = formatMonthYear(new Date(Number(year), Number(month!) - 1));
+    const d = new Date(groupPhotos[0]!.taken_at || groupPhotos[0]!.created_at);
+    const label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
     groups.push({ key, label, photos: groupPhotos });
   }
-
-  groups.sort((a, b) => b.key.localeCompare(a.key));
+  // El orden lo trae el servidor — se respeta el orden de aparición de los grupos.
   return groups;
 }
 
@@ -77,6 +85,7 @@ function PhotoThumbnail({
   onSetAsCover,
   onCreateAlbum,
   onViewExif,
+  onProcessPhoto,
   onDelete,
   selected,
   showCheckbox,
@@ -89,6 +98,7 @@ function PhotoThumbnail({
   onSetAsCover: (photoId: string, albumId: string) => void;
   onCreateAlbum: (name: string) => Promise<Album>;
   onViewExif: (photo: Photo) => void;
+  onProcessPhoto: (photo: Photo) => void;
   onDelete: (photoId: string) => void;
   selected?: boolean;
   showCheckbox?: boolean;
@@ -123,6 +133,7 @@ function PhotoThumbnail({
           },
           { label: 'View details', icon: Info, onClick: () => onViewExif(photo) },
           { label: 'Download', icon: Download, onClick: () => downloadFile(photo.id, photo.filename) },
+          { label: 'Process with AI', icon: Cpu, onClick: () => onProcessPhoto(photo) },
           {
             label: 'Assign stars',
             icon: Star,
@@ -147,8 +158,11 @@ function PhotoThumbnail({
         ]}
         trigger={
           <div
+            data-photo-id={photo.id}
             onClick={(e) => {
               if ((e.target as HTMLElement).tagName === 'INPUT') return;
+              // En modo selección (galería estándar): tap = alternar, no abrir.
+              if (showCheckbox) { onToggleSelect?.(e.shiftKey); return; }
               onClick();
             }}
             onMouseEnter={() => setHovered(true)}
@@ -205,6 +219,7 @@ function PhotoThumbnail({
                     src={previewUrl}
                     alt={photo.filename}
                     loading="lazy"
+                    draggable={false}
                     onError={() => setImgError(true)}
                     onLoad={() => setImgLoaded(true)}
                     style={{
@@ -215,6 +230,10 @@ function PhotoThumbnail({
                       objectFit: 'cover',
                       opacity: imgLoaded ? 1 : 0,
                       transition: 'opacity 0.2s',
+                      // Sin herencia: corta el callout/selección nativo de Android
+                      // sobre la <img> (el long-press ya no abre menú, ver hook).
+                      WebkitTouchCallout: 'none',
+                      WebkitUserSelect: 'none',
                     }}
                   />
                   {!imgLoaded && (
@@ -236,6 +255,38 @@ function PhotoThumbnail({
                   pointerEvents: 'none',
                 }}
               />
+            )}
+
+            {/* Video badge: ▶ + duración (el tile muestra el póster ffmpeg) */}
+            {(photo.mime_type || '').startsWith('video/') && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  right: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  background: 'rgba(0,0,0,0.65)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '2px 5px',
+                  fontSize: '0.5625rem',
+                  fontWeight: 600,
+                  color: '#fff',
+                  fontFamily: 'var(--font-sans)',
+                  lineHeight: 1,
+                  pointerEvents: 'none',
+                }}
+              >
+                <span style={{ fontSize: '0.5rem' }}>▶</span>
+                {(() => {
+                  const secs = (photo.metadata as { duration_seconds?: number } | null)?.duration_seconds;
+                  if (typeof secs !== 'number' || !Number.isFinite(secs)) return null;
+                  const m = Math.floor(secs / 60);
+                  const s = Math.floor(secs % 60);
+                  return <span>{m}:{String(s).padStart(2, '0')}</span>;
+                })()}
+              </div>
             )}
 
             {/* Star badge for aesthetic score >= 3 */}
@@ -397,18 +448,33 @@ export function PhotosTimeline({
   onSetAsCover,
   onCreateAlbum,
   onViewExif,
+  onProcessPhoto,
   onDeletePhoto,
   selectedIds,
   onToggleSelect,
+  onSetSelection,
+  onApplyDelta,
+  sortField,
 }: PhotosTimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Elemento real del scroll para Selecto (montado tras el primer render).
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
   const isMobile = useIsMobile();
 
   const hasSelection = selectedIds.size > 0;
 
+  // Barrido táctil (long-press + arrastre, estilo galería móvil).
+  useTouchDragSelect({
+    container: scrollEl,
+    photoIds: photos.map((p) => p.id),
+    selectedIds,
+    setSelection: onSetSelection,
+    enabled: isMobile,
+  });
+
   // Compute the global index for a photo within a group
   const getGlobalIndex = useCallback((groupKey: string, localIndex: number) => {
-    const groups = groupPhotosByMonth(photos);
+    const groups = groupPhotos(photos, sortField);
     let globalIdx = 0;
     for (const g of groups) {
       if (g.key === groupKey) {
@@ -417,7 +483,7 @@ export function PhotosTimeline({
       globalIdx += g.photos.length;
     }
     return 0;
-  }, [photos]);
+  }, [photos, sortField]);
 
   // Infinite scroll via scroll event
   useEffect(() => {
@@ -436,7 +502,7 @@ export function PhotosTimeline({
     return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMore, loading, onLoadMore]);
 
-  const groups = groupPhotosByMonth(photos);
+  const groups = groupPhotos(photos, sortField);
 
   if (!loading && photos.length === 0) {
     return (
@@ -454,7 +520,7 @@ export function PhotosTimeline({
     <DropZone onFilesDropped={onFilesDropped}>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       <div
-        ref={scrollRef}
+        ref={(el) => { scrollRef.current = el; setScrollEl(el); }}
         style={{
           overflowY: 'auto',
           flex: 1,
@@ -464,23 +530,25 @@ export function PhotosTimeline({
       >
         {groups.map((group) => (
           <div key={group.key}>
-            {/* Sticky month header */}
-            <div
-              style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 5,
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: 'var(--amber)',
-                background: 'var(--surface)',
-                padding: '8px 16px',
-                margin: '0 -16px',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              {group.label}
-            </div>
+            {/* Sticky day header (oculto en orden name/size — grid plano) */}
+            {group.label && (
+              <div
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 5,
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: 'var(--amber)',
+                  background: 'var(--surface)',
+                  padding: '8px 16px',
+                  margin: '0 -16px',
+                  fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {group.label}
+              </div>
+            )}
 
             {/* Photo grid */}
             <div
@@ -504,6 +572,7 @@ export function PhotosTimeline({
                   onSetAsCover={onSetAsCover}
                   onCreateAlbum={onCreateAlbum}
                   onViewExif={onViewExif}
+                  onProcessPhoto={onProcessPhoto}
                   onDelete={onDeletePhoto}
                   selected={selectedIds.has(photo.id)}
                   showCheckbox={hasSelection}
@@ -531,6 +600,26 @@ export function PhotosTimeline({
         {/* Spacer for scroll trigger */}
         <div style={{ height: 1 }} />
       </div>
+
+      {/* Marquee de escritorio (react-selecto): arrastrar desde hueco vacío
+          selecciona por rectángulo; los clicks sobre tiles siguen abriendo. */}
+      {!isMobile && scrollEl && (
+        <Selecto
+          dragContainer={scrollEl}
+          selectableTargets={['[data-photo-id]']}
+          hitRate={0}
+          selectByClick={false}
+          selectFromInside={false}
+          continueSelectWithoutDeselect
+          scrollOptions={{ container: scrollEl, throttleTime: 30, threshold: 30 }}
+          onScroll={({ direction }) => scrollEl.scrollBy(direction[0]! * 12, direction[1]! * 12)}
+          onSelect={(e) => {
+            const ids = (els: (HTMLElement | SVGElement)[]) =>
+              els.map((el) => (el as HTMLElement).dataset.photoId!).filter(Boolean);
+            onApplyDelta(ids(e.added), ids(e.removed));
+          }}
+        />
+      )}
     </DropZone>
   );
 }

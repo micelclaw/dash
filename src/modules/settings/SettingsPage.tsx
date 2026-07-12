@@ -14,7 +14,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import {
   Globe, Palette, Shield, Search as SearchIcon, HardDrive, Network,
-  UserCircle, Brain, Terminal, Lock, AppWindow, Code,
+  UserCircle, Brain, Terminal, Lock, AppWindow, Code, Menu,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
@@ -29,6 +29,7 @@ import {
 import { NotFoundSection } from '@/components/settings/sections/NotFoundSection';
 import { SettingsSidebarGroup } from '@/components/settings/SettingsSidebarGroup';
 import { SettingsSidebarSearch } from '@/components/settings/SettingsSidebarSearch';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { SettingsLanding, type LandingGroup } from './SettingsLanding';
 import { searchSettings, validateSearchIndex } from './settings-search-index';
 
@@ -323,6 +324,8 @@ export function Component() {
 
   // Search state.
   const [searchQuery, setSearchQuery] = useState('');
+  // Móvil: drawer lateral con la misma nav que escritorio (sustituye al <select> feo).
+  const [navOpen, setNavOpen] = useState(false);
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const results = searchSettings(searchQuery);
@@ -373,188 +376,182 @@ export function Component() {
     color: g.color,
   }));
 
-  // Mobile: search input + flat dropdown grouped by category. When the
-  // search has text we replace the dropdown with a result list so the
-  // user can tap directly — typing on a long `<select optgroup>` is
-  // unusable on small screens.
+  // Nav lateral compartida (escritorio + drawer móvil). `onPick` cierra el drawer al
+  // elegir sección; en escritorio no se pasa. Es EXACTAMENTE la misma nav (búsqueda +
+  // árbol de grupos) para que móvil se vea igual que el side panel, no un <select>.
+  const renderNavTree = (onPick?: () => void) => (
+    <>
+      <SettingsSidebarSearch query={searchQuery} onQueryChange={setSearchQuery} />
+
+      {searchQuery.trim() ? (
+        /* ── Flat search results view ── */
+        <div>
+          {searchResults.length === 0 ? (
+            <div style={{ padding: '12px 8px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+              No results for «{searchQuery}»
+            </div>
+          ) : (
+            searchResults.map((r) => {
+              const group = GROUPS.find((g) => g.id === r.entry.groupId);
+              const item = group?.sections.find((s) => s.id === r.entry.sectionId);
+              const Icon = item?.icon ?? SearchIcon;
+              const isActive = activeSection === r.entry.sectionId;
+              const matchHint =
+                r.match.field === 'label'
+                  ? group?.label
+                  : `${group?.label ?? ''} · matches: ${r.match.term}`;
+              return (
+                <button
+                  key={r.entry.sectionId}
+                  type="button"
+                  onClick={() => {
+                    navigate(`/settings/${r.entry.sectionId}`, { replace: true });
+                    setSearchQuery('');
+                    onPick?.();
+                  }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+                    width: '100%', padding: '8px 12px',
+                    background: isActive ? 'var(--surface-hover)' : 'transparent',
+                    border: 'none', borderRadius: 'var(--radius-md)',
+                    color: isActive ? 'var(--amber)' : 'var(--text-dim)',
+                    fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                    cursor: 'pointer', textAlign: 'left', marginBottom: 2,
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--surface)'; }}
+                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Icon size={14} />
+                    <span>{item?.label ?? r.entry.label}</span>
+                  </span>
+                  {matchHint && (
+                    <span style={{
+                      fontSize: '0.625rem',
+                      color: r.match.field === 'label' ? 'var(--text-muted)' : 'var(--amber)',
+                      marginLeft: 22,
+                    }}>
+                      {matchHint}
+                    </span>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* ── Grouped tree view ── */
+        <>
+          <button
+            type="button"
+            onClick={() => { navigate('/settings', { replace: true }); onPick?.(); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '8px 12px', marginBottom: 6,
+              background: !activeSection ? 'var(--surface-hover)' : 'transparent',
+              border: 'none', borderRadius: 'var(--radius-md)',
+              color: !activeSection ? 'var(--amber)' : 'var(--text-dim)',
+              fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+              cursor: 'pointer', textAlign: 'left',
+            }}
+            onMouseEnter={(e) => { if (activeSection) e.currentTarget.style.background = 'var(--surface)'; }}
+            onMouseLeave={(e) => { if (activeSection) e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Globe size={14} />
+            <span>Home</span>
+          </button>
+
+          {GROUPS.map((group) => (
+            <SettingsSidebarGroup
+              key={group.id}
+              id={group.id}
+              label={group.label}
+              icon={group.icon}
+              color={group.color}
+              expanded={!!expandedGroups[group.id]}
+              onToggle={() => toggleGroup(group.id)}
+              count={group.sections.length}
+            >
+              {group.sections.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => { navigate(`/settings/${item.id}`, { replace: true }); onPick?.(); }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '6px 10px',
+                      background: isActive ? 'var(--surface-hover)' : 'transparent',
+                      border: 'none', borderRadius: 'var(--radius-sm)',
+                      color: isActive ? 'var(--amber)' : 'var(--text-dim)',
+                      fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
+                      cursor: 'pointer', textAlign: 'left', marginBottom: 1,
+                    }}
+                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--surface)'; }}
+                    onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon size={13} />
+                    <span style={{ flex: 1 }}>{item.label}</span>
+                  </button>
+                );
+              })}
+            </SettingsSidebarGroup>
+          ))}
+        </>
+      )}
+    </>
+  );
+
+  // Etiqueta de la sección activa (para la cabecera móvil junto a la hamburguesa).
+  const activeSectionLabel = activeSection
+    ? GROUPS.flatMap((g) => g.sections).find((s) => s.id === activeSection)?.label ?? 'Settings'
+    : 'Settings';
+
+  // Mobile: hamburguesa que abre el mismo side panel (drawer) que en escritorio.
   if (isMobile) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
+        {/* Cabecera móvil: hamburguesa que despliega el side panel + título de la sección. */}
         <div
           style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 5,
-            background: 'var(--card)',
-            borderBottom: '1px solid var(--border)',
-            padding: '8px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
+            position: 'sticky', top: 0, zIndex: 5,
+            background: 'var(--card)', borderBottom: '1px solid var(--border)',
+            padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10,
           }}
         >
-          <div style={{ position: 'relative' }}>
-            <SearchIcon
-              size={14}
-              style={{
-                position: 'absolute',
-                left: 10,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-muted)',
-                pointerEvents: 'none',
-              }}
-            />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search settings…"
-              autoComplete="off"
-              style={{
-                width: '100%',
-                height: 36,
-                padding: '0 30px 0 32px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text)',
-                fontSize: '0.875rem',
-                fontFamily: 'var(--font-sans)',
-                outline: 'none',
-              }}
-            />
-            {searchQuery.trim() && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 20,
-                  height: 20,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  lineHeight: 1,
-                  padding: 0,
-                }}
-              >
-                ×
-              </button>
-            )}
-          </div>
-
-          {!searchQuery.trim() && (
-            <select
-              value={activeSection ?? ''}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v) navigate(`/settings/${v}`, { replace: true });
-                else navigate('/settings', { replace: true });
-              }}
-              style={{
-                width: '100%',
-                height: 36,
-                padding: '0 10px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--text)',
-                fontSize: '0.875rem',
-                fontFamily: 'var(--font-sans)',
-                outline: 'none',
-              }}
-            >
-              <option value="">— Home —</option>
-              {GROUPS.map((g) => (
-                <optgroup key={g.id} label={g.label}>
-                  {g.sections.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          )}
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open settings menu"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 36, height: 36, flexShrink: 0,
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)', color: 'var(--text)', cursor: 'pointer',
+            }}
+          >
+            <Menu size={18} />
+          </button>
+          <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {activeSectionLabel}
+          </span>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {searchQuery.trim() ? (
-            searchResults.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', padding: '12px 0' }}>
-                No results for «{searchQuery}»
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {searchResults.map((r) => {
-                  const group = GROUPS.find((g) => g.id === r.entry.groupId);
-                  const item = group?.sections.find((s) => s.id === r.entry.sectionId);
-                  const Icon = item?.icon ?? SearchIcon;
-                  const matchHint =
-                    r.match.field === 'label'
-                      ? group?.label
-                      : `${group?.label ?? ''} · matches: ${r.match.term}`;
-                  return (
-                    <button
-                      key={r.entry.sectionId}
-                      type="button"
-                      onClick={() => {
-                        navigate(`/settings/${r.entry.sectionId}`, { replace: true });
-                        setSearchQuery('');
-                      }}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        gap: 4,
-                        width: '100%',
-                        padding: '10px 12px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-md)',
-                        color: 'var(--text)',
-                        fontSize: '0.875rem',
-                        fontFamily: 'var(--font-sans)',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Icon size={14} />
-                        <span>{item?.label ?? r.entry.label}</span>
-                      </span>
-                      {matchHint && (
-                        <span
-                          style={{
-                            fontSize: '0.6875rem',
-                            color: r.match.field === 'label' ? 'var(--text-muted)' : 'var(--amber)',
-                            marginLeft: 22,
-                          }}
-                        >
-                          {matchHint}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )
-          ) : activeSection ? (
-            renderSection(activeSection)
-          ) : (
-            <SettingsLanding groups={landingGroups} />
-          )}
+          {activeSection ? renderSection(activeSection) : <SettingsLanding groups={landingGroups} />}
         </div>
+
+        {/* Drawer lateral: MISMA nav que escritorio (búsqueda + árbol de grupos). El
+            paddingTop deja hueco para la X de cierre que aporta SheetContent. */}
+        <Sheet open={navOpen} onOpenChange={setNavOpen}>
+          <SheetContent side="left" style={{ width: 280, padding: '8px 8px 14px', paddingTop: 'calc(44px + env(safe-area-inset-top, 0px))', overflowY: 'auto' }} aria-describedby={undefined}>
+            <div style={{ width: '100%' }}>
+              {renderNavTree(() => setNavOpen(false))}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     );
   }
@@ -570,170 +567,7 @@ export function Component() {
           overflowY: 'auto',
         }}
       >
-        <SettingsSidebarSearch query={searchQuery} onQueryChange={setSearchQuery} />
-
-        {searchQuery.trim() ? (
-          /* ── Flat search results view ── */
-          <div>
-            {searchResults.length === 0 ? (
-              <div
-                style={{
-                  padding: '12px 8px',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.75rem',
-                }}
-              >
-                No results for «{searchQuery}»
-              </div>
-            ) : (
-              searchResults.map((r) => {
-                const group = GROUPS.find((g) => g.id === r.entry.groupId);
-                const item = group?.sections.find((s) => s.id === r.entry.sectionId);
-                const Icon = item?.icon ?? SearchIcon;
-                const isActive = activeSection === r.entry.sectionId;
-                // When the match was a tag/setting (not the section
-                // label itself), show "Group · matches: <term>" so the
-                // user understands *why* this section showed up.
-                const matchHint =
-                  r.match.field === 'label'
-                    ? group?.label
-                    : `${group?.label ?? ''} · matches: ${r.match.term}`;
-                return (
-                  <button
-                    key={r.entry.sectionId}
-                    type="button"
-                    onClick={() => {
-                      navigate(`/settings/${r.entry.sectionId}`, { replace: true });
-                      setSearchQuery('');
-                    }}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      gap: 2,
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: isActive ? 'var(--surface-hover)' : 'transparent',
-                      border: 'none',
-                      borderRadius: 'var(--radius-md)',
-                      color: isActive ? 'var(--amber)' : 'var(--text-dim)',
-                      fontSize: '0.8125rem',
-                      fontFamily: 'var(--font-sans)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      marginBottom: 2,
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'var(--surface)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon size={14} />
-                      <span>{item?.label ?? r.entry.label}</span>
-                    </span>
-                    {matchHint && (
-                      <span
-                        style={{
-                          fontSize: '0.625rem',
-                          color: r.match.field === 'label' ? 'var(--text-muted)' : 'var(--amber)',
-                          marginLeft: 22,
-                        }}
-                      >
-                        {matchHint}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        ) : (
-          /* ── Grouped tree view ── */
-          <>
-            <button
-              type="button"
-              onClick={() => navigate('/settings', { replace: true })}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                width: '100%',
-                padding: '8px 12px',
-                marginBottom: 6,
-                background: !activeSection ? 'var(--surface-hover)' : 'transparent',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                color: !activeSection ? 'var(--amber)' : 'var(--text-dim)',
-                fontSize: '0.8125rem',
-                fontFamily: 'var(--font-sans)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-              onMouseEnter={(e) => {
-                if (activeSection) e.currentTarget.style.background = 'var(--surface)';
-              }}
-              onMouseLeave={(e) => {
-                if (activeSection) e.currentTarget.style.background = 'transparent';
-              }}
-            >
-              <Globe size={14} />
-              <span>Home</span>
-            </button>
-
-            {GROUPS.map((group) => (
-              <SettingsSidebarGroup
-                key={group.id}
-                id={group.id}
-                label={group.label}
-                icon={group.icon}
-                color={group.color}
-                expanded={!!expandedGroups[group.id]}
-                onToggle={() => toggleGroup(group.id)}
-                count={group.sections.length}
-              >
-                {group.sections.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeSection === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => navigate(`/settings/${item.id}`, { replace: true })}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        width: '100%',
-                        padding: '6px 10px',
-                        background: isActive ? 'var(--surface-hover)' : 'transparent',
-                        border: 'none',
-                        borderRadius: 'var(--radius-sm)',
-                        color: isActive ? 'var(--amber)' : 'var(--text-dim)',
-                        fontSize: '0.75rem',
-                        fontFamily: 'var(--font-sans)',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        marginBottom: 1,
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) e.currentTarget.style.background = 'var(--surface)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) e.currentTarget.style.background = 'transparent';
-                      }}
-                    >
-                      <Icon size={13} />
-                      <span style={{ flex: 1 }}>{item.label}</span>
-                    </button>
-                  );
-                })}
-              </SettingsSidebarGroup>
-            ))}
-          </>
-        )}
+        {renderNavTree()}
       </nav>
 
       {/* Content */}

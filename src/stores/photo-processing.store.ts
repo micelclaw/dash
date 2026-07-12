@@ -40,6 +40,11 @@ interface PhotoProcessingState {
   setPaused: (paused: boolean) => void;
   clearFile: (fileId: string) => void;
   clearNonPending: () => void;
+  /** Clear ONLY 'pending' entries whose id is in readyIds (a fetched photo is
+   *  now processed/viewable). Never touches active phases (multimodal/…) so an
+   *  in-flight reprocess spinner is preserved. Fixes the captured-photo badge
+   *  that never received a worker clearing event. */
+  clearProcessedPending: (readyIds: string[]) => void;
   clearAll: () => void;
 }
 
@@ -82,6 +87,18 @@ export const usePhotoProcessingStore = create<PhotoProcessingState>()((set) => (
         if (entry.phase === 'pending') next.set(id, entry);
       }
       return { processingFiles: next };
+    }),
+
+  clearProcessedPending: (readyIds) =>
+    set((state) => {
+      if (readyIds.length === 0) return state;
+      const ready = new Set(readyIds);
+      let changed = false;
+      const next = new Map(state.processingFiles);
+      for (const [id, entry] of state.processingFiles) {
+        if (entry.phase === 'pending' && ready.has(id)) { next.delete(id); changed = true; }
+      }
+      return changed ? { processingFiles: next } : state;
     }),
 
   setPaused: (paused) => set({ isPaused: paused }),

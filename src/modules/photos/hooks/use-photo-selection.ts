@@ -36,5 +36,20 @@ export function usePhotoSelection(items: { id: string }[]) {
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  return { selectedIds, toggleSelection, clearSelection };
+  /** Reemplaza la selección entera (drag-select táctil por rango). */
+  const setSelection = useCallback((ids: Set<string>) => {
+    setSelectedIds(new Set(ids));
+  }, []);
+
+  /** Delta add/remove (marquee de Selecto en escritorio). */
+  const applyDelta = useCallback((added: string[], removed: string[]) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      for (const id of added) next.add(id);
+      for (const id of removed) next.delete(id);
+      return next;
+    });
+  }, []);
+
+  return { selectedIds, toggleSelection, clearSelection, setSelection, applyDelta };
 }

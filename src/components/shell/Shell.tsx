@@ -19,7 +19,7 @@ import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { useDigestStore } from '@/stores/digest.store';
-import { useIsMobile, useIsCompact } from '@/hooks/use-media-query';
+import { useIsPhone, useIsCompact, useKeyboardOpen } from '@/hooks/use-media-query';
 import { useKeyboard } from '@/hooks/use-keyboard';
 import { useCommandPalette } from '@/hooks/use-command-palette';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -64,7 +64,15 @@ export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
   const toggle = useSidebarStore((s) => s.toggle);
   const setCollapsed = useSidebarStore((s) => s.setCollapsed);
-  const isMobile = useIsMobile();
+  // "App móvil" = teléfono en CUALQUIER orientación. useIsMobile es solo por ancho,
+  // así que en landscape (ancho > 767) sacaba el Sidebar de módulos y la BottomBar de
+  // escritorio. En teléfono la navegación de módulos vive SOLO en el botón "Más" de la
+  // bottom-nav (petición del usuario) → usamos isPhone para el shell móvil.
+  const isPhone = useIsPhone();
+  // Con el teclado desplegado (móvil) ocultamos la nav inferior para dar más
+  // espacio a la escritura (nota/evento/chat/correo…). El nav es flex-item, así
+  // que al desmontarlo el contenido reclama el hueco.
+  const keyboardOpen = useKeyboardOpen();
   const isCompact = useIsCompact();
   const location = useLocation();
   const connect = useWebSocketStore((s) => s.connect);
@@ -75,8 +83,25 @@ export function Shell() {
   const logout = useAuthStore((s) => s.logout);
   const isChatPage = location.pathname === '/chat';
 
+  // Rutas "inmersivas": interfaces ricas de dibujo (whiteboard/Excalidraw y editor de
+  // diagramas/ReactFlow) que necesitan todo el lienzo. En ellas ocultamos TopBar y la
+  // nav inferior para dibujar a pantalla completa (petición móvil, aplica también en
+  // escritorio). El launcher /sketches NO es inmersivo; sí sus subrutas.
+  const isImmersive =
+    location.pathname !== '/sketches' && location.pathname.startsWith('/sketches/');
+
   // Deep-links del wrapper móvil (widgets nativos → abrir ruta/registro). No-op en web.
   useDeepLinks();
+
+  // Siembra la cookie `claw_session` en el WebView/navegador (idempotente). Los iframes
+  // de servicios embebidos same-origin (Mathesar/Portainer/…) autorizan por esta cookie
+  // (el navegador NO manda Authorization en la navegación de un iframe). En web ya la pone
+  // el login; en la app móvil la sesión entra por device token/handoff (Bearer) y el
+  // WebView puede no tenerla → sin esto los embeds darían 401. El api client adjunta el
+  // Bearer y Core lo refleja a la cookie httpOnly. No-op si algo falla.
+  useEffect(() => {
+    api.post('/auth/session-cookie').catch(() => { /* best-effort */ });
+  }, []);
 
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
 
@@ -205,7 +230,7 @@ export function Shell() {
   // Auto-collapse on compact screens, auto-expand when viewport goes wide
   const prevCompactRef = useRef(isCompact);
   useEffect(() => {
-    if (isMobile) return;
+    if (isPhone) return;
     const wasCompact = prevCompactRef.current;
     prevCompactRef.current = isCompact;
 
@@ -217,7 +242,7 @@ export function Shell() {
       const { userCollapsed } = useSidebarStore.getState();
       setCollapsed(userCollapsed);
     }
-  }, [isCompact, isMobile, setCollapsed]);
+  }, [isCompact, isPhone, setCollapsed]);
 
   // Connect WebSocket on mount — proactively refresh token first
   useEffect(() => {
@@ -785,23 +810,25 @@ export function Shell() {
           <OnboardingBanner variant="completed" onDismiss={() => setBannerDismissed(true)} />
         )}
 
-        {/* Desktop sidebar (en móvil se sustituye por la bottom-nav de abajo) */}
-        {!isMobile && (
+        {/* Desktop sidebar (en móvil se sustituye por la bottom-nav de abajo).
+            isPhone (no isMobile) → oculto también en landscape de teléfono. */}
+        {!isPhone && (
           <Sidebar onOpenCommandPalette={openPalette} />
         )}
 
         {/* Main content area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-          <TopBar onOpenCommandPalette={openPalette} />
+          {!isImmersive && <TopBar onOpenCommandPalette={openPalette} />}
 
           {/* Content + BottomBar */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ flex: 1, overflow: 'auto', position: 'relative', display: 'flex', flexDirection: 'column' }}>
               <AppAccessGate><Outlet /></AppAccessGate>
             </div>
-            {/* Móvil: nav inferior de 5 slots (Hoy/Chat/+/Buscar/Más). Escritorio:
-                la BottomBar de chat acoplada (salvo en /chat). */}
-            {isMobile ? <MobileBottomNav /> : (!isChatPage && <BottomBar />)}
+            {/* Móvil (teléfono, cualquier orientación): nav inferior de 5 slots
+                (Hoy/Chat/+/Buscar/Más). Escritorio: la BottomBar de chat acoplada
+                (salvo en /chat). En rutas inmersivas se ocultan ambas. */}
+            {!isImmersive && (isPhone ? (!keyboardOpen && <MobileBottomNav />) : (!isChatPage && <BottomBar />))}
           </div>
         </div>
 

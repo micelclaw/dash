@@ -18,9 +18,11 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { TileMoreButton } from '@/components/shared/TileMoreButton';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { RenameDialog } from '@/components/shared/RenameDialog';
 import { FolderPicker } from '@/components/shared/FolderPicker';
-import { ShareModal } from '@/components/shared/ShareModal';
+import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useFileClipboard } from '@/stores/file-clipboard.store';
 import { useDriveStore } from '@/stores/drive.store';
@@ -31,8 +33,6 @@ import { useFilesQuery } from '../hooks/use-files-query';
 import { useDriveShortcuts } from '../hooks/use-drive-shortcuts';
 import { buildFileContextMenu, type DriveMenuContext } from '../context-menu';
 import { DriveInspector } from '../components/inspector/DriveInspector';
-import { ShareWithUserModal } from '../components/ShareWithUserModal';
-import { ShareEmailModal } from '../components/ShareEmailModal';
 import { TagsModal } from '../components/TagsModal';
 import type { ApiResponse } from '@/types/api';
 import type { FileRecord } from '@/types/files';
@@ -60,14 +60,11 @@ export function RecentView() {
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   const [folderPickerIds, setFolderPickerIds] = useState<string[] | null>(null);
   const [folderPickerMode, setFolderPickerMode] = useState<'move' | 'copy'>('move');
-  const [shareFile, setShareFile] = useState<FileRecord | null>(null);
-  const [shareUserFiles, setShareUserFiles] = useState<FileRecord[] | null>(null);
-  const [shareEmailFile, setShareEmailFile] = useState<FileRecord | null>(null);
+  const [shareTargets, setShareTargets] = useState<FileRecord[] | null>(null);
   const [tagsFiles, setTagsFiles] = useState<FileRecord[] | null>(null);
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
 
-  const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareFile
-    || !!shareUserFiles || !!shareEmailFile || !!tagsFiles || confirmDeleteIds !== null;
+  const anyModalOpen = !!renameTarget || folderPickerIds !== null || !!shareTargets || !!tagsFiles || confirmDeleteIds !== null;
 
   const hotFiles = useMemo(
     () => hot.files.filter(f => (f.heat_score ?? 0) > 0),
@@ -191,9 +188,7 @@ export function RecentView() {
         setInspectorOpen(true);
       },
       onToggleStar: (targets, starred) => { void handleToggleStar(targets, starred); },
-      onShare: (file) => setShareFile(file),
-      onShareUser: (targets) => setShareUserFiles(targets),
-      onShareEmail: (file) => setShareEmailFile(file),
+      onShare: (targets) => setShareTargets(targets),
       onCut: handleCut,
       onCopy: handleCopy,
       onMoveTo: (targets) => openFolderPicker(targets.map(f => f.id), 'move'),
@@ -312,16 +307,18 @@ export function RecentView() {
       />
 
       {/* Modals (P2 — calqued from StarredView) */}
-      {shareFile && (
-        <ShareModal open={!!shareFile} file={shareFile} onClose={() => setShareFile(null)} />
-      )}
-      <ShareWithUserModal
-        open={shareUserFiles !== null}
-        files={shareUserFiles ?? []}
-        onClose={() => setShareUserFiles(null)}
-      />
-      {shareEmailFile && (
-        <ShareEmailModal open={!!shareEmailFile} file={shareEmailFile} onClose={() => setShareEmailFile(null)} />
+      {shareTargets && shareTargets.length > 0 && (
+        <EntityShareModal
+          open
+          entityType="file"
+          entityId={shareTargets[0]!.id}
+          entityIds={shareTargets.map(f => f.id)}
+          entityTitle={shareTargets.length === 1 ? shareTargets[0]!.filename : ''}
+          shareMeta={shareTargets.length === 1
+            ? { mime: shareTargets[0]!.mime_type ?? undefined, isDirectory: shareTargets[0]!.is_directory }
+            : undefined}
+          onClose={() => setShareTargets(null)}
+        />
       )}
       <TagsModal
         open={tagsFiles !== null}
@@ -376,6 +373,9 @@ function HotCard({ file, selected, onClick, onDoubleClick }: {
   onDoubleClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  // Recent no tiene multi-selección → en móvil el ⋮ se muestra siempre
+  // (es la única vía de abrir el menú contextual sin long-press).
+  const isMobile = useIsMobile();
   return (
     <div
       onClick={onClick}
@@ -413,6 +413,8 @@ function HotCard({ file, selected, onClick, onDoubleClick }: {
           {typeof file.access_count === 'number' && file.access_count > 0 && ` · ${file.access_count} opens`}
         </div>
       </div>
+      {/* ⋮ (móvil): abre el menú contextual de la tarjeta */}
+      {isMobile && <TileMoreButton style={{ position: 'static', flexShrink: 0 }} />}
     </div>
   );
 }
@@ -424,6 +426,8 @@ function RecentRow({ file, selected, onClick, onDoubleClick }: {
   onDoubleClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  // Sin multi-selección → ⋮ siempre visible en móvil (única vía al menú).
+  const isMobile = useIsMobile();
   return (
     <div
       onClick={onClick}
@@ -431,11 +435,14 @@ function RecentRow({ file, selected, onClick, onDoubleClick }: {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
+        position: 'relative',
         display: 'grid',
         gridTemplateColumns: '1fr 90px 140px',
         gap: 8,
         alignItems: 'center',
         padding: '6px 8px',
+        // Hueco para el ⋮ superpuesto al final de la fila (móvil)
+        paddingRight: isMobile ? 34 : 8,
         borderRadius: 'var(--radius-sm)',
         background: selected ? 'var(--amber-dim)' : hovered ? 'var(--surface-hover)' : 'transparent',
         cursor: 'pointer',
@@ -460,6 +467,10 @@ function RecentRow({ file, selected, onClick, onDoubleClick }: {
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {file.last_accessed_at ? formatRelative(new Date(file.last_accessed_at)) : formatRelative(new Date(file.updated_at))}
       </span>
+      {/* ⋮ (móvil): abre el menú contextual de la fila */}
+      {isMobile && (
+        <TileMoreButton style={{ top: '50%', right: 4, transform: 'translateY(-50%)' }} />
+      )}
     </div>
   );
 }

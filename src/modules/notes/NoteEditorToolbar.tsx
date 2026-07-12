@@ -32,6 +32,9 @@ interface NoteEditorToolbarProps {
   format?: NoteFormat;
   tocOpen?: boolean;
   onToggleToc?: () => void;
+  /** Abre el selector de imagen (galería en móvil / explorador en PC). Si se
+   *  provee, el botón de imagen lo usa en vez del prompt de URL. */
+  onPickImage?: () => void;
 }
 
 interface ToolbarButton {
@@ -44,6 +47,9 @@ interface ToolbarButton {
   hiddenFor?: NoteFormat[];
   /** Solo visible cuando el cursor está dentro de una tabla. */
   tableContext?: boolean;
+  /** Botón con comportamiento especial cableado desde el editor (p.ej. abrir
+   *  el selector de imagen nativo en vez de ejecutar `action`). */
+  special?: 'pickImage';
 }
 
 const BUTTONS: ToolbarButton[] = [
@@ -87,7 +93,9 @@ const BUTTONS: ToolbarButton[] = [
     isActive: e => e.isActive('link'),
   },
   {
-    icon: ImageIcon, label: 'Image (URL)',
+    icon: ImageIcon, label: 'Insertar imagen', special: 'pickImage',
+    // Fallback si el editor no cablea onPickImage (p.ej. consumidores sin
+    // subida): prompt de URL, el comportamiento antiguo.
     action: e => {
       const url = window.prompt('URL de la imagen:');
       if (url) e.chain().focus().setImage({ src: url }).run();
@@ -127,7 +135,7 @@ const BUTTONS: ToolbarButton[] = [
   { icon: Trash2, label: 'Delete table', tableContext: true, action: e => e.chain().focus().deleteTable().run() },
 ];
 
-export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleToc }: NoteEditorToolbarProps) {
+export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleToc, onPickImage }: NoteEditorToolbarProps) {
   if (!editor) return null;
   const inTable = editor.isActive('table');
 
@@ -164,6 +172,9 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
             // details/table/…), `editor.chain().focus().toggleX()` no existe y reventaba
             // con pageerror. Guardamos la acción: comando no disponible → no-op, no crash.
             onClick={() => {
+              // Botón de imagen: abre el selector nativo (galería en móvil,
+              // explorador en PC) si el editor lo cableó; si no, cae al prompt.
+              if (btn.special === 'pickImage' && onPickImage) { onPickImage(); return; }
               try {
                 btn.action(editor);
               } catch (err) {

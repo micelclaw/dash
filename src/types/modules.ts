@@ -22,4 +22,7 @@ export interface ModuleConfig {
   /** Solo visible para owner/admin (infraestructura del sistema). Fase 0 del
    *  rediseño NAS; la Fase 1 añade además el gating per-usuario por app-access. */
   adminOnly?: boolean;
+  /** Solo visible en escritorio (oculto en el shell de teléfono). p.ej. Studio,
+   *  cuya UX de tres paneles no cabe en móvil. */
+  desktopOnly?: boolean;
 }

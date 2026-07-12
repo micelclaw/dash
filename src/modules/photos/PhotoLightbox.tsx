@@ -11,13 +11,15 @@
  */
 
 import { useEffect, useCallback, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Image, Users } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Image, Users, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
-import { formatFileSize, getPreviewUrl } from '@/lib/file-utils';
+import { formatFileSize, getPreviewUrl, getStreamUrl, isVideoMime } from '@/lib/file-utils';
 import { formatDateShort, formatTime } from '@/lib/date-helpers';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
 import type { FaceDetection } from '@/stores/photo-ai.store';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { StarRating } from './StarRating';
 import { SimilarPhotosPanel } from './SimilarPhotosPanel';
 import { FaceOverlay } from './FaceOverlay';
@@ -30,6 +32,9 @@ interface PhotoLightboxProps {
   onClose: () => void;
   onNavigate: (index: number) => void;
   onUpdatePhoto?: (photo: Photo) => void;
+  /** Estado/toggle del panel Photo Details (botón superpuesto en el visor). */
+  detailsOpen?: boolean;
+  onToggleDetails?: () => void;
 }
 
 export function PhotoLightbox({
@@ -38,7 +43,10 @@ export function PhotoLightbox({
   onClose,
   onNavigate,
   onUpdatePhoto,
+  detailsOpen = false,
+  onToggleDetails,
 }: PhotoLightboxProps) {
+  const isMobile = useIsMobile();
   const photo = photos[currentIndex];
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
@@ -56,6 +64,11 @@ export function PhotoLightbox({
   const linkFaceToContact = usePhotoAiStore((s) => s.linkFaceToContact);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [contactDialogFace, setContactDialogFace] = useState<FaceDetection | null>(null);
+
+  // Bug 8: el botón "atrás" del dispositivo cierra el visor. Si el panel de
+  // detalles (ExifPanel) está abierto, ese overlay está más arriba en la pila y
+  // "atrás" lo cierra primero (ver ExifPanel, que registra su propio back).
+  useBackGuard(true, onClose);
 
   // Touch/swipe support
   const pointerStartX = useRef<number | null>(null);
@@ -167,6 +180,7 @@ export function PhotoLightbox({
   if (!photo) return null;
 
   const previewUrl = getPreviewUrl(photo.id, 1200);
+  const isVideo = isVideoMime(photo.mime_type || '');
   const dateObj = photo.taken_at ? new Date(photo.taken_at) : new Date(photo.created_at);
   const camera = photo.metadata?.camera;
   const gps = photo.metadata?.gps;
@@ -217,7 +231,14 @@ export function PhotoLightbox({
         height: '100%',
         background: '#000',
         position: 'relative',
+        // Android WebView: el long-press sobre la imagen abierta arrancaba la
+        // selección/callout nativa y CONGELABA la app (mismo secuestro táctil
+        // que en los tiles). Se suprime aquí + preventDefault del contextmenu.
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
       }}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onTouchStart={handleTouchStart}
@@ -230,7 +251,7 @@ export function PhotoLightbox({
         onMouseLeave={() => setHoveredBtn(null)}
         style={{
           position: 'absolute',
-          top: 12,
+          top: 'calc(12px + env(safe-area-inset-top, 0px))',
           right: 12,
           zIndex: 2,
           width: 36,
@@ -249,23 +270,54 @@ export function PhotoLightbox({
         <X size={18} />
       </button>
 
+      {/* Photo Details toggle — superpuesto sobre la foto (la barra-rail ya no existe) */}
+      {onToggleDetails && (
+        <button
+          onClick={onToggleDetails}
+          onMouseEnter={() => setHoveredBtn('details')}
+          onMouseLeave={() => setHoveredBtn(null)}
+          title={detailsOpen ? 'Hide details' : 'Photo details'}
+          style={{
+            position: 'absolute',
+            top: 'calc(12px + env(safe-area-inset-top, 0px))',
+            right: 56,
+            zIndex: 2,
+            width: 36,
+            height: 36,
+            borderRadius: 'var(--radius-full)',
+            border: 'none',
+            background: hoveredBtn === 'details' ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)',
+            color: '#fff',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background var(--transition-fast)',
+          }}
+        >
+          {detailsOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+        </button>
+      )}
+
       {/* Main layout: photo area + optional similar panel */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Photo area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-          {/* Photo + navigation */}
+          {/* Photo + navigation — en móvil la foto va a sangre (sin padding ni
+              flechas: se navega deslizando, como cualquier galería) */}
           <div
             style={{
               flex: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 12,
-              padding: '12px 12px 0',
+              gap: isMobile ? 0 : 12,
+              padding: isMobile ? 0 : '12px 12px 0',
               minHeight: 0,
             }}
           >
-            {/* Prev arrow */}
+            {/* Prev arrow (solo escritorio) */}
+            {!isMobile && (
             <button
               onClick={(e) => { e.stopPropagation(); goPrev(); }}
               onMouseEnter={() => setHoveredBtn('prev')}
@@ -275,6 +327,7 @@ export function PhotoLightbox({
             >
               <ChevronLeft size={20} />
             </button>
+            )}
 
             {/* Photo display */}
             <div
@@ -290,16 +343,35 @@ export function PhotoLightbox({
                 position: 'relative',
               }}
             >
-              {!imgError ? (
+              {isVideo ? (
+                /* Vídeo (gallery-sync): reproducción inline vía el endpoint de
+                   streaming con Range (mismo patrón que VideoOverlay). */
+                <video
+                  key={photo.id}
+                  controls
+                  autoPlay
+                  preload="metadata"
+                  src={getStreamUrl(photo.id)}
+                  poster={previewUrl}
+                  style={isMobile
+                    ? { width: '100%', height: '100%', objectFit: 'contain' }
+                    : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              ) : !imgError ? (
                 <>
                   <img
                     src={previewUrl}
                     alt={photo.filename}
+                    draggable={false}
                     onError={() => setImgError(true)}
                     onLoad={() => setImgLoaded(true)}
                     style={{
-                      maxWidth: '100%',
-                      maxHeight: '100%',
+                      // Móvil: a sangre (todo el ancho de la pantalla, sin
+                      // márgenes laterales — el letterbox de contain es solo
+                      // vertical, como en una galería nativa).
+                      ...(isMobile
+                        ? { width: '100%', height: '100%' }
+                        : { maxWidth: '100%', maxHeight: '100%' }),
                       objectFit: 'contain',
                       opacity: imgLoaded ? 1 : 0,
                       transition: 'opacity 0.2s',
@@ -336,7 +408,8 @@ export function PhotoLightbox({
               )}
             </div>
 
-            {/* Next arrow */}
+            {/* Next arrow (solo escritorio) */}
+            {!isMobile && (
             <button
               onClick={(e) => { e.stopPropagation(); goNext(); }}
               onMouseEnter={() => setHoveredBtn('next')}
@@ -346,6 +419,7 @@ export function PhotoLightbox({
             >
               <ChevronRight size={20} />
             </button>
+            )}
           </div>
 
           {/* Action buttons */}

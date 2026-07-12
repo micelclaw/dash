@@ -18,6 +18,7 @@ import { useChatStore } from '@/stores/chat.store';
 import { useTtsChatState, nextTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { useCanvasEvents } from '@/hooks/use-canvas-events';
 import { useBrowserSession } from '@/hooks/use-browser-session';
 import { ChatPanel } from '@/components/shell/ChatPanel';
@@ -54,6 +55,12 @@ export function Component() {
     setInsightsCollapsed(next);
     try { localStorage.setItem('claw-insights-collapsed', String(next)); } catch { /* ignore */ }
   };
+
+  // Back jerárquico móvil: cada overlay se cierra con "atrás" (de más interna a
+  // más externa) en vez de salir del módulo. Replican el onClose/onClick actual.
+  useBackGuard(canvasOpen, () => setCanvasOpen(false), isMobile);
+  useBackGuard(checkpointsOpen, () => setCheckpointsOpen(false), isMobile);
+  useBackGuard(showSidebar, () => setShowSidebar(false), isMobile);
 
   // Set chat state to 3 on mount
   useEffect(() => {

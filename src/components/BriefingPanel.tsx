@@ -14,6 +14,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Newspaper, Lightbulb, ChevronRight } from 'lucide-react';
 import { useDigestStore, type DigestEntry } from '@/stores/digest.store';
+import { useIsPhone } from '@/hooks/use-media-query';
 
 const ALERT_COLORS: Record<string, string> = {
   SILENT: 'var(--text-muted)',
@@ -195,6 +196,7 @@ export function BriefingPanel() {
   const fetchTodayHistory = useDigestStore((s) => s.fetchTodayHistory);
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const isPhone = useIsPhone();
 
   useEffect(() => {
     if (panelOpen) {
@@ -220,8 +222,25 @@ export function BriefingPanel() {
     <div
       ref={panelRef}
       style={{
-        position: 'absolute', top: 44, right: 0,
-        width: 360, maxHeight: 480,
+        // En móvil el panel se anclaba al borde del BOTÓN interior (absolute;
+        // right:0) → su borde izquierdo caía fuera de pantalla (bug 1). En móvil
+        // pasa a FIXED respecto al viewport, anclado a la derecha de la pantalla;
+        // en escritorio se conserva el anclaje al botón.
+        ...(isPhone
+          ? {
+              position: 'fixed',
+              top: 'calc(42px + env(safe-area-inset-top, 0px) + 4px)',
+              right: 8,
+              left: 'auto',
+              width: 'min(360px, calc(100vw - 16px))',
+            }
+          : {
+              position: 'absolute',
+              top: 44,
+              right: 0,
+              width: 'min(360px, calc(100vw - 16px))',
+            }),
+        maxHeight: 480,
         background: 'var(--glass-75)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',

@@ -16,6 +16,7 @@ import { FileIcon } from '@/components/shared/FileIcon';
 import { FileThumbnail } from '@/components/shared/FileThumbnail';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { useLongPress } from './use-long-press';
 import { isImageMime, simpleHash, canShowThumbnail } from '@/lib/file-utils';
 import { useThumbnailBatch, getPrefetchedThumb } from '@/lib/thumbnail-batch';
 import { useDriveStore } from '@/stores/drive.store';
@@ -97,6 +98,7 @@ export function DriveGrid({
           selectedIds={selectedIds}
           isCut={!!cutIds?.has(file.id)}
           compact={compact}
+          isMobile={!!isMobile}
           onClick={() => onItemClick(file)}
           onDoubleClick={() => onItemDoubleClick(file)}
           onToggleSelect={(shiftKey) => onToggleSelect(file.id, shiftKey)}
@@ -122,7 +124,7 @@ export function DriveGrid({
 }
 
 function GridItem({
-  file, selected, checked, showCheckbox, selectedIds, isCut, compact, onClick, onDoubleClick,
+  file, selected, checked, showCheckbox, selectedIds, isCut, compact, isMobile, onClick, onDoubleClick,
   onToggleSelect, contextItems, onToggleStar, starred, onDragToFolder,
 }: {
   file: FileRecord;
@@ -132,6 +134,7 @@ function GridItem({
   selectedIds: Set<string>;
   isCut: boolean;
   compact: boolean;
+  isMobile: boolean;
   onClick: () => void;
   onDoubleClick: () => void;
   onToggleSelect: (shiftKey: boolean) => void;
@@ -144,6 +147,18 @@ function GridItem({
   const [isDragOver, setIsDragOver] = useState(false);
   const isImage = isImageMime(file.mime_type);
   const isDir = file.is_directory;
+
+  // Móvil: long-press (~300ms quieto) alterna la selección del tile — el menú
+  // contextual se abre con el ⋮ único de la batch bar (el long-press no lo abre).
+  const longPress = useLongPress(() => onToggleSelect(false), isMobile);
+
+  const handleClick = () => {
+    // El click que sigue a un long-press ya consumido no debe ni abrir ni re-toggle.
+    if (longPress.consumeFired()) return;
+    // Modo selección en móvil: tap = alternar selección (patrón galería).
+    if (isMobile && showCheckbox) { onToggleSelect(false); return; }
+    onClick();
+  };
 
   const hue = simpleHash(file.id) % 360;
   const showCb = showCheckbox || hovered || checked;
@@ -204,10 +219,11 @@ function GridItem({
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
+        onClick={handleClick}
+        onDoubleClick={() => { if (isMobile && showCheckbox) return; onDoubleClick(); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
+        {...(isMobile ? longPress.handlers : {})}
         style={{
           position: 'relative',
           width: '100%',

@@ -17,6 +17,7 @@ import { SplitPane } from '@/components/shared/SplitPane';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { useNotes } from './hooks/use-notes';
 import { NotesList } from './NotesList';
 import { NoteEditor } from './NoteEditor';
@@ -34,6 +35,9 @@ export function Component() {
     archived: false,
   });
   const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
+
+  // Móvil: el botón atrás cierra el editor (sub-vista) antes de salir del módulo.
+  useBackGuard(!!selectedNoteId, () => setSelectedNoteId(null), isMobile);
 
   const {
     notes, loading, error,
@@ -95,11 +99,6 @@ export function Component() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleCreateNote]);
 
-  // Mobile: push navigation
-  if (isMobile && selectedNoteId) {
-    return <NoteEditor noteId={selectedNoteId} onBack={() => setSelectedNoteId(null)} onSaved={patchLocalNote} />;
-  }
-
   const listPanel = (
     <NotesList
       notes={notes}
@@ -127,6 +126,15 @@ export function Component() {
       actions={[{ label: '+ New Note', onClick: handleCreateNote, variant: 'primary' }]}
     />
   );
+
+  // Móvil: navegación push (lista a pantalla completa → tap abre el editor con "atrás").
+  // Evitamos el SplitPane, que en móvil pinta una tab bar "Panel 1 / Panel 2" sin sentido:
+  // aquí ambas vistas ya son accesibles por navegación.
+  if (isMobile) {
+    return selectedNoteId
+      ? <NoteEditor noteId={selectedNoteId} onBack={() => setSelectedNoteId(null)} onSaved={patchLocalNote} />
+      : listPanel;
+  }
 
   return (
     <>

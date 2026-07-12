@@ -79,12 +79,23 @@ export function DiaryTimeline({
     return result;
   }, [entries]);
 
-  // Check if today has an entry
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const hasTodayEntry = entries.some(e => e.entry_date === todayStr);
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface)' }}>
+      {/* New entry — botón permanente arriba (como Contacts). Abre/crea la entrada de hoy. */}
+      <button
+        onClick={onCreateToday}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          margin: '12px 12px 0', padding: '8px 12px',
+          background: 'var(--amber)', color: '#06060a', border: 'none',
+          borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+        }}
+      >
+        <Plus size={16} />
+        New entry
+      </button>
+
       {/* Search */}
       <div style={{ padding: '12px 12px 0' }}>
         <div style={{
@@ -119,30 +130,6 @@ export function DiaryTimeline({
       <div style={{ padding: '8px 12px 0' }}>
         <DiaryStatsWidget />
       </div>
-
-      {/* Today ghost entry */}
-      {!hasTodayEntry && !loading && (
-        <button
-          onClick={onCreateToday}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            margin: '8px 12px',
-            padding: '10px 12px',
-            background: 'var(--amber-dim)',
-            border: '1px dashed var(--amber)',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-            color: 'var(--amber)',
-            fontSize: '0.8125rem',
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <Plus size={14} />
-          Write today's entry
-        </button>
-      )}
 
       {/* Entries list */}
       <div style={{ flex: 1, overflowY: 'auto' }}>

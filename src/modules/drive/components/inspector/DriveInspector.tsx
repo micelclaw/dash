@@ -18,6 +18,7 @@ import {
 import { Tabs } from '@/components/shared/Tabs';
 import { FileIcon } from '@/components/shared/FileIcon';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { useBackGuard } from '@/hooks/use-back-guard';
 import { formatFileSize, getMimeLabel } from '@/lib/file-utils';
 import { useDriveStore, type DriveInspectorTab } from '@/stores/drive.store';
 import { DetailsTab } from './DetailsTab';
@@ -69,6 +70,8 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
   const inspectorTab = useDriveStore(s => s.inspectorTab);
   const setInspectorTab = useDriveStore(s => s.setInspectorTab);
   const isOverlay = useMediaQuery('(max-width: 1023px)');
+  // En el sheet móvil, el botón "atrás" del dispositivo lo cierra (bug 8).
+  useBackGuard(isOverlay && inspectorOpen && files.length > 0, onClose);
 
   const single = files.length === 1 ? files[0]! : null;
 
@@ -135,8 +138,11 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
         ...(isOverlay ? {
           position: 'fixed' as const,
           top: 0, right: 0, bottom: 0,
-          zIndex: 45,
+          zIndex: 'var(--z-modal)',
           boxShadow: 'var(--shadow-lg)',
+          // Reservar el notch/barra de estado → el header (colapsar + X) queda
+          // por debajo y es tocable (bug 8: la X quedaba tapada arriba).
+          paddingTop: 'env(safe-area-inset-top, 0px)',
         } : {}),
       }}
     >
@@ -241,7 +247,7 @@ export function DriveInspector({ files, onClose, onRefetch, onDeleteFile, onTogg
       <>
         <div
           onClick={onClose}
-          style={{ position: 'fixed', inset: 0, zIndex: 44, background: 'rgba(0,0,0,0.4)' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 'var(--z-modal-backdrop)', background: 'rgba(0,0,0,0.4)' }}
         />
         {panel}
       </>

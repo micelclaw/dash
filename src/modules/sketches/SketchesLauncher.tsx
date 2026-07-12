@@ -235,8 +235,9 @@ export function SketchesLauncher() {
       padding: '32px 24px',
       fontFamily: 'var(--font-sans, system-ui)',
     }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 32 }}>
+      {/* Header — flexWrap: en móvil el grupo de botones baja a otra fila en vez de
+          provocar scroll horizontal (título + 2 botones no caben a 393px). */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Shapes size={24} style={{ color: 'var(--mod-sketches, #06b6d4)' }} />
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text, #e2e8f0)', margin: 0 }}>
