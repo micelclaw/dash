@@ -22,6 +22,8 @@ interface RelateModalProps {
   open: boolean;
   sourceType: string;
   sourceId: string;
+  /** Multi-selección: relaciona TODAS estas fuentes con el destino elegido (default [sourceId]). */
+  sourceIds?: string[];
   onClose: () => void;
   onLinked?: () => void;
 }
@@ -62,7 +64,7 @@ function getResultTitle(result: SearchResult): string {
   }
 }
 
-export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: RelateModalProps) {
+export function RelateModal({ open, sourceType, sourceId, sourceIds, onClose, onLinked }: RelateModalProps) {
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -138,15 +140,18 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
     if (!selectedResult) return;
     setLinking(true);
     try {
-      await api.post('/links', {
-        source_type: sourceType,
-        source_id: sourceId,
-        target_type: selectedResult.domain,
-        target_id: selectedResult.record_id,
-        link_type: 'manual',
-        created_by: 'user',
-      });
-      toast.success('Relation created');
+      const ids = sourceIds && sourceIds.length > 0 ? sourceIds : [sourceId];
+      for (const id of ids) {
+        await api.post('/links', {
+          source_type: sourceType,
+          source_id: id,
+          target_type: selectedResult.domain,
+          target_id: selectedResult.record_id,
+          link_type: 'manual',
+          created_by: 'user',
+        });
+      }
+      toast.success(ids.length > 1 ? `${ids.length} relations created` : 'Relation created');
       window.dispatchEvent(new CustomEvent('links-changed'));
       onLinked?.();
       onClose();
@@ -154,7 +159,7 @@ export function RelateModal({ open, sourceType, sourceId, onClose, onLinked }: R
       toast.error('Failed to create relation');
     }
     setLinking(false);
-  }, [selectedResult, sourceType, sourceId, onLinked, onClose]);
+  }, [selectedResult, sourceType, sourceId, sourceIds, onLinked, onClose]);
 
   if (!open) return null;
 
