@@ -19,6 +19,7 @@ import { SettingInput } from '../SettingInput';
 import { SaveBar } from '../SaveBar';
 import { ProLockBanner, useIsPro } from '../shared/ProLockBanner';
 import { PhotoPipelineProgress } from './PhotoPipelineProgress';
+import { GallerySyncBlock } from './GallerySyncBlock';
 
 export function PhotosSection() {
   const settings = useSettingsStore((s) => s.settings);
@@ -193,6 +194,9 @@ export function PhotosSection() {
       </SettingSection>
 
       {p.ai_worker.enabled && <PhotoPipelineProgress />}
+
+      {/* Sincronización de galería del móvil (estado propio contra /gallery-sync/*) */}
+      <GallerySyncBlock />
 
       <SaveBar visible={!!dirty.photos} saving={saving} onSave={handleSave} onDiscard={() => resetSection('photos')} />
     </>

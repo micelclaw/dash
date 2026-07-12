@@ -16,6 +16,7 @@ import { App } from './App';
 import { consumeMobileHandoff } from './lib/mobile-handoff';
 import { configureNativeShell } from './lib/native-shell';
 import { configureWidgetBridge } from './lib/widget-bridge';
+import { configureGallerySync } from './lib/gallery-sync/engine';
 import './index.css';
 
 // App móvil → dash: si venimos con sesión en el hash (#mmauth=), rellena el store
@@ -25,6 +26,8 @@ consumeMobileHandoff();
 configureNativeShell();
 // Dentro del APK: mantiene fresca la credencial que leen los widgets nativos (no-op en web).
 configureWidgetBridge();
+// Dentro del APK: motor de sync de galería (boot + visibilidad + periódico; no-op en web).
+configureGallerySync();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
