@@ -211,9 +211,15 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
       calibreweb: 8084,
       audiobookshelf: 13379,
     };
+    // El camino per-port (`<host>:<puerto>`) solo es alcanzable en la MISMA máquina que
+    // corre los servicios (dev box: localhost). Desde un cliente REMOTO (app móvil vía
+    // victor.claw, otro PC) ese puerto no existe → se usa el proxy same-origin de Core
+    // (`/api/v1/multimedia/proxy/<svc>/`, ya existente, autorizado por la cookie claw_session).
+    // Mismo criterio que OpencodeEmbed (isRemoteClient). Local no cambia (cero regresión).
     const hostname = window.location.hostname;
+    const isRemoteClient = hostname !== 'localhost' && hostname !== '127.0.0.1';
     const iframePort = IFRAME_PORTS[serviceName];
-    const proxyUrl = iframePort
+    const proxyUrl = (!isRemoteClient && iframePort)
       ? `${window.location.protocol}//${hostname}:${iframePort}/`
       : `${window.location.origin}/api/v1/multimedia/proxy/${serviceName}/`;
     return (

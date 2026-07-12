@@ -119,8 +119,12 @@ export function Component() {
           />
         </div>
         {/* ─── Iframe ─────────────────────────────────────── */}
+        {/* Remoto (móvil/otro PC): el loopback status.url no es alcanzable → proxy
+            same-origin de Core (autorizado por la cookie claw_session). Local: puerto directo. */}
         <iframe
-          src={status.url}
+          src={(window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
+            ? `${window.location.origin}/api/v1/portainer/ui/`
+            : status.url}
           title="Portainer Docker Management"
           style={{ flex: 1, border: 'none', background: '#fff' }}
           allow="clipboard-read; clipboard-write"

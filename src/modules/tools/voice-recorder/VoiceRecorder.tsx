@@ -56,6 +56,17 @@ export function VoiceRecorder() {
   }, []);
 
   const handleRecord = useCallback(async () => {
+    // getUserMedia only exists in a secure context (https or localhost). Over
+    // plain http, navigator.mediaDevices is undefined and the call would throw,
+    // landing in the generic "access denied" catch — which misleads the user
+    // into checking mic permissions. Detect it up front and be explicit.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      toast.error('Microphone needs a secure connection (https)', {
+        description: "You're connected over http. Open the app at https://<your-domain>.claw to record.",
+        duration: 8000,
+      });
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;

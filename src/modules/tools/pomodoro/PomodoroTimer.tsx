@@ -53,7 +53,10 @@ function playTone() {
 
 function notifyComplete(phase: string) {
   playTone();
-  if (Notification.permission === 'granted') {
+  // El WebView de Android no expone el API Notification → `Notification` es un símbolo
+  // global inexistente y tocarlo lanza ReferenceError (tumbaba todo el Shell vía la
+  // error boundary de ruta). Guardamos con typeof (mismo patrón que NotificationsSection).
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     new Notification(`${phase === 'focus' ? 'Focus' : 'Break'} complete!`, {
       body: phase === 'focus' ? 'Time for a break.' : 'Ready to focus again?',
       tag: 'micelclaw-timer',
@@ -193,9 +196,9 @@ export function PomodoroTimer() {
     setLaps([]);
   }, [focusMin]);
 
-  // Request notification permission
+  // Request notification permission (guard: el WebView de Android no tiene Notification)
   useEffect(() => {
-    if (Notification.permission === 'default') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
