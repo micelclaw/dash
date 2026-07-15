@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { hasNativeNotify, startNativeNotifications, requestNativeNotifPermission } from '@/lib/native-notify';
 import { useSidebarStore } from '@/stores/sidebar.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -314,81 +315,20 @@ export function Shell() {
 
   // Notification event listeners
   const addNotification = useNotificationStore((s) => s.addNotification);
-  const syncEvent = useWebSocket('sync.*');
-  const emailEvent = useWebSocket('email.*');
   const agentEvent = useWebSocket('agent.*');
   const digestEvent = useWebSocket('digest.*');
-  const systemEvent = useWebSocket('system.*');
   const approvalEvent = useWebSocket('approval.*');
   const clipboardEvent = useWebSocket('clipboard.*');
   const processEvent = useWebSocket('process.*');
   const photoWorkerEvent = useWebSocket('photo.worker.*');
-  const changeEvent = useWebSocket('change.*');
   const mediaEvent = useWebSocket('media.download.*');
   const notificationEvent = useWebSocket('notification.new');
   const postYieldEvent = useWebSocket('chat.post_yield_message');
 
-  useEffect(() => {
-    if (!syncEvent) return;
-    if (syncEvent.event === 'sync.completed') {
-      const created = (syncEvent.data.created as number) ?? 0;
-      // Only notify if there are genuinely NEW items — skip updates-only syncs
-      if (created > 0) {
-        const domainBreakdown = syncEvent.data.domain_breakdown as Record<string, { created?: number }> | undefined;
-        const primaryDomain = domainBreakdown
-          ? Object.entries(domainBreakdown).find(([, v]) => (v.created ?? 0) > 0)?.[0]
-            ?? Object.keys(domainBreakdown)[0]
-          : undefined;
-        const domainTypeMap: Record<string, Notification['type']> = {
-          emails: 'email', events: 'calendar', contacts: 'contacts',
-          messages: 'messages',
-        };
-        const notifType: Notification['type'] = (primaryDomain && domainTypeMap[primaryDomain]) || 'sync';
-
-        // Deep link for single-record notifications
-        const singleRecord = syncEvent.data.single_record as { domain: string; id: string } | null;
-        const domainRouteMap: Record<string, string> = {
-          emails: '/mail', events: '/calendar', contacts: '/contacts',
-          notes: '/notes', files: '/drive', diary_entries: '/diary',
-          messages: '/messages',
-        };
-        let action: { label: string; route: string } | undefined;
-        if (singleRecord) {
-          if (singleRecord.domain === 'messages') {
-            const provider = (syncEvent.data.provider as string) ?? '';
-            action = { label: 'View', route: `/messages?platform=${provider.toLowerCase()}` };
-          } else {
-            action = { label: 'View', route: `${domainRouteMap[singleRecord.domain] ?? '/'}?id=${singleRecord.id}` };
-          }
-        } else if (primaryDomain && domainRouteMap[primaryDomain]) {
-          action = { label: 'View', route: domainRouteMap[primaryDomain]! };
-        }
-
-        addNotification({
-          type: notifType,
-          title: (syncEvent.data.title as string) ?? `Sync completed: ${syncEvent.data.provider as string}`,
-          action,
-        });
-      }
-    } else if (syncEvent.event === 'sync.error') {
-      addNotification({
-        type: 'system',
-        title: `Sync failed: ${syncEvent.data.provider as string}`,
-        action: { label: 'Settings', route: '/settings?section=sync' },
-      });
-    }
-  }, [syncEvent, addNotification]);
-
-  useEffect(() => {
-    if (!emailEvent) return;
-    const count = (emailEvent.data.count as number) ?? 1;
-    const from = emailEvent.data.from as string;
-    addNotification({
-      type: 'email',
-      title: `${count} new email${count > 1 ? 's' : ''} from ${from}`,
-      action: { label: 'Open', route: '/mail' },
-    });
-  }, [emailEvent, addNotification]);
+  // (A4) La síntesis de notificaciones de `sync.*` y `email.*` se ELIMINÓ: el servidor
+  // las decide desde el bus (plantillas `content.sync.*` / `content.email.received`) y
+  // llegan por `notification.new`. Los frames `sync.*` siguen vivos como ESTADO — quien
+  // los necesite (listas, badges) que se suscriba en su módulo.
 
   useEffect(() => {
     if (!agentEvent) return;
@@ -441,61 +381,35 @@ export function Shell() {
       return;
     }
 
-    // agent.message → user-facing notification
-    const agent = agentEvent.data.agent as string;
-    const summary = agentEvent.data.summary as string;
-    const route = agentEvent.data.route as string | undefined;
-    addNotification({
-      type: 'agent_action',
-      title: `${agent}: ${summary}`,
-      action: route ? { label: 'View', route } : undefined,
-    });
-  }, [agentEvent, addNotification]);
+    // NOTA: el resto de `agent.*` NO se convierte en notificación aquí. El bus
+    // canónico reemite CADA evento de dominio como `agent.event` (data =
+    // {id,type,source,target,severity,payload,...}) — leer `data.agent`/`data.summary`
+    // daba "undefined: undefined" para casi todo. Las notificaciones las decide el
+    // servidor y llegan por `notification.new` (arriba). Aquí solo tratamos los casos
+    // interactivos (stuck_yield / model_changed).
+  }, [agentEvent]);
 
   const handleDigestReady = useDigestStore((s) => s.handleDigestReady);
   const handleDigestUrgent = useDigestStore((s) => s.handleDigestUrgent);
   const handleDigestEnriched = useDigestStore((s) => s.handleDigestEnriched);
-  const setDigestPanelOpen = useDigestStore((s) => s.setPanelOpen);
 
   useEffect(() => {
     if (!digestEvent) return;
+    // (A4) Solo ESTADO: el aviso (campana en escritorio / nativa en móvil) lo emite el
+    // servidor con la plantilla `content.digest.ready`. Aquí ya no se sintetiza ni se
+    // hace toast — duplicaría la notificación del servidor.
     if (digestEvent.event === 'digest.ready') {
       handleDigestReady(digestEvent.data);
-
-      const alertLevel = digestEvent.data.alert_level as string;
-      toast(alertLevel === 'URGENT' ? 'Urgent Briefing' : 'New Briefing', {
-        description: digestEvent.data.summary as string,
-        duration: alertLevel === 'URGENT' ? 10000 : 5000,
-        action: {
-          label: 'Open Briefing',
-          onClick: () => setDigestPanelOpen(true),
-        },
-      });
     } else if (digestEvent.event === 'digest.urgent') {
       handleDigestUrgent(digestEvent.data);
-
-      addNotification({
-        type: 'digest',
-        title: 'Urgent briefing available',
-        action: { label: 'Open Briefing', callback: 'openBriefing' },
-      });
-
-      toast.warning('Urgent Alert', {
-        description: digestEvent.data.summary as string,
-        duration: 10000,
-      });
     } else if (digestEvent.event === 'digest.enriched') {
       handleDigestEnriched(digestEvent.data);
     }
-  }, [digestEvent, addNotification, handleDigestReady, handleDigestUrgent, handleDigestEnriched, setDigestPanelOpen]);
+  }, [digestEvent, handleDigestReady, handleDigestUrgent, handleDigestEnriched]);
 
-  useEffect(() => {
-    if (!systemEvent) return;
-    addNotification({
-      type: 'system',
-      title: systemEvent.data.message as string,
-    });
-  }, [systemEvent, addNotification]);
+  // (Las notificaciones de `system.*` las decide el servidor y llegan por
+  // `notification.new` — el handler genérico de aquí duplicaba y mostraba el
+  // `message` crudo de cualquier evento de sistema.)
 
   const fetchPendingCount = useSecurityStore((s) => s.fetchPendingCount);
 
@@ -517,11 +431,8 @@ export function Shell() {
     const originConvId = (approvalEvent.data.conversation_id as string | undefined) ?? null;
 
     if (approvalEvent.event === 'approval.new') {
-      addNotification({
-        type: 'approval',
-        title: `Approval needed: ${approvalEvent.data.summary as string}`,
-        action: { label: 'Review', route: '/approvals' },
-      });
+      // (A4) La notificación la emite el servidor (`content.approval.new`) → aquí solo
+      // la tarjeta inline del chat, que es ESTADO de la conversación, no un aviso.
 
       // Inject approval card into its ORIGIN conversation (addMessage routes by
       // conversation_id and bumps that conv's unread counter).
@@ -561,7 +472,10 @@ export function Shell() {
       }
     } else if (approvalEvent.event === 'approval.agent_response') {
       // Agent's follow-up response after approval notification.
-      if (originConvId && approvalEvent.data.text) {
+      // MODO LEDGER (`ledger_covered:true`): la fila REAL del resume la
+      // persiste+emite el ledger (`chat.ledger_message`, id de DB) — pintar
+      // además este texto efímero (id no-determinista) duplicaría SIEMPRE.
+      if (originConvId && approvalEvent.data.text && approvalEvent.data.ledger_covered !== true) {
         useChatStore.getState().addMessage({
           id: `approval-agent-${Date.now()}`,
           conversation_id: originConvId,
@@ -574,7 +488,7 @@ export function Shell() {
 
     // Refresh pending count on any approval event
     fetchPendingCount();
-  }, [approvalEvent, addNotification, fetchPendingCount]);
+  }, [approvalEvent, fetchPendingCount]);
 
   // Post-yield messages: when a parent agent (Francis) replies to a
   // sub-agent's announce-back, that reply is generated INSIDE OpenClaw
@@ -627,6 +541,60 @@ export function Shell() {
       store.setStreamingMessage(null);
     }
   }, [postYieldEvent]);
+
+  // Webchat Session Ledger: mensajes assistant persistidos desde el JSONL de
+  // OpenClaw para turnos que el dash NO está streameando (resume de aprobación,
+  // inter-sesión, continuación tras reinicio de Core). Cada evento trae la fila
+  // REAL de DB (id + tool pills + thinking) → el chat queda completo EN VIVO.
+  // El Core suprime este push mientras chat-bridge streamea la conv (el done
+  // entrega `messages[]`), así que aquí no hay riesgo de doble burbuja.
+  const ledgerMsgEvent = useWebSocket('chat.ledger_message');
+  useEffect(() => {
+    if (!ledgerMsgEvent) return;
+    const data = ledgerMsgEvent.data as {
+      id: string;
+      conversation_id: string | null;
+      session_id: string;
+      from_agent: string;
+      text: string;
+      tool_calls?: Array<Record<string, unknown>> | null;
+      thinking?: string | null;
+      created_at: string;
+    };
+    if (!data.id || !data.conversation_id) return;
+    const store = useChatStore.getState();
+    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
+      ? data.tool_calls.map((t) => ({
+          id: String(t.id ?? crypto.randomUUID()),
+          tool: String(t.tool ?? t.name ?? 'unknown'),
+          status: t.status as import('@/types/chat').ToolCallRecord['status'],
+          summary: typeof t.summary === 'string' ? t.summary : undefined,
+          input: (() => {
+            const raw = t.input ?? t.arguments;
+            if (typeof raw === 'string') return raw;
+            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
+            return undefined;
+          })(),
+          output: typeof t.output === 'string' ? t.output : undefined,
+          text_offset: typeof t.text_offset === 'number' ? t.text_offset : undefined,
+          entity_refs: Array.isArray(t.entity_refs) ? (t.entity_refs as Array<{ type: string; id: string; title: string | null }>) : undefined,
+        }))
+      : undefined;
+    store.addMessage({
+      id: data.id,
+      conversation_id: data.conversation_id,
+      role: 'assistant',
+      content: data.text,
+      agent: data.from_agent,
+      timestamp: data.created_at,
+      tool_calls: toolCalls,
+      thinking: data.thinking ?? undefined,
+    });
+    // Limpia el placeholder de yield/espera si era de esta conversación.
+    if (store.streamingMessage?.conversationId === data.conversation_id) {
+      store.setStreamingMessage(null);
+    }
+  }, [ledgerMsgEvent]);
 
   // Sub-agent messages (from the parent's delegation): the mirror
   // emits these as new sub-agent thread rows are persisted. The dash
@@ -722,11 +690,12 @@ export function Shell() {
   // Media download events
   useEffect(() => {
     if (!mediaEvent) return;
-    if (mediaEvent.event === 'media.download.complete') {
-      toast.success(`Download complete: ${mediaEvent.data.title}`);
-      usePlayerStore.getState().fetchDownloads();
-    } else if (mediaEvent.event === 'media.download.error') {
-      toast.error(`Download failed: ${mediaEvent.data.error}`, { duration: 5000 });
+    // (A4) Solo ESTADO — refrescar la lista de descargas. El aviso lo emite el servidor
+    // (`content.media.completed` / `content.media.error`); el toast de aquí duplicaba.
+    if (
+      mediaEvent.event === 'media.download.complete' ||
+      mediaEvent.event === 'media.download.error'
+    ) {
       usePlayerStore.getState().fetchDownloads();
     }
   }, [mediaEvent]);
@@ -738,28 +707,10 @@ export function Shell() {
     return () => window.removeEventListener('claw:open-download-dialog', handler);
   }, []);
 
-  // Individual change notifications (agent/background sources)
-  useEffect(() => {
-    if (!changeEvent) return;
-    const domain = changeEvent.data.domain as string;
-    const summary = changeEvent.data.summary as string;
-    const source = changeEvent.data.source as string;
-
-    const DOMAIN_ROUTE: Record<string, string> = {
-      notes: '/notes', emails: '/mail', events: '/calendar',
-      contacts: '/contacts', diary_entries: '/diary', files: '/drive',
-      bookmarks: '/bookmarks',
-    };
-
-    const route = DOMAIN_ROUTE[domain];
-    const sourceLabel = source === 'agent_primary' ? 'Agent' : 'Background';
-
-    addNotification({
-      type: 'change',
-      title: `${sourceLabel}: ${summary}`,
-      action: route ? { label: 'View', route } : undefined,
-    });
-  }, [changeEvent, addNotification]);
+  // (Las notificaciones de cambios CRUD ya no se sintetizan aquí — leían
+  // `change.data.summary`, que casi siempre es undefined → "Background: undefined".
+  // Si se quieren como notificación, se plantillan server-side y llegan por
+  // `notification.new`.)
 
   // Ola 5: reactive push notifications from the ClawEventBus. The Core
   // service `push-from-events.service.ts` maps bus events (built-in
@@ -769,12 +720,23 @@ export function Shell() {
   // dedup is enough to avoid spam).
   useEffect(() => {
     if (!notificationEvent || notificationEvent.event !== 'notification.new') return;
+    // En el APK nativo la entrega es 100% NATIVA: el servicio ClawConnectionService
+    // recibe este mismo frame por su propio WS y lo postea en la barra de Android
+    // (foreground incluido). El dash NO pinta nada — ni toast ni campana (2B).
+    if (hasNativeNotify()) return;
+    // Servidor = fuente única: Core (`push-from-events.service.ts`) decide qué se
+    // notifica y manda este frame ya construido (id/type/category/title/body/action/
+    // timestamp). El dash SOLO lo pinta — no vuelve a inventar notificaciones de
+    // eventos crudos del bus. `id` hace la dedupe idempotente (multi-pestaña/reconexión).
     const d = notificationEvent.data as {
+      id?: string;
       template?: string;
+      type?: Notification['type'];
       title?: string;
       body?: string;
       severity?: 'debug' | 'info' | 'warn' | 'error' | 'critical';
       action?: { label: string; route?: string };
+      timestamp?: string;
     };
     const title = d.title ?? d.template ?? 'Notificación';
     const description = d.body;
@@ -790,12 +752,25 @@ export function Shell() {
         toast(title, { description });
     }
     addNotification({
-      type: 'system',
+      id: d.id,
+      type: d.type ?? 'system',
       title,
       body: description,
       action: d.action,
+      timestamp: d.timestamp,
     });
   }, [notificationEvent, addNotification]);
+
+  // Notificaciones NATIVAS en el APK móvil: al cargar el dash autenticado, pide el
+  // permiso (API 33+) y arranca el servicio self-hosted (WS a tu box → barra de
+  // Android). Entrega 100% nativa (foreground incluido): el servicio postea SIEMPRE,
+  // el dash no pinta nada (ver el early-return de `notification.new`). Por eso ya no
+  // se reporta el estado de foreground — no gobierna la entrega.
+  useEffect(() => {
+    if (!hasNativeNotify()) return;
+    requestNativeNotifPermission();
+    startNativeNotifications();
+  }, []);
 
   // ── Workflow events (MicelFlow) retirados 2026-06-30 — la automatización es n8n. ──
 

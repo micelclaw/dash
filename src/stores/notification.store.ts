@@ -17,7 +17,7 @@ interface NotificationState {
   notifications: Notification[];
   unreadCount: number;
 
-  addNotification: (n: Omit<Notification, 'id' | 'read' | 'timestamp'>) => void;
+  addNotification: (n: Omit<Notification, 'id' | 'read' | 'timestamp'> & { id?: string; timestamp?: string }) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearAll: () => void;
@@ -29,22 +29,29 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
 
   addNotification: (n) =>
     set((state) => {
-      // Deduplicate: skip if same title+type was added in last 30 minutes
-      const DEDUP_WINDOW = 30 * 60_000;
       const now = Date.now();
-      const isDuplicate = state.notifications.some(
-        (existing) =>
-          existing.title === n.title &&
-          existing.type === n.type &&
-          now - new Date(existing.timestamp).getTime() < DEDUP_WINDOW,
-      );
-      if (isDuplicate) return state;
+      // Con `id` (frames del servidor `notification.new`): dedupe IDEMPOTENTE por id
+      // → reconexión / multi-pestaña / backfill no duplican, y los críticos siempre
+      // se pintan (el id del evento es estable). Sin `id` (síntesis cliente-side de
+      // sync/email/digest): ventana anti-spam de 30 min por title+type.
+      if (n.id) {
+        if (state.notifications.some((x) => x.id === n.id)) return state;
+      } else {
+        const DEDUP_WINDOW = 30 * 60_000;
+        const isDuplicate = state.notifications.some(
+          (existing) =>
+            existing.title === n.title &&
+            existing.type === n.type &&
+            now - new Date(existing.timestamp).getTime() < DEDUP_WINDOW,
+        );
+        if (isDuplicate) return state;
+      }
 
       const notification: Notification = {
         ...n,
-        id: crypto.randomUUID(),
+        id: n.id ?? crypto.randomUUID(),
         read: false,
-        timestamp: new Date().toISOString(),
+        timestamp: n.timestamp ?? new Date().toISOString(),
       };
       const notifications = [notification, ...state.notifications].slice(0, 50);
       return {

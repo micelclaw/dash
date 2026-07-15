@@ -24,6 +24,7 @@ import { useAuthStore } from '@/stores/auth.store';
 import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { lucideLookup } from '@/config/lucide-lookup';
 import { useIsPhone } from '@/hooks/use-media-query';
+import { hasNativeNotify } from '@/lib/native-notify';
 import { api } from '@/services/api';
 
 function PowerMenu() {
@@ -291,7 +292,10 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
         </button>
         <ClipboardButton />
         <BriefingButton />
-        <NotificationBell />
+        {/* En la app nativa (APK) la campana NO existe: las notificaciones se
+            entregan como notificaciones NATIVAS de Android. En escritorio/PWA/
+            navegador se mantiene (esos no tienen entrega nativa). */}
+        {!hasNativeNotify() && <NotificationBell />}
         <PowerMenu />
       </div>
 
