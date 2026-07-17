@@ -167,6 +167,14 @@ export default defineConfig({
           if (id.includes('@excalidraw')) return 'excalidraw';
           if (id.includes('@codemirror') || id.includes('@uiw/react-codemirror') || id.includes('@lezer')) return 'codemirror';
           if (id.includes('recharts')) return 'charts';
+          // Utilidades compartidas entre familias de chunks (three3d ↔ excalidraw ↔
+          // lobehub): con chunk propio no pegan chunks grandes entre sí (evita el
+          // aviso "Circular chunk: three3d -> excalidraw" y que abrir Excalidraw
+          // arrastre el chunk three3d entero).
+          if (/[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:lodash-es|@babel[\\/]runtime|polished|tinycolor2)[\\/]/.test(id)) return 'vendor-utils';
+          // Renderer 3D del Knowledge Graph — solo se carga por import() dinámico.
+          // OJO: antes del chunk d3 (su regex atraparía d3-force-3d).
+          if (/[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:three|3d-force-graph|three-forcegraph|three-render-objects|three-spritetext|d3-force-3d|data-bind-mapper|kapsule|accessor-fn|float-tooltip)[\\/]/.test(id)) return 'three3d';
           if (/[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?d3(?:-[^\\/]+)?[\\/]/.test(id)) return 'd3';
           if (id.includes('@xterm')) return 'xterm';
           // OJO: NO chunkar la familia markdown (react-markdown/remark/rehype/

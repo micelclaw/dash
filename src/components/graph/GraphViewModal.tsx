@@ -10,18 +10,36 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { X, Maximize2, Network, FileText } from 'lucide-react';
+import { toast } from 'sonner';
 import { useIntelligenceStore } from '@/stores/intelligence.store';
+import { shortestPath, egoWithinDegree } from './graph-path';
 import { GraphCanvas } from './GraphCanvas';
 import { GraphDetailPanel } from './GraphDetailPanel';
 import { GraphSearchInput } from './GraphSearchInput';
 import { GraphCategoryFilters } from './GraphCategoryFilters';
 import { GraphColorModeToggle } from './GraphColorModeToggle';
+import { GraphDimensionToggle } from './GraphDimensionToggle';
 import { GRAPH_RECORD_DOMAIN_BY_TYPE } from '@/config/graph-domains';
 import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
 
 type GraphMode = 'entities' | 'records';
+
+/** Set vacío estable (identidad constante) para no romper memos/effects sin camino. */
+const EMPTY_ID_SET: Set<string> = new Set();
+
+/** Grado máximo de la ego-red (el label se mantiene sano; el BFS satura en el componente). */
+const MAX_EGO_DEGREE = 6;
+
+/** Camino más corto activo entre dos nodos (o no-encontrado). */
+interface PathState {
+  start: GraphNode;
+  end: GraphNode;
+  nodes: GraphNode[];      // ordenados inicio→fin; vacío si no encontrado
+  edgeIds: Set<string>;
+  found: boolean;
+}
 
 // type (resolveEntity) → domain backend (center_record_type). SSOT del grafo.
 const RECORD_DOMAIN: Record<string, string> = GRAPH_RECORD_DOMAIN_BY_TYPE;
@@ -49,10 +67,39 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   const [nodeLimit, setNodeLimit] = useState(100);
   const [searchQuery, setSearchQuery] = useState('');
   const [colorMode, setColorMode] = useState<GraphColorMode>('type');
+  const [view3D, setView3D] = useState(() => {
+    // localStorage puede lanzar (storage bloqueado); no romper el render por una preferencia
+    try {
+      return localStorage.getItem('dash.graph.view3d') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [communities, setCommunities] = useState<GraphCommunity[]>([]);
   const [strengthThreshold, setStrengthThreshold] = useState(0);
-  const [highlightNodeIds, setHighlightNodeIds] = useState<Set<string>>(new Set());
-  const [highlightEdgeIds, setHighlightEdgeIds] = useState<Set<string>>(new Set());
+  // Camino más corto: pathState = camino activo; pathAnchor = inicio armado desde el
+  // panel esperando el click del nodo final. Los highlight sets se DERIVAN de pathState.
+  const [pathState, setPathState] = useState<PathState | null>(null);
+  const [pathAnchor, setPathAnchor] = useState<GraphNode | null>(null);
+  const highlightNodeIds = useMemo(
+    () => (pathState?.found ? new Set(pathState.nodes.map(n => n.id)) : EMPTY_ID_SET),
+    [pathState],
+  );
+  const highlightEdgeIds = useMemo(
+    () => (pathState?.found ? pathState.edgeIds : EMPTY_ID_SET),
+    [pathState],
+  );
+  const pathEndpointIds = useMemo(
+    () => (pathState?.found ? new Set([pathState.start.id, pathState.end.id]) : EMPTY_ID_SET),
+    [pathState],
+  );
+  // Ego-red por grados: egoDegree=0 → grafo completo; egoAnchorId = nodo centro.
+  const [egoDegree, setEgoDegree] = useState(0);
+  const [egoAnchorId, setEgoAnchorId] = useState<string | null>(null);
+  const egoNodeIds = useMemo(
+    () => (egoDegree > 0 && egoAnchorId ? egoWithinDegree(edges, egoAnchorId, egoDegree) : null),
+    [egoDegree, egoAnchorId, edges],
+  );
   const [categoryFilters, setCategoryFilters] = useState<Record<string, boolean>>({});
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
@@ -80,8 +127,11 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    setHighlightNodeIds(new Set());
-    setHighlightEdgeIds(new Set());
+    // El subgrafo cambia (centro/límite/modo) → camino y ego previos quedan obsoletos.
+    setPathState(null);
+    setPathAnchor(null);
+    setEgoDegree(0);
+    setEgoAnchorId(null);
 
     const fetchFn = graphMode === 'records'
       ? fetchRecordSubgraph({
@@ -151,14 +201,98 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  const handleNodeClick = useCallback((node: GraphNode) => {
-    setSelectedNode(node);
-    // Re-center the subgraph around the clicked node
-    if (node.id !== centerId) {
-      setCenterId(node.id);
-      setCenterType(node.entity_type);
+  // Calcula el camino más corto (BFS sobre el subgrafo cargado) y lo activa.
+  const computePath = useCallback((start: GraphNode, end: GraphNode) => {
+    setPathAnchor(null);
+    // Ego y camino son excluyentes: calcular un camino sale del modo ego.
+    setEgoDegree(0);
+    setEgoAnchorId(null);
+    if (start.id === end.id) return;
+    const res = shortestPath(edges, start.id, end.id);
+    if (res) {
+      const byId = new Map(nodes.map(n => [n.id, n]));
+      const orderedNodes = res.nodeIds
+        .map(id => byId.get(id))
+        .filter((n): n is GraphNode => !!n);
+      setPathState({ start, end, nodes: orderedNodes, edgeIds: new Set(res.edgeIds), found: true });
+    } else {
+      setPathState({ start, end, nodes: [], edgeIds: new Set(), found: false });
     }
-  }, [centerId]);
+  }, [edges, nodes]);
+
+  const handleNodeClick = useCallback((node: GraphNode, event?: MouseEvent) => {
+    const modifier = !!(event && (event.shiftKey || event.ctrlKey || event.metaKey));
+    // Gesto de camino: (a) inicio armado desde el panel, o (b) Shift/Ctrl+click con un
+    // nodo ya seleccionado. En ambos casos NO se re-centra (mantener el subgrafo).
+    if (pathAnchor && node.id !== pathAnchor.id) {
+      computePath(pathAnchor, node);
+      return;
+    }
+    if (modifier && selectedNode && node.id !== selectedNode.id) {
+      computePath(selectedNode, node);
+      return;
+    }
+    // Click normal: SOLO seleccionar (ya NO re-centra ni re-fetch). Así el subgrafo
+    // cargado NO cambia y se puede Shift+click en cualquier nodo visible, aunque esté
+    // lejos del seleccionado. Explorar la vecindad de un nodo pasa a un botón explícito
+    // del panel (handleExplore). Se limpia camino y ego (se sale al grafo completo; luego
+    // + re-engancha la ego-red en el nuevo nodo = "caminar" el grafo).
+    setPathState(null);
+    setPathAnchor(null);
+    setEgoDegree(0);
+    setEgoAnchorId(null);
+    setSelectedNode(node);
+  }, [pathAnchor, selectedNode, computePath]);
+
+  // Explorar la vecindad: re-carga el subgrafo centrado en el nodo (lo que antes hacía
+  // el click). Ahora explícito → seleccionar no encoge la vista.
+  const handleExplore = useCallback((node: GraphNode) => {
+    setSelectedNode(node);
+    setCenterId(node.id);
+    setCenterType(node.entity_type);
+  }, []);
+
+  const handleClearPath = useCallback(() => {
+    setPathState(null);
+    setPathAnchor(null);
+  }, []);
+
+  // Ego-red +/−. Con nodo seleccionado y grado 0, cualquiera de +/− engancha a grado 1
+  // (ancla = nodo seleccionado). Ya enganchado: + sube, − baja (0 = grafo completo).
+  // Excluyente con el camino más corto (lo limpia al enganchar).
+  const handleEgoPlus = useCallback(() => {
+    if (egoDegree === 0) {
+      if (!selectedNode) return;
+      setPathState(null);
+      setPathAnchor(null);
+      setEgoAnchorId(selectedNode.id);
+      setEgoDegree(1);
+    } else {
+      setEgoDegree(d => Math.min(d + 1, MAX_EGO_DEGREE));
+    }
+  }, [egoDegree, selectedNode]);
+
+  const handleEgoMinus = useCallback(() => {
+    if (egoDegree === 0) {
+      if (!selectedNode) return;
+      setPathState(null);
+      setPathAnchor(null);
+      setEgoAnchorId(selectedNode.id);
+      setEgoDegree(1);
+    } else {
+      setEgoDegree(d => {
+        const next = d - 1;
+        if (next <= 0) { setEgoAnchorId(null); return 0; } // 0 = grafo completo
+        return next;
+      });
+    }
+  }, [egoDegree, selectedNode]);
+
+  // Botón "Trazar camino desde aquí" del panel: arma el nodo como inicio.
+  const handleStartPath = useCallback((node: GraphNode) => {
+    setPathState(null);
+    setPathAnchor(node);
+  }, []);
 
   const handleResetGraph = useCallback(() => {
     setCenterId(null);
@@ -178,6 +312,23 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
       [type]: prev[type] === false ? true : false,
     }));
   }, []);
+
+  // Persistir la preferencia 2D/3D entre sesiones
+  const setView3DPersist = useCallback((v: boolean) => {
+    setView3D(v);
+    // setItem puede lanzar (Safari privado / cuota agotada); si falla, no propagar:
+    // el fallback 3D→2D debe llegar al toast y no disparar on3DUnavailable dos veces
+    try {
+      localStorage.setItem('dash.graph.view3d', v ? '1' : '0');
+    } catch {
+      // preferencia no persistida; el estado en memoria ya está aplicado
+    }
+  }, []);
+
+  const handle3DUnavailable = useCallback(() => {
+    setView3DPersist(false);
+    toast.error('WebGL no disponible — usando la vista 2D');
+  }, [setView3DPersist]);
 
   if (!open) return null;
 
@@ -257,6 +408,7 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
         <GraphSearchInput value={searchQuery} onChange={setSearchQuery} />
         <GraphCategoryFilters enabled={categoryFilters} onToggle={toggleCategory} mode={graphMode} />
         <GraphColorModeToggle mode={colorMode} onChange={setColorMode} />
+        <GraphDimensionToggle is3D={view3D} onChange={setView3DPersist} />
 
         <button
           onClick={onClose}
@@ -298,6 +450,12 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               communities={communities}
               highlightNodeIds={highlightNodeIds}
               highlightEdgeIds={highlightEdgeIds}
+              pathEndpointIds={pathEndpointIds}
+              egoNodeIds={egoNodeIds}
+              egoDegree={egoDegree}
+              egoEnabled={!!selectedNode}
+              onEgoPlus={handleEgoPlus}
+              onEgoMinus={handleEgoMinus}
               searchQuery={searchQuery}
               categoryFilters={categoryFilters}
               onNodeClick={handleNodeClick}
@@ -308,6 +466,8 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
               width={dimensions.width}
               height={dimensions.height}
               mode={graphMode}
+              is3D={view3D}
+              on3DUnavailable={handle3DUnavailable}
             />
           )}
         </div>
@@ -321,6 +481,15 @@ export function GraphViewModal({ open, onClose, centerEntityId }: GraphViewModal
           onEntityHover={setDetailHoverEntityId}
           onNavigateAway={onClose}
           mode={graphMode}
+          pathNodes={pathState?.found ? pathState.nodes : null}
+          pathNotFound={pathState && !pathState.found
+            ? { startName: pathState.start.name, endName: pathState.end.name }
+            : null}
+          pathArmingName={pathAnchor?.name ?? null}
+          onStartPath={handleStartPath}
+          onClearPath={handleClearPath}
+          onExplore={handleExplore}
+          onFocusPathNode={setSelectedNode}
         />
       </div>
 

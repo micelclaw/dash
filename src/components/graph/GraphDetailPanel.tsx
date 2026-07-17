@@ -10,17 +10,17 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import {
   User, Briefcase, MapPin, Hash, Building2, CalendarDays,
-  ChevronDown, ChevronUp, Maximize2,
+  ChevronDown, ChevronUp, Maximize2, Route, ArrowRight, X, LocateFixed,
 } from 'lucide-react';
 import { HeatBadge } from '@/components/shared/HeatBadge';
 import { api } from '@/services/api';
 import { resolveEntity, normalizeDomain } from '@/config/entity-registry';
 import { labelOfResultDomain } from '@/config/search-domains';
-import { entityTypeColor } from './graph-utils';
+import { entityTypeColor, PATH_ENDPOINT_COLOR } from './graph-utils';
 import type { GraphNode, GraphEdge } from '@/types/intelligence';
 import type { LucideIcon } from 'lucide-react';
 
@@ -32,6 +32,19 @@ interface GraphDetailPanelProps {
   onEntityHover?: (entityId: string | null) => void;
   onNavigateAway?: () => void;
   mode?: 'entities' | 'records';
+  /** Camino más corto activo (ordenado inicio→fin); si está, la vista de camino toma el panel. */
+  pathNodes?: GraphNode[] | null;
+  /** Se intentó un camino y no lo hay en el subgrafo cargado. */
+  pathNotFound?: { startName: string; endName: string } | null;
+  /** Nombre del nodo inicio armado (esperando click del fin); muestra un hint. */
+  pathArmingName?: string | null;
+  /** Arma el nodo actual como inicio del camino (botón "Trazar camino desde aquí"). */
+  onStartPath?: (node: GraphNode) => void;
+  onClearPath?: () => void;
+  /** Explorar la vecindad: re-carga el subgrafo centrado en el nodo (antes lo hacía el click). */
+  onExplore?: (node: GraphNode) => void;
+  /** Click en una fila del camino: enfocar sin re-cargar (no rompe el camino). */
+  onFocusPathNode?: (node: GraphNode) => void;
 }
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -78,7 +91,7 @@ interface MentionsResponse {
   };
 }
 
-export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onEntityHover, onNavigateAway, mode = 'entities' }: GraphDetailPanelProps) {
+export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity, onEntityHover, onNavigateAway, mode = 'entities', pathNodes, pathNotFound, pathArmingName, onStartPath, onClearPath, onExplore, onFocusPathNode }: GraphDetailPanelProps) {
   const navigate = useNavigate();
   const [mentionGroups, setMentionGroups] = useState<MentionGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -175,6 +188,126 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
     });
   };
 
+  const isRecordModeTop = mode === 'records';
+  const resolveNodeVisual = (n: GraphNode): { Icon: LucideIcon; color: string } => {
+    if (isRecordModeTop) {
+      const ent = resolveEntity(n.entity_type, n.id);
+      return { Icon: ent.Icon, color: ent.color };
+    }
+    return { Icon: TYPE_ICONS[n.entity_type] ?? Hash, color: entityTypeColor(n.entity_type) };
+  };
+
+  const panelShell = (children: ReactNode) => (
+    <div style={{
+      width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)',
+      background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    }}>
+      {children}
+    </div>
+  );
+
+  // ── Vista: CAMINO MÁS CORTO encontrado (toma el panel) ──
+  if (pathNodes && pathNodes.length > 0) {
+    const start = pathNodes[0]!;
+    const end = pathNodes[pathNodes.length - 1]!;
+    const hops = pathNodes.length - 1;
+    return panelShell(
+      <>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '12px 16px', borderBottom: '1px solid var(--border)',
+        }}>
+          <Route size={16} style={{ color: PATH_ENDPOINT_COLOR, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
+              CAMINO MÁS CORTO
+            </div>
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{start.name}</span>
+              <ArrowRight size={11} style={{ flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{end.name}</span>
+            </div>
+          </div>
+          <button onClick={() => onClearPath?.()} title="Limpiar camino" style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
+            display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
+            fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
+          }}>
+            <X size={14} /> Limpiar
+          </button>
+        </div>
+        <div style={{ padding: '8px 16px', fontSize: '0.6875rem', color: 'var(--text-dim)', borderBottom: '1px solid var(--border)' }}>
+          {hops} {hops === 1 ? 'salto' : 'saltos'} · {pathNodes.length} nodos
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+          {pathNodes.map((n, i) => {
+            const { Icon, color } = resolveNodeVisual(n);
+            const isEndpoint = i === 0 || i === pathNodes.length - 1;
+            const tag = i === 0 ? 'INICIO' : i === pathNodes.length - 1 ? 'FIN' : `paso ${i}`;
+            return (
+              <button
+                key={n.id}
+                onClick={() => onFocusPathNode?.(n)}
+                onMouseEnter={() => onEntityHover?.(n.id)}
+                onMouseLeave={() => onEntityHover?.(null)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                  padding: '6px 8px', marginBottom: 3, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                  borderRadius: 6,
+                  border: isEndpoint ? `1px solid ${PATH_ENDPOINT_COLOR}66` : '1px solid transparent',
+                  borderLeft: `3px solid ${isEndpoint ? PATH_ENDPOINT_COLOR : 'var(--border)'}`,
+                  background: isEndpoint ? `${PATH_ENDPOINT_COLOR}14` : 'transparent',
+                }}
+              >
+                <Icon size={15} style={{ color, flexShrink: 0 }} />
+                <span style={{
+                  flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  fontSize: '0.8125rem', color: 'var(--text)', fontWeight: isEndpoint ? 600 : 400,
+                }}>
+                  {n.name}
+                </span>
+                <span style={{
+                  flexShrink: 0, fontSize: '0.625rem', fontWeight: isEndpoint ? 700 : 400, letterSpacing: '0.04em',
+                  color: isEndpoint ? PATH_ENDPOINT_COLOR : 'var(--text-muted)',
+                }}>
+                  {tag}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </>,
+    );
+  }
+
+  // ── Vista: sin camino en el subgrafo cargado ──
+  if (pathNotFound) {
+    return panelShell(
+      <>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '12px 16px', borderBottom: '1px solid var(--border)',
+        }}>
+          <Route size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: '0.75rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '0.04em' }}>
+            CAMINO MÁS CORTO
+          </div>
+          <button onClick={() => onClearPath?.()} title="Cerrar" style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-dim)',
+            display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.6875rem', fontFamily: 'var(--font-sans)',
+          }}>
+            <X size={14} /> Limpiar
+          </button>
+        </div>
+        <div style={{ padding: 16, fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          Sin camino entre <strong style={{ color: 'var(--text)' }}>«{pathNotFound.startName}»</strong> y{' '}
+          <strong style={{ color: 'var(--text)' }}>«{pathNotFound.endName}»</strong> en el subgrafo cargado.
+          Prueba a subir el límite de nodos (250 / 500 / All).
+        </div>
+      </>,
+    );
+  }
+
   // Empty state — no node selected yet
   if (!node) {
     return (
@@ -254,6 +387,19 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16, fontFamily: 'var(--font-sans)' }}>
+        {/* Hint de armado: esperando el nodo final del camino */}
+        {pathArmingName && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12,
+            padding: '6px 10px', borderRadius: 6,
+            background: `${PATH_ENDPOINT_COLOR}14`, border: `1px solid ${PATH_ENDPOINT_COLOR}40`,
+            fontSize: '0.6875rem', color: PATH_ENDPOINT_COLOR, lineHeight: 1.4,
+          }}>
+            <Route size={13} style={{ flexShrink: 0 }} />
+            <span>Elige el nodo <strong>final</strong> para trazar el camino desde «{pathArmingName}».</span>
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{
           display: 'flex', gap: 12, marginBottom: 16,
@@ -272,6 +418,44 @@ export function GraphDetailPanel({ node, graphNodes, graphEdges, onCenterEntity,
             Heat
           </div>
         </div>
+
+        {/* Trazar camino desde aquí (arma el nodo como inicio) */}
+        {onStartPath && !pathArmingName && (
+          <button
+            onClick={() => onStartPath(node)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              width: '100%', padding: '6px 12px', marginBottom: 16,
+              background: `${PATH_ENDPOINT_COLOR}14`, border: `1px solid ${PATH_ENDPOINT_COLOR}40`,
+              borderRadius: 6, cursor: 'pointer',
+              fontSize: '0.75rem', fontWeight: 500, color: PATH_ENDPOINT_COLOR,
+              fontFamily: 'var(--font-sans)',
+            }}
+            title="Elige luego otro nodo (o Shift+click) para el camino más corto"
+          >
+            <Route size={14} />
+            Trazar camino desde aquí
+          </button>
+        )}
+
+        {/* Explorar vecindad (re-carga el subgrafo centrado en este nodo) */}
+        {onExplore && !pathArmingName && (
+          <button
+            onClick={() => onExplore(node)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              width: '100%', padding: '6px 12px', marginBottom: 16,
+              background: 'var(--surface-hover)', border: '1px solid var(--border)',
+              borderRadius: 6, cursor: 'pointer',
+              fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-dim)',
+              fontFamily: 'var(--font-sans)',
+            }}
+            title="Recarga el grafo centrado en este nodo (su vecindad)"
+          >
+            <LocateFixed size={14} />
+            Explorar vecindad
+          </button>
+        )}
 
         {/* View record button (record mode) */}
         {isRecordMode && recordEnt?.route && (

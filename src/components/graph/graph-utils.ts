@@ -100,6 +100,11 @@ export function communityColor(communityId: number | null | undefined): string {
   return hslToHex(hue, 72, 57);
 }
 
+/** Ámbar de resaltado de aristas (highlight/camino más corto). Antes hardcodeado inline. */
+export const HIGHLIGHT_EDGE_COLOR = '#fbbf24';
+/** Ámbar más cálido para nodo seleccionado y extremos del camino más corto. */
+export const PATH_ENDPOINT_COLOR = '#f59e0b';
+
 /** Cuántas comunidades reciben color/foco propio; el resto (long-tail) va en gris. */
 export const SIGNIFICANT_COMMUNITY_COUNT = 14;
 /** Tamaño mínimo para considerar una comunidad "isla" (umbral de hull). */

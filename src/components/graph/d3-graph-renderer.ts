@@ -11,10 +11,12 @@
  */
 
 import * as d3 from 'd3';
-import type { GraphNode, GraphEdge, GraphColorMode, GraphCommunity } from '@/types/intelligence';
+import type { GraphNode, GraphEdge, GraphColorMode } from '@/types/intelligence';
+import type { GraphRendererInstance, GraphRendererUpdateParams } from './graph-renderer-contract';
 import {
   entityTypeColor, entityTypeShape, nodeSize, heatColor, heatColorRGB, communityColor,
   linkColor, linkDashArray, linkStrokeWidth, expandPolygon, significantCommunityIds, wrapLabelLines,
+  HIGHLIGHT_EDGE_COLOR, PATH_ENDPOINT_COLOR,
 } from './graph-utils';
 import { svgShapePath } from './graph-svg-shapes';
 import type { NodeShape } from './graph-utils';
@@ -40,40 +42,15 @@ export interface D3GraphConfig {
   heatCanvas: HTMLCanvasElement | null;
   width: number;
   height: number;
-  onNodeClick: (node: SimNode) => void;
+  onNodeClick: (node: SimNode, event?: MouseEvent) => void;
   onNodeHover: (node: SimNode | null, event: MouseEvent | null) => void;
   onEdgeClick: (edge: GraphEdge, event: MouseEvent) => void;
 }
 
-export interface D3GraphUpdateParams {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  colorMode: GraphColorMode;
-  communities?: GraphCommunity[];
-  showHulls: boolean;
-  hideLabels: boolean;
-  compactLabels: boolean;
-  highlightNodeIds: Set<string>;
-  highlightEdgeIds: Set<string>;
-  searchMatches: Set<string> | null;
-  visibleNodeIds: Set<string>;
-  strengthThreshold?: number;
-}
-
-export interface D3GraphInstance {
-  update(params: D3GraphUpdateParams): void;
-  resize(width: number, height: number): void;
-  zoomIn(): void;
-  zoomOut(): void;
-  zoomReset(): void;
-  freeze(): void;
-  unfreeze(): void;
-  isFrozen(): boolean;
-  centerOnNode(nodeId: string): void;
-  setExternalHover(nodeId: string | null): void;
-  setSelectedNode(nodeId: string | null): void;
-  destroy(): void;
-}
+// El contrato del renderer vive en graph-renderer-contract.ts (compartido con el
+// renderer 3D). Se re-exporta con los nombres históricos para los consumidores.
+export type D3GraphUpdateParams = GraphRendererUpdateParams;
+export type D3GraphInstance = GraphRendererInstance;
 
 // ─── Constants ──────────────────────────────────────────────────────
 
@@ -106,6 +83,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   let currentHighlightEdgeIds = new Set<string>();
   let currentSearchMatches: Set<string> | null = null;
   let currentSelectedNodeId: string | null = null;
+  let currentPathEndpointIds = new Set<string>(); // extremos del camino más corto
   let currentStrengthThreshold = 0;
 
   // ─── Community-mode state (derived each update) ────────────────
@@ -486,7 +464,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
 
     linkEnter.merge(linkSel)
       .attr('stroke', d => {
-        if (currentHighlightEdgeIds.size > 0 && currentHighlightEdgeIds.has(d._edge.id)) return '#fbbf24';
+        if (currentHighlightEdgeIds.size > 0 && currentHighlightEdgeIds.has(d._edge.id)) return HIGHLIGHT_EDGE_COLOR;
         if (currentHeatMode) return heatColor(d._edge.heat_edge);
         const targetId = typeof d.target === 'object' ? (d.target as SimNode).id : d.target;
         const targetNode = nodeMap.get(targetId as string);
@@ -519,7 +497,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
       .call(dragBehavior)
       .on('click', (event: MouseEvent, d) => {
         event.stopPropagation();
-        config.onNodeClick(d);
+        config.onNodeClick(d, event);
       })
       .on('mouseenter', (event: MouseEvent, d) => {
         applyHoverDimming(d.id);
@@ -787,8 +765,12 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
   function applySelectedHighlight() {
     nodeGroup.selectAll<SVGGElement, SimNode>('.graph-node').each(function (d) {
       const el = d3.select(this).select('.node-shape');
-      if (d.id === currentSelectedNodeId) {
-        el.attr('stroke', '#f59e0b').attr('stroke-width', 2.5);
+      // Extremos del camino más corto: stroke ámbar más grueso que el seleccionado
+      // → jerarquía visual resto < intermedio (glow) < extremo.
+      if (currentPathEndpointIds.has(d.id)) {
+        el.attr('stroke', PATH_ENDPOINT_COLOR).attr('stroke-width', 3.5);
+      } else if (d.id === currentSelectedNodeId) {
+        el.attr('stroke', PATH_ENDPOINT_COLOR).attr('stroke-width', 2.5);
       } else {
         const color = currentHeatMode
           ? (() => { const rgb = heatColorRGB(d.heat_score); return `rgb(${rgb.r},${rgb.g},${rgb.b})`; })()
@@ -814,6 +796,7 @@ export function createD3Graph(config: D3GraphConfig): D3GraphInstance {
     currentCompactLabels = params.compactLabels;
     currentHighlightNodeIds = params.highlightNodeIds;
     currentHighlightEdgeIds = params.highlightEdgeIds;
+    currentPathEndpointIds = params.pathEndpointIds ?? new Set();
     currentSearchMatches = params.searchMatches;
     currentStrengthThreshold = params.strengthThreshold ?? 0;
 
