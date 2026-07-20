@@ -10,14 +10,16 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ArrowRight, ChevronRight, ChevronDown, Loader2, Trash2, Package, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { downloadAgentarExport } from '@/services/agentar.service';
 import { useAgentDetail } from './hooks/use-agent-detail';
+import { useContextBudget } from './hooks/use-context-budget';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
+import { ContextBudgetBars } from './ContextBudgetBars';
 import { PendingSkillProposals } from './PendingSkillProposals';
 import { LearnedSkills } from './LearnedSkills';
 import { AgentActivity } from './AgentActivity';
@@ -85,6 +87,13 @@ function ModelLabel({ model }: { model: string }) {
 
 export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrowseFiles }: AgentDetailProps) {
   const { agent, loading, refetch } = useAgentDetail(agentId);
+  // Context budget (Overview bar + per-app token badges). Refetches when the
+  // agent's skill_modes change (toggling an app núcleo↔completo shifts its tools).
+  const { budget: contextBudget, loading: budgetLoading } = useContextBudget(agent?.id ?? null, agent?.skill_modes);
+  const appTokens = useMemo(
+    () => Object.fromEntries((contextBudget?.apps ?? []).map((a) => [a.skill_id, a.tokens])),
+    [contextBudget],
+  );
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
   // Read ?tab= from the URL on first render so deep-links from
@@ -545,10 +554,11 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           {/* Identity */}
           <AgentIdentity agentId={agentId} />
 
-          <div style={{ height: 1, background: 'var(--border)' }} />
+          {/* Context budget bar (sits between Identity and Apps, replacing the divider) */}
+          <ContextBudgetBars budget={contextBudget} loading={budgetLoading} />
 
           {/* Skills (apps) */}
-          <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} skillModes={agent.skill_modes} onSkillsChanged={refetch} />
+          <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} skillModes={agent.skill_modes} appTokens={appTokens} onSkillsChanged={refetch} />
 
           {/* Skill Workshop: propuestas pendientes + skills aprendidas (concepto separado de las apps).
               Ambos se auto-ocultan si no hay nada → no ensucian el Overview. */}

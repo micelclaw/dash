@@ -17,6 +17,12 @@ import remarkGfm from 'remark-gfm';
 import { useAgentFile } from './hooks/use-agent-detail';
 import { getAgentFileMeta } from './agent-file-meta';
 
+/** Compact "≈Xk" token count for the per-file badge (prose ratio /4, same as backend). */
+function fmtTok(n: number): string {
+  if (n < 1000) return String(n);
+  return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+}
+
 interface AgentIdentityProps {
   agentId: string;
 }
@@ -84,6 +90,19 @@ function FileCard({ filename, agentId }: FileRowProps) {
             {meta.label}
           </div>
         </div>
+        {content !== null && (
+          <span
+            title="Tokens de contexto estimados de este bloque"
+            style={{
+              flexShrink: 0, fontSize: '0.5625rem', color: 'var(--text-muted)',
+              fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+              padding: '1px 4px', borderRadius: 'var(--radius-sm)',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+            }}
+          >
+            ≈{fmtTok(Math.ceil(content.length / 4))}
+          </span>
+        )}
         <button
           onClick={(e) => { e.stopPropagation(); handleOpen(true); }}
           disabled={loading || content === null}

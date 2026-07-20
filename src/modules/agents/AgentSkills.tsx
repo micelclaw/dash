@@ -24,10 +24,19 @@ interface AgentSkillsProps {
   agentName?: string;
   agentAvatar?: string;
   skillModes?: Record<string, 'core' | 'full'>;
+  /** Estimated context tokens per app (skill_id → tokens), from the context-budget
+   *  endpoint. Rendered as a small badge on each app card. */
+  appTokens?: Record<string, number>;
   onSkillsChanged?: () => void;
 }
 
-export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillModes, onSkillsChanged }: AgentSkillsProps) {
+/** Compact "≈Xk" token count for the per-app badge. */
+function fmtTok(n: number): string {
+  if (n < 1000) return String(n);
+  return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+}
+
+export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillModes, appTokens, onSkillsChanged }: AgentSkillsProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -112,6 +121,20 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
             }}>
               {skill.name}
             </span>
+            {(() => {
+              const t = appTokens?.[skill.skill_id ?? `claw-${skill.domain}`];
+              return typeof t === 'number' ? (
+                <span
+                  title="Tokens de contexto estimados de esta app"
+                  style={{
+                    fontSize: '0.5625rem', color: 'var(--text-muted)',
+                    fontVariantNumeric: 'tabular-nums', lineHeight: 1,
+                  }}
+                >
+                  ≈{fmtTok(t)}
+                </span>
+              ) : null;
+            })()}
           </div>
         ))}
       </div>
