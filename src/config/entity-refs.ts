@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, type LucideIcon } from 'lucide-react';
+import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, MapPin, Inbox, type LucideIcon } from 'lucide-react';
 import { lucideLookup } from './lucide-lookup';
 import type { AppEntityType } from '@/services/app-access.service';
 
@@ -46,6 +46,12 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-calendar)',
     label: 'Evento',
     route: (id) => `/calendar?id=${encodeURIComponent(id)}`,
+  },
+  calendar: {
+    Icon: Calendar,
+    color: 'var(--mod-calendar)',
+    label: 'Calendario',
+    route: (id) => `/calendar?calendar=${encodeURIComponent(id)}`,
   },
   contact: {
     Icon: Users,
@@ -106,6 +112,31 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-inventory)',
     label: 'Inventario',
     route: (id) => `/inventory?id=${encodeURIComponent(id)}`,
+  },
+  // inventory — sub-tipos del dominio (el default `inventory` de arriba es el ITEM).
+  // Ubicación (árbol de bins/estantes): InventoryPage lee ?location_id= → fuerza la tab
+  // Locations con ese id.
+  inventory_location: {
+    Icon: MapPin,
+    color: 'var(--mod-inventory)',
+    label: 'Ubicación',
+    route: (id) => `/inventory?location_id=${encodeURIComponent(id)}`,
+  },
+  // Movimiento del ledger de stock: no hay deep-link por id en v1 (patrón firefly_*) →
+  // abre la tab Stock (kardex), ignorando el id.
+  inventory_move: {
+    Icon: ArrowLeftRight,
+    color: 'var(--mod-inventory)',
+    label: 'Movimiento',
+    route: () => `/inventory?tab=stock`,
+  },
+  // Propuesta de la cola de intake: se revisa/aprueba en el Panel → abre esa tab (v1
+  // ignora el id).
+  inventory_proposal: {
+    Icon: Inbox,
+    color: 'var(--mod-inventory)',
+    label: 'Propuesta',
+    route: () => `/inventory?tab=panel`,
   },
   bookmark: {
     Icon: Bookmark,
@@ -306,7 +337,7 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
 };
 
 /** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
-export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'];
+export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'inventory_location', 'inventory_move', 'inventory_proposal', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'];
 
 // ─── Extensión dinámica por apps L3 (`ui.entities` del manifest) ────────────
 // Invocada una vez al boot (`stores/entity-types.store.ts`) tras fetchear
