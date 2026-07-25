@@ -23,6 +23,7 @@ import { startGateway } from '@/services/gateway.service';
 import { ToolRenderer } from '@/components/chat/tool-renderers';
 import { ReasoningChip } from '@/components/chat/ReasoningChip';
 import { shouldRenderTool } from '@/config/tool-rendering';
+import { EntityRefChips } from '@/components/chat/tool-renderers/EntityRefChips';
 import { findSlashCommand, CATEGORY_COLORS } from '@/config/slash-commands';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 
@@ -364,6 +365,23 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     : message.content;
   const setActiveMode = useCanvasStore((s) => s.setActiveMode);
 
+  // Burbuja VACÍA: con el ledger per-message, un turno deja filas assistant que
+  // SOLO llevan tool_calls (sin texto). Si el usuario oculta esas tools por
+  // preferencias, la fila se quedaba sin nada que pintar y salía una burbuja
+  // vacía flotando encima del mensaje real. Si no queda NADA visible (ni texto,
+  // ni tool visible, ni chip de entidad, ni razonamiento, ni canvas), no se pinta.
+  if (!isUser && !isStreaming) {
+    const rows: ToolCallRecord[] = message.tool_calls ?? [];
+    const nothingVisible =
+      !displayContent.trim()
+      && !canvasReadyDesc
+      && !message.thinking
+      && rows.length > 0
+      && !rows.some((t) => shouldRenderTool(t.tool, visibility))
+      && !rows.some((t) => (t.entity_refs?.length ?? 0) > 0);
+    if (nothingVisible) return null;
+  }
+
   const timeStr = new Date(message.timestamp).toLocaleTimeString('en-GB', {
     hour: '2-digit',
     minute: '2-digit',
@@ -481,10 +499,32 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                     : (message.tool_calls ?? []);
                   const visibleTools = rawTools.filter((t) => shouldRenderTool(t.tool, visibility));
                   const segments = buildSegments(displayContent, visibleTools);
-                  return segments.map((seg, i) =>
-                    seg.type === 'text'
-                      ? <AssistantMarkdown key={`txt-${i}`} content={seg.text} onLinkClick={handleLinkClick} />
-                      : <div key={`tool-${seg.tool.id}`} style={{ margin: '4px 0' }}><ToolRenderer tool={seg.tool} /></div>,
+                  // Las CHIPS de entidad NO son un interno de la tool: son el enlace
+                  // navegable al registro que se acaba de crear/tocar (la nota, el
+                  // evento…). Si el usuario oculta una tool, el bloque desaparece pero
+                  // la chip debe seguir — antes se iban juntas porque `ToolRenderer`
+                  // pinta bloque+chips y el filtro de visibilidad quitaba ambos.
+                  // Dedup por type+id: si un turno toca el MISMO registro con varias
+                  // tools ocultas, la chip debe salir UNA vez, no N.
+                  const seenRef = new Set<string>();
+                  const hiddenRefs = rawTools
+                    .filter((t) => !shouldRenderTool(t.tool, visibility))
+                    .flatMap((t) => t.entity_refs ?? [])
+                    .filter((r) => {
+                      const k = `${r.type}:${r.id}`;
+                      if (seenRef.has(k)) return false;
+                      seenRef.add(k);
+                      return true;
+                    });
+                  return (
+                    <>
+                      {segments.map((seg, i) =>
+                        seg.type === 'text'
+                          ? <AssistantMarkdown key={`txt-${i}`} content={seg.text} onLinkClick={handleLinkClick} />
+                          : <div key={`tool-${seg.tool.id}`} style={{ margin: '4px 0' }}><ToolRenderer tool={seg.tool} /></div>,
+                      )}
+                      {hiddenRefs.length > 0 && <EntityRefChips refs={hiddenRefs} />}
+                    </>
                   );
                 })()}
                 {canvasReadyDesc && (
@@ -929,12 +969,12 @@ function ApiErrorCard({ message }: { message: Message }) {
   // la imagen Docker del sandbox desde Settings → Sandbox.
   const isSandboxBroken = message.error_type === 'sandbox_error';
 
-  // El backend envía el mensaje real (enriquecido para tipos conocidos, crudo
-  // para 'unknown') en `message.content`. Antes lo descartábamos y solo
-  // mostrábamos el `info.description` genérico — eso ocultaba info útil
-  // como "Sandbox image not found: openclaw-sandbox:bookworm-slim". Ahora
-  // lo renderizamos si no es trivial (no vacío, distinto de info.description).
-  const rawDetail = (message.content ?? '').trim();
+  // El backend envía el motivo REAL del fallo en `error_detail` (enriquecido
+  // para tipos conocidos, crudo para 'unknown'). Antes solo llegaba mezclado
+  // en `content` — y en un turno con texto parcial `content` = el parcial, así
+  // que la caja duplicaba la burbuja y el porqué se perdía. Fallback a
+  // `content` para mensajes de error viejos sin el campo.
+  const rawDetail = ((message.error_detail || message.content) ?? '').trim();
   const showRawDetail = rawDetail.length > 0 && rawDetail !== info.description;
   const DETAIL_TRUNC = 280;
   const detailTruncated = rawDetail.length > DETAIL_TRUNC && !showFullDetail
@@ -1108,7 +1148,8 @@ function AttachmentChip({ attachment }: { attachment: ChatAttachment }) {
       {attachment.preview_url ? (
         <img src={attachment.preview_url} alt="" style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }} />
       ) : isImage ? (
-        <ImageIcon size={14} />
+        // Sin preview local (conversación cargada) → thumbnail real del fichero (auth por cookie same-origin).
+        <img src={`/api/v1/files/${attachment.id}/download`} alt={attachment.filename} style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }} />
       ) : isPdf ? (
         <FileText size={14} />
       ) : (
