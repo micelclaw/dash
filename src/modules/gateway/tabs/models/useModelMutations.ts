@@ -13,33 +13,51 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { updateAgentModel } from '@/services/agents-admin.service';
+import type { ManagedAgent } from '@/modules/agents/types';
 import type { GatewayModel, CatalogModel } from '../../types';
+import { describeCredentialError, isProviderNotAuthenticated, providerFromAuthError } from '../../lib/credential-errors';
 import { loadsIntoVram } from './constants';
 
-// Mutaciones de modelos (default, add, remove, borrado en disco) + el estado
-// de progreso asociado. La UI del tab solo consume handlers y flags.
-export function useModelMutations({ addModel, removeModel, fetchModels, fetchCatalog, fetchCustomProviders }: {
+// Mutaciones de modelos (asignar a agente, add, remove, borrado en disco) +
+// el estado de progreso asociado. La UI del tab solo consume handlers y flags.
+export function useModelMutations({ addModel, removeModel, queueRemoveModel, fetchModels, fetchCatalog, fetchCustomProviders, onNeedsCredential, onAgentsChanged }: {
   addModel: (key: string) => Promise<void>;
+  /** Borrado inmediato (delete-from-disk); el Remove normal va por la cola. */
   removeModel: (key: string) => Promise<void>;
+  /** Encola el borrado (batch con debounce + Deshacer) — gateway.store. */
+  queueRemoveModel: (key: string) => void;
   fetchModels: () => void;
   fetchCatalog: () => void;
   fetchCustomProviders: () => void;
+  /** 409 PROVIDER_NOT_AUTHENTICATED al añadir/asignar un modelo → el tab abre
+   *  el formulario de pegar-key de ese provider. */
+  onNeedsCredential?: (provider: string) => void;
+  /** Tras asignar un modelo a un agente → refetch de agentes (avatares). */
+  onAgentsChanged?: () => void;
 }) {
-  const [settingDefault, setSettingDefault] = useState<string | null>(null);
   const [mutatingModel, setMutatingModel] = useState<string | null>(null);
   const [addingKey, setAddingKey] = useState<string | null>(null);  // +Add en curso → la tarjeta se vuelve barra de carga (VRAM)
   const [addProgress, setAddProgress] = useState(0);                // 0..100 fake-progress de esa barra
+  // Asignación modelo→agente en vuelo (spinner en la fila del popover).
+  const [assigning, setAssigning] = useState<{ model: string; agentId: string } | null>(null);
 
-  const handleSetDefault = async (model: GatewayModel) => {
-    setSettingDefault(model.id);
+  const handleAssignAgent = async (agent: ManagedAgent, model: GatewayModel) => {
+    const key = model.id || `${model.provider}/${model.model}`;
+    setAssigning({ model: key, agentId: agent.id });
     try {
-      await gwService.setDefaultModel(model.id || model.model);
-      toast.success(`Default model set to ${model.model}`);
-      fetchModels();
+      await updateAgentModel(agent.id, key);
+      toast.success(`${model.model || key} asignado a ${agent.display_name}. Aplica a sesiones nuevas.`);
+      onAgentsChanged?.();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to set default model');
+      if (isProviderNotAuthenticated(err)) {
+        toast.error(describeCredentialError(err, 'Provider not authenticated'));
+        onNeedsCredential?.(providerFromAuthError(err) ?? model.provider);
+      } else {
+        toast.error(describeCredentialError(err, 'No se pudo asignar el modelo'));
+      }
     } finally {
-      setSettingDefault(null);
+      setAssigning(null);
     }
   };
 
@@ -65,23 +83,25 @@ export function useModelMutations({ addModel, removeModel, fetchModels, fetchCat
       await addModel(key);
       toast.success(`Added ${key}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to add model');
+      // 409 PROVIDER_NOT_AUTHENTICATED: no hay credencial → mostrar el
+      // mensaje del backend Y abrir el formulario de pegar-key del provider.
+      if (isProviderNotAuthenticated(err)) {
+        toast.error(describeCredentialError(err, 'Provider not authenticated'));
+        onNeedsCredential?.(providerFromAuthError(err) ?? provider);
+      } else {
+        toast.error(describeCredentialError(err, 'Failed to add model'));
+      }
     } finally {
       setMutatingModel(null);
       if (iv) stopAddProgress(iv);
     }
   };
 
-  const handleRemoveModel = async (key: string) => {
-    setMutatingModel(key);
-    try {
-      await removeModel(key);
-      toast.success(`Removed ${key}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove model');
-    } finally {
-      setMutatingModel(null);
-    }
+  // Remove = encolar (síncrono, sin toast aquí): la tarjeta se atenúa al
+  // instante con "Deshacer"; el flush del store agrupa los clicks seguidos en
+  // UNA llamada batch y emite el toast único.
+  const handleRemoveModel = (key: string) => {
+    queueRemoveModel(key);
   };
 
   // Borrado HARD del modelo Ollama en disco (libera espacio). Recupera
@@ -123,13 +143,15 @@ export function useModelMutations({ addModel, removeModel, fetchModels, fetchCat
     setMutatingModel(key);
     const iv = vram ? startAddProgress(key) : null;
     try {
+      // Sin context_window/max_tokens: el server los resuelve con datos REALES
+      // (catálogo curado, o /api/show para Ollama) en vez de los antiguos
+      // defaults inventados 200K/8192 — que dejaban la config mintiendo
+      // (contextWindow 200000 sobre un modelo de 40k). 2026-07-14.
       await gwService.addModelWithConfig({
         model: key,
         provider_id: provider,
         model_id: modelId,
         name: modelId,
-        context_window: 200_000,
-        max_tokens: 8_192,
       });
       toast.success(`Added ${modelId}`);
       // Refresh catalog + providers so the row immediately flips to
@@ -138,13 +160,19 @@ export function useModelMutations({ addModel, removeModel, fetchModels, fetchCat
       fetchCatalog();
       fetchCustomProviders();
     } catch (err) {
-      // Probe errors (MODEL_NOT_IN_CATALOG / MODEL_NOT_SERVING / etc.) come
-      // through with a structured shape from the api client. Surface the full
-      // message so the user sees what the provider said.
-      const sample = (err as { available_sample?: string[] }).available_sample;
-      const msg = err instanceof Error ? err.message : String(err);
-      const hint = sample?.length ? ` (ej.: ${sample.slice(0, 3).join(', ')})` : '';
-      toast.error(msg + hint);
+      if (isProviderNotAuthenticated(err)) {
+        // Sin credencial → mensaje del backend + abrir el formulario de key.
+        toast.error(describeCredentialError(err, 'Provider not authenticated'));
+        onNeedsCredential?.(providerFromAuthError(err) ?? provider);
+      } else {
+        // Probe errors (MODEL_NOT_IN_CATALOG / MODEL_NOT_SERVING / etc.) come
+        // through with a structured shape from the api client. Surface the full
+        // message so the user sees what the provider said.
+        const sample = (err as { available_sample?: string[] }).available_sample;
+        const msg = describeCredentialError(err, 'Failed to add model');
+        const hint = sample?.length ? ` (ej.: ${sample.slice(0, 3).join(', ')})` : '';
+        toast.error(msg + hint);
+      }
     } finally {
       setMutatingModel(null);
       if (iv) stopAddProgress(iv);
@@ -152,8 +180,8 @@ export function useModelMutations({ addModel, removeModel, fetchModels, fetchCat
   };
 
   return {
-    settingDefault, mutatingModel, addingKey, addProgress,
-    handleSetDefault, handleAddModel, handleRemoveModel,
+    mutatingModel, addingKey, addProgress, assigning,
+    handleAssignAgent, handleAddModel, handleRemoveModel,
     handleDeleteFromDisk, handleAddCustomModelDirect,
   };
 }

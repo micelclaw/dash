@@ -10,22 +10,26 @@
  * https://micelclaw.com
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Cpu } from 'lucide-react';
 import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
+import { useWebSocket } from '@/hooks/use-websocket';
 import { useGatewayStore } from '@/stores/gateway.store';
 import * as gwService from '@/services/gateway.service';
+import { listManagedAgents } from '@/services/agents-admin.service';
+import type { ManagedAgent } from '@/modules/agents/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { ModelSetupWizard, type ProviderType } from '../components/ModelSetupWizard';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { ModelSetupWizard, providerTypeForId, type ProviderType } from '../components/ModelSetupWizard';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
 import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
 import { OllamaModelSettingsModal } from '../components/OllamaModelSettingsModal';
 import { AddOllamaModelModal } from '../components/AddOllamaModelModal';
-import type { GatewayModel, CatalogModel } from '../types';
-import { PROVIDER_COLORS, PROVIDER_LABELS, USER_MANAGED_FIXED_PROVIDERS, isUserManagedProvider } from './models/constants';
+import type { GatewayModel, CatalogModel, ProviderOverview } from '../types';
+import { PROVIDER_COLORS, PROVIDER_LABELS } from './models/constants';
 import type { View, CatalogSubView, ProviderEntry } from './models/types';
 import { useModelMutations } from './models/useModelMutations';
 import { ModelsHeader } from './models/ModelsHeader';
@@ -38,7 +42,11 @@ export function ModelsTab() {
   const {
     models, modelsLoading, modelsError, fetchModels,
     catalog, catalogLoading, catalogError, fetchCatalog,
+    providersOverview, providersOverviewLoading, providersOverviewError,
+    catalogWarm, fetchProvidersOverview,
+    modelTests, testingModels, runModelTest, hydrateModelTests,
     addModel, removeModel,
+    queuedRemovals, inflightRemovals, queueRemoveModel, undoRemoveModel,
   } = useGatewayStore();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,6 +87,61 @@ export function ModelsTab() {
     if (models.length === 0) fetchModels();
   }, [models.length, fetchModels]);
 
+  // ── Agentes del usuario (avatares por tarjeta + popover "Asignar") ──
+  // Join client-side con GET /managed-agents (precedente: HeartbeatTab). Es
+  // enriquecimiento: si falla, la pestaña funciona igual sin avatares.
+  const [agents, setAgents] = useState<ManagedAgent[]>([]);
+  const refetchAgents = useCallback(async () => {
+    try {
+      setAgents(await listManagedAgents() as unknown as ManagedAgent[]);
+    } catch { /* enriquecimiento, no bloquea el tab */ }
+  }, []);
+  useEffect(() => { void refetchAgents(); }, [refetchAgents]);
+
+  // Refresco en vivo: cualquier cambio de modelo (desde el módulo Agents o
+  // desde el propio botón Asignar) emite agent.model_changed por WS.
+  const modelChangedEvent = useWebSocket('agent.model_changed');
+  useEffect(() => {
+    if (modelChangedEvent) void refetchAgents();
+  }, [modelChangedEvent, refetchAgents]);
+
+  // Índice modelo→agentes. agent.model es SIEMPRE fully-qualified
+  // ('provider/modelId'); GatewayModel.id también — el doble lookup de abajo
+  // (id y provider/model) cubre el caso Ollama sin prefijo en model.model.
+  const agentsByModel = useMemo(() => {
+    const m = new Map<string, ManagedAgent[]>();
+    for (const a of agents) {
+      if (!a.model) continue;
+      const arr = m.get(a.model) ?? [];
+      arr.push(a);
+      m.set(a.model, arr);
+    }
+    return m;
+  }, [agents]);
+
+  // SSOT de auth: el providers-overview se carga al montar el TAB entero (no
+  // solo en view=catalog) para que Catalog/Configured/Advanced deriven de la
+  // misma verdad desde el primer render. Con él se rehidratan también los
+  // resultados de tests de salud (viven en Core hasta reinicio) tras un F5.
+  useEffect(() => {
+    fetchProvidersOverview();
+    hydrateModelTests();
+    // Solo al montar — las mutaciones encadenan su propio refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Si el overview se obtuvo con el catálogo FRÍO (featured_count null y
+  // universo sin los providers solo-destacados), re-pedirlo UNA vez cuando el
+  // catálogo del dash ya cargó (ese fetch calienta la caché de Core).
+  const overviewRewarmedRef = useRef(false);
+  useEffect(() => {
+    if (overviewRewarmedRef.current) return;
+    if (catalog.length > 0 && providersOverview !== null && !catalogWarm && !providersOverviewLoading) {
+      overviewRewarmedRef.current = true;
+      fetchProvidersOverview();
+    }
+  }, [catalog.length, providersOverview, catalogWarm, providersOverviewLoading, fetchProvidersOverview]);
+
   useEffect(() => {
     // El catalog se cruza con los modelos configurados para mostrar sus tags de
     // contexto/tamaño en la pestaña Configured → cargarlo también ahí.
@@ -96,22 +159,54 @@ export function ModelsTab() {
   // Fetch custom provider IDs and full config (so the grid shows them
   // even with 0 catalog models, and the Edit modal can read existing
   // contextWindow/maxTokens from `models.providers[id].models[]`).
+  // NOTA: este fetch alimenta providersConfig (editor de modelos custom,
+  // params Ollama) y customProviderIds (discover/delete). La AUTH ya no sale
+  // de aquí — la sirve el providers-overview del store, cuyo error es visible
+  // (banner + Retry), nunca un catch{} silencioso que pintaba "todo sin auth".
   const fetchCustomProviders = useCallback(async () => {
     try {
       const config = await gwService.getProvidersConfig();
       setProvidersConfig(config);
       setCustomProviderIds(Object.keys(config.providers ?? {}));
-    } catch { /* silent */ }
+    } catch { /* solo afecta a metadatos de edición; la auth viene del overview */ }
   }, []);
   useEffect(() => {
     if (view === 'catalog') fetchCustomProviders();
   }, [view, fetchCustomProviders]);
 
+  // Índice del overview por provider id — la señal de auth de todo el tab.
+  const overviewById = useMemo(() => {
+    const m = new Map<string, ProviderOverview>();
+    for (const p of providersOverview ?? []) m.set(p.id, p);
+    return m;
+  }, [providersOverview]);
+
+  // Abre el formulario de credencial correcto para un provider (paste-key
+  // cloud, servidor local fijo o custom). Lo usan el click en tarjeta sin
+  // credencial y el 409 PROVIDER_NOT_AUTHENTICATED de las mutaciones.
+  const openCredentialWizard = useCallback((provider: string) => {
+    // Con un modelo representativo del catálogo, el wizard estándar añade el
+    // modelo tras guardar la key; sin modelos (catálogo frío o provider vacío)
+    // se abre el formulario del tipo correcto (nvidia/google/… o custom).
+    const representative = catalog.find(m => m.provider === provider && !m.configured)
+      ?? catalog.find(m => m.provider === provider);
+    if (representative) {
+      setWizardModel(representative);
+    } else {
+      setCustomWizardType(providerTypeForId(provider));
+    }
+    setSelectedProvider(provider);
+  }, [catalog]);
+
   const {
-    settingDefault, mutatingModel, addingKey, addProgress,
-    handleSetDefault, handleAddModel, handleRemoveModel,
+    mutatingModel, addingKey, addProgress, assigning,
+    handleAssignAgent, handleAddModel, handleRemoveModel,
     handleDeleteFromDisk, handleAddCustomModelDirect,
-  } = useModelMutations({ addModel, removeModel, fetchModels, fetchCatalog, fetchCustomProviders });
+  } = useModelMutations({
+    addModel, removeModel, queueRemoveModel, fetchModels, fetchCatalog, fetchCustomProviders,
+    onNeedsCredential: openCredentialWizard,
+    onAgentsChanged: refetchAgents,
+  });
 
   // Background discover for custom providers with 0 catalog models (to show count in grid)
   useEffect(() => {
@@ -130,62 +225,64 @@ export function ModelsTab() {
     return () => { cancelled = true; };
   }, [view, catalogSubView, customProviderIds, catalog]);
 
-  // Provider entries for the catalog grid (catalog models + custom providers from config)
+  // Provider entries for the catalog grid. Counts salen del catálogo (y del
+  // discover para customs vacíos); la AUTH sale EXCLUSIVAMENTE del overview
+  // (`has_credential`). El flag `available` del catálogo NO es auth — marca
+  // modelos destacados aunque no haya key (por eso anthropic/nvidia/google-
+  // vertex salían verdes y dejaban añadir modelos que quedaban orphan).
   const providerEntries = useMemo((): ProviderEntry[] => {
-    const grouped = new Map<string, { count: number; available: boolean; configured: number }>();
+    const grouped = new Map<string, { count: number; configured: number }>();
     for (const m of catalog) {
-      const entry = grouped.get(m.provider) ?? { count: 0, available: false, configured: 0 };
+      const entry = grouped.get(m.provider) ?? { count: 0, configured: 0 };
       entry.count++;
-      if (m.available) entry.available = true;
       if (m.configured) entry.configured++;
       grouped.set(m.provider, entry);
     }
-    // Merge custom providers from config that have 0 models in the catalog
-    for (const id of customProviderIds) {
-      if (!grouped.has(id)) {
-        grouped.set(id, { count: discoveredCounts[id] ?? 0, available: true, configured: 0 });
+    // Providers del overview sin modelos en el catálogo (cloud recién dado de
+    // alta, custom vacío, mirror declarado…): tarjeta igualmente, con el count
+    // del discover (customs) o el featured_count del overview como fallback.
+    for (const p of providersOverview ?? []) {
+      if (!grouped.has(p.id)) {
+        grouped.set(p.id, {
+          count: discoveredCounts[p.id] ?? p.featured_count ?? 0,
+          configured: p.configured_count,
+        });
       }
     }
-    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => {
-      // Orphan: user-managed provider whose models are still referenced by
-      // agents.list / agents.defaults, so the catalog lists them as
-      // available — but `models.providers[id]` is gone, so calls fail with
-      // 401 "no api key found". Treat as needing setup so clicking the
-      // tile opens the wizard pre-populated.
-      const isOrphan = isUserManagedProvider(provider) && !customProviderIds.includes(provider);
-      return {
-        provider,
-        label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
-        color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
-        modelCount: info.count,
-        configuredCount: info.configured,
-        hasAuth: info.available && !isOrphan,
-      };
-    });
+    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => ({
+      provider,
+      label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
+      color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
+      modelCount: info.count,
+      configuredCount: info.configured,
+      // LA señal de auth: overview.has_credential. Sin fila en el overview
+      // (p.ej. provider solo-destacado con catálogo frío) = sin credencial.
+      hasAuth: overviewById.get(provider)?.has_credential ?? false,
+    }));
     // Providers with auth first, then alphabetical
     entries.sort((a, b) => {
       if (a.hasAuth !== b.hasAuth) return a.hasAuth ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
     return entries;
-  }, [catalog, customProviderIds, discoveredCounts]);
+  }, [catalog, providersOverview, overviewById, discoveredCounts]);
+
+  // Dedup de tarjetas "Add provider" del grid: presente = entrada en config o
+  // credencial activa (contrato del overview).
+  const presentProviders = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of providersOverview ?? []) {
+      if (p.entry_in_config || p.has_credential) s.add(p.id);
+    }
+    return s;
+  }, [providersOverview]);
 
   const handleProviderClick = (provider: string) => {
-    const entry = providerEntries.find(e => e.provider === provider);
-    if (!entry?.hasAuth) {
-      // No credentials — open wizard for this provider. For orphans, all
-      // catalog models are flagged `configured`, so fall back to any model
-      // from the provider (the wizard skips re-adding when configured).
-      const representative = catalog.find(m => m.provider === provider && !m.configured)
-        ?? catalog.find(m => m.provider === provider);
-      if (representative) {
-        setWizardModel(representative);
-      } else if (USER_MANAGED_FIXED_PROVIDERS.has(provider)) {
-        setCustomWizardType(provider as ProviderType);
-      } else {
-        setCustomWizardType('custom');
-      }
-      setSelectedProvider(provider);
+    if (!overviewById.get(provider)?.has_credential) {
+      // Sin credencial — re-pedir la key con el formulario correcto del
+      // provider (nvidia/google/groq/… su paste-key; ollama/vllm su form
+      // fijo; desconocidos/custom-api-* el Custom). Nunca entrar a modelos.
+      openCredentialWizard(provider);
       return;
     }
     // Has credentials — go directly to models
@@ -197,6 +294,7 @@ export function ModelsTab() {
     fetchModels();
     fetchCatalog();
     fetchCustomProviders();
+    fetchProvidersOverview();
     if (selectedProvider) {
       setCatalogSubView('models');
     }
@@ -277,10 +375,17 @@ export function ModelsTab() {
 
   // ── Delete custom provider ──
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
+  // Confirmación canónica (ConfirmDialog), no window.confirm.
+  const [confirmDeleteProvider, setConfirmDeleteProvider] = useState<string | null>(null);
 
-  const handleDeleteProvider = async (providerId: string, e: React.MouseEvent) => {
+  const handleDeleteProvider = (providerId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Remove provider "${providerId}"? Models from this provider will be removed.`)) return;
+    setConfirmDeleteProvider(providerId);
+  };
+
+  const doDeleteProvider = async () => {
+    const providerId = confirmDeleteProvider;
+    if (!providerId) return;
     setDeletingProvider(providerId);
     try {
       await gwService.deleteProvider(providerId);
@@ -288,6 +393,7 @@ export function ModelsTab() {
       fetchModels();
       fetchCatalog();
       fetchCustomProviders();
+      fetchProvidersOverview();
       if (selectedProvider === providerId) {
         setCatalogSubView('providers');
         setSelectedProvider(null);
@@ -366,7 +472,7 @@ export function ModelsTab() {
 
   return (
     <ScrollArea style={{ height: '100%' }}>
-      <div style={{ padding: isMobile ? 12 : 20, maxWidth: 1100 }}>
+      <div style={{ padding: isMobile ? 12 : 20 }}>
         <ModelsHeader
           isMobile={isMobile}
           search={search}
@@ -386,12 +492,22 @@ export function ModelsTab() {
             <EmptyState icon={Cpu} title={search ? 'No models match your search' : 'No models configured'} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {filteredModels.map((model) => {
+              {filteredModels
+                // En vuelo (batch POST) → oculta; si el batch falla, reaparece
+                // sola (esto es solo un filtro de render sobre el store).
+                .filter((model) => !inflightRemovals.includes(model.id))
+                .map((model) => {
                 // GatewayModel.model viene SIN prefijo de provider para Ollama
                 // ("qwen3:8b"), pero el catalog usa key con prefijo ("ollama/qwen3:8b").
                 // Probar ambas formas para cruzar contexto/tamaño en todos los casos.
                 const cat = catalogByKey.get(model.model)
                   ?? catalogByKey.get(`${model.provider}/${model.model}`);
+                // Key compartida con el Catalog y con el store de tests:
+                // 'provider/modelId' (== model.id en el contrato actual).
+                const testKey = model.id || `${model.provider}/${model.model}`;
+                const assignedAgents = agentsByModel.get(model.id)
+                  ?? agentsByModel.get(`${model.provider}/${model.model}`)
+                  ?? [];
                 return (
                 <ConfiguredRow
                   key={model.id || model.model}
@@ -399,29 +515,78 @@ export function ModelsTab() {
                   isMobile={isMobile}
                   isHovered={hoveredRow === model.id}
                   onHover={setHoveredRow}
-                  settingDefault={settingDefault}
-                  onSetDefault={handleSetDefault}
-                  mutatingModel={mutatingModel}
+                  agents={agents}
+                  assignedAgents={assignedAgents}
+                  assigning={assigning}
+                  onAssignAgent={handleAssignAgent}
+                  removalQueued={queuedRemovals.includes(model.id)}
+                  onUndoRemove={undoRemoveModel}
                   onRemove={handleRemoveModel}
                   onEditOllama={handleEditOllama}
                   contextWindow={cat?.context_window ?? null}
                   sizeBytes={cat?.size_bytes ?? null}
+                  maxContext={cat?.max_context ?? null}
+                  caps={cat?.caps ?? null}
+                  knowledge={cat?.knowledge ?? null}
+                  aaSlug={cat?.aa_slug ?? null}
+                  testResult={modelTests[testKey] ?? null}
+                  isTesting={testingModels.includes(testKey)}
+                  onTest={(key) => { void runModelTest(key); }}
                 />
                 );
               })}
             </div>
           )
+        ) : providersOverviewError ? (
+          /* ── Catalog: el overview de providers FALLÓ ──
+             Sin él no hay señal de auth fiable: pintar el grid supondría
+             "todo sin credencial" (el bug histórico de los catch{} silencios).
+             Error visible + Retry, nunca degradar en silencio. */
+          <div style={{
+            padding: 20, background: '#ef444410', border: '1px solid #ef444425',
+            borderRadius: 'var(--radius-md)',
+          }}>
+            <p style={{ color: '#ef4444', fontSize: '0.8125rem', fontWeight: 500, marginBottom: 4 }}>
+              Could not load provider credentials overview
+            </p>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: 10 }}>{providersOverviewError}</p>
+            <button
+              onClick={() => { void fetchProvidersOverview(); }}
+              disabled={providersOverviewLoading}
+              style={{
+                padding: '4px 12px', fontSize: '0.75rem', background: 'var(--surface)',
+                border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)',
+                opacity: providersOverviewLoading ? 0.6 : 1,
+              }}
+            >
+              {providersOverviewLoading ? 'Retrying…' : 'Retry'}
+            </button>
+          </div>
+        ) : providersOverview === null ? (
+          /* Primer fetch del overview en vuelo: no pintar gates erróneos. */
+          <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
+            Loading providers…
+          </div>
         ) : catalogSubView === 'providers' ? (
           /* ── Catalog: Provider Grid (Step 1) ── */
           <CatalogProvidersGrid
             entries={providerEntries}
+            presentProviders={presentProviders}
             search={search}
             isMobile={isMobile}
             customProviderIds={customProviderIds}
             deletingProvider={deletingProvider}
             onProviderClick={handleProviderClick}
             onDeleteProvider={handleDeleteProvider}
-            onSelectProviderType={setCustomWizardType}
+            onSelectProviderType={(type) => {
+              setCustomWizardType(type);
+              // Para un provider conocido (no 'custom', cuyo id se acuña al
+              // crearlo), fijar selectedProvider para que tras Save el flujo
+              // navegue a sus modelos (handleWizardSuccess) en vez de dejar al
+              // usuario en el grid sin señal de qué pasó.
+              if (type !== 'custom') setSelectedProvider(type);
+            }}
             onOpenAdvanced={() => { setView('advanced'); }}
           />
         ) : (
@@ -451,6 +616,9 @@ export function ModelsTab() {
             onEditCustomModel={handleEditCustomModel}
             onDeleteFromDisk={handleDeleteFromDisk}
             onOpenAddOllama={() => setAddModelOpen(true)}
+            modelTests={modelTests}
+            testingModels={testingModels}
+            onTestModel={(key) => { void runModelTest(key); }}
           />
         )}
       </div>
@@ -498,6 +666,15 @@ export function ModelsTab() {
           onAdded={() => { fetchCatalog(); fetchModels(); }}
         />
       )}
+      <ConfirmDialog
+        open={confirmDeleteProvider !== null}
+        onClose={() => setConfirmDeleteProvider(null)}
+        onConfirm={() => { void doDeleteProvider(); }}
+        title="Remove provider?"
+        description={confirmDeleteProvider ? `Remove provider "${confirmDeleteProvider}"? Models from this provider will be removed.` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+      />
     </ScrollArea>
   );
 }

@@ -11,10 +11,13 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Cpu } from 'lucide-react';
 import type { ManagedAgent } from './types';
 import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
+import { AppIcon } from '@/components/shared/AppIcon';
 import { useUserAvatar } from '@/hooks/use-user-avatar';
+import { getProviderIcon } from '@/config/provider-icons';
+import { PROVIDER_COLORS, PROVIDER_LABELS } from '@/modules/gateway/tabs/models/constants';
 
 interface AgentTreeNodeProps {
   agent: ManagedAgent;
@@ -26,29 +29,60 @@ interface AgentTreeNodeProps {
   onToggleExpand?: () => void;
 }
 
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active: { bg: 'rgba(34,197,94,0.15)', text: 'var(--success)' },
-  idle: { bg: 'rgba(234,179,8,0.15)', text: '#EAB308' },
-  error: { bg: 'rgba(239,68,68,0.15)', text: 'var(--error)' },
-};
-
 /**
- * Last segment after the final `/` — the actual model identifier.
- * Handles any depth and preserves all characters (colons, dots, dashes).
- *
- *  anthropic/claude-sonnet-4-6              → claude-sonnet-4-6
- *  openrouter/openai/gpt-oss-120b:free      → gpt-oss-120b:free
- *  amazon-bedrock/amazon.nova-2-lite-v1:0   → amazon.nova-2-lite-v1:0
- *  fireworks/accounts/fireworks/models/glm-5 → glm-5
- *  cloudflare-ai-gateway/workers-ai/@cf/nvidia/nemotron-nano-3-30b → nemotron-nano-3-30b
- *
- * If no slash: returns the input as-is (defensive — covers agents without
- * a fully-qualified model identifier).
+ * Etiqueta de modelo a ancho completo, con el estilo de las opciones del
+ * ModelSelect / tarjetas de Gateway → Models: icono del proveedor en un
+ * cuadro tintado + nombre del modelo + label del proveedor debajo.
  */
-function formatModelName(model: string): string {
-  if (!model) return '';
-  const lastSlash = model.lastIndexOf('/');
-  return lastSlash >= 0 ? model.slice(lastSlash + 1) : model;
+function ModelBadge({ model }: { model: string }) {
+  const slash = model.indexOf('/');
+  const provider = slash > 0 ? model.slice(0, slash) : '';
+  const rest = slash > 0 ? model.slice(slash + 1) : model;
+  const Icon = provider ? getProviderIcon(provider) : null;
+  const color = PROVIDER_COLORS[provider?.toLowerCase()] ?? 'var(--text-dim)';
+  return (
+    <div
+      title={model}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        width: '100%',
+        boxSizing: 'border-box',
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '8px 10px',
+        marginTop: 2,
+      }}
+    >
+      <div style={{
+        width: 28, height: 28,
+        borderRadius: 'var(--radius-sm)',
+        background: `${color}15`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        {Icon ? <Icon size={20} style={{ color }} /> : <Cpu size={15} style={{ color }} />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          color: 'var(--text)',
+          fontFamily: 'var(--font-mono)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {rest}
+        </span>
+        <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', textTransform: 'capitalize' }}>
+          {PROVIDER_LABELS[provider] ?? provider}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 0, expanded = true, onToggleExpand }: AgentTreeNodeProps) {
@@ -122,8 +156,6 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
   // Regular agent card
   const visibleSkills = agent.skills.slice(0, 6);
   const extraSkillCount = Math.max(0, agent.skills.length - 6);
-  const statusStyle = STATUS_COLORS[agent.status] ?? { bg: 'rgba(234, 179, 8, 0.15)', text: '#EAB308' };
-  const modelLabel = formatModelName(agent.model);
 
   return (
     <div
@@ -229,7 +261,7 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
               whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ fontSize: '0.75rem' }}>{skill.icon}</span>
+            <AppIcon icon={skill.icon} icon_kind={skill.icon_kind} color={skill.color} size={12} />
             {skill.name}
           </span>
         ))}
@@ -245,52 +277,8 @@ export function AgentTreeNode({ agent, selected, onClick, isOwner, childCount = 
         )}
       </div>
 
-      {/* Footer: status badge + model badge */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginTop: 2,
-      }}>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-          background: statusStyle.bg,
-          color: statusStyle.text,
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-sm)',
-          lineHeight: 1.4,
-          textTransform: 'capitalize',
-        }}>
-          <span style={{
-            width: 7,
-            height: 7,
-            borderRadius: 'var(--radius-full)',
-            background: statusStyle.text,
-            flexShrink: 0,
-          }} />
-          {agent.status}
-        </span>
-
-        {modelLabel && (
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            background: 'var(--amber-dim)',
-            color: 'var(--amber)',
-            fontSize: '0.8125rem',
-            fontWeight: 500,
-            padding: '4px 10px',
-            borderRadius: 'var(--radius-sm)',
-            lineHeight: 1.4,
-          }}>
-            {modelLabel}
-          </span>
-        )}
-      </div>
+      {/* Footer: badge de modelo a ancho completo (estilo ModelSelect) */}
+      {agent.model && <ModelBadge model={agent.model} />}
 
       {/* Sub-agent expand/collapse toggle */}
       {childCount > 0 && (

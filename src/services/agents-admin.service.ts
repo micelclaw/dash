@@ -114,6 +114,16 @@ export async function updateToolAccess(
 }
 
 /**
+ * Assign a model to an agent (fully-qualified id, e.g. "nvidia/nemotron-3").
+ * Applies to NEW sessions. Timeout 150s: the write goes through the Gateway's
+ * FIFO config queue and under rate-limit pressure can take >60s to land
+ * (same ceiling as the credential writes).
+ */
+export async function updateAgentModel(agentId: string, model: string): Promise<void> {
+  await api.post(`/managed-agents/${agentId}/set-model`, { model }, { timeout: 150_000 });
+}
+
+/**
  * Generic agent patch (used by PermissionsSection to update the
  * `permissions` field — allowed_domains + tag_filter).
  */

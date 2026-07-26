@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useMemo, useState, useCallback, useRef } from 'react';
+import { useMemo, useState, useCallback, useLayoutEffect, useRef } from 'react';
 import { ChevronLeft, ZoomIn, ZoomOut, Maximize2, RotateCcw, MousePointer2 } from 'lucide-react';
 import { AgentTreeNode } from './AgentTreeNode';
 import { AgentDetail } from './AgentDetail';
@@ -51,6 +51,23 @@ const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.6;
 const ZOOM_STEP = 0.08;
 
+// Estimación de filas de chips de skills empaquetando por ANCHO aproximado
+// (antes se asumían 3 por fila y nombres largos como "Reverse Proxy" envolvían
+// en más filas → la tarjeta real era más alta que la estimada y el badge de
+// modelo quedaba recortado por el foreignObject).
+function estimateSkillRows(agent: ManagedAgent): number {
+  const chips = agent.skills.slice(0, 6);
+  if (chips.length === 0) return 1;
+  const budget = 300; // 340 de tarjeta − 40 de padding
+  let rows = 1;
+  let x = 0;
+  for (const s of chips) {
+    const w = Math.min(220, 42 + (s.name?.length ?? 6) * 6.5); // icono+padding + ~6.5px/carácter
+    if (x > 0 && x + w > budget) { rows++; x = w + 6; } else { x += w + 6; }
+  }
+  return rows;
+}
+
 function computeCardHeight(agent: ManagedAgent, childCount: number, isOwner: boolean): number {
   if (isOwner) return 90;
   let h = 40;   // padding (20 + 20)
@@ -58,10 +75,9 @@ function computeCardHeight(agent: ManagedAgent, childCount: number, isOwner: boo
   h += 14;      // gap
   h += 22;      // role description
   h += 14;      // gap
-  const skillRows = Math.max(1, Math.ceil(Math.min(agent.skills.length, 6) / 3));
-  h += skillRows * 32; // skill tag rows
+  h += estimateSkillRows(agent) * 32; // skill tag rows
   h += 14;      // gap
-  h += 30;      // footer (status + model badges)
+  h += 54;      // footer: badge de modelo a ancho completo (icono 28 + 2 líneas)
   if (childCount > 0) {
     h += 14;    // gap + marginTop
     h += 34;    // toggle (paddingTop + borderTop + content)
@@ -247,6 +263,30 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [zoom, setZoom] = useState(0.85);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Wrapper DIMENSIONADO del contenido escalado (ver render): su rect es la
+  // referencia para anclar el zoom al cursor sin asumir paddings/márgenes.
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Ancla pendiente de un cambio de zoom: punto del viewport (clientX/Y) que
+  // debe seguir sobre el mismo punto del CONTENIDO (cx/cy, coords sin escalar).
+  const pendingAnchor = useRef<{ clientX: number; clientY: number; cx: number; cy: number } | null>(null);
+
+  // Aplica el ancla DESPUÉS de que React pinte el nuevo scale: se mide el rect
+  // REAL del contenido (recoge el margin:auto y el padding ya recalculados) y
+  // se corrige el scroll para que el punto siga bajo el cursor. El enfoque
+  // anterior (predecir el scroll con coords derivadas del scroll previo)
+  // ignoraba el padding del contenedor y el auto-centrado → deriva lateral.
+  useLayoutEffect(() => {
+    const a = pendingAnchor.current;
+    const content = contentRef.current;
+    const container = containerRef.current;
+    if (!a || !content || !container) return;
+    pendingAnchor.current = null;
+    const rect = content.getBoundingClientRect();
+    container.scrollLeft += (rect.left + a.cx * zoom) - a.clientX;
+    container.scrollTop += (rect.top + a.cy * zoom) - a.clientY;
+  }, [zoom]);
+
+  const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
   // Drag-to-pan: arrastrar el FONDO del lienzo mueve el scroll. Se ignora si el
   // mousedown cae sobre una card ([data-agent-card]) para no romper su click.
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
@@ -287,32 +327,43 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
     });
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) return; // Don't interfere with browser zoom
-    e.preventDefault();
-
+  // Rueda = zoom. Listener NATIVO con { passive: false }: React registra
+  // onWheel como pasivo → su e.preventDefault() no hace nada ("Unable to
+  // preventDefault inside passive event listener") y el contenedor scrolleaba
+  // nativamente ADEMÁS del ajuste de ancla → deriva al hacer zoom.
+  useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) return; // no interferir con el zoom del navegador
+      e.preventDefault();
 
-    const rect = container.getBoundingClientRect();
-    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      const content = contentRef.current;
+      if (!content) return;
 
-    setZoom(prev => {
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      const { clientX, clientY } = e;
 
-      // Cursor position in content coordinates (unscaled)
-      const cursorX = (e.clientX - rect.left + container.scrollLeft) / prev;
-      const cursorY = (e.clientY - rect.top + container.scrollTop) / prev;
-
-      // Adjust scroll so cursor stays in the same viewport position
-      requestAnimationFrame(() => {
-        container.scrollLeft = cursorX * newZoom - (e.clientX - rect.left);
-        container.scrollTop = cursorY * newZoom - (e.clientY - rect.top);
+      setZoom(prev => {
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev + delta));
+        if (newZoom === prev) return prev;
+        // Punto del contenido bajo el cursor, en coords SIN escalar, medido
+        // sobre el rect real del wrapper (independiente de padding/márgenes).
+        const rect = content.getBoundingClientRect();
+        pendingAnchor.current = {
+          clientX,
+          clientY,
+          cx: (clientX - rect.left) / prev,
+          cy: (clientY - rect.top) / prev,
+        };
+        return newZoom;
       });
-
-      return newZoom;
-    });
-  }, []);
+    };
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+    // Deps: en móvil con detalle abierto el early-return no monta el
+    // contenedor; al volver al árbol hay que re-enganchar el listener.
+  }, [isMobile, selectedId]);
 
   const childCountMap = useMemo(() => buildChildCountMap(agents), [agents]);
 
@@ -335,21 +386,28 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
     };
   }, [agents, collapsed]);
 
-  // Zoom centrado en el viewport (para los botones +/−): mantiene el punto
-  // central a la vista al cambiar la escala.
+  // Zoom centrado en el viewport (para los botones +/−): ancla el punto
+  // central de la vista con el mismo mecanismo que la rueda.
   const setZoomCentered = useCallback((updater: (z: number) => number) => {
     const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) {
+      setZoom(prev => clampZoom(updater(prev)));
+      return;
+    }
+    const vrect = container.getBoundingClientRect();
+    const clientX = vrect.left + vrect.width / 2;
+    const clientY = vrect.top + vrect.height / 2;
     setZoom(prev => {
-      const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, updater(prev)));
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        const cx = (container.scrollLeft + rect.width / 2) / prev;
-        const cy = (container.scrollTop + rect.height / 2) / prev;
-        requestAnimationFrame(() => {
-          container.scrollLeft = cx * newZoom - rect.width / 2;
-          container.scrollTop = cy * newZoom - rect.height / 2;
-        });
-      }
+      const newZoom = clampZoom(updater(prev));
+      if (newZoom === prev) return prev;
+      const rect = content.getBoundingClientRect();
+      pendingAnchor.current = {
+        clientX,
+        clientY,
+        cx: (clientX - rect.left) / prev,
+        cy: (clientY - rect.top) / prev,
+      };
       return newZoom;
     });
   }, []);
@@ -425,7 +483,6 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
       {/* Tree area */}
       <div
         ref={containerRef}
-        onWheel={handleWheel}
         onMouseDown={handlePanDown}
         onMouseMove={panning ? handlePanMove : undefined}
         onMouseUp={endPan}
@@ -501,15 +558,29 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
           </span>
         </div>
 
-        <div style={{
-          transform: `scale(${zoom})`,
-          transformOrigin: '0 0',
-        }}>
+        {/* Wrapper DIMENSIONADO al tamaño visual (svg × zoom): el transform no
+            cambia el layout, así que sin esto el área de scroll no coincidía
+            con lo visible (deriva lateral al hacer zoom + clamping raro). El
+            margin auto centra el árbol cuando cabe entero en el viewport. */}
+        <div
+          ref={contentRef}
+          style={{
+            width: svgWidth * zoom,
+            height: svgHeight * zoom,
+            margin: '0 auto',
+          }}
+        >
+          <div style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: '0 0',
+            width: svgWidth,
+            height: svgHeight,
+          }}>
           <svg
             width={svgWidth}
             height={svgHeight}
             viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            style={{ display: 'block', margin: '0 auto' }}
+            style={{ display: 'block' }}
           >
             {/* Connection edges */}
             {edges.map(edge => {
@@ -561,14 +632,15 @@ export function AgentTree({ agents, selectedId, onSelect, isMobile, onAgentChang
               </foreignObject>
             ))}
           </svg>
+          </div>
         </div>
       </div>
 
       {/* Detail panel (desktop only) */}
       {!isMobile && showDetail && (
         <div style={{
-          width: 420,
-          minWidth: 420,
+          width: 540,
+          minWidth: 540,
           borderLeft: '1px solid var(--border)',
           overflow: 'hidden',
         }}>

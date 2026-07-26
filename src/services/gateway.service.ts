@@ -28,7 +28,9 @@ import type {
   CronRun,
   LogEntry,
   ModelsStatus,
+  ModelTestResult,
   AuthProfileEntry,
+  ProvidersOverviewResponse,
 } from '@/modules/gateway/types';
 
 // ─── Snapshot (single request for all data) ─────────────────────────
@@ -287,6 +289,17 @@ export async function removeModel(model: string): Promise<void> {
   await api.post('/gateway/models/remove', { model });
 }
 
+/**
+ * Batch remove: N modelos = UNA sola escritura de config en el Gateway (el
+ * rate limit es 3 escrituras/60s — N llamadas sueltas rebotaban a partir de
+ * la 3ª). Timeout 90s: la escalera de backoff del servidor ante rate-limit
+ * suma 75s antes del 5º intento; 45-60s abortaría con la escritura
+ * aterrizando después de todos modos.
+ */
+export async function removeModels(models: string[]): Promise<void> {
+  await api.post('/gateway/models/remove', { models }, { timeout: 90_000 });
+}
+
 // Hard delete de un modelo local de Ollama (borra el blob de disco). `id` = tag
 // real de Ollama (p.ej. 'qwen3:14b' o 'hf.co/org/repo:latest'). Para desregistrarlo
 // como modelo de chat, llamar también a removeModel('ollama/<id>') (best-effort).
@@ -396,6 +409,30 @@ export async function getModelsStatus(probe = false): Promise<ModelsStatus> {
   return res.data;
 }
 
+// ─── Model health test ──────────────────────────────────────────────
+// Test REAL por modelo: completion de 1 token (cloud) o presencia en disco
+// (Ollama). NO escribe config. El backend puede tardar hasta ~23s (timeouts
+// internos 8s catálogo + 15s completion) → 35s de techo en el cliente para
+// recibir el tag real (auth/not_serving/…) en vez de un abort genérico.
+// Errores HTTP: 409 PROVIDER_NOT_AUTHENTICATED (sin credencial),
+// 400 NO_BASE_URL_TO_TEST.
+
+export async function testModel(model: string): Promise<ModelTestResult> {
+  const res = await api.post<{ data: { model: string; result: ModelTestResult } }>(
+    '/gateway/models/test',
+    { model },
+    { timeout: 35_000 },
+  );
+  return res.data.result;
+}
+
+/** Resultados de tests previos (viven en Core hasta reinicio) — para
+ *  rehidratar los pills tras un F5. Key = 'provider/modelId'. */
+export async function getModelTests(): Promise<Record<string, ModelTestResult>> {
+  const res = await api.get<{ data: { tests: Record<string, ModelTestResult> } }>('/gateway/models/tests');
+  return res.data?.tests ?? {};
+}
+
 // ─── Aliases ────────────────────────────────────────────────────────
 
 export async function getAliases(): Promise<Record<string, string>> {
@@ -430,6 +467,11 @@ export async function clearFallbacks(): Promise<void> {
   await api.delete('/gateway/models/fallbacks');
 }
 
+/** Fijar el orden completo de fallbacks (reorder up/down en el dash). */
+export async function setFallbacks(models: string[]): Promise<void> {
+  await api.put('/gateway/models/fallbacks', { models });
+}
+
 // ─── Image fallbacks ────────────────────────────────────────────────
 
 export async function getImageFallbacks(): Promise<string[]> {
@@ -449,7 +491,25 @@ export async function clearImageFallbacks(): Promise<void> {
   await api.delete('/gateway/models/image-fallbacks');
 }
 
+export async function setImageFallbacks(models: string[]): Promise<void> {
+  await api.put('/gateway/models/image-fallbacks', { models });
+}
+
+// ─── Providers overview (SSOT de auth por proveedor) ───────────────
+// LA fuente de verdad de la que derivan todas las vistas del módulo Models.
+// `has_credential` gobierna punto verde, gates de +Add y entrar-a-modelos.
+
+export async function getProvidersOverview(): Promise<ProvidersOverviewResponse> {
+  const res = await api.get<{ data: ProvidersOverviewResponse }>('/gateway/models/providers-overview');
+  return res.data;
+}
+
 // ─── Auth profiles ──────────────────────────────────────────────────
+// Los writes de credenciales pasan por la cola de config del Gateway, que
+// reintenta hasta ~120s si el rate-limit (3 writes/60s) está agotado. El
+// timeout del cliente debe superar ese techo para recibir el resultado real
+// (éxito honesto o 503 GATEWAY_BUSY) en vez de abortar a los 15s por defecto.
+const CREDENTIAL_WRITE_TIMEOUT_MS = 150_000;
 
 export async function getAuthProfiles(): Promise<AuthProfileEntry[]> {
   const res = await api.get<{ data: AuthProfileEntry[] }>('/gateway/models/auth/profiles');
@@ -461,16 +521,44 @@ export async function setAuthToken(input: {
   token: string;
   profile_id?: string;
   expires_in_ms?: number;
-}): Promise<{ profile_id: string }> {
-  const res = await api.post<{ data: { ok: boolean; profile_id: string } }>(
+}): Promise<{ profile_id: string; credential_active: boolean }> {
+  const res = await api.post<{ data: { ok: boolean; profile_id: string; credential_active?: boolean } }>(
     '/gateway/models/auth/token',
     input,
+    { timeout: CREDENTIAL_WRITE_TIMEOUT_MS },
   );
-  return { profile_id: res.data.profile_id };
+  return { profile_id: res.data.profile_id, credential_active: res.data.credential_active ?? false };
 }
 
-export async function removeAuthProfile(profileId: string): Promise<void> {
-  await api.delete(`/gateway/models/auth/profiles/${encodeURIComponent(profileId)}`);
+export async function removeAuthProfile(profileId: string): Promise<{ removed: boolean; provider: string | null }> {
+  const res = await api.delete<{ data: { removed?: boolean; provider?: string | null } }>(
+    `/gateway/models/auth/profiles/${encodeURIComponent(profileId)}`,
+    undefined,
+    { timeout: CREDENTIAL_WRITE_TIMEOUT_MS },
+  );
+  return { removed: res.data?.removed ?? false, provider: res.data?.provider ?? null };
+}
+
+/** Borrar la credencial de un proveedor por id (no por profileId sintético). */
+export async function logoutProvider(provider: string): Promise<{ removed: boolean }> {
+  const res = await api.post<{ data: { removed?: boolean } }>(
+    '/gateway/models/auth/logout',
+    { provider },
+    { timeout: CREDENTIAL_WRITE_TIMEOUT_MS },
+  );
+  return { removed: res.data?.removed ?? false };
+}
+
+/** Rescata una key huérfana (pre-migración 2026.6.11) promoviéndola a
+ *  `models.providers.<id>.apiKey`. Solo tiene sentido en filas del overview
+ *  con `orphan_credentials: true`. */
+export async function rescueProviderKey(provider: string): Promise<{ rescued: boolean; donor: string | null }> {
+  const res = await api.post<{ data: { rescued?: boolean; donor?: string | null } }>(
+    '/gateway/models/auth/rescue',
+    { provider },
+    { timeout: CREDENTIAL_WRITE_TIMEOUT_MS },
+  );
+  return { rescued: res.data?.rescued ?? false, donor: res.data?.donor ?? null };
 }
 
 // ─── Sessions ───────────────────────────────────────────────────────
@@ -1005,6 +1093,12 @@ export interface DiscoveredModel {
   name: string;
   input: string[];
   size_bytes?: number | null; // Ollama: tamaño en disco (de /api/tags)
+  // Metadata del catálogo CURADO (presente solo con match — chips del dash)
+  max_context?: number | null;
+  max_output?: number | null;
+  caps?: { reasoning: boolean; vision: boolean; tools: boolean } | null;
+  knowledge?: string | null;
+  aa_slug?: string | null;
 }
 
 export interface DiscoverResult {
@@ -1020,6 +1114,40 @@ export async function discoverProviderModels(providerId: string): Promise<Discov
 
 export async function deleteProvider(providerId: string): Promise<void> {
   await api.delete(`/gateway/providers/${encodeURIComponent(providerId)}`);
+}
+
+// ─── OmniRoute (managed AI gateway provider) ──────────────────────
+// OmniRoute es un AI gateway self-hosted OpenAI-compatible que Core instala/arranca como
+// servicio gestionado (contenedor) y registra como provider `omniroute` en OpenClaw. El
+// estado de arranque llega en vivo por WS (service.omniroute); estos endpoints disparan
+// la instalación y leen el estado agregado (contenedor + provider registrado + modelos).
+
+export interface OmniRouteStatus {
+  installed: boolean;
+  running: boolean;
+  ready: boolean;                 // running + /v1/models responde
+  provider_registered: boolean;   // models.providers.omniroute con baseUrl
+  models_assigned: number;        // modelos omniroute/* asignados a agentes
+  dashboard_url: string | null;   // http://127.0.0.1:20128 (abrir en pestaña nueva)
+  ram_mb: number | null;
+  uptime_seconds: number | null;
+  start_error: string | null;
+  image_present: boolean;
+}
+
+/** Instala/arranca OmniRoute (fire-and-forget). El progreso llega por WS service.omniroute. */
+export async function startOmniroute(): Promise<{ starting: boolean }> {
+  const res = await api.post<{ data: { starting: boolean } }>('/omniroute/start', {});
+  return res.data;
+}
+
+export async function stopOmniroute(): Promise<void> {
+  await api.post('/omniroute/stop', {});
+}
+
+export async function getOmnirouteStatus(): Promise<OmniRouteStatus> {
+  const res = await api.get<{ data: OmniRouteStatus }>('/omniroute/status');
+  return res.data;
 }
 
 // ─── Commands Config ───────────────────────────────────────────────
@@ -1261,6 +1389,16 @@ export interface SkillStatus {
   description: string;
   source: string;
   emoji: string;
+  /**
+   * Display SSOT (Fase E): nombre/icono ya resueltos por el backend. ES la fuente
+   * correcta del nombre e icono de la skill (por encima de `name`/`emoji` crudos).
+   */
+  display?: {
+    name: string;
+    icon: string;
+    icon_kind: 'emoji' | 'lucide';
+    color?: string;
+  };
   eligible: boolean;
   disabled: boolean;
   always: boolean;
