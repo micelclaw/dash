@@ -123,7 +123,22 @@ export default defineConfig({
     // Permite servir el dash por los dominios locales `.claw` (acceso por nombre +
     // página /wake a la que redirige Caddy). Sin esto, Vite dev bloquea el Host
     // con 403 "host not allowed". En producción (build estático) no aplica.
-    allowedHosts: ['.claw'],
+    // `.claw` es un SUFIJO a propósito (hay un subdominio por servicio). Para el
+    // nombre público del box (patrón Plex) se añaden hosts EXACTOS por entorno:
+    // `CLAW_EXTRA_ALLOWED_HOSTS=b7d41f9c2ae05836.micelclaw.com`.
+    //
+    // OJO, no poner aquí `.micelclaw.com`: esta lista existe justamente para frenar
+    // el DNS rebinding (una web hostil resuelve un subdominio suyo a 127.0.0.1 y le
+    // habla al dev server desde el navegador del usuario). Un sufijo de un dominio
+    // público lo permitiría para CUALQUIER subdominio, incluido uno que controle el
+    // atacante. Por eso se filtran las entradas que empiecen por punto o lleven `*`.
+    allowedHosts: [
+      '.claw',
+      ...(process.env.CLAW_EXTRA_ALLOWED_HOSTS ?? '')
+        .split(',')
+        .map(h => h.trim().toLowerCase())
+        .filter(h => h.length > 0 && !h.startsWith('.') && !h.includes('*') && !h.includes('/')),
+    ],
     https: useInternalCerts
       ? { cert: internalCert, key: internalKey }
       : useTailscaleCerts

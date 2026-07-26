@@ -707,6 +707,15 @@ function RouterSetup({ lanIp }: { lanIp: string }) {
       <div style={{ margin: '8px 0 8px 20px' }}>
         <CopyBlock code={lanIp} />
       </div>
+      <ol style={{ margin: 0, paddingLeft: 20 }} start={4}>
+        {/* Ya estás en la pantalla del router con la IP delante: reservarla cuesta un clic más
+            y evita que un reinicio del router deje sin conexión al móvil y a los demás equipos. */}
+        <li>
+          Mientras estás aquí, <strong style={{ color: 'var(--text)' }}>reserva esta IP</strong> para
+          tu servidor (en la misma sección DHCP: «reserva», «IP fija» o «asignación estática»). Si no,
+          el router puede darle otra dirección al reiniciarse y tus dispositivos dejarán de encontrarlo.
+        </li>
+      </ol>
       <p style={{ margin: '8px 0 0 20px' }}>
         Todos los dispositivos de tu red usarán automáticamente los dominios <code style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)' }}>.claw</code>.
         Puede tardar unos minutos en aplicarse.

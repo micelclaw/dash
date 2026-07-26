@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import {
   Globe2, Plus, Trash2, Star, ExternalLink, Loader2, ShieldCheck,
   Download, AlertTriangle, Check, Power, ChevronDown, ChevronRight,
-  RefreshCw, Wifi, Copy,
+  RefreshCw, Wifi, Copy, Smartphone,
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { SettingSection } from '../SettingSection';
@@ -29,10 +29,14 @@ import { InlineLoading } from '../shared/InlineLoading';
 import {
   getDomains, addDomain, updateDomain, deleteDomain, setServiceExposure,
   resyncDomain, getLocalDomainSetup,
-  type SystemDomain,
+  getMdnsAgentStatus, installMdnsAgent,
+  type SystemDomain, type MdnsAgentStatus,
 } from '@/services/domains.service';
 import { useServiceUrlsStore } from '@/stores/service-urls.store';
 import { DomainAccessMethods } from './DomainAccessMethods';
+import {
+  hasNativeCaBridge, nativeCaStatus, nativeDownloadCa, nativeInstallCa, nativeOpenSecuritySettings,
+} from '@/lib/native-ca';
 
 const CA_CERT_URL = '/api/v1/hal/network/proxy/ca-certificate';
 
@@ -53,6 +57,8 @@ export function DomainsSection() {
   const [showHelp, setShowHelp] = useState(false);
   const [showAccess, setShowAccess] = useState(false);
   const [lanIp, setLanIp] = useState<string | null>(null);
+  const [mdns, setMdns] = useState<MdnsAgentStatus | null>(null);
+  const [installingMdns, setInstallingMdns] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,15 +73,36 @@ export function DomainsSection() {
   useEffect(() => {
     void getLocalDomainSetup().then(s => setLanIp(s.lan_ip)).catch(() => {});
   }, []);
+  const refreshMdns = useCallback(() => {
+    // Silencioso: en bare-metal Linux o si no eres admin, este bloque simplemente
+    // no se muestra. No es un error que haya que gritar.
+    void getMdnsAgentStatus().then(setMdns).catch(() => setMdns(null));
+  }, []);
+  useEffect(() => { refreshMdns(); }, [refreshMdns]);
+
+  const handleInstallMdns = async () => {
+    setInstallingMdns(true);
+    try {
+      const res = await installMdnsAgent();
+      setMdns(res);
+      toast.success(res.message ?? 'Agente instalado.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo instalar el agente.');
+    } finally {
+      setInstallingMdns(false);
+      // El agente tarda unos segundos en anunciar: se re-consulta poco después.
+      setTimeout(refreshMdns, 6000);
+    }
+  };
 
   const reloadResolver = () => void useServiceUrlsStore.getState().load(true);
 
-  const handleCreate = async () => {
+  const handleCreate = async (tld: 'claw' | 'local') => {
     const label = newLabel.trim().toLowerCase();
     if (!label) return;
     setCreating(true);
     try {
-      const d = await addDomain(`${label}.claw`, 'local');
+      const d = await addDomain(`${label}.${tld}`, 'local');
       toast.success(`Dominio ${d.domain} creado`);
       if (d.status === 'error') {
         toast.warning(`Rutas creadas, pero el DNS no se provisionó: ${d.error_message ?? 'PowerDNS no disponible'}`);
@@ -136,6 +163,11 @@ export function DomainsSection() {
   if (loadState === 'loading') return <InlineLoading />;
 
   const primary = domains.find(d => d.is_primary) ?? domains[0] ?? null;
+  // Dominios locales cuyo registro DNS quedó apuntando a una IP que ya no es la del box.
+  // Se detecta comparando la IP VIVA (getLocalDomainSetup) con la persistida al aprovisionar.
+  const drifted = lanIp
+    ? domains.filter(d => d.kind === 'local' && d.wildcard_ip && d.wildcard_ip !== lanIp)
+    : [];
 
   return (
     <div>
@@ -188,6 +220,106 @@ export function DomainsSection() {
           )}
         </div>
 
+        {/* Deriva de IP: el router cambió la dirección del servidor y los registros DNS de
+            los dominios locales siguen apuntando a la vieja → todo lo que resuelva por
+            nombre (móvil, otros equipos) deja de conectar, en silencio. */}
+        {drifted.length > 0 && (
+          <div style={driftBox} data-testid="ip-drift-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--amber)' }}>
+              <AlertTriangle size={16} /> La dirección de tu servidor cambió
+            </div>
+            <div style={{ fontSize: '0.8125rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+              Ahora es <code>{lanIp}</code>, pero {drifted.length === 1 ? 'el dominio' : 'los dominios'}{' '}
+              {drifted.map(d => <code key={d.id} style={{ marginRight: 4 }}>{d.domain}</code>)}
+              {drifted.length === 1 ? ' apunta' : ' apuntan'} todavía a{' '}
+              <code>{drifted[0]?.wildcard_ip}</code>.{' '}
+              <strong>Se está corrigiendo solo</strong> — el servidor lo comprueba cada pocos minutos
+              y se re-apunta sin que tengas que hacer nada. Si tienes prisa, puedes forzarlo aquí.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {drifted.map(d => (
+                <button key={d.id} style={driftBtn} disabled={busy === d.id} onClick={() => handleResync(d)}>
+                  {busy === d.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  Corregir {d.domain} ahora
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Tu router asigna la dirección por DHCP y puede cambiarla al reiniciarse. Para que no
+              vuelva a pasar, <strong>resérvale esta IP</strong> en la configuración del router
+              (busca «DHCP» → reserva o asignación estática).
+            </div>
+          </div>
+        )}
+
+        {/* Cómo te encuentra el móvil: agente mDNS + la verdad sobre el caso sin internet.
+            Solo se muestra donde aplica (WSL2 sobre Windows y siendo admin). */}
+        {mdns?.supported && (
+          <div style={mdnsBox} data-testid="mdns-agent-box">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
+              <Smartphone size={16} style={{ color: 'var(--amber)' }} />
+              Cómo te encuentra el móvil
+            </div>
+
+            <div style={{ fontSize: '0.8125rem', lineHeight: 1.55, color: 'var(--text-muted)' }}>
+              {mdns.running === true ? (
+                <>
+                  Tu servidor se anuncia en la red como{' '}
+                  <code>{mdns.announced_name ?? 'micelclaw.local'}</code>, así que un móvil
+                  puede entrar <strong>sin saber ninguna dirección IP</strong> y sin que le
+                  afecte que el router se la cambie.
+                </>
+              ) : (
+                <>
+                  Ahora mismo tu móvil solo puede entrar por la dirección IP, y esa{' '}
+                  <strong>cambia cuando el router se reinicia</strong>. Si instalas el
+                  anunciador, el servidor se presenta en la red con un nombre fijo
+                  (<code>{mdns.announced_name ?? 'micelclaw.local'}</code>) y el teléfono lo
+                  encuentra solo.
+                </>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{
+                ...badgeStyle,
+                color: mdns.running === true ? 'var(--success, #34d399)' : 'var(--text-muted)',
+                borderColor: mdns.running === true ? 'var(--success, #34d399)' : 'var(--border)',
+              }}>
+                {mdns.running === true ? 'Publicando' : mdns.task_installed ? 'Instalado, arrancando' : 'No instalado'}
+              </span>
+              {mdns.running !== true && (
+                <button style={primaryBtn} disabled={installingMdns} onClick={handleInstallMdns}
+                        data-testid="install-mdns-agent">
+                  {installingMdns ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                  Instalar el anunciador
+                </button>
+              )}
+              <button style={iconBtn} onClick={refreshMdns} title="Volver a comprobar">
+                <RefreshCw size={13} />
+              </button>
+            </div>
+
+            {mdns.running !== true && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Pedirá permiso de administrador <strong>una vez</strong>: se instala en Windows
+                (fuera de Micelclaw) porque el descubrimiento por nombre no funciona desde
+                dentro del servidor.
+              </div>
+            )}
+
+            {/* Lo que hay que decir aunque no apetezca: el caso SIN internet. */}
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+              <strong style={{ color: 'var(--text)' }}>Si algún día tu red se queda sin internet</strong>{' '}
+              y usas un nombre público para entrar desde fuera, ese nombre deja de resolver
+              (necesita internet para traducirse). En ese caso la app <strong>vuelve sola</strong> a
+              buscar el servidor dentro de tu red: por eso el descubrimiento local nunca se
+              retira, y por eso conviene <strong>mantener instalado el certificado del
+              servidor</strong> en tus dispositivos.
+            </div>
+          </div>
+        )}
+
         {/* Lista de dominios */}
         {domains.length === 0 ? (
           <div style={emptyStyle}>
@@ -212,8 +344,16 @@ export function DomainsSection() {
                     {STATUS_LABELS[d.status]?.label ?? d.status}
                   </span>
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                    {d.status !== 'active' && d.kind === 'local' && (
-                      <button title="Reintentar DNS" style={iconBtn} disabled={busy === d.id} onClick={() => handleResync(d)}>
+                    {/* Siempre visible para dominios locales: la deriva de IP deja el estado en
+                        'active' (el DNS se creó bien, solo apunta a una IP muerta) y con la
+                        condición vieja (`status !== 'active'`) el botón se ocultaba precisamente
+                        en el caso que hay que arreglar → no había forma de resincronizar desde la UI. */}
+                    {d.kind === 'local' && (
+                      <button
+                        title={d.status === 'active' ? 'Resincronizar DNS con la IP actual' : 'Reintentar DNS'}
+                        style={iconBtn} disabled={busy === d.id} onClick={() => handleResync(d)}
+                        data-testid={`resync-${d.domain}`}
+                      >
                         {busy === d.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                       </button>
                     )}
@@ -240,29 +380,45 @@ export function DomainsSection() {
           </div>
         )}
 
-        {/* Crear dominio local */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            value={newLabel}
-            onChange={e => setNewLabel(e.target.value.replace(/[^a-z0-9-]/gi, '').toLowerCase())}
-            placeholder="victor"
-            style={inputStyle}
-            onKeyDown={e => { if (e.key === 'Enter') void handleCreate(); }}
-          />
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>.claw</span>
-          <button
-            style={{
-              ...primaryBtn,
-              opacity: creating || !newLabel.trim() ? 0.45 : 1,
-              cursor: creating || !newLabel.trim() ? 'not-allowed' : 'pointer',
-            }}
-            disabled={creating || !newLabel.trim()}
-            onClick={() => void handleCreate()}
-          >
-            {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            Crear dominio local
-          </button>
-        </div>
+        {/* Crear dominio local — elige TLD (.claw o .local). Solo uno a la vez. */}
+        {(() => {
+          const hasLocal = domains.some(d => d.kind === 'local');
+          const disabled = creating || !newLabel.trim() || hasLocal;
+          const btn = (tld: 'claw' | 'local') => (
+            <button
+              style={{ ...primaryBtn, opacity: disabled ? 0.45 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
+              disabled={disabled}
+              onClick={() => void handleCreate(tld)}
+              title={hasLocal ? 'Ya tienes un dominio local. Bórralo para cambiar de TLD.' : `Crear ${newLabel.trim() || 'nombre'}.${tld}`}
+            >
+              {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Crear .{tld}
+            </button>
+          );
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <input
+                  value={newLabel}
+                  onChange={e => setNewLabel(e.target.value.replace(/[^a-z0-9-]/gi, '').toLowerCase())}
+                  placeholder="victor"
+                  style={inputStyle}
+                  disabled={hasLocal}
+                />
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>.claw / .local</span>
+                {btn('claw')}
+                {btn('local')}
+              </div>
+              <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {hasLocal ? (
+                  <>Ya tienes un dominio local (<code>{domains.find(d => d.kind === 'local')?.domain}</code>). Solo se permite uno: bórralo arriba para crear otro con distinto TLD.</>
+                ) : (
+                  <>Elige <b>uno</b> de los dos (no ambos). <code>.claw</code> es el recomendado. <code>.local</code> resuelve por el mismo DNS, pero <b>macOS y Linux</b> (systemd) suelen interceptarlo como mDNS y puede no resolver; en <b>Windows y Android</b> funciona.</>
+                )}
+              </div>
+            </>
+          );
+        })()}
       </SettingSection>
 
       {/* Servicios expuestos */}
@@ -355,6 +511,9 @@ export function DomainsSection() {
         </SettingSection>
       )}
 
+      {/* Conexión segura en la app móvil (solo en el envoltorio APK): estado + instalación NATIVA de la CA */}
+      {hasNativeCaBridge() && <NativeSecureConnection />}
+
       {/* Certificado CA */}
       <SettingSection
         title="Certificado (HTTPS local)"
@@ -378,6 +537,111 @@ export function DomainsSection() {
         </div>
       </SettingSection>
     </div>
+  );
+}
+
+// ─── Conexión segura (app móvil) ────────────────────────────────────
+// Solo se monta si `hasNativeCaBridge()`. Muestra el estado de confianza del
+// certificado del box para ESTE dispositivo y, si falta, lo instala con el flujo
+// NATIVO de Android (instalador directo) + sondeo hasta que sea de confianza.
+function NativeSecureConnection() {
+  // Sondeamos SIEMPRE la URL https del box (no el origen http actual), porque una
+  // URL http siempre daría "trusted" (el almacén de CA no aplica sin https).
+  const httpsUrl = `https://${window.location.hostname}`;
+  const [state, setState] = useState<'checking' | 'secure' | 'insecure'>('checking');
+  const [installing, setInstalling] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [sha, setSha] = useState('');
+
+  const probe = useCallback(async () => {
+    const { trusted } = await nativeCaStatus(httpsUrl);
+    setState(trusted ? 'secure' : 'insecure');
+  }, [httpsUrl]);
+
+  useEffect(() => { void probe(); }, [probe]);
+
+  const install = async () => {
+    setInstalling(true); setSha('');
+    // La descarga usa el ORIGEN actual (sirve /api/v1 pre-CA: http://ip:7100 o https tras CA).
+    const res = await nativeDownloadCa(window.location.origin);
+    setInstalling(false);
+    if (!res.ok) { toast.error('No se pudo descargar el certificado. Revisa que el servidor está accesible.'); return; }
+    if (res.sha256) setSha(res.sha256);
+    nativeInstallCa();
+    setWaiting(true);
+    const start = Date.now();
+    const tick = async () => {
+      const { trusted } = await nativeCaStatus(httpsUrl);
+      if (trusted) { setState('secure'); setWaiting(false); toast.success('Conexión segura activada'); return; }
+      if (Date.now() - start > 90000) { setWaiting(false); return; }
+      setTimeout(() => void tick(), 2000);
+    };
+    void tick();
+  };
+
+  const box: React.CSSProperties = {
+    display: 'flex', flexDirection: 'column', gap: 8,
+    padding: '12px 14px', borderRadius: 'var(--radius-md)',
+  };
+  const btn: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6, width: 'fit-content',
+    padding: '7px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)',
+    background: 'var(--bg-elevated, rgba(255,255,255,0.05))', color: 'var(--text)', cursor: 'pointer', fontSize: '0.82rem',
+  };
+
+  return (
+    <SettingSection
+      title="Conexión segura (esta app)"
+      description="Estado del certificado de tu servidor en este dispositivo. Con él, la app va cifrada (HTTPS) y el micrófono, Office y el chat en vivo funcionan."
+    >
+      {state === 'checking' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+          <Loader2 size={14} className="animate-spin" /> Comprobando el certificado…
+        </div>
+      )}
+
+      {state === 'secure' && (
+        <div style={{ ...box, border: '1px solid color-mix(in srgb, var(--success, #34d399) 45%, transparent)', background: 'color-mix(in srgb, var(--success, #34d399) 8%, transparent)' }} data-testid="secure-ok">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--success, #34d399)' }}>
+            <ShieldCheck size={16} /> Conexión segura activada
+          </div>
+          <div style={{ fontSize: '0.8rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>
+            Este dispositivo confía en el certificado de tu servidor. Todo va cifrado (HTTPS).
+          </div>
+        </div>
+      )}
+
+      {state === 'insecure' && (
+        <div style={{ ...box, border: '1px solid color-mix(in srgb, var(--warning, #fb923c) 45%, transparent)', background: 'color-mix(in srgb, var(--warning, #fb923c) 8%, transparent)' }} data-testid="secure-insecure">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, color: 'var(--warning, #fb923c)' }}>
+            <AlertTriangle size={16} /> Certificado no instalado
+          </div>
+          <div style={{ fontSize: '0.8rem', lineHeight: 1.45, color: 'var(--text-muted)' }}>
+            Vas por conexión sin cifrar. Instala el certificado de tu servidor una vez para activar HTTPS.
+          </div>
+          {sha && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+              Huella (SHA-256): <code>{sha}</code>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+            <button style={btn} onClick={() => void install()} disabled={installing || waiting} data-testid="secure-install">
+              <ShieldCheck size={14} /> {installing ? 'Preparando…' : waiting ? 'Esperando…' : 'Instalar certificado'}
+            </button>
+            {waiting && (
+              <button style={btn} onClick={() => nativeOpenSecuritySettings()} data-testid="secure-settings">
+                ¿No se abrió? Abrir Ajustes
+              </button>
+            )}
+          </div>
+          {waiting && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>
+              Confirma la instalación de <b>micelclaw-ca.crt</b> como certificado de <b>CA</b>. Volvemos solos al terminar.
+            </div>
+          )}
+        </div>
+      )}
+    </SettingSection>
   );
 }
 
@@ -406,6 +670,27 @@ const primaryBtn: React.CSSProperties = {
 };
 const introText: React.CSSProperties = {
   fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 6px 0', lineHeight: 1.55,
+};
+const mdnsBox: React.CSSProperties = {
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  padding: 12,
+  marginBottom: 14,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  background: 'var(--surface)',
+};
+
+const driftBox: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', marginBottom: 14,
+  borderRadius: 'var(--radius-md)', border: '1px solid color-mix(in srgb, var(--amber) 45%, transparent)',
+  background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
+};
+const driftBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', cursor: 'pointer',
+  borderRadius: 'var(--radius-sm)', border: '1px solid var(--amber)', background: 'transparent',
+  color: 'var(--amber)', fontSize: '0.78rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
 };
 const readMoreLink: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', padding: 0,

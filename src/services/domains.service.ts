@@ -132,3 +132,27 @@ export async function getHostsBlock(): Promise<HostsBlock> {
   const res = await api.get<{ data: HostsBlock }>('/network/hosts-block?no_cache=true');
   return res.data;
 }
+
+// ─── Agente mDNS del anfitrión ───────────────────────────────────────
+// Publica el nombre `.local` por el que un móvil encuentra el servidor sin saber
+// ninguna IP. Vive en el ANFITRIÓN (Windows) porque el multicast de WSL2 está
+// muerto; instalarlo crea una tarea programada → pide permiso de administrador una
+// vez, igual que la regla de firewall. Admin-only.
+export interface MdnsAgentStatus {
+  supported: boolean;
+  exe_present: boolean;
+  task_installed: boolean | null;
+  running: boolean | null;
+  announced_name?: string;
+  message?: string;
+}
+
+export async function getMdnsAgentStatus(): Promise<MdnsAgentStatus> {
+  const res = await api.get<{ data: MdnsAgentStatus }>('/network/mdns-agent');
+  return res.data;
+}
+
+export async function installMdnsAgent(): Promise<MdnsAgentStatus> {
+  const res = await api.post<{ data: MdnsAgentStatus }>('/network/mdns-agent', {});
+  return res.data;
+}
