@@ -22,6 +22,8 @@ import { api } from './api';
 // ─── Types ──────────────────────────────────────────────────────────
 
 export interface ConnectorInfo {
+  /** Causa del último fallo, con su pista. Vacío si no ha fallado. */
+  last_error?: string | null;
   id: string;
   connector_type: string;
   name: string;

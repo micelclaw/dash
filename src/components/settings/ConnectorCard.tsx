@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { RefreshCw, Settings, Pause, Play, Loader2, Trash2, Unlink } from 'lucide-react';
+import { RefreshCw, Settings, Pause, Play, Loader2, Trash2, Unlink, TriangleAlert } from 'lucide-react';
 import * as syncSvc from '@/services/sync.service';
 import { DisconnectDialog } from './DisconnectDialog';
 import { toast } from 'sonner';
@@ -131,6 +131,7 @@ interface ConnectorCardProps {
     domains: string[];
     status: string;
     last_sync_at: string | null;
+    last_error?: string | null;
     errors_count: number;
   };
   onRefresh: () => void;
@@ -300,6 +301,24 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
           <span style={{ fontSize: '0.625rem', color: 'var(--text-muted)' }}>
             {progress.phase ?? 'Syncing'}: {progress.processed}{progress.total ? `/${progress.total}` : ''}{progress.folder ? ` (${progress.folder})` : ''}
           </span>
+        </div>
+      )}
+
+      {/* La causa del fallo, en el sitio donde el usuario ve el rojo. Antes la
+          tarjeta se ponía en error y no decía nada: había que ir a la base de
+          datos para saber si era la contraseña, el certificado o la red. */}
+      {connector.status === 'error' && connector.last_error && (
+        <div style={{
+          display: 'flex', gap: 6, alignItems: 'flex-start',
+          padding: '8px 10px', marginBottom: 8,
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.25)',
+          borderRadius: 'var(--radius-md)',
+          fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5,
+        }}>
+          <TriangleAlert size={13} style={{ color: 'var(--error)', flexShrink: 0, marginTop: 1 }} />
+          {/* El prefijo `[causa]` es para el log, no para el usuario. */}
+          <span>{connector.last_error.replace(/^\[[a-z_]+\]\s*/i, '')}</span>
         </div>
       )}
 
