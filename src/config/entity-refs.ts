@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, MapPin, Inbox, type LucideIcon } from 'lucide-react';
+import { Globe, StickyNote, Calendar, Users, Mail, BookOpen, Kanban, SquareCheckBig, Boxes, FolderOpen, Bookmark, Rss, Newspaper, Image, Images, FileText, Sheet, Presentation, FileType, Music, Clapperboard, Library, MessageSquare, MessageCircle, Database, Wallet, ArrowLeftRight, PieChart, Receipt, MapPin, Inbox, type LucideIcon } from 'lucide-react';
 import { lucideLookup } from './lucide-lookup';
 import type { AppEntityType } from '@/services/app-access.service';
 
@@ -112,6 +112,20 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
     color: 'var(--mod-inventory)',
     label: 'Inventario',
     route: (id) => `/inventory?id=${encodeURIComponent(id)}`,
+  },
+  // proxy_host — la regla "este dominio va a este destino", que es el único
+  // registro navegable de infraestructura. ProxyPage lee ?host= y abre su editor
+  // en la sección que le toca según el tipo de host.
+  //
+  // NO hay chip de contenedor, y es deliberado: ningún componente del dash lista
+  // contenedores, así que el chip no tendría dónde aterrizar. Un enlace muerto es
+  // peor que no ofrecerlo. Cuando exista esa pantalla, el extractor ya está listo
+  // (container_summary y wait_ready devuelven {id, name} limpios).
+  proxy_host: {
+    Icon: Globe,
+    color: 'var(--mod-proxy)',
+    label: 'Host de proxy',
+    route: (id) => `/proxy?host=${encodeURIComponent(id)}`,
   },
   // inventory — sub-tipos del dominio (el default `inventory` de arriba es el ITEM).
   // Ubicación (árbol de bins/estantes): InventoryPage lee ?location_id= → fuerza la tab

@@ -11,6 +11,7 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router';
 import { useProxyStatus } from './hooks/use-proxy-status';
 import { useProxyHosts } from './hooks/use-proxy-hosts';
 import { api } from '@/services/api';
@@ -29,6 +30,28 @@ export function Component() {
   const proxyStatus = useProxyStatus();
   const allHosts = useProxyHosts();
   const [section, setSection] = useState<ProxySection>('overview');
+
+  // Aterrizaje del chip `proxy_host` del chat: /proxy?host=<uuid>.
+  //
+  // Sin esto el chip llevaba al panel general y el usuario tenía que buscar su
+  // host a mano entre los 21 que hay — o sea, la mitad del valor del chip. Se
+  // resuelve el tipo de host para abrir la sección correcta (una redirección no
+  // vive en la misma pestaña que un proxy) y se limpia el parámetro para que un
+  // F5 no reabra el editor.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [focusHostId, setFocusHostId] = useState<string | null>(null);
+  useEffect(() => {
+    const wanted = searchParams.get('host');
+    if (!wanted || allHosts.loading) return;
+    const h = allHosts.hosts.find((x) => x.id === wanted);
+    if (h) {
+      setSection(h.host_type === 'redirect' ? 'redirects' : h.host_type === '404_host' ? '404_hosts' : 'hosts');
+      setFocusHostId(h.id);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('host');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, allHosts.loading, allHosts.hosts, setSearchParams]);
 
   const hostCounts = useMemo(() => ({
     proxy: allHosts.hosts.filter(h => h.host_type === 'proxy').length,
@@ -82,6 +105,8 @@ export function Component() {
         )}
         {section === 'hosts' && (
           <ProxyHostsSection
+          focusHostId={focusHostId}
+          onFocusHandled={() => setFocusHostId(null)}
             hosts={allHosts.hosts.filter(h => h.host_type === 'proxy')}
             loading={allHosts.loading}
             onCreate={allHosts.createHost}

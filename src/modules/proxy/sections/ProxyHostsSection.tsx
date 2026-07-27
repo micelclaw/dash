@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, RefreshCw, TestTube, Pencil, ArrowRight, Globe, Loader2, X } from 'lucide-react';
 import type { ProxyHost, ProxyHostInput, UpstreamTestResult } from '../hooks/use-proxy-hosts';
 import { HostEditorDialog } from '../components/HostEditorDialog';
@@ -25,10 +25,14 @@ interface ProxyHostsSectionProps {
   onToggle: (id: string, enabled: boolean) => Promise<void>;
   onTest: (id: string) => Promise<UpstreamTestResult | null>;
   onRefresh: () => Promise<void>;
+  /** Host a abrir al entrar (viene del chip del chat: /proxy?host=<id>). */
+  focusHostId?: string | null;
+  onFocusHandled?: () => void;
 }
 
 export function ProxyHostsSection({
   hosts, loading, onCreate, onUpdate, onDelete, onToggle, onTest, onRefresh,
+  focusHostId, onFocusHandled,
 }: ProxyHostsSectionProps) {
   const [showEditor, setShowEditor] = useState(false);
   const [editHost, setEditHost] = useState<ProxyHost | null>(null);
@@ -36,6 +40,17 @@ export function ProxyHostsSection({
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; result: UpstreamTestResult } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ProxyHost | null>(null);
+
+  // El chip del chat pide abrir un host concreto. Se avisa al padre en cuanto se
+  // atiende para que no lo reabra si el usuario cierra el editor a mano.
+  useEffect(() => {
+    if (!focusHostId) return;
+    const h = hosts.find((x) => x.id === focusHostId);
+    if (!h) return;
+    setEditHost(h);
+    setShowEditor(true);
+    onFocusHandled?.();
+  }, [focusHostId, hosts, onFocusHandled]);
 
   const handleCreate = async (input: ProxyHostInput) => {
     const result = await onCreate(input);
