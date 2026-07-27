@@ -11,8 +11,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router';
-import { Search, Newspaper, Network, Power, RotateCcw } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
+import { Search, Newspaper, Network, Power, RotateCcw, Settings, LogOut } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 import { ClipboardButton } from './ClipboardButton';
 import { BriefingPanel } from '@/components/BriefingPanel';
@@ -25,11 +25,38 @@ import { useUiModulesStore } from '@/stores/ui-modules.store';
 import { lucideLookup } from '@/config/lucide-lookup';
 import { useIsPhone } from '@/hooks/use-media-query';
 import { hasNativeNotify } from '@/lib/native-notify';
+import { hasNativeAccessReset, nativeResetAccess } from '@/lib/native-session';
+import { settingsRouteForPath } from '@/config/settings-route-map';
 import { api } from '@/services/api';
 
+/**
+ * Menú de sesión y servidor.
+ *
+ * "Sign out" vive AQUÍ y no solo en el pie del panel lateral porque ese panel no existe
+ * en el teléfono: en la app era literalmente inalcanzable. Y en la app cerrar sesión
+ * tiene que soltar además el acceso del dispositivo (`nativeResetAccess`), o al reabrir
+ * la app volvería a entrar sola con el emparejamiento y no habría forma de repetir el
+ * proceso de conexión.
+ */
 function PowerMenu() {
   const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState<'shutdown' | 'restart' | null>(null);
+  const [confirming, setConfirming] = useState<'shutdown' | 'restart' | 'signout' | null>(null);
+  const logout = useAuthStore((s) => s.logout);
+  const navigate = useNavigate();
+  const inApp = hasNativeAccessReset();
+
+  const handleSignOut = () => {
+    if (confirming !== 'signout') {
+      setConfirming('signout');
+      return;
+    }
+    // La sesión del dash es lo único que vive en ESTE origen: se limpia siempre.
+    logout();
+    // En la app, el envoltorio suelta el acceso y navega al onboarding él mismo.
+    if (!nativeResetAccess()) navigate('/login', { replace: true });
+    setOpen(false);
+    setConfirming(null);
+  };
 
   const handleAction = async (action: 'shutdown' | 'restart') => {
     if (confirming !== action) {
@@ -50,7 +77,7 @@ function PowerMenu() {
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => { setOpen(!open); setConfirming(null); }}
-        title="Server Power"
+        title={inApp ? "Session & server" : "Session & server power"}
         style={{
           background: 'none', border: 'none',
           cursor: 'pointer', color: open ? 'var(--amber)' : 'var(--text-dim)',
@@ -69,9 +96,30 @@ function PowerMenu() {
             position: 'absolute', top: '100%', right: 0, marginTop: 8,
             background: '#1a1a24', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-md)', padding: 4,
-            zIndex: 200, minWidth: 160,
+            zIndex: 200, minWidth: 200,
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           }}>
+            <button
+              onClick={handleSignOut}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '8px 12px',
+                background: confirming === 'signout' ? 'rgba(239,68,68,0.15)' : 'transparent',
+                border: 'none', borderRadius: 'var(--radius-sm)',
+                color: confirming === 'signout' ? 'var(--error)' : 'var(--text)',
+                fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { if (confirming !== 'signout') e.currentTarget.style.background = 'var(--surface)'; }}
+              onMouseLeave={(e) => { if (confirming !== 'signout') e.currentTarget.style.background = 'transparent'; }}
+              data-testid="power-signout"
+            >
+              <LogOut size={14} />
+              {confirming === 'signout'
+                ? (inApp ? 'Click to confirm — back to connection setup' : 'Click to confirm')
+                : (inApp ? 'Sign out & reconnect' : 'Sign out')}
+            </button>
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
             <button
               onClick={() => handleAction('restart')}
               style={{
@@ -155,6 +203,7 @@ interface TopBarProps {
 
 export function TopBar({ onOpenCommandPalette }: TopBarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   // Any paid tier (pro OR plus) unlocks Pro features; only 'free' is gated.
   const isPro = useAuthStore((s) => s.user)?.tier !== 'free';
   // En la app móvil el buscador central tapaba el título del módulo → se oculta.
@@ -296,6 +345,24 @@ export function TopBar({ onOpenCommandPalette }: TopBarProps) {
             entregan como notificaciones NATIVAS de Android. En escritorio/PWA/
             navegador se mantiene (esos no tienen entrega nativa). */}
         {!hasNativeNotify() && <NotificationBell />}
+        {/* Engranaje contextual: lleva a la sección de Ajustes del módulo actual
+            (p.ej. Mail → /settings/mail), o a los Ajustes generales si el módulo
+            no tiene sección propia. Misma derivación que el gear de la bottom-nav
+            móvil (settings-route-map). Oculto en móvil: ahí ya vive en la bottom-nav. */}
+        {!isPhone && (
+          <button
+            onClick={() => navigate(settingsRouteForPath(location.pathname))}
+            title="Ajustes del módulo"
+            style={{
+              background: 'none', border: 'none',
+              cursor: 'pointer',
+              color: location.pathname.startsWith('/settings') ? 'var(--amber)' : 'var(--text-dim)',
+              padding: 4, display: 'flex',
+            }}
+          >
+            <Settings size={18} />
+          </button>
+        )}
         <PowerMenu />
       </div>
 
