@@ -91,6 +91,29 @@ export interface DiscoveryResult {
   total_ms: number;
 }
 
+export interface ConnectorDataSummary {
+  connector_id: string;
+  connector_type: string;
+  domain: 'mail' | 'calendar' | 'contacts' | null;
+  /** Cuántos registros se llevaría por delante desconectar. */
+  records: number;
+  account: string | null;
+  /** El recuento incluye lo de otras integraciones del mismo tipo. */
+  shared_scope: boolean;
+}
+
+/** Qué hay dentro de una integración. Lo enseña el diálogo ANTES de borrar. */
+export async function getConnectorDataSummary(connectorId: string): Promise<ConnectorDataSummary> {
+  const res = await api.get<{ data: ConnectorDataSummary }>(`/sync/connectors/${connectorId}/data-summary`);
+  return res.data;
+}
+
+/** Retira los datos que trajo la integración (criterio I8-2 del playbook). */
+export async function purgeConnectorData(connectorId: string): Promise<{ removed: number }> {
+  const res = await api.post<{ data: { removed: number } }>(`/sync/connectors/${connectorId}/purge-data`, {});
+  return res.data;
+}
+
 export async function listDataProviders(): Promise<DataProvider[]> {
   const res = await api.get<{ data: { providers: DataProvider[] } }>('/sync/providers');
   return res.data?.providers ?? [];

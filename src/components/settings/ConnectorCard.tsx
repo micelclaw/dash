@@ -13,6 +13,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, Settings, Pause, Play, Loader2, Trash2, Unlink } from 'lucide-react';
 import * as syncSvc from '@/services/sync.service';
+import { DisconnectDialog } from './DisconnectDialog';
 import { toast } from 'sonner';
 import { useWebSocket } from '@/hooks/use-websocket';
 
@@ -221,16 +222,10 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Disconnect ${label}? This will stop syncing.`)) return;
-    try {
-      await syncSvc.deleteConnector(connector.id);
-      toast.success(`Disconnected: ${label}`);
-      onRefresh();
-    } catch {
-      toast.error('Failed to disconnect');
-    }
-  };
+  // Desconectar abre un diálogo que dice cuántos datos se lleva y ofrece la copia
+  // (criterio I8-3). El `confirm()` de antes decía «esto dejará de sincronizar»,
+  // que era verdad a medias: ni contaba los datos ni los retiraba.
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
 
   const oauthProvider = connector.connector_type.startsWith('google-') || connector.connector_type === 'gmail'
     ? 'google'
@@ -352,11 +347,19 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
               <Unlink size={14} />
             </button>
           )}
-          <button onClick={handleDelete} style={{ ...iconBtnStyle, color: 'var(--error)' }} title="Disconnect">
+          <button onClick={() => setDisconnectOpen(true)} style={{ ...iconBtnStyle, color: 'var(--error)' }} title="Disconnect">
             <Trash2 size={14} />
           </button>
         </div>
       </div>
+
+      <DisconnectDialog
+        connectorId={connector.id}
+        label={label}
+        open={disconnectOpen}
+        onClose={() => setDisconnectOpen(false)}
+        onDisconnected={onRefresh}
+      />
     </div>
   );
 }
