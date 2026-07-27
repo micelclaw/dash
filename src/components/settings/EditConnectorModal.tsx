@@ -169,9 +169,18 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     setTestResult('testing');
     try {
       const result = await emailAccountsSvc.testEmailAccount(emailAccount.id);
-      setTestResult(result.success ? 'success' : 'failed');
-    } catch {
+      const ok = result.imap?.status === 'ok';
+      setTestResult(ok ? 'success' : 'failed');
+      // Un aspa roja sin causa es lo que dejó 13 conexiones en rojo sin que
+      // nadie supiera por qué: si falla, se dice qué pasó y qué hacer.
+      if (ok) {
+        toast.success(`Conectado · ${result.imap.folders_found?.length ?? 0} carpetas`);
+      } else {
+        toast.error(result.imap?.hint ?? 'No se pudo conectar', { duration: 8000 });
+      }
+    } catch (err: unknown) {
       setTestResult('failed');
+      toast.error(err instanceof Error ? err.message : 'No se pudo conectar');
     }
   };
 

@@ -40,14 +40,42 @@ export async function updateEmailAccount(
   await api.patch(`/email-accounts/${id}`, patch);
 }
 
-/** Test the IMAP/SMTP connection of an existing account. */
-export async function testEmailAccount(id: string): Promise<{ success: boolean }> {
-  const res = await api.post<{ data: { success: boolean } }>(`/email-accounts/${id}/test`);
+/**
+ * Resultado de probar una cuenta.
+ *
+ * El contrato cambió cuando el endpoint dejó de mentir: antes devolvía
+ * `{success:true}` con una lista de carpetas inventada SIN abrir un socket.
+ * Ahora informa por protocolo, y cuando falla dice la CAUSA (`kind`) y qué hacer
+ * (`hint`) — que es lo que hay que enseñar al usuario en vez de un aspa roja.
+ */
+export interface ProtocolTestResult {
+  status: 'ok' | 'error';
+  duration_ms: number;
+  /** Solo en IMAP y solo si fue bien: las carpetas que dijo EL SERVIDOR. */
+  folders_found?: string[];
+  /** Causa clasificada: auth · tls_cert · dns · refused · timeout · blocked… */
+  kind?: string;
+  hint?: string;
+  detail?: string;
+}
+
+export interface AccountTestResult {
+  imap: ProtocolTestResult;
+  smtp: ProtocolTestResult;
+}
+
+/** Prueba REAL de la conexión: LOGIN + LIST contra IMAP y AUTH contra SMTP. */
+export async function testEmailAccount(id: string): Promise<AccountTestResult> {
+  const res = await api.post<{ data: AccountTestResult }>(`/email-accounts/${id}/test`);
   return res.data;
 }
 
-/** List the IMAP folders available on an existing account. */
+/**
+ * Las carpetas que existen EN EL SERVIDOR. Devuelve nombres para que el
+ * llamante no cambie, pero ojo: el endpoint ya no inventa nada — si no hay
+ * conexión válida responde 502 con la causa, y esto lanza.
+ */
 export async function listEmailFolders(id: string): Promise<string[]> {
-  const res = await api.get<{ data: string[] }>(`/email-accounts/${id}/folders`);
-  return res.data ?? [];
+  const res = await api.get<{ data: { folders: { name: string }[] } }>(`/email-accounts/${id}/folders`);
+  return (res.data?.folders ?? []).map((f) => f.name);
 }

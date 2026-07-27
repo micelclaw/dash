@@ -44,6 +44,70 @@ export interface ObserverPrivacy {
   content_filter: 'full' | 'metadata_only';
 }
 
+// ─── Catálogo y motor de descubrimiento de integraciones de datos ───
+//
+// El catálogo es la fuente única de qué proveedores existen y qué promete cada
+// uno; el motor convierte una dirección de correo en una configuración. La UI no
+// decide ninguna de las dos cosas: las pinta.
+
+export interface DataProvider {
+  slug: string;
+  label: string;
+  domains: ('mail' | 'calendar' | 'contacts')[];
+  protocols: string[];
+  auth_order: string[];
+  discovery: string;
+  mail_domains: string[];
+  features: Record<string, boolean>;
+  /** Fecha en que se probó contra un servidor REAL, o null si nunca. */
+  verified: string | null;
+  notes: string[];
+  requires_own_oauth_client: boolean;
+  preset_hint: string | null;
+}
+
+export interface DiscoveredEndpoint {
+  kind: 'imap' | 'smtp';
+  host: string;
+  port: number;
+  socket: 'ssl' | 'starttls' | 'plain';
+  username_template?: string;
+}
+
+export interface DiscoveryResult {
+  address: string;
+  domain: string;
+  candidate: {
+    mechanism: string;
+    confidence: 'high' | 'medium' | 'low';
+    mail: DiscoveredEndpoint[];
+    dav: { kind: 'caldav' | 'carddav'; url: string }[];
+    notes?: string[];
+  } | null;
+  provider: DataProvider | null;
+  auth_order: string[];
+  manual_required: boolean;
+  attempts: { mechanism: string; outcome: string; ms: number; detail?: string }[];
+  total_ms: number;
+}
+
+export async function listDataProviders(): Promise<DataProvider[]> {
+  const res = await api.get<{ data: { providers: DataProvider[] } }>('/sync/providers');
+  return res.data?.providers ?? [];
+}
+
+/**
+ * `catalogOnly` es el atajo del botón con logo: identifica al proveedor por su
+ * dominio y devuelve su preset SIN tocar la red.
+ */
+export async function discoverProvider(address: string, catalogOnly = false): Promise<DiscoveryResult> {
+  const res = await api.post<{ data: DiscoveryResult }>('/sync/discover', {
+    address,
+    catalog_only: catalogOnly,
+  });
+  return res.data;
+}
+
 // ─── Connectors ─────────────────────────────────────────────────────
 
 export async function listConnectors(): Promise<ConnectorInfo[]> {
@@ -60,8 +124,19 @@ export async function createConnector(body: Record<string, unknown>): Promise<vo
   await api.post('/sync/connectors', body);
 }
 
-export async function runConnector(connectorId: string): Promise<void> {
-  await api.post(`/sync/connectors/${connectorId}/run`);
+/** Qué hizo DE VERDAD el backend con el botón de la fila (el toast se deriva de esto). */
+export type ConnectorRunAction =
+  | 'sync_started'
+  | 'stream_reconnected'
+  | 'stream_already_live'
+  | 'refreshed'
+  | 'noop';
+
+export async function runConnector(connectorId: string): Promise<ConnectorRunAction> {
+  const res = await api.post<{ data: { action?: ConnectorRunAction } }>(
+    `/sync/connectors/${connectorId}/run`,
+  );
+  return res.data?.action ?? 'sync_started';
 }
 
 export async function pauseConnector(connectorId: string): Promise<void> {
@@ -148,6 +223,8 @@ export interface ConnectorChannelInfo {
   id: string;
   name: string;
   type: string;
+  /** Plataforma real del chat (hub Matrix: telegram/messenger/…). */
+  platform?: string;
   member_count?: number;
   message_count?: number;
   purpose?: string;
@@ -158,6 +235,7 @@ export interface ObservedChannel {
   id: string;
   name: string;
   type: string;
+  platform?: string;
 }
 
 /**
@@ -168,7 +246,7 @@ export interface ObservedChannel {
  */
 export async function getConnectorChannels(
   connectorId: string,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; platform?: string } = {},
 ): Promise<{
   channels: ConnectorChannelInfo[];
   selected: string[];
@@ -177,7 +255,10 @@ export async function getConnectorChannels(
     data: { channels: ConnectorChannelInfo[]; selected: string[] };
   }>(
     `/sync/connectors/${connectorId}/channels`,
-    undefined,
+    // El hub Matrix mete Telegram/Messenger/Google Messages en UN connector, así
+    // que el selector filtra por plataforma: en la fila de Telegram solo salen
+    // chats de Telegram.
+    options.platform ? { platform: options.platform } : undefined,
     options.timeoutMs ? { timeout: options.timeoutMs } : undefined,
   );
   return res.data;

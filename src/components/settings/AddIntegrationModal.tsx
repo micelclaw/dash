@@ -23,6 +23,7 @@ import { TelegramBotForm } from './add-integration/TelegramBotForm';
 import { SignalForm } from './add-integration/SignalForm';
 import { SimplexForm } from './add-integration/SimplexForm';
 import { SessionForm } from './add-integration/SessionForm';
+import { DiscoverForm } from './add-integration/DiscoverForm';
 
 interface AddIntegrationModalProps {
   open: boolean;
@@ -167,7 +168,7 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
           borderBottom: '1px solid var(--border)',
         }}>
           <div style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text)' }}>
-            {step === 'pick' ? 'Add Integration' : step === 'oauth-pending' ? 'Authorizing...' : selectedService?.name}
+            {step === 'pick' ? (prefilterService ? 'Add Integration' : 'Conectar una cuenta') : step === 'oauth-pending' ? 'Authorizing...' : selectedService?.name}
           </div>
           <button
             onClick={step === 'form' ? (prefilterService ? onClose : () => setStep('pick')) : onClose}
@@ -182,7 +183,26 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
 
         {/* Content */}
         <div style={{ padding: 16, overflow: 'auto', flex: 1 }}>
-          {step === 'pick' && (
+          {step === 'pick' && !prefilterService && (
+            <DiscoverForm
+              onConnected={() => { onConnected(); onClose(); }}
+              // Sin descubrimiento, el formulario completo de siempre: el motor
+              // admite que no sabe en vez de inventarse un servidor.
+              onManualFallback={() => {
+                const imap = SERVICES.find((s) => s.id === 'imap');
+                if (imap) { setSelectedService(imap); setStep('form'); }
+              }}
+              // Un proveedor cuyo primer método es OAuth no pasa por contraseña:
+              // se le manda a su autorización real.
+              onOAuth={(slug) => {
+                const svc = SERVICES.find((s) => s.provider === slug && s.flow === 'oauth');
+                if (svc) void handleServiceClick(svc);
+                else toast.error('Ese proveedor todavía no tiene autorización configurada');
+              }}
+            />
+          )}
+
+          {step === 'pick' && prefilterService && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {CATEGORIES.map((cat) => {
                 const CatIcon = CATEGORY_ICONS[cat];
