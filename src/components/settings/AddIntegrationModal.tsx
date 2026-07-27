@@ -19,9 +19,11 @@ import { DavForm } from './DavForm';
 import { ImapForm } from './ImapForm';
 import { SERVICES, CATEGORIES, CATEGORY_ICONS, ServiceIcon, type ServiceDef } from './add-integration/services';
 import { DiscordBotForm } from './add-integration/DiscordBotForm';
-import { TelegramBotForm } from './add-integration/TelegramBotForm';
 import { SignalForm } from './add-integration/SignalForm';
-import { SimplexForm } from './add-integration/SimplexForm';
+import { TelegramMatrixForm } from './add-integration/TelegramMatrixForm';
+import { WhatsAppMatrixForm } from './add-integration/WhatsAppMatrixForm';
+import { SimplexOwnForm } from './add-integration/SimplexOwnForm';
+import { SimplexXrcpForm } from './add-integration/SimplexXrcpForm';
 import { SessionForm } from './add-integration/SessionForm';
 import { DiscoverForm } from './add-integration/DiscoverForm';
 
@@ -147,7 +149,11 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       />
 
       {/* Modal */}
-      <div style={{
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Conectar una cuenta"
+        style={{
         position: 'fixed', top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         width: 480, maxHeight: '80vh',
@@ -303,8 +309,14 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
                   onCancel={handleFormCancel}
                 />
               )}
-              {selectedService.flow === 'bot_token' && selectedService.id === 'telegram-observer' && (
-                <TelegramBotForm
+              {selectedService.flow === 'bot_token' && selectedService.id === 'telegram-matrix' && (
+                <TelegramMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'whatsapp-matrix' && (
+                <WhatsAppMatrixForm
                   onComplete={handleFormComplete}
                   onCancel={handleFormCancel}
                 />
@@ -316,13 +328,27 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
                 />
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'simplex-observer' && (
-                <SimplexForm
+                <SimplexOwnForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'simplex-xrcp' && (
+                <SimplexXrcpForm
                   onComplete={handleFormComplete}
                   onCancel={handleFormCancel}
                 />
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'session-observer' && (
                 <SessionForm
+                  variant="own"
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'session-link-observer' && (
+                <SessionForm
+                  variant="link"
                   onComplete={handleFormComplete}
                   onCancel={handleFormCancel}
                 />

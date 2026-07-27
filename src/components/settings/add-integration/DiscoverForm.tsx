@@ -49,11 +49,11 @@ interface DiscoverFormProps {
 
 type Fase = 'direccion' | 'buscando' | 'credencial';
 
-const DOMINIO_ES: Record<string, string> = {
+const DOMINIO_ES = {
   mail: 'correo',
   calendar: 'calendario',
   contacts: 'contactos',
-};
+} as const;
 
 /** Cómo se dice, en llano, de dónde salió la configuración. */
 const MECANISMO_ES: Record<string, string> = {
@@ -98,6 +98,7 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
 
   // Campos editables de la pantalla 2 (los rellena el motor; el usuario puede tocarlos).
   const [pass, setPass] = useState('');
+  const [usuario, setUsuario] = useState('');
   const [imapHost, setImapHost] = useState('');
   const [imapPort, setImapPort] = useState(993);
   const [imapSsl, setImapSsl] = useState(true);
@@ -129,6 +130,7 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
     setTocadoAMano(false);
     setAceptaCertPropio(false);
     setPass('');
+    setUsuario(dir.includes('@') ? dir : '');
     // Si no encontró nada, los detalles se abren solos: el usuario tiene que
     // escribirlos, y esconderlos sería esconder justo lo que hay que hacer.
     setVerDetalles(r.manual_required || !r.candidate);
@@ -166,6 +168,37 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
     }
   }, [direccion, aplicarResultado]);
 
+  /**
+   * Solo calendario y contactos: no hay cuenta de correo que crear. Se crean los
+   * connectors DAV que encontró el motor, uno por tipo.
+   */
+  const conectarServidor = useCallback(async () => {
+    if (!usuario || !pass) { toast.error('Faltan el usuario y la contraseña'); return; }
+    const dav = resultado?.candidate?.dav ?? [];
+    if (dav.length === 0) { toast.error('No hay servidor de calendario ni de contactos que conectar'); return; }
+    setGuardando(true);
+    try {
+      for (const col of dav) {
+        await syncSvc.createConnector({
+          connector_type: col.kind,               // 'caldav' | 'carddav'
+          display_name: `${resultado?.provider?.label ?? resultado?.domain} · ${col.kind === 'caldav' ? 'Calendario' : 'Contactos'}`,
+          config: {
+            server_url: col.url,
+            username: usuario,
+            password: pass,
+            sync_interval_minutes: 15,
+          },
+        });
+      }
+      toast.success(dav.length === 1 ? 'Conectado' : `Conectados ${dav.length} servicios`);
+      onConnected();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo conectar');
+    } finally {
+      setGuardando(false);
+    }
+  }, [usuario, pass, resultado, onConnected]);
+
   const conectar = useCallback(async () => {
     if (!pass) { toast.error('Falta la contraseña'); return; }
     if (!imapHost || !smtpHost) { toast.error('Faltan los servidores de correo'); return; }
@@ -200,9 +233,18 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
     }
   }, [pass, imapHost, imapPort, imapSsl, smtpHost, smtpPort, smtpSsl, direccion, resultado, onConnected]);
 
+  /**
+   * Lo que se va a traer sale de lo que el motor ENCONTRÓ, no de lo que el
+   * proveedor declara poder hacer. Antes caía a una lista fija y a un Nextcloud
+   * —que solo da calendario y contactos— le prometía correo.
+   */
   const queTraemos = useMemo(() => {
-    const doms = resultado?.provider?.domains ?? (resultado?.candidate?.dav?.length ? ['mail', 'calendar', 'contacts'] : ['mail']);
-    return doms.map((d) => DOMINIO_ES[d] ?? d).join(' · ');
+    const c = resultado?.candidate;
+    const partes: string[] = [];
+    if ((c?.mail?.length ?? 0) > 0) partes.push(DOMINIO_ES.mail);
+    if (c?.dav?.some((d) => d.kind === 'caldav')) partes.push(DOMINIO_ES.calendar);
+    if (c?.dav?.some((d) => d.kind === 'carddav')) partes.push(DOMINIO_ES.contacts);
+    return partes.join(' · ');
   }, [resultado]);
 
   // ── Pantalla 1: la caja ───────────────────────────────────────────────────
@@ -211,7 +253,7 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', padding: '8px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', fontSize: '0.9375rem' }}>
           <Mail size={18} style={{ color: 'var(--text-dim)' }} />
-          ¿Qué cuenta quieres conectar?
+          ¿Qué quieres conectar?
         </div>
 
         <form
@@ -220,10 +262,10 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
         >
           <input
             autoFocus
-            type="email"
+            type="text"
             value={direccion}
             onChange={(e) => setDireccion(e.target.value)}
-            placeholder="tu@dominio.com"
+            placeholder="tu@dominio.com  ·  o  ·  cloud.tudominio.com"
             disabled={fase === 'buscando'}
             style={{ ...campo, textAlign: 'center', fontSize: '0.9375rem' }}
           />
@@ -233,8 +275,9 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
         </form>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.5 }}>
-          Buscamos solos la configuración de tu proveedor.<br />
-          Si es tu propio servidor, también.
+          Tu dirección de correo, o el nombre de tu servidor si lo que quieres
+          traer es un calendario o tus contactos (Nextcloud, Synology…).<br />
+          Buscamos solos su configuración.
         </div>
 
         <button
@@ -289,6 +332,17 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
   const encontrado = !!resultado?.candidate && !resultado.manual_required;
   // El catálogo manda: si su primer método es OAuth, no hay campo de contraseña.
   const necesitaOAuth = resultado?.auth_order?.[0] === 'oauth2';
+  // Sin servidores de correo pero con DAV: es un servidor de calendario y
+  // contactos. Ni se pide dirección de correo ni se crea cuenta de correo.
+  /**
+   * Solo se anuncia «contraseña de aplicación» si lo dice la ficha de un
+   * proveedor RECONOCIDO. Sin proveedor, `auth_order` trae el valor por defecto
+   * del motor, y eso no es una afirmación sobre TU servidor: a un Nextcloud
+   * cualquiera le estaría diciendo que su contraseña normal no vale.
+   */
+  const esAppPassword = !!resultado?.provider && resultado.auth_order?.[0] === 'app_password';
+  const soloServidor =
+    (resultado?.candidate?.mail?.length ?? 0) === 0 && (resultado?.candidate?.dav?.length ?? 0) > 0;
   const mecanismo = resultado?.candidate?.mechanism ?? '';
 
   return (
@@ -322,6 +376,19 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
         </div>
       </div>
 
+      {soloServidor && (
+        <div>
+          <label style={etiqueta}>Usuario de tu servidor</label>
+          <input
+            autoFocus
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            placeholder="tu usuario"
+            style={campo}
+          />
+        </div>
+      )}
+
       {necesitaOAuth ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>
@@ -348,7 +415,7 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
       ) : (
       <div>
         <label style={etiqueta}>
-          {resultado?.auth_order?.[0] === 'app_password' ? 'Contraseña de aplicación' : 'Contraseña'}
+          {esAppPassword ? 'Contraseña de aplicación' : 'Contraseña'}
         </label>
         <input
           autoFocus
@@ -358,7 +425,7 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
           placeholder="••••••••"
           style={campo}
         />
-        {resultado?.auth_order?.[0] === 'app_password' && (
+        {esAppPassword && (
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', marginTop: 4 }}>
             Este proveedor no acepta tu contraseña normal: necesita una contraseña
             de aplicación, que se genera en su web.
@@ -474,7 +541,10 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
           </Button>
         )}
         {!necesitaOAuth && (
-          <Button onClick={() => void conectar()} disabled={guardando || !pass}>
+          <Button
+            onClick={() => void (soloServidor ? conectarServidor() : conectar())}
+            disabled={guardando || !pass || (soloServidor && !usuario)}
+          >
             {guardando ? <><Loader2 size={14} className="animate-spin" /> Probando…</> : 'Probar y conectar'}
           </Button>
         )}
