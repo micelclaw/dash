@@ -11,13 +11,21 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Loader2, Search } from 'lucide-react';
+import { X, Loader2, Search, MessageSquarePlus } from 'lucide-react';
 import { toast } from 'sonner';
 import * as syncSvc from '@/services/sync.service';
+import { usePlatformCapability } from '@/stores/platform-capabilities.store';
+import { NewChatDialog } from './NewChatDialog';
 
 interface ChannelConfigModalProps {
   connectorId: string;
   connectorType: string;
+  /**
+   * Plataforma cuya lista se está eligiendo. Solo hace falta en el hub Matrix:
+   * Telegram/Messenger/Google Messages comparten UN connector, así que sin esto
+   * en la fila de Telegram saldrían también los chats de los otros bridges.
+   */
+  platform?: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -26,6 +34,8 @@ interface ChannelInfo {
   id: string;
   name: string;
   type: string;
+  /** Plataforma real del chat (hub Matrix: telegram/messenger/…). Se persiste. */
+  platform?: string;
   member_count?: number;
   message_count?: number;
   purpose?: string;
@@ -39,7 +49,7 @@ const GROUP_ORDER: Record<string, { label: string; order: number }> = {
   group: { label: 'Groups', order: 3 },
 };
 
-export function ChannelConfigModal({ connectorId, connectorType, onClose, onSaved }: ChannelConfigModalProps) {
+export function ChannelConfigModal({ connectorId, connectorType, platform, onClose, onSaved }: ChannelConfigModalProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
@@ -47,17 +57,25 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
   const [filter, setFilter] = useState('');
   const [directionFilter, setDirectionFilter] = useState<'all' | 'my_messages'>('all');
   const [contentFilter, setContentFilter] = useState<'full' | 'metadata_only'>('full');
+  const [showNewChat, setShowNewChat] = useState(false);
+  // ¿La plataforma permite escribir a un contacto nuevo (y está usable)?
+  const cap = usePlatformCapability(platform ?? '');
+  const canStartChat = !!(platform && cap?.start_chat && cap.can_send);
 
   useEffect(() => {
     loadChannels();
-  }, [connectorId]);
+  }, [connectorId, platform]);
 
   async function loadChannels() {
     setLoading(true);
     try {
-      // Signal needs a longer timeout — the CLI container may need to start first
-      const timeoutMs = connectorType === 'signal-observer' ? 120_000 : undefined;
-      const data = await syncSvc.getConnectorChannels(connectorId, { timeoutMs });
+      // Signal: el contenedor del CLI puede tener que arrancar. SimpleX XRCP: la discovery
+      // TOMA EL CONTROL del móvil primero (reconnect + espera a que aceptes "Usar desde
+      // escritorio", hasta ~45s) → timeout largo.
+      const timeoutMs = connectorType === 'signal-observer' ? 120_000
+        : connectorType === 'simplex-remote-observer' ? 90_000
+        : undefined;
+      const data = await syncSvc.getConnectorChannels(connectorId, { timeoutMs, platform });
       setChannels(data.channels ?? []);
       setSelected(new Set(data.selected ?? []));
     } catch (err: any) {
@@ -72,10 +90,13 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
     try {
       const observedChannels = channels
         .filter(ch => selected.has(ch.id))
-        .map(ch => ({ id: ch.id, name: ch.name, type: ch.type }));
+        .map(ch => ({ id: ch.id, name: ch.name, type: ch.type, platform: ch.platform }));
 
       await syncSvc.updateConnectorChannels(connectorId, {
         observed_channels: observedChannels,
+        // La lista que se envía es SOLO la de esta plataforma (el discovery vino
+        // filtrado) → el servidor debe acotar el reemplazo a ella.
+        platform,
         direction_filter: directionFilter,
         content_filter: contentFilter,
       });
@@ -205,6 +226,22 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
                   }}
                 />
               </div>
+
+              {/* Escribir a un contacto nuevo (fuera de la lista sincronizada) */}
+              {canStartChat && (
+                <button
+                  onClick={() => setShowNewChat(true)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    width: '100%', padding: '8px 10px',
+                    background: 'none', border: '1px dashed var(--amber)',
+                    borderRadius: 'var(--radius-sm)', color: 'var(--amber)',
+                    cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.8125rem', fontWeight: 500,
+                  }}
+                >
+                  <MessageSquarePlus size={14} /> Escribir a un contacto nuevo
+                </button>
+              )}
 
               {/* Grouped channel list */}
               <div style={{
@@ -377,6 +414,26 @@ export function ChannelConfigModal({ connectorId, connectorType, onClose, onSave
           </div>
         )}
       </div>
+
+      {/* Escribir a un contacto nuevo: crea+observa el chat y lo añade a la lista
+          ya marcado (el backend ya lo observó; al Guardar se conserva). */}
+      {showNewChat && canStartChat && platform && cap?.start_chat && (
+        <NewChatDialog
+          platform={platform}
+          platformLabel={cap.label ?? label}
+          kind={cap.start_chat.kind}
+          onClose={() => setShowNewChat(false)}
+          onStarted={(ch) => {
+            setShowNewChat(false);
+            setChannels((prev) =>
+              prev.some((c) => c.id === ch.channel_id)
+                ? prev
+                : [{ id: ch.channel_id, name: ch.name, type: ch.type, platform: ch.platform }, ...prev],
+            );
+            setSelected((prev) => new Set(prev).add(ch.channel_id));
+          }}
+        />
+      )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </>

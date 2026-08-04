@@ -24,6 +24,16 @@ import { api } from './api';
 export interface ConnectorInfo {
   /** Causa del último fallo, con su pista. Vacío si no ha fallado. */
   last_error?: string | null;
+  /**
+   * Cambios locales que agotaron los reintentos y NO llegaron al proveedor.
+   *
+   * Va aparte de `last_error` porque son cosas distintas: un `runSync` puede
+   * terminar bien (la tarjeta en verde) y aun así haber un correo destacado aquí
+   * que allí no se marcó nunca. Hasta ahora eso no salía por ninguna puerta.
+   */
+  push_failed_count?: number;
+  /** La causa del más reciente de esos cambios, tal cual la dio el proveedor. */
+  push_last_error?: string | null;
   id: string;
   connector_type: string;
   name: string;
@@ -32,6 +42,20 @@ export interface ConnectorInfo {
   status: string;
   last_sync_at: string | null;
   errors_count: number;
+  /**
+   * La cuenta de correo a la que pertenece, si tiene una. Es lo que permite
+   * agrupar las tarjetas y encontrar el connector que acaba de crear un alta,
+   * sin adivinar por el nombre.
+   */
+  account_id?: string | null;
+  /**
+   * El proveedor de MARCA (Synology/Nextcloud/Google/…), resuelto por el
+   * servidor (`resolveProviderSlug`): prioridad a lo que persistió el alta en
+   * `config.provider` para un proveedor ambiguo por protocolo (CalDAV/CardDAV/
+   * IMAP genérico), luego el `providerSlug` que el TIPO declara en el catálogo.
+   * `null` si no hay proveedor determinable (nunca se adivina).
+   */
+  provider_slug?: string | null;
 }
 
 export interface DuplicatePair {
@@ -64,7 +88,8 @@ export interface DataProvider {
   /** Fecha en que se probó contra un servidor REAL, o null si nunca. */
   verified: string | null;
   notes: string[];
-  requires_own_oauth_client: boolean;
+  /** ¿Se conecta con la aplicación que trae Micelclaw, o con una registrada aquí? */
+  uses_shipped_oauth_client?: boolean;
   preset_hint: string | null;
 }
 
@@ -102,11 +127,51 @@ export interface ConnectorDataSummary {
   account: string | null;
   /** El recuento incluye lo de otras integraciones del mismo tipo. */
   shared_scope: boolean;
+  /** Del mismo origen pero sin dueño demostrable: NO se borran (ver INT128). */
+  orphans?: number;
 }
 
 /** Qué hay dentro de una integración. Lo enseña el diálogo ANTES de borrar. */
 export async function getConnectorDataSummary(connectorId: string): Promise<ConnectorDataSummary> {
   const res = await api.get<{ data: ConnectorDataSummary }>(`/sync/connectors/${connectorId}/data-summary`);
+  return res.data;
+}
+
+export interface CollectionItem {
+  id: string;
+  name: string;
+  count?: number;
+}
+
+export interface ConnectorCollections {
+  connector_id: string;
+  connector_type: string;
+  /** Clave de config donde viven las elegidas (`folders`, `labels`, `calendars`…). */
+  key: string;
+  /** Cómo se llaman en castellano, para la pregunta de la ventana 4. */
+  noun: string;
+  collections: CollectionItem[];
+  selected: string[];
+}
+
+/**
+ * Lo que hay DENTRO de una integración: carpetas, calendarios o libretas, tal y
+ * como las devuelve el servidor del proveedor. Nunca una lista plausible.
+ */
+export async function getConnectorCollections(connectorId: string): Promise<ConnectorCollections> {
+  const res = await api.get<{ data: ConnectorCollections }>(`/sync/connectors/${connectorId}/collections`);
+  return res.data;
+}
+
+/** Guarda lo elegido. Lista vacía = traérselo todo. */
+export async function saveConnectorCollections(
+  connectorId: string,
+  selected: string[],
+): Promise<{ key: string; selected: string[] }> {
+  const res = await api.put<{ data: { key: string; selected: string[] } }>(
+    `/sync/connectors/${connectorId}/collections`,
+    { selected },
+  );
   return res.data;
 }
 
@@ -116,9 +181,51 @@ export async function purgeConnectorData(connectorId: string): Promise<{ removed
   return res.data;
 }
 
-export async function listDataProviders(): Promise<DataProvider[]> {
-  const res = await api.get<{ data: { providers: DataProvider[] } }>('/sync/providers');
+/** Un tipo de conector, tal y como lo declara el catálogo del servidor. */
+export interface ConnectorTypeMeta {
+  type: string;
+  label: string;
+  protocol: string;
+  domains: string[];
+  provider_slug: string | null;
+  oauth_provider: string | null;
+  /**
+   * Si no se crea por el camino genérico, POR DÓNDE sí (una cuenta de correo,
+   * una autorización). La pantalla lo usa para mandar al sitio correcto en vez
+   * de ofrecer un formulario que va a ser rechazado.
+   */
+  created_by: string | null;
+}
+
+/**
+ * El catálogo. `domain` lo FILTRA en el servidor, que es lo que hace que cada
+ * ventana 2 sea distinta: Nextcloud sale en calendario y no en correo, porque no
+ * aloja buzones.
+ */
+export async function listDataProviders(domain?: 'mail' | 'calendar' | 'contacts'): Promise<DataProvider[]> {
+  const q = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+  const res = await api.get<{ data: { providers: DataProvider[] } }>(`/sync/providers${q}`);
   return res.data?.providers ?? [];
+}
+
+/**
+ * Proveedores Y tipos de conector en UNA llamada. Los tipos vienen del mismo
+ * catálogo para que la pantalla no mantenga su propio mapa de etiquetas — ése
+ * era uno de los mapas paralelos que este arco vino a matar, y repetirlo aquí
+ * sería reabrirlo por la otra punta.
+ */
+export async function listDataCatalog(domain?: 'mail' | 'calendar' | 'contacts'): Promise<{
+  providers: DataProvider[];
+  connectorTypes: ConnectorTypeMeta[];
+}> {
+  const q = domain ? `?domain=${encodeURIComponent(domain)}` : '';
+  const res = await api.get<{ data: { providers: DataProvider[]; connector_types?: ConnectorTypeMeta[] } }>(
+    `/sync/providers${q}`,
+  );
+  return {
+    providers: res.data?.providers ?? [],
+    connectorTypes: res.data?.connector_types ?? [],
+  };
 }
 
 /**
@@ -172,8 +279,13 @@ export async function resumeConnector(connectorId: string): Promise<void> {
   await api.post(`/sync/connectors/${connectorId}/resume`);
 }
 
-export async function deleteConnector(connectorId: string): Promise<void> {
-  await api.delete(`/sync/connectors/${connectorId}`);
+/**
+ * Desconecta una integración. Se lleva por delante lo que trajo (criterio I8-2
+ * del playbook) y devuelve cuántos registros retiró, para poder decirlo.
+ */
+export async function deleteConnector(connectorId: string): Promise<{ records_removed: number }> {
+  const res = await api.delete<{ data?: { records_removed?: number } }>(`/sync/connectors/${connectorId}`);
+  return { records_removed: res?.data?.records_removed ?? 0 };
 }
 
 export async function updateConnectorConfig(
@@ -208,8 +320,42 @@ export async function getOAuthAuthorizeUrl(
   return res.data;
 }
 
-export async function oauthCallback(body: Record<string, unknown>): Promise<void> {
-  await api.post('/sync/oauth/callback', body);
+/** Cierra la autorización y devuelve la integración creada (para la ventana 4). */
+/**
+ * Un código de autorización se canja UNA vez, y aquí se garantiza.
+ *
+ * La ventana emergente avisa con un `postMessage`, y ese aviso lo puede oír más
+ * de un componente montado (el asistente de datos y el de canales tienen cada
+ * uno su escucha). Cuando pasaba, el segundo canje llegaba con el código ya
+ * gastado y el proveedor respondía «the code has expired» — un error alarmante
+ * para el usuario justo después de que TODO hubiera ido bien: la integración
+ * quedaba creada y aun así veía un aviso rojo.
+ *
+ * En vez de perseguir cuántas escuchas hay (que cambiará con el tiempo), se
+ * memoriza la promesa por `state`: quien llegue después recibe el MISMO
+ * resultado en vez de gastar el código otra vez.
+ */
+const canjesEnCurso = new Map<string, Promise<{ id: string; provider: string; status: string }>>();
+
+export async function oauthCallback(
+  body: Record<string, unknown>,
+): Promise<{ id: string; provider: string; status: string }> {
+  const state = typeof body.state === 'string' ? body.state : null;
+  const yaEnCurso = state ? canjesEnCurso.get(state) : undefined;
+  if (yaEnCurso) return yaEnCurso;
+
+  const promesa = api
+    .post<{ data: { id: string; provider: string; status: string } }>('/sync/oauth/callback', body)
+    .then((res) => res.data);
+
+  if (state) {
+    canjesEnCurso.set(state, promesa);
+    // Si falla, se olvida: un reintento legítimo del usuario debe poder pasar.
+    // Si sale bien, se conserva — ese código ya no vale para nada más.
+    promesa.catch(() => canjesEnCurso.delete(state));
+  }
+
+  return promesa;
 }
 
 export async function deleteOAuthCredentials(provider: string): Promise<void> {
@@ -293,6 +439,12 @@ export async function updateConnectorChannels(
   connectorId: string,
   body: {
     observed_channels: ObservedChannel[];
+    /**
+     * Obligatorio cuando el selector muestra UNA plataforma de un connector
+     * COMPARTIDO (el hub Matrix: Telegram + WhatsApp + Matrix). Sin esto el
+     * servidor reemplaza la lista entera y borra la selección de las otras.
+     */
+    platform?: string;
     direction_filter?: 'all' | 'my_messages';
     content_filter?: 'full' | 'metadata_only';
   },

@@ -11,84 +11,136 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from '@/services/api';
-import type { ApiListResponse } from '@/types/api';
-import type { Message } from '../types';
+import { listMessages, type Message } from '@/services/messages.service';
 
 const PAGE_SIZE = 50;
 
-export function useChannelMessages(channelId: string | null) {
+/**
+ * Merge two message lists (kept newest-last for rendering) deduping by id,
+ * so an optimistic send, a poll refetch and a "load older" page that overlaps
+ * on a boundary timestamp never produce duplicates or gaps.
+ */
+function mergeById(a: Message[], b: Message[]): Message[] {
+  const map = new Map<string, Message>();
+  for (const m of a) map.set(m.id, m);
+  for (const m of b) map.set(m.id, m);
+  return Array.from(map.values()).sort(
+    (x, y) => new Date(x.sent_at).getTime() - new Date(y.sent_at).getTime(),
+  );
+}
+
+const isOptimistic = (m: Message): boolean => m.pending === true || m.id.startsWith('optimistic-');
+
+/**
+ * Reconcilia las burbujas optimistas ("sending…") con su fila CONFIRMADA cuando
+ * el poll la trae: la optimista lleva `id='optimistic-<ts>'` y la confirmada un
+ * UUID real → `mergeById` (que deduplica por id) NO las une y quedaría el mensaje
+ * DUPLICADO ("sending…" + confirmado). Empareja cada burbuja optimista `sent` con
+ * la PRIMERA confirmada `sent` del mismo contenido cuya marca de tiempo sea
+ * ~concurrente-o-posterior (ventana de 60s para el desfase de reloj dash↔servidor)
+ * y aún no usada, y descarta la optimista. Si no hay confirmada todavía, la deja
+ * (sigue "sending…"). El emparejado `used` evita colapsar dos envíos iguales.
+ */
+function reconcileOptimistic(list: Message[]): Message[] {
+  const confirmedSent = list.filter((m) => !isOptimistic(m) && m.direction === 'sent');
+  if (!confirmedSent.length) return list;
+  const used = new Set<Message>();
+  return list.filter((m) => {
+    if (!isOptimistic(m)) return true;
+    const optTs = new Date(m.sent_at).getTime();
+    const match = confirmedSent.find(
+      (c) => !used.has(c) && c.content === m.content && new Date(c.sent_at).getTime() >= optTs - 60_000,
+    );
+    if (match) { used.add(match); return false; } // la confirmada la reemplaza → tira la optimista
+    return true; // aún sin confirmar → sigue "sending…"
+  });
+}
+
+/**
+ * Un chat se identifica por (platform, platform_channel_id) — el mismo id puede
+ * existir en dos plataformas (p.ej. el Session ID de un contacto aparece en
+ * «Session · identidad propia» y en «Session · tu móvil»). Sin `platform` los
+ * dos hilos se mezclan en la misma vista.
+ */
+export function useChannelMessages(channelId: string | null, platform?: string | null) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const initialLoadDone = useRef(false);
 
-  const fetch = useCallback(async (isPolling = false) => {
-    if (!channelId) { setMessages([]); return; }
+  const fetchLatest = useCallback(
+    async (isPolling = false) => {
+      if (!channelId) {
+        setMessages([]);
+        setHasMore(false);
+        return;
+      }
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    // Cancel any in-flight request — only the latest fetch wins
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+      if (!isPolling && !initialLoadDone.current) setLoading(true);
 
-    // Only show loading spinner on initial load, not on polling/refetch
-    if (!isPolling && !initialLoadDone.current) setLoading(true);
-
-    try {
-      const res = await api.get<ApiListResponse<Message>>('/messages', {
-        channel_id: channelId,
-        sort: 'sent_at',
-        order: 'desc',
-        limit: String(PAGE_SIZE),
-      });
-
-      // If this request was aborted, a newer one is in flight — discard
-      if (controller.signal.aborted) return;
-
-      setMessages(res.data.reverse());
-      setTotal(res.meta?.total ?? res.data.length);
-      initialLoadDone.current = true;
-    } catch (err: any) {
-      if (err?.name === 'AbortError' || controller.signal.aborted) return;
-      console.warn('[messages] fetch failed:', err?.message ?? err);
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, [channelId]);
+      try {
+        const { messages: page, total } = await listMessages({ channel_id: channelId, platform: platform ?? undefined, limit: PAGE_SIZE });
+        if (controller.signal.aborted) return;
+        // API returns newest-first; render oldest-first. Merge (not replace) so a
+        // poll doesn't drop an in-flight optimistic message; reconcile drops the
+        // "sending…" bubble once its confirmed row lands (evita el duplicado).
+        setMessages((prev) => (isPolling ? reconcileOptimistic(mergeById(prev, page)) : page.slice().reverse()));
+        setHasMore(total > page.length);
+        setError(null);
+        initialLoadDone.current = true;
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError((err as Error).message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    },
+    [channelId, platform],
+  );
 
   useEffect(() => {
     initialLoadDone.current = false;
-    fetch();
-    return () => { abortRef.current?.abort(); };
-  }, [fetch]);
+    setMessages([]);
+    fetchLatest();
+    return () => abortRef.current?.abort();
+  }, [fetchLatest]);
 
-  const hasMore = messages.length < total;
-
-  const loadMore = useCallback(async () => {
-    if (!channelId || !hasMore) return;
+  /** Cursor pagination: fetch the page BEFORE the oldest message we hold. */
+  const loadOlder = useCallback(async () => {
+    if (!channelId || !hasMore || loadingOlder) return;
+    const oldest = messages[0];
+    if (!oldest) return;
+    setLoadingOlder(true);
     try {
-      const res = await api.get<ApiListResponse<Message>>('/messages', {
+      const { messages: page } = await listMessages({
         channel_id: channelId,
-        sort: 'sent_at',
-        order: 'desc',
-        limit: String(PAGE_SIZE),
-        offset: String(messages.length),
+        platform: platform ?? undefined,
+        limit: PAGE_SIZE,
+        before: oldest.sent_at,
       });
-      setMessages(prev => [...res.data.reverse(), ...prev]);
+      // `before` is inclusive → the boundary row repeats; mergeById drops it.
+      setMessages((prev) => mergeById(page.slice().reverse(), prev));
+      // If the page only contained the boundary row(s) we already had, we're done.
+      const fresh = page.filter((m) => m.id !== oldest.id);
+      setHasMore(fresh.length > 0 && page.length >= PAGE_SIZE);
     } catch {
-      // ignore
+      // transient — keep what we have; the button stays available to retry
+    } finally {
+      setLoadingOlder(false);
     }
-  }, [channelId, hasMore, messages.length]);
+  }, [channelId, platform, hasMore, loadingOlder, messages]);
 
-  // Allow appending a new message (for optimistic send)
-  const appendMessage = useCallback((msg: Message) => {
-    setMessages(prev => [...prev, msg]);
-    setTotal(prev => prev + 1);
+  const appendOptimistic = useCallback((msg: Message) => {
+    setMessages((prev) => mergeById(prev, [msg]));
   }, []);
 
-  // Refetch wrapper that marks as polling (no loading spinner)
-  const refetch = useCallback(() => fetch(true), [fetch]);
+  const refetch = useCallback(() => fetchLatest(true), [fetchLatest]);
 
-  return { messages, loading, hasMore, loadMore, refetch, appendMessage };
+  return { messages, loading, loadingOlder, hasMore, loadOlder, refetch, appendOptimistic, error };
 }

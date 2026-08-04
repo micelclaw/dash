@@ -55,18 +55,45 @@ export const SERVICES: ServiceDef[] = [
 
   // Messaging
   { id: 'slack-observer', category: 'Messaging', name: 'Slack', icon: 'slack', color: '#4A154B',
-    flow: 'oauth', provider: 'slack', scopes: 'channels:history,channels:read,im:history,groups:history,users:read' },
+    flow: 'oauth', provider: 'slack',
+    // Scopes DERIVADOS de las APIs que se usan de verdad (auditoría P0 2026-07-27),
+    // no copiados de un ejemplo. `conversations.list` pide types
+    // `public_channel,private_channel,mpim,im` (slack-observer.ts) y Slack exige el
+    // scope :read de CADA tipo o falla la llamada entera; `conversations.history`
+    // pide el :history de cada uno; y `chat.postMessage` (sendSlack) exige chat:write.
+    // Faltaban groups:read, im:read, mpim:read, mpim:history y chat:write → el canal
+    // habría fallado en el discovery (P2) y en el envío (P4) tras conectar bien.
+    scopes: [
+      'channels:read', 'groups:read', 'im:read', 'mpim:read',            // conversations.list
+      'channels:history', 'groups:history', 'im:history', 'mpim:history', // conversations.history
+      'chat:write',                                                       // chat.postMessage
+      'users:read',                                                       // nombres de remitente
+    ].join(','),
+  },
   { id: 'discord-observer', category: 'Messaging', name: 'Discord', icon: 'discord', color: '#5865F2',
     flow: 'bot_token' },
-  { id: 'telegram-observer', category: 'Messaging', name: 'Telegram', icon: 'telegram', color: '#0088cc',
+  // Telegram = TU CUENTA REAL (tus chats y grupos con gente real), vía el hub
+  // Matrix + mautrix-telegram. Una sola entrada: el bot (identidad separada que
+  // solo veía lo que la involucraba) se retiró — mautrix ya cubre los grupos.
+  { id: 'telegram-matrix', category: 'Messaging', name: 'Telegram', icon: 'telegram', color: '#0088cc',
+    flow: 'bot_token' },
+  // WhatsApp = TU CUENTA REAL (dispositivo vinculado) vía el hub Matrix +
+  // mautrix-whatsapp. Sin credenciales: código de emparejamiento o QR.
+  { id: 'whatsapp-matrix', category: 'Messaging', name: 'WhatsApp', icon: 'whatsapp', color: '#25D366',
     flow: 'bot_token' },
   { id: 'teams-observer', category: 'Messaging', name: 'Teams', icon: 'teams', color: '#6264a7',
     flow: 'oauth', provider: 'microsoft', scopes: 'Chat.Read,ChannelMessage.Read.All' },
   { id: 'signal-observer', category: 'Messaging', name: 'Signal', icon: 'signal', color: '#3a76f0',
     flow: 'bot_token' },
-  { id: 'simplex-observer', category: 'Messaging', name: 'SimpleX', icon: 'simplex', color: '#3DB548',
+  { id: 'simplex-observer', category: 'Messaging', name: 'SimpleX · identidad propia', icon: 'simplex', color: '#3DB548',
     flow: 'bot_token' },
-  { id: 'session-observer', category: 'Messaging', name: 'Session', icon: 'session', color: '#00F782',
+  // SimpleX · tu móvil (XRCP) = identidad del teléfono (chats REALES). Wizard
+  // propio; el connector es `simplex-remote-observer` (distinto del perfil dedicado).
+  { id: 'simplex-xrcp', category: 'Messaging', name: 'SimpleX · tu móvil', icon: 'simplex', color: '#3DB548',
+    flow: 'bot_token' },
+  { id: 'session-observer', category: 'Messaging', name: 'Session · identidad propia', icon: 'session', color: '#00F782',
+    flow: 'bot_token' },
+  { id: 'session-link-observer', category: 'Messaging', name: 'Session · tu móvil', icon: 'session', color: '#00F782',
     flow: 'bot_token' },
 ];
 
