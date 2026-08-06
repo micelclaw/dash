@@ -35,7 +35,10 @@ const DOMAIN_MAP: Record<string, { endpoint: string; titleField: string }> = {
   // Los clientes/proveedores son CONTACTOS (dominio `contact`, ya mapeado arriba).
   finance_document: { endpoint: '/finance/documents', titleField: 'number' },
   finance_journal_entry: { endpoint: '/finance/transactions', titleField: 'description' },
-  // kanban_card no tiene endpoint plano (/projects/boards/:b/cards/:id) → sin enrich; cae al label.
+  // Tarea del kanban. Desde la ola 1 SÍ hay endpoint plano (`GET /projects/cards/:id`),
+  // así que el panel de Relacionados enseña el título real en vez de la palabra "Tarjeta".
+  kanban_card: { endpoint: '/projects/cards', titleField: 'title' },
+  kanban_cards: { endpoint: '/projects/cards', titleField: 'title' },
 };
 
 const ROUTE_MAP: Record<string, string> = {

@@ -38,6 +38,16 @@ interface ProjectsState {
   cardDependencyCounts: Record<string, number>;
   cardLinkCounts: Record<string, number>;
 
+  /**
+   * Tareas SIN tablero (las del tablero "Personal"), para la zona izquierda de
+   * la pantalla de entrada. Slice APARTE de `cards`/`columnCardIds` a propósito:
+   * ese diccionario lo puebla `fetchFullBoard` iterando `board.columns[].cards`,
+   * y meter aquí tareas de otro tablero lo corrompería.
+   */
+  inboxCards: Card[];
+  inboxLoading: boolean;
+  inboxTotal: number;
+
   // Active board
   activeBoardId: string | null;
   activeBoardTitle: string | null;
@@ -60,6 +70,14 @@ interface ProjectsState {
   // Board actions
   fetchBoards: () => Promise<void>;
   fetchFullBoard: (boardId: string) => Promise<void>;
+  /** Bandeja: las tareas del tablero por defecto, sin cargar el tablero entero. */
+  fetchInbox: () => Promise<void>;
+  /** Apuntar una tarea sin decir tablero (cae en el "Personal"). */
+  quickAddTask: (title: string) => Promise<Card | null>;
+  /** Marcar hecha / reabrir. La fecha la deriva el servidor. */
+  toggleTaskComplete: (cardId: string, completed: boolean) => Promise<void>;
+  /** Arrastrar de la bandeja a una baldosa: entra por la columna de posición 0. */
+  sendTaskToBoard: (cardId: string, boardId: string) => Promise<string | null>;
   createBoard: (data: { title: string; description?: string; color?: string; icon?: string; default_view?: string; tags?: string[] }) => Promise<Board | null>;
   updateBoard: (id: string, data: Record<string, unknown>) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
@@ -112,9 +130,30 @@ interface ProjectsState {
   handleWsEvent: (event: string, data: Record<string, unknown>) => void;
 }
 
+/**
+ * Una tarea vive en DOS sitios del store: `cards` (lo puebla `fetchFullBoard`
+ * iterando las columnas del tablero) e `inboxCards` (la bandeja de la pantalla
+ * de entrada, que se carga por el endpoint plano). Son slices separados a
+ * propósito —meter tareas de otros tableros en `cards` corrompería el kanban—
+ * pero eso obliga a escribir en LOS DOS al actualizar, o la bandeja enseña una
+ * versión vieja: era el bug de "0/3 en la lista y 2/3 en la ficha" y el de la
+ * portada que seguía ahí después de quitarla.
+ */
+function aplicarTarjeta(s: ProjectsState, card: Card) {
+  return {
+    cards: { ...s.cards, [card.id]: card },
+    inboxCards: s.inboxCards.some((c) => c.id === card.id)
+      ? s.inboxCards.map((c) => (c.id === card.id ? card : c))
+      : s.inboxCards,
+  };
+}
+
 export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   // Initial state
   boards: [],
+  inboxCards: [],
+  inboxLoading: false,
+  inboxTotal: 0,
   columns: {},
   cards: {},
   customFieldDefs: {},
@@ -146,6 +185,64 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     } catch {
       set({ loading: false });
       toast.error('Error loading boards');
+    }
+  },
+
+  fetchInbox: async () => {
+    set({ inboxLoading: true });
+    try {
+      // OJO: el envelope de lista pone el total en `meta`, no plano — el tipo
+      // `ApiList` de este fichero dice lo contrario y miente desde siempre.
+      const res = await api.get<{ data: Card[]; meta?: { total: number } }>('/projects/cards', {
+        only_default: 'true', completed: 'false', sort: 'due_date', order: 'asc', limit: '100',
+      });
+      set({ inboxCards: res.data, inboxTotal: res.meta?.total ?? res.data.length, inboxLoading: false });
+    } catch {
+      set({ inboxLoading: false });
+      toast.error('No se pudieron cargar las tareas');
+    }
+  },
+
+  quickAddTask: async (title) => {
+    try {
+      const res = await api.post<ApiEnvelope<Card>>('/projects/cards', { title });
+      set((s) => ({ inboxCards: [...s.inboxCards, res.data], inboxTotal: s.inboxTotal + 1 }));
+      return res.data;
+    } catch {
+      toast.error('No se pudo crear la tarea');
+      return null;
+    }
+  },
+
+  toggleTaskComplete: async (cardId, completed) => {
+    // Optimista: la casilla responde al instante y se revierte si el POST falla.
+    const prev = get().inboxCards;
+    set((s) => ({
+      inboxCards: s.inboxCards.map((c) =>
+        c.id === cardId ? { ...c, completed_at: completed ? new Date().toISOString() : null } : c),
+    }));
+    try {
+      const res = await api.post<ApiEnvelope<Card>>(`/projects/cards/${cardId}/complete`, { completed });
+      // También en `cards`: si la ficha está abierta, debe reflejar el cambio.
+      set((s) => aplicarTarjeta(s, res.data));
+    } catch {
+      set({ inboxCards: prev });
+      toast.error('No se pudo actualizar la tarea');
+    }
+  },
+
+  sendTaskToBoard: async (cardId, boardId) => {
+    const prev = get().inboxCards;
+    set((s) => ({ inboxCards: s.inboxCards.filter((c) => c.id !== cardId), inboxTotal: Math.max(0, s.inboxTotal - 1) }));
+    try {
+      const res = await api.post<ApiEnvelope<Card & { _target_column?: string }>>(
+        `/projects/cards/${cardId}/send-to-board`, { board_id: boardId },
+      );
+      return res.data._target_column ?? null;
+    } catch {
+      set({ inboxCards: prev });
+      toast.error('No se pudo mover la tarea');
+      return null;
     }
   },
 
@@ -394,9 +491,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   updateCard: async (boardId, cardId, data) => {
     try {
       const res = await api.patch<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards/${cardId}`, data);
-      set((s) => ({
-        cards: { ...s.cards, [cardId]: res.data },
-      }));
+      set((s) => aplicarTarjeta(s, res.data));
     } catch {
       toast.error('Error updating card');
     }
@@ -411,9 +506,13 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
         for (const colId of Object.keys(columnCardIds)) {
           columnCardIds[colId] = (columnCardIds[colId] ?? []).filter(id => id !== cardId);
         }
+        const estabaEnBandeja = s.inboxCards.some((c) => c.id === cardId);
         return {
           cards: restCards,
           columnCardIds,
+          // La bandeja es otro slice: sin esto la tarea borrada seguía ahí.
+          inboxCards: estabaEnBandeja ? s.inboxCards.filter((c) => c.id !== cardId) : s.inboxCards,
+          inboxTotal: estabaEnBandeja ? Math.max(0, s.inboxTotal - 1) : s.inboxTotal,
           selectedCardId: s.selectedCardId === cardId ? null : s.selectedCardId,
           cardDetailOpen: s.selectedCardId === cardId ? false : s.cardDetailOpen,
         };
@@ -461,7 +560,16 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   archiveCard: async (boardId, cardId) => {
     try {
       const res = await api.post<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards/${cardId}/archive`);
-      set((s) => ({ cards: { ...s.cards, [cardId]: res.data } }));
+      // La tarjeta SIGUE en `cards` (el tablero las enseña tras el filtro
+      // "Archivadas"), pero sale de la bandeja, que solo lista lo vivo.
+      set((s) => {
+        const estaba = s.inboxCards.some((c) => c.id === cardId);
+        return {
+          cards: { ...s.cards, [cardId]: res.data },
+          inboxCards: estaba ? s.inboxCards.filter((c) => c.id !== cardId) : s.inboxCards,
+          inboxTotal: estaba ? Math.max(0, s.inboxTotal - 1) : s.inboxTotal,
+        };
+      });
       toast.success('Card archived');
     } catch {
       toast.error('Error archiving card');
@@ -471,7 +579,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
   unarchiveCard: async (boardId, cardId) => {
     try {
       const res = await api.post<ApiEnvelope<Card>>(`/projects/boards/${boardId}/cards/${cardId}/unarchive`);
-      set((s) => ({ cards: { ...s.cards, [cardId]: res.data } }));
+      set((s) => aplicarTarjeta(s, res.data));
       toast.success('Card restored');
     } catch {
       toast.error('Error restoring card');

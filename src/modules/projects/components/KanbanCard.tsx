@@ -12,6 +12,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { Calendar, CheckSquare, MessageSquare, GitBranch, Link2 } from 'lucide-react';
+import { getPreviewUrl } from '@/lib/file-utils';
 import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
 import { PRIORITY_COLORS, getCardAgeOpacity, getChecklistProgressColor } from '../utils/design-tokens';
@@ -104,13 +105,25 @@ export const KanbanCard = React.memo(function KanbanCard({
         overflow: 'hidden',
       }}
     >
-      {/* Cover strip (normal size) */}
+      {/* Franja de portada. `hasCover` YA contemplaba `cover_image_id`, pero la
+          franja solo pintaba el color: una tarjeta con imagen de portada dejaba
+          un hueco gris de 40px. Ahora la imagen manda y el color es el respaldo. */}
       {hasCover && coverSize === 'normal' && (
         <div style={{
           height: 40,
           background: card.cover_color ?? 'var(--surface)',
           borderRadius: '6px 6px 0 0',
-        }} />
+          overflow: 'hidden',
+        }}>
+          {card.cover_image_id && (
+            <img
+              src={getPreviewUrl(card.cover_image_id, 320)}
+              alt=""
+              style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+        </div>
       )}
 
       {/* Multi-select checkbox */}

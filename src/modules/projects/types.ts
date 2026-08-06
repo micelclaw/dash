@@ -25,9 +25,20 @@ export interface Board {
   position: number;
   tags: string[] | null;
   card_counter: number;
+  /**
+   * El tablero "Personal": donde caen las tareas que no son de ningún proyecto.
+   * Uno por usuario. Se FILTRA de la rejilla (si no, sus tareas se verían dos
+   * veces: en la bandeja de la izquierda y en su baldosa), pero es un tablero
+   * normal en la base — se renombra, se comparte y se archiva.
+   */
+  is_default?: boolean;
   created_at: string;
   updated_at: string;
   _permission?: 'owner' | 'edit' | 'view';
+  /** Contadores que el backend ya calculaba para los agentes y el dash no pedía. */
+  _card_count?: number;
+  _done_count?: number;
+  _overdue_count?: number;
 }
 
 export interface BoardSettings {

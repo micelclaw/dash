@@ -12,24 +12,52 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Plus, Archive } from 'lucide-react';
+import { Plus, Archive, ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+import { api } from '@/services/api';
 import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
 import { NewBoardModal } from './components/NewBoardModal';
+import { InboxZone } from './components/InboxZone';
+import { CardDetailPanel } from './components/CardDetailPanel';
 import type { Board } from './types';
 
-function BoardCard({ board, onClick }: { board: Board; onClick: () => void }) {
+function BoardCard({
+  board, onClick, onDropTask,
+}: {
+  board: Board;
+  onClick: () => void;
+  onDropTask?: (cardId: string) => void;
+}) {
+  const [over, setOver] = useState(false);
+  const total = board._card_count;
+  const hechas = board._done_count;
+  const vencidas = board._overdue_count ?? 0;
+  const pct = total && total > 0 ? Math.round(((hechas ?? 0) / total) * 100) : null;
+
   return (
     <button
       onClick={onClick}
+      onDragOver={(e) => {
+        if (!onDropTask || !e.dataTransfer.types.includes('text/x-claw-task')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        setOver(false);
+        const cardId = e.dataTransfer.getData('text/x-claw-task');
+        if (cardId && onDropTask) { e.preventDefault(); onDropTask(cardId); }
+      }}
       style={{
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
+        background: over ? 'var(--card-hover, var(--card))' : 'var(--card)',
+        border: over ? '1px solid var(--amber)' : '1px solid var(--border)',
         borderRadius: 'var(--radius-md, 8px)',
         padding: 16,
         cursor: 'pointer',
         textAlign: 'left',
-        transition: 'border-color 0.15s',
+        transition: 'border-color 0.15s, background 0.15s',
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -52,6 +80,19 @@ function BoardCard({ board, onClick }: { board: Board; onClick: () => void }) {
           {board.tags.slice(0, 3).map((tag) => (
             <TagChip key={tag} tag={tag} size="xs" />
           ))}
+        </div>
+      )}
+      {/* Estos contadores el backend ya los calculaba PARA LOS AGENTES y el dash
+          nunca los pedía: hasta ahora los agentes veían más de tus tableros que tú. */}
+      {total !== undefined && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+          <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+            <div style={{ width: `${pct ?? 0}%`, height: '100%', background: 'var(--amber)' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, color: 'var(--text-dim)', fontSize: 11 }}>
+            <span>{hechas ?? 0}/{total}</span>
+            {vencidas > 0 && <span style={{ color: 'var(--red, #e5484d)' }}>⚠ {vencidas}</span>}
+          </div>
         </div>
       )}
     </button>
@@ -90,6 +131,46 @@ export function Component() {
   }, [fetchBoards]);
 
   // Deep-link del widget "Nuevo tablero": /projects?action=new → abre el modal.
+  const fetchInbox = useProjectsStore((s) => s.fetchInbox);
+  const sendTaskToBoard = useProjectsStore((s) => s.sendTaskToBoard);
+  const fetchFullBoard = useProjectsStore((s) => s.fetchFullBoard);
+
+  // La tarea abierta vive en la URL (`?task=`): sin eso, F5 y el botón atrás
+  // devuelven a la rejilla y la ficha es un callejón sin salida.
+  const taskId = searchParams.get('task');
+  const [taskBoardId, setTaskBoardId] = useState<string | null>(null);
+
+  useEffect(() => { void fetchInbox(); }, [fetchInbox]);
+
+  // Para pintar la ficha hace falta el tablero cargado (columnas + campos
+  // propios): así se reutiliza EL MISMO CardDetailPanel del tablero, con sus 13
+  // secciones, en vez de escribir un segundo panel que acabaría divergiendo.
+  useEffect(() => {
+    if (!taskId) { setTaskBoardId(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<{ data: { board_id: string } }>(`/projects/cards/${taskId}`);
+        if (cancelled) return;
+        await fetchFullBoard(res.data.board_id);
+        if (!cancelled) setTaskBoardId(res.data.board_id);
+      } catch {
+        if (cancelled) return;
+        toast.error('No se encontró la tarea');
+        setSearchParams({}, { replace: true });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [taskId, fetchFullBoard, setSearchParams]);
+
+  async function moverABaldosa(cardId: string, board: Board) {
+    const columna = await sendTaskToBoard(cardId, board.id);
+    if (columna) {
+      toast.success(`Movida a ${board.title} · ${columna}`);
+      void fetchBoards();
+    }
+  }
+
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
       setShowNew(true);
@@ -97,11 +178,72 @@ export function Component() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Deep-link degradado de una chip de `kanban_card` SIN board (chips antiguas, o
+  // resultados de búsqueda sin `board_id`): /projects?card=<cardId>. Aquí no se sabe
+  // en qué tablero vive, así que se resuelve probando los tableros del usuario con el
+  // GET por tarjeta que ya existe, y se redirige a /projects/:boardId?card=… que es
+  // donde BoardView abre el CardDetailPanel. Si no aparece en ninguno, se dice.
+  useEffect(() => {
+    const cardId = searchParams.get('card');
+    if (!cardId || loading || boards.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const board of boards) {
+        try {
+          await api.get(`/projects/boards/${board.id}/cards/${cardId}`);
+        } catch {
+          continue;
+        }
+        if (cancelled) return;
+        navigate(`/projects/${board.id}?card=${encodeURIComponent(cardId)}`, { replace: true });
+        return;
+      }
+      if (cancelled) return;
+      toast.error('No se encontró la tarjeta');
+      setSearchParams({}, { replace: true });
+    })();
+    return () => { cancelled = true; };
+  }, [searchParams, setSearchParams, boards, loading, navigate]);
+
+  // Las tareas sueltas viven en el tablero por defecto, que se FILTRA de la
+  // rejilla: si saliera como baldosa, las mismas tareas se verían dos veces.
+  const tablerosVisibles = boards.filter((b) => !b.is_default);
+
   return (
-    <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+      <InboxZone
+        selectedTaskId={taskId}
+        onSelectTask={(id) => setSearchParams({ task: id })}
+      />
+
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {taskId ? (
+        /* Variante A: la ficha SUSTITUYE la rejilla de tableros. La zona
+           izquierda sobrevive entera y hace de índice. */
+        taskBoardId ? (
+          <CardDetailPanel
+            boardId={taskBoardId}
+            cardId={taskId}
+            isMobile={false}
+            variant="full"
+            leadingAction={
+              <button
+                onClick={() => setSearchParams({})}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12, padding: 0, fontFamily: 'var(--font-sans)' }}
+              >
+                <ArrowLeft size={13} />
+                Tableros ({tablerosVisibles.length})
+              </button>
+            }
+          />
+        ) : (
+          <div style={{ padding: 24, color: 'var(--text-dim)', fontSize: 13 }}>Cargando la tarea…</div>
+        )
+      ) : (
+      <div style={{ padding: 24, overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <h1 style={{ color: 'var(--text)', fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
-          Projects
+          Tableros
         </h1>
         <button
           onClick={() => setShowNew(true)}
@@ -141,7 +283,7 @@ export function Component() {
             <SkeletonCard key={i} />
           ))}
         </div>
-      ) : boards.length === 0 ? (
+      ) : tablerosVisibles.length === 0 ? (
         <div
           style={{
             display: 'flex',
@@ -158,11 +300,19 @@ export function Component() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-          {boards.map((board) => (
-            <BoardCard key={board.id} board={board} onClick={() => navigate(`/projects/${board.id}`)} />
+          {tablerosVisibles.map((board) => (
+            <BoardCard
+              key={board.id}
+              board={board}
+              onClick={() => navigate(`/projects/${board.id}`)}
+              onDropTask={(cardId) => void moverABaldosa(cardId, board)}
+            />
           ))}
         </div>
       )}
+      </div>
+      )}
+      </div>
     </div>
   );
 }

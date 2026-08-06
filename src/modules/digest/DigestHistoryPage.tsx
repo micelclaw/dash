@@ -53,8 +53,8 @@ const DOMAIN_ROUTES: Record<string, string> = {
   files: '/drive',
   bookmarks: '/bookmarks',
   diary_entries: '/diary',
-  kanban_cards: '/kanban',
-  kanban_boards: '/kanban',
+  kanban_cards: '/projects',
+  kanban_boards: '/projects',
 };
 
 const ACTION_LABELS: Record<string, string> = {

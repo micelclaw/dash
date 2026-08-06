@@ -12,11 +12,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight } from 'lucide-react';
+import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight, Paperclip, Download, Image as ImageIcon } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
+import { DropZone } from '@/components/shared/DropZone';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { api } from '@/services/api';
+import { getPreviewUrl } from '@/lib/file-utils';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
 import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
@@ -77,11 +79,24 @@ interface CardDetailPanelProps {
   boardId: string;
   cardId: string;
   isMobile: boolean;
+  /**
+   * Cómo se presenta. `panel` (defecto) = la columna de 400px pegada al tablero.
+   * `full` = ocupa todo el ancho disponible; lo usa la ficha de la pantalla de
+   * entrada de Tareas, que SUSTITUYE la rejilla de tableros.
+   *
+   * Es el MISMO componente a propósito: las 13 secciones (título, prioridad,
+   * descripción, fechas, campos propios, etiquetas, checklist, dependencias,
+   * enlazados, inteligencia de relaciones, comentarios y acciones) no se
+   * duplican en un segundo panel que acabaría divergiendo.
+   */
+  variant?: 'panel' | 'full';
+  /** Cabecera opcional a la izquierda del título (el "← Tableros (N)"). */
+  leadingAction?: React.ReactNode;
 }
 
 interface ApiEnvelope<T> { data: T }
 
-export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelProps) {
+export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', leadingAction }: CardDetailPanelProps) {
   const navigate = useNavigate();
   const card = useProjectsStore((s) => s.cards[cardId]);
   const columns = useProjectsStore((s) => s.columns);
@@ -91,6 +106,80 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const selectCard = useProjectsStore((s) => s.selectCard);
   const archiveCard = useProjectsStore((s) => s.archiveCard);
   const unarchiveCard = useProjectsStore((s) => s.unarchiveCard);
+
+  // Usuarios asignables. `GET /projects/users` ya existía y ninguna pantalla lo
+  // consumía. (Nota: hoy devuelve TODOS los usuarios activos del sistema sin
+  // filtro de relación — anotado como deuda de privacidad, no se agrava aquí.)
+  const [boardUsers, setBoardUsers] = useState<Array<{ id: string; email?: string; display_name?: string }>>([]);
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const res = await api.get<{ data: Array<{ id: string; email?: string; display_name?: string }> }>('/projects/users');
+        if (!cancelado) setBoardUsers(res.data ?? []);
+      } catch { /* sin usuarios: la sección lo dice */ }
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  // Subida de portada y adjuntos. Molde real del repo: subir a /files/upload y
+  // guardar el id devuelto en el registro (igual que inventory/StockTab).
+  const [subiendo, setSubiendo] = useState(false);
+  // Visor de la portada: en el panel se ve recortada tipo banner (objectFit
+  // cover); al pulsarla se abre completa, sin recortar.
+  const [portadaAbierta, setPortadaAbierta] = useState(false);
+  const [nombresAdjuntos, setNombresAdjuntos] = useState<Record<string, string>>({});
+
+  async function subirFichero(f: File, carpeta: string): Promise<string | null> {
+    const form = new FormData();
+    form.append('file', f);
+    form.append('parent_folder', carpeta);
+    const up = await api.upload<{ data: { id: string; filename?: string } }>('/files/upload', form);
+    if (up.data.filename) setNombresAdjuntos((m) => ({ ...m, [up.data.id]: up.data.filename! }));
+    return up.data.id ?? null;
+  }
+
+  async function subirPortada(f: File) {
+    setSubiendo(true);
+    try {
+      const id = await subirFichero(f, '/Projects/covers/');
+      if (id) handleSaveField('cover_image_id', id);
+    } catch {
+      toast.error('No se pudo subir la portada');
+    } finally { setSubiendo(false); }
+  }
+
+  async function subirAdjuntos(files: File[]) {
+    setSubiendo(true);
+    try {
+      const ids: string[] = [];
+      for (const f of files) {
+        const id = await subirFichero(f, '/Projects/attachments/');
+        if (id) ids.push(id);
+      }
+      if (ids.length) handleSaveField('attachment_ids', [...(card?.attachment_ids ?? []), ...ids]);
+    } catch {
+      toast.error('No se pudieron subir los adjuntos');
+    } finally { setSubiendo(false); }
+  }
+
+  // Nombres de los adjuntos ya guardados (los recién subidos ya los tenemos).
+  useEffect(() => {
+    const faltan = (card?.attachment_ids ?? []).filter((id) => !nombresAdjuntos[id]);
+    if (faltan.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      const nuevos: Record<string, string> = {};
+      for (const id of faltan) {
+        try {
+          const r = await api.get<{ data: { filename?: string } }>(`/files/${id}`);
+          if (r.data?.filename) nuevos[id] = r.data.filename;
+        } catch { /* fichero borrado: se queda con el nombre genérico */ }
+      }
+      if (!cancelado && Object.keys(nuevos).length) setNombresAdjuntos((m) => ({ ...m, ...nuevos }));
+    })();
+    return () => { cancelado = true; };
+  }, [card?.attachment_ids, nombresAdjuntos]);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -152,7 +241,12 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
   const handleClose = useCallback(() => selectCard(null), [selectCard]);
   // Cerrar con Escape (salvo escribiendo en un campo: hay edición inline de
   // checklist con su propio Escape, y no queremos cerrar a media edición).
-  useEscapeToClose(handleClose);
+  // Con el visor de portada abierto, Escape cierra el VISOR, no el panel: si no,
+  // una tecla haría desaparecer las dos capas de golpe.
+  useEscapeToClose(useCallback(() => {
+    if (portadaAbierta) { setPortadaAbierta(false); return; }
+    handleClose();
+  }, [portadaAbierta, handleClose]));
 
   const handleSaveField = useCallback(
     (field: string, value: unknown) => {
@@ -225,6 +319,8 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
 
   const panelStyle: React.CSSProperties = isMobile
     ? { position: 'fixed', inset: 0, zIndex: 50, background: 'var(--bg)', overflow: 'auto' }
+    : variant === 'full'
+    ? { flex: 1, minWidth: 0, background: 'var(--bg)', overflow: 'auto', height: '100%' }
     : {
         width: 400,
         minWidth: 400,
@@ -239,6 +335,7 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {leadingAction}
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
             {columns[card.column_id]?.title ?? 'Column'}
           </span>
@@ -375,6 +472,123 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
             tags={card.tags ?? []}
             onChange={(next) => handleSaveField('tags', next)}
           />
+        </div>
+
+        {/* Asignados — el campo `assignee_ids` existía en la tabla desde siempre,
+            se escribía por API y NINGUNA pantalla lo pintaba: un campo fantasma.
+            Los enlaces automáticos a contactos ya se sincronizan al guardarlo. */}
+        <div>
+          <label style={labelStyle}>Asignados</label>
+          {boardUsers.length === 0 ? (
+            <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>Sin usuarios disponibles</span>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {boardUsers.map((u) => {
+                const asignado = (card.assignee_ids ?? []).includes(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      const actuales = card.assignee_ids ?? [];
+                      handleSaveField('assignee_ids', asignado
+                        ? actuales.filter((a) => a !== u.id)
+                        : [...actuales, u.id]);
+                    }}
+                    title={u.email ?? u.display_name ?? u.id}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '3px 8px', borderRadius: 999, cursor: 'pointer',
+                      fontSize: 12, fontFamily: 'var(--font-sans)',
+                      background: asignado ? 'var(--amber)' : 'transparent',
+                      color: asignado ? '#06060a' : 'var(--text-dim)',
+                      border: `1px solid ${asignado ? 'var(--amber)' : 'var(--border)'}`,
+                    }}
+                  >
+                    {(u.display_name ?? u.email ?? '?').slice(0, 24)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Portada y adjuntos. Los dos campos existían en la tabla desde siempre
+            (`cover_image_id`, `attachment_ids`) y NINGUNA pantalla dejaba ponerlos:
+            solo se podían rellenar por API. Este es el único componente que edita
+            una tarjeta —se monta como panel del tablero y como ficha de la bandeja—
+            así que basta con añadirlo aquí. */}
+        <div>
+          <label style={labelStyle}>Portada</label>
+          {card.cover_image_id ? (
+            <div style={{ position: 'relative', borderRadius: 'var(--radius-md, 8px)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <img
+                // `/files/:id/content` NO sirve bytes: devuelve un envelope JSON y
+                // responde 404 TEXT_NOT_AVAILABLE para cualquier mime que no sea
+                // texto o PDF. Y `<img>` no puede mandar cabeceras, así que el token
+                // va en la query — es lo que hacen Drive, Fotos y Contactos.
+                src={getPreviewUrl(card.cover_image_id, 640)}
+                alt="Portada de la tarjeta"
+                onClick={() => setPortadaAbierta(true)}
+                title="Ver completa"
+                style={{ display: 'block', width: '100%', maxHeight: 160, objectFit: 'cover', cursor: 'zoom-in' }}
+              />
+              <button
+                onClick={() => handleSaveField('cover_image_id', null)}
+                style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', borderRadius: 6, cursor: 'pointer', fontSize: 11, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none' }}
+              >
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12 }}>
+              <ImageIcon size={13} />
+              {subiendo ? 'Subiendo…' : 'Elegir portada'}
+              <input
+                type="file" accept="image/*" hidden disabled={subiendo}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void subirPortada(f); }}
+              />
+            </label>
+          )}
+        </div>
+
+        <div>
+          <label style={labelStyle}>Adjuntos</label>
+          <DropZone onFilesDropped={(files) => void subirAdjuntos(files)} disabled={subiendo}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {(card.attachment_ids ?? []).map((fid) => (
+                <div key={fid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 6px)', fontSize: 12 }}>
+                  <Paperclip size={12} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>
+                    {nombresAdjuntos[fid] ?? 'Archivo'}
+                  </span>
+                  <a
+                    href={api.mediaUrl(`/files/${fid}/download`)}
+                    download
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ color: 'var(--text-dim)', display: 'inline-flex' }}
+                    title="Descargar"
+                  >
+                    <Download size={12} />
+                  </a>
+                  <button
+                    onClick={() => handleSaveField('attachment_ids', (card.attachment_ids ?? []).filter((x) => x !== fid))}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', display: 'inline-flex', padding: 0 }}
+                    title="Quitar"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12, alignSelf: 'flex-start' }}>
+                <Paperclip size={13} />
+                {subiendo ? 'Subiendo…' : 'Adjuntar archivo'}
+                <input
+                  type="file" multiple hidden disabled={subiendo}
+                  onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) void subirAdjuntos(fs); }}
+                />
+              </label>
+            </div>
+          </DropZone>
         </div>
 
         {/* Checklist */}
@@ -654,6 +868,39 @@ export function CardDetailPanel({ boardId, cardId, isMobile }: CardDetailPanelPr
           onClose={() => setLinkPickerOpen(false)}
           onLinksChanged={fetchLinks}
         />
+      )}
+
+      {/* Visor de la portada COMPLETA. En el panel se ve recortada como banner
+          (cover); aquí entera (contain). No se reutiliza `PhotoLightbox` porque
+          está atado al tipo `Photo` con navegación y panel de detalles: para una
+          sola imagen habría que fabricar un objeto falso. */}
+      {portadaAbierta && card.cover_image_id && (
+        <div
+          onClick={() => setPortadaAbierta(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Portada a tamaño completo"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 32, cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={getPreviewUrl(card.cover_image_id, 2048)}
+            alt="Portada de la tarjeta"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', cursor: 'default' }}
+          />
+          <button
+            onClick={() => setPortadaAbierta(false)}
+            aria-label="Cerrar"
+            style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(0,0,0,0.5)', border: 'none', borderRadius: 999, color: '#fff', width: 32, height: 32, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
       )}
     </div>
   );
