@@ -12,9 +12,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight, Paperclip, Download, Image as ImageIcon } from 'lucide-react';
+import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight, Paperclip, Download, Image as ImageIcon, HardDrive } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
 import { DropZone } from '@/components/shared/DropZone';
+import { DrivePickerModal } from './DrivePickerModal';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { api } from '@/services/api';
@@ -128,6 +129,8 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
   // Visor de la portada: en el panel se ve recortada tipo banner (objectFit
   // cover); al pulsarla se abre completa, sin recortar.
   const [portadaAbierta, setPortadaAbierta] = useState(false);
+  /** Selector del Drive: 'portada' | 'adjuntos' | null. */
+  const [drivePara, setDrivePara] = useState<null | 'portada' | 'adjuntos'>(null);
   const [nombresAdjuntos, setNombresAdjuntos] = useState<Record<string, string>>({});
 
   async function subirFichero(f: File, carpeta: string): Promise<string | null> {
@@ -180,6 +183,17 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
     })();
     return () => { cancelado = true; };
   }, [card?.attachment_ids, nombresAdjuntos]);
+
+  // Lo que se pinta = quien PUEDE asignarse (relación de tablero compartido) MÁS
+  // quien YA está asignado. Si no, un asignado de antes —o de cuando el endpoint
+  // devolvía medio sistema— se volvería invisible y no habría forma de quitarlo.
+  const asignables = (() => {
+    const vistos = new Set(boardUsers.map((u) => u.id));
+    const extra = (card?.assignee_ids ?? [])
+      .filter((id) => !vistos.has(id))
+      .map((id) => ({ id, display_name: undefined, email: undefined }));
+    return [...boardUsers, ...extra];
+  })();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -479,11 +493,11 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
             Los enlaces automáticos a contactos ya se sincronizan al guardarlo. */}
         <div>
           <label style={labelStyle}>Asignados</label>
-          {boardUsers.length === 0 ? (
+          {asignables.length === 0 ? (
             <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>Sin usuarios disponibles</span>
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {boardUsers.map((u) => {
+              {asignables.map((u) => {
                 const asignado = (card.assignee_ids ?? []).includes(u.id);
                 return (
                   <button
@@ -540,14 +554,23 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
               </button>
             </div>
           ) : (
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12 }}>
-              <ImageIcon size={13} />
-              {subiendo ? 'Subiendo…' : 'Elegir portada'}
-              <input
-                type="file" accept="image/*" hidden disabled={subiendo}
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void subirPortada(f); }}
-              />
-            </label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12 }}>
+                <ImageIcon size={13} />
+                {subiendo ? 'Subiendo…' : 'Subir imagen'}
+                <input
+                  type="file" accept="image/*" hidden disabled={subiendo}
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void subirPortada(f); }}
+                />
+              </label>
+              <button
+                onClick={() => setDrivePara('portada')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 12, background: 'transparent', fontFamily: 'var(--font-sans)' }}
+              >
+                <HardDrive size={13} />
+                Del Drive
+              </button>
+            </div>
           )}
         </div>
 
@@ -579,14 +602,23 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                   </button>
                 </div>
               ))}
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12, alignSelf: 'flex-start' }}>
-                <Paperclip size={13} />
-                {subiendo ? 'Subiendo…' : 'Adjuntar archivo'}
-                <input
-                  type="file" multiple hidden disabled={subiendo}
-                  onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) void subirAdjuntos(fs); }}
-                />
-              </label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: subiendo ? 'wait' : 'pointer', color: 'var(--text-dim)', fontSize: 12 }}>
+                  <Paperclip size={13} />
+                  {subiendo ? 'Subiendo…' : 'Subir archivo'}
+                  <input
+                    type="file" multiple hidden disabled={subiendo}
+                    onChange={(e) => { const fs = Array.from(e.target.files ?? []); e.target.value = ''; if (fs.length) void subirAdjuntos(fs); }}
+                  />
+                </label>
+                <button
+                  onClick={() => setDrivePara('adjuntos')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 8px)', cursor: 'pointer', color: 'var(--text-dim)', fontSize: 12, background: 'transparent', fontFamily: 'var(--font-sans)' }}
+                >
+                  <HardDrive size={13} />
+                  Del Drive
+                </button>
+              </div>
             </div>
           </DropZone>
         </div>
@@ -867,6 +899,27 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
           cardId={cardId}
           onClose={() => setLinkPickerOpen(false)}
           onLinksChanged={fetchLinks}
+        />
+      )}
+
+      {drivePara && (
+        <DrivePickerModal
+          soloImagenes={drivePara === 'portada'}
+          titulo={drivePara === 'portada' ? 'Elegir portada del Drive' : 'Adjuntar del Drive'}
+          onClose={() => setDrivePara(null)}
+          onPick={(files) => {
+            if (files.length === 0) { setDrivePara(null); return; }
+            if (drivePara === 'portada') {
+              handleSaveField('cover_image_id', files[0].id);
+            } else {
+              // Sin duplicar: adjuntar dos veces el mismo fichero no aporta nada.
+              const yaEstan = new Set(card.attachment_ids ?? []);
+              const nuevos = files.map((f) => f.id).filter((id) => !yaEstan.has(id));
+              setNombresAdjuntos((m) => ({ ...m, ...Object.fromEntries(files.map((f) => [f.id, f.filename])) }));
+              if (nuevos.length) handleSaveField('attachment_ids', [...(card.attachment_ids ?? []), ...nuevos]);
+            }
+            setDrivePara(null);
+          }}
         />
       )}
 

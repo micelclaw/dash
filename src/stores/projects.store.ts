@@ -72,8 +72,9 @@ interface ProjectsState {
   fetchFullBoard: (boardId: string) => Promise<void>;
   /** Bandeja: las tareas del tablero por defecto, sin cargar el tablero entero. */
   fetchInbox: () => Promise<void>;
-  /** Apuntar una tarea sin decir tablero (cae en el "Personal"). */
-  quickAddTask: (title: string) => Promise<Card | null>;
+  /** Apuntar una tarea sin decir tablero (cae en el "Personal"). `extra` trae
+   *  lo que el mini-lenguaje de la captura haya entendido (prioridad, fecha…). */
+  quickAddTask: (title: string, extra?: Record<string, unknown>) => Promise<Card | null>;
   /** Marcar hecha / reabrir. La fecha la deriva el servidor. */
   toggleTaskComplete: (cardId: string, completed: boolean) => Promise<void>;
   /** Arrastrar de la bandeja a una baldosa: entra por la columna de posición 0. */
@@ -203,9 +204,9 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     }
   },
 
-  quickAddTask: async (title) => {
+  quickAddTask: async (title, extra) => {
     try {
-      const res = await api.post<ApiEnvelope<Card>>('/projects/cards', { title });
+      const res = await api.post<ApiEnvelope<Card>>('/projects/cards', { title, ...(extra ?? {}) });
       set((s) => ({ inboxCards: [...s.inboxCards, res.data], inboxTotal: s.inboxTotal + 1 }));
       return res.data;
     } catch {

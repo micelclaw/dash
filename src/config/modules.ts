@@ -38,7 +38,7 @@ export const MODULES: ModuleConfig[] = [
   { id: 'bookmarks', label: 'Bookmarks',   icon: Bookmark,      color: 'var(--mod-bookmarks)', path: '/bookmarks', group: 'Productivity' },
   { id: 'tools',    label: 'Tools',         icon: Wrench,        color: 'var(--mod-tools)',    path: '/tools',    group: 'Productivity' },
   { id: 'sketches', label: 'Sketches',      icon: Shapes,        color: 'var(--mod-sketches)', path: '/sketches', group: 'Productivity' },
-  { id: 'projects', label: 'Projects',     icon: Kanban,        color: 'var(--mod-projects)', path: '/projects', group: 'Productivity' },
+  { id: 'projects', label: 'Tareas',       icon: Kanban,        color: 'var(--mod-projects)', path: '/projects', group: 'Productivity' },
   { id: 'inventory', label: 'Inventory',   icon: Boxes,         color: 'var(--mod-inventory)', path: '/inventory', group: 'Productivity' },
   { id: 'office',   label: 'Office',       icon: FileText,      color: 'var(--mod-office)',   path: '/office',   group: 'Productivity' },
   // Finance

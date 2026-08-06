@@ -21,10 +21,11 @@
  * Se arrastran a una baldosa de tablero para sacarlas de aquí.
  */
 
-import { useState, useEffect } from 'react';
-import { Plus, AlertTriangle, Paperclip, CheckSquare } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, AlertTriangle, Paperclip, CheckSquare, X } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
 import { TagChip } from '@/components/shared/TagChip';
+import { parsearCaptura, trozosAPayload } from '../utils/quick-add-parser';
 import { api } from '@/services/api';
 import { getPreviewUrl } from '@/lib/file-utils';
 import type { Card, ChecklistItem } from '../types';
@@ -78,10 +79,19 @@ export function InboxZone({
   const loading = useProjectsStore((s) => s.inboxLoading);
   const total = useProjectsStore((s) => s.inboxTotal);
   const quickAdd = useProjectsStore((s) => s.quickAddTask);
+  // Para resolver `+tablero` por nombre a su id.
+  const boards = useProjectsStore((s) => s.boards);
   const toggle = useProjectsStore((s) => s.toggleTaskComplete);
 
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Trozos que el usuario ha quitado a mano: su texto vuelve al título. */
+  const [descartados, setDescartados] = useState<Set<string>>(new Set());
+  /** Vista calculada. NO son carpetas: una tarea aparece en "Hoy" porque su
+   *  fecha lo dice, no porque se archive ahí (principio de Things 3). */
+  const [vista, setVista] = useState<'todas' | 'hoy' | 'vencidas' | 'sin_fecha'>('todas');
+
+  const parsed = useMemo(() => parsearCaptura(draft, descartados), [draft, descartados]);
 
   // Nombres de los asignados. Una sola petición para toda la lista, no una por fila.
   const [usuarios, setUsuarios] = useState<Record<string, string>>({});
@@ -100,14 +110,33 @@ export function InboxZone({
   }, []);
 
   async function submit() {
-    const title = draft.trim();
+    const title = parsed.titulo;
     if (!title || saving) return;
     setSaving(true);
     // Se limpia YA: escribir tres seguidas no debe esperar al servidor.
     setDraft('');
-    await quickAdd(title);
+    setDescartados(new Set());
+    const extra = trozosAPayload(
+      parsed.trozos,
+      (nombre) => boards.find((b) => b.title.toLowerCase().startsWith(nombre.toLowerCase()))?.id ?? null,
+      (nombre) => Object.entries(usuarios).find(([, n]) => n.toLowerCase().startsWith(nombre.toLowerCase()))?.[0] ?? null,
+    );
+    await quickAdd(title, extra);
     setSaving(false);
   }
+
+  // Vistas calculadas sobre lo YA cargado: cero peticiones nuevas.
+  const inicioHoy = new Date(new Date().toDateString()).getTime();
+  const finHoy = inicioHoy + 86400000;
+  const contar = (f: (c: Card) => boolean) => cards.filter(f).length;
+  const VISTAS = [
+    { id: 'todas' as const, label: 'Todas', filtro: () => true },
+    { id: 'hoy' as const, label: 'Hoy', filtro: (c: Card) => !!c.due_date && new Date(c.due_date).getTime() >= inicioHoy && new Date(c.due_date).getTime() < finHoy },
+    { id: 'vencidas' as const, label: 'Vencidas', filtro: (c: Card) => esVencida(c) },
+    { id: 'sin_fecha' as const, label: 'Sin fecha', filtro: (c: Card) => !c.due_date },
+  ];
+  const filtroActivo = VISTAS.find((v) => v.id === vista)!.filtro;
+  const visibles = cards.filter(filtroActivo);
 
   return (
     <div
@@ -130,6 +159,31 @@ export function InboxZone({
         <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>{total}</span>
       </div>
 
+      {/* Vistas CALCULADAS, no carpetas: una tarea sale en "Hoy" porque su fecha
+          lo dice. Se derivan de lo ya cargado, sin pedir nada al servidor. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '0 12px 8px' }}>
+        {VISTAS.map((v) => {
+          const n = contar(v.filtro);
+          const activa = v.id === vista;
+          if (n === 0 && v.id !== 'todas' && !activa) return null;
+          return (
+            <button
+              key={v.id}
+              onClick={() => setVista(v.id)}
+              style={{
+                padding: '2px 8px', borderRadius: 999, fontSize: 11, cursor: 'pointer',
+                fontFamily: 'var(--font-sans)',
+                background: activa ? 'var(--amber)' : 'transparent',
+                color: activa ? '#06060a' : 'var(--text-dim)',
+                border: `1px solid ${activa ? 'var(--amber)' : 'var(--border)'}`,
+              }}
+            >
+              {v.label} {n}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Captura rápida: la razón de ser de esta zona. */}
       <div style={{ padding: '0 12px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 8px)', background: 'var(--card)' }}>
@@ -143,17 +197,49 @@ export function InboxZone({
             style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-sans)' }}
           />
         </div>
+
+        {/* Lo entendido se ENSEÑA antes de guardar, y se puede quitar: ocultar el
+            parseo es el fallo de Things 3 —si acierta no te enteras y si falla,
+            tampoco—. Un símbolo que no se entiende NO aparece aquí: se queda en
+            el título, así que nunca se traga una palabra en silencio. */}
+        {parsed.trozos.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6, alignItems: 'center' }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+              Se guardará: «{parsed.titulo || '…'}»
+            </span>
+            {parsed.trozos.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setDescartados((d) => new Set(d).add(t.id))}
+                title="Quitar (vuelve al título)"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '1px 6px', borderRadius: 999, fontSize: 11, cursor: 'pointer',
+                  background: 'var(--card)', color: 'var(--text)',
+                  border: '1px solid var(--border)', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                {t.etiqueta}
+                <X size={9} style={{ color: 'var(--text-dim)' }} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 16px' }}>
         {loading && cards.length === 0 ? (
           <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Cargando…</div>
-        ) : cards.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <div style={{ padding: '24px 16px', color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.5 }}>
-            Nada suelto. Lo que apuntes aquí —o lo que te apunte el agente— aparece en esta lista.
+            {vista === 'todas'
+              ? 'Nada suelto. Lo que apuntes aquí —o lo que te apunte el agente— aparece en esta lista.'
+              : cards.length === 0
+              ? 'Nada suelto todavía.'
+              : `Nada en «${VISTAS.find((v) => v.id === vista)!.label}». Hay ${cards.length} en Todas.`}
           </div>
         ) : (
-          cards.map((c) => {
+          visibles.map((c) => {
             const vencida = esVencida(c);
             const seleccionada = c.id === selectedTaskId;
 
