@@ -15,6 +15,12 @@ import type { ServiceState } from '@/stores/services.store';
 
 interface ServiceStatusDotProps {
   status: ServiceState;
+  /**
+   * El contenedor corre pero el servicio no está configurado (Core lo manda en
+   * `setup_hint`). Gana al estado: un «running» sin configurar NO se pinta de
+   * verde — era exactamente la mentira del panel con la VPN sin autenticar.
+   */
+  needsSetup?: boolean;
   size?: 'sm' | 'md';
   className?: string;
   title?: string;
@@ -30,8 +36,10 @@ const STATUS_CONFIG: Record<ServiceState, { color: string; label: string; pulse?
 
 const SIZE_MAP = { sm: 'h-1.5 w-1.5', md: 'h-2 w-2' };
 
-export function ServiceStatusDot({ status, size = 'sm', className, title }: ServiceStatusDotProps) {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.stopped;
+const NEEDS_SETUP_CONFIG = { color: 'bg-amber-500', label: 'Needs setup' } as const;
+
+export function ServiceStatusDot({ status, needsSetup, size = 'sm', className, title }: ServiceStatusDotProps) {
+  const config = needsSetup ? NEEDS_SETUP_CONFIG : (STATUS_CONFIG[status] ?? STATUS_CONFIG.stopped);
   const sizeClass = SIZE_MAP[size];
 
   return (
@@ -40,7 +48,7 @@ export function ServiceStatusDot({ status, size = 'sm', className, title }: Serv
         'inline-block rounded-full shrink-0',
         sizeClass,
         config.color,
-        config.pulse && 'animate-pulse',
+        'pulse' in config && config.pulse && 'animate-pulse',
         className,
       )}
       title={title ?? config.label}

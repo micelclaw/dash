@@ -12,12 +12,27 @@
 
 import { create } from 'zustand';
 import { api } from '@/services/api';
+import { updateServiceResourcePolicy } from '@/services/lifecycle.service';
 
 // ─── Types ───────────────────────────────────────────────
 
 export type ServiceState = 'stopped' | 'starting' | 'running' | 'draining' | 'failed';
 export type LifecyclePolicy = 'always' | 'ondemand' | 'scheduled';
-export type HardwareProfileTier = 'lite' | 'standard' | 'performance';
+export type ResourcePriorityClass = 'critical' | 'high' | 'normal' | 'low';
+export type ResourcePolicyPatch = {
+  lifecycle?: LifecyclePolicy;
+  schedule?: ScheduleConfig;
+  priority_class?: Exclude<ResourcePriorityClass, 'critical'>;
+};
+export type BulkResourcePolicyResult = {
+  updated: string[];
+  failed: Array<{ name: string; error: string }>;
+};
+// Seis tramos nombrados por su RAM (2026-08-06). Los tres anteriores —`lite`/`standard`/
+// `performance`— los sigue aceptando el PUT de Core y los traduce al guardar, así que un
+// override viejo se migra solo la primera vez que el usuario toca el selector.
+export const HARDWARE_PROFILE_TIERS = ['4gb', '8gb', '16gb', '32gb', '64gb', '128gb'] as const;
+export type HardwareProfileTier = (typeof HARDWARE_PROFILE_TIERS)[number];
 
 export interface ScheduleWindow {
   days: number[];
@@ -47,11 +62,28 @@ export interface ServiceLifecycleState {
   uptime_seconds: number | null;
   timeout_remaining_seconds: number | null;
   error: string | null;
+  /**
+   * Non-null = el servicio está arrancado pero NO usable todavía: qué le falta
+   * al operador. Lo emite Core desde el `ServiceNotConfiguredError` del adapter
+   * (p.ej. Tailscale con el contenedor corriendo y la sesión sin autenticar).
+   * Se pinta en ámbar en vez del punto verde de «running».
+   */
+  setup_hint: string | null;
   started_by: string | null;
   drain_guards_active: string[];
   category: string;
   tier: string;
   estimated_start_seconds: number;
+  ram_reservation_mb: number;
+  priority_class: ResourcePriorityClass;
+  schedule: ScheduleConfig | null;
+  timeout_seconds: number | null;
+  resource_status: {
+    state: 'applied' | 'drift' | 'not-installed' | 'native-pending' | 'error';
+    reservation_mb?: number;
+    maximum_mb?: number;
+    detail?: string;
+  } | null;
 }
 
 export interface RamBudgetStatus {
@@ -74,22 +106,84 @@ export interface HardwareProfile {
   is_wsl2: boolean;
 }
 
+export interface SystemResources {
+  platform: 'wsl2' | 'mac-vm' | 'bare-metal' | 'vm' | 'container' | 'unknown';
+  capabilities: {
+    vm_resources: boolean;
+    host_apply: boolean;
+    cpu_limit: boolean;
+    external_management: boolean;
+  };
+  hardware: {
+    host_total_ram_mb: number;
+    guest_total_ram_mb: number;
+    host_logical_cpus: number;
+    guest_logical_cpus: number;
+    guest_swap_mb: number;
+  };
+  profile: {
+    desired: HardwareProfileTier;
+    effective: HardwareProfileTier;
+    budget_services_mb: number;
+    recommended_vm_ram_mb: number;
+    available: Array<{ tier: HardwareProfileTier; enabled: boolean; reason: string | null }>;
+  };
+  host: {
+    mode: 'managed' | 'external';
+    reconciliation: 'applied' | 'pending' | 'drift' | 'externally-managed' | 'unsupported';
+    configured_ram_mb: number | null;
+    configured_processors: number;
+    configured_swap_mb: number | null;
+    networking_mode: string | null;
+    auto_memory_reclaim: string | null;
+    invalid_page_reporting: boolean;
+    running_wsl_distros: string[];
+  };
+  settings: {
+    default_timeout_minutes: number;
+    ram_pressure_threshold_percent: number;
+    auto_evict_on_pressure: boolean;
+    notifications_enabled: boolean;
+  };
+}
+
+export interface ResourcePlan {
+  id: string;
+  profile: HardwareProfileTier;
+  cpu_limit: number;
+  vm_memory_mb: number;
+  swap_mb: number;
+  services_blocked: string[];
+  services_to_stop: string[];
+  services_preserved: string[];
+  requires_vm_restart: boolean;
+  affected_wsl_distros: string[];
+}
+
 // ─── Store ───────────────────────────────────────────────
 
 interface ServicesState {
   services: ServiceLifecycleState[];
   ramBudget: RamBudgetStatus | null;
   profile: HardwareProfile | null;
+  resources: SystemResources | null;
+  resourcePlan: ResourcePlan | null;
   loading: boolean;
   error: string | null;
 
   fetchServices: () => Promise<void>;
   fetchRamBudget: () => Promise<void>;
   fetchProfile: () => Promise<void>;
+  fetchResources: () => Promise<void>;
+  planResources: (profile: HardwareProfileTier, cpuLimit?: number) => Promise<ResourcePlan>;
+  applyResourcePlan: (planId: string, restartNow?: boolean) => Promise<void>;
   startService: (name: string) => Promise<void>;
   stopService: (name: string) => Promise<void>;
   forceStopService: (name: string) => Promise<void>;
   updatePolicy: (name: string, policy: LifecyclePolicy, schedule?: ScheduleConfig) => Promise<void>;
+  updateResourcePolicy: (name: string, patch: ResourcePolicyPatch) => Promise<void>;
+  updateResourcePolicies: (names: string[], patch: ResourcePolicyPatch) => Promise<BulkResourcePolicyResult>;
+  updateGlobalSettings: (patch: Partial<SystemResources['settings']>) => Promise<void>;
   updateServiceFromWS: (event: string, data: Record<string, unknown>) => void;
 }
 
@@ -97,6 +191,8 @@ export const useServicesStore = create<ServicesState>()((set, get) => ({
   services: [],
   ramBudget: null,
   profile: null,
+  resources: null,
+  resourcePlan: null,
   loading: false,
   error: null,
 
@@ -122,6 +218,28 @@ export const useServicesStore = create<ServicesState>()((set, get) => ({
       const res = await api.get<{ data: HardwareProfile }>('/system/profile');
       set({ profile: res.data });
     } catch { /* ignore */ }
+  },
+
+  fetchResources: async () => {
+    try {
+      const res = await api.get<{ data: SystemResources }>('/system/resources');
+      set({ resources: res.data });
+    } catch { /* older Core versions keep the existing profile UI usable */ }
+  },
+
+  planResources: async (profile, cpuLimit) => {
+    const res = await api.post<{ data: ResourcePlan }>('/system/resources/plan', {
+      profile,
+      ...(cpuLimit ? { cpu_limit: cpuLimit } : {}),
+    });
+    set({ resourcePlan: res.data });
+    return res.data;
+  },
+
+  applyResourcePlan: async (planId, restartNow = false) => {
+    await api.post('/system/resources/apply', { plan_id: planId, confirm: true, restart_now: restartNow });
+    set({ resourcePlan: null });
+    await Promise.all([get().fetchResources(), get().fetchProfile(), get().fetchRamBudget(), get().fetchServices()]);
   },
 
   startService: async (name: string) => {
@@ -164,8 +282,36 @@ export const useServicesStore = create<ServicesState>()((set, get) => ({
   },
 
   updatePolicy: async (name: string, policy: LifecyclePolicy, schedule?: ScheduleConfig) => {
-    await api.put(`/services/${name}/policy`, { lifecycle: policy, schedule });
+    await updateServiceResourcePolicy(name, { lifecycle: policy, schedule });
     await get().fetchServices();
+  },
+
+  updateResourcePolicy: async (name, patch) => {
+    await updateServiceResourcePolicy(name, patch);
+    await get().fetchServices();
+  },
+
+  updateResourcePolicies: async (names, patch) => {
+    const results = await Promise.allSettled(
+      names.map((name) => updateServiceResourcePolicy(name, patch)),
+    );
+    const updated: string[] = [];
+    const failed: BulkResourcePolicyResult['failed'] = [];
+    results.forEach((result, index) => {
+      const name = names[index]!;
+      if (result.status === 'fulfilled') updated.push(name);
+      else failed.push({
+        name,
+        error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
+      });
+    });
+    await get().fetchServices();
+    return { updated, failed };
+  },
+
+  updateGlobalSettings: async (patch) => {
+    await api.patch('/system/resources/settings', patch);
+    await get().fetchResources();
   },
 
   updateServiceFromWS: (event: string, data: Record<string, unknown>) => {
