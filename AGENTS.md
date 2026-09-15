@@ -18,3 +18,15 @@ current rule.
 - Do not change unrelated worktree files, generated `dist/` content or secrets.
 - Verify claims and state the validation actually run. Require approval for push,
   publishing and external side effects.
+
+## Planificación de implementaciones
+
+- Antes de preparar o revisar un plan, lee y aplica
+  `../micelclaw-os/codex-skills/micelclaw-impact-planner/SKILL.md`, que enlaza el
+  protocolo y la plantilla canónicos. Investiga relaciones en código antes de
+  diseñar tareas; vincula impactos, tareas y verificaciones.
+- Plan breve si el alcance local está comprobado; matriz y revisión independiente
+  para planes transversales. Incluye wireframes ASCII si cambia la interfaz.
+- Si el checkout de Micelclaw OS u otro consumidor no está disponible, declara
+  esa parte pendiente; no afirmes compatibilidad sin investigarla. Al ejecutar,
+  revalida el código de partida y revisa dependencias nuevas antes de modificarlas.
