@@ -24,19 +24,24 @@ La pantalla muestra la cabecera `Gateway`; los tabs `Overview`, `Channels`,
 | Tabs de Gateway | `src/modules/gateway/GatewayPage.tsx` |
 | Orquestación de Models | `src/modules/gateway/tabs/ModelsTab.tsx` |
 | Grid de proveedores y filas de modelo | `src/modules/gateway/tabs/models/` |
-| Alta de credenciales / custom provider | `src/modules/gateway/components/ModelSetupWizard.tsx` |
+| Auth dinámica OpenClaw | `src/modules/gateway/components/ProviderAuthWizard.tsx` |
+| Custom provider / servidores locales | `src/modules/gateway/components/ModelSetupWizard.tsx` |
 | Estado | `src/stores/gateway.store.ts` |
 | Cliente HTTP | `src/services/gateway.service.ts` |
 
-El grid se deriva de los modelos del catálogo y del overview de proveedores. Las
-tarjetas de alta no sustituyen las tarjetas de proveedores ya presentes: la
-deduplicación usa tanto configuración declarada como credencial disponible.
+El grid consume un catálogo unificado propiedad de OpenClaw. Muestra dos
+secciones: proveedores instalados y plugins oficiales disponibles para instalar.
+Los modelos estáticos de los manifiestos se muestran incluso antes de autenticar
+el proveedor; el catálogo vivo gana cuando está disponible. `Custom Provider` y
+`OmniRoute` son las dos extensiones explícitas de Micelclaw.
 
 ## Contrato con Core
 
-El Dash carga el catálogo mediante `GET /gateway/models/catalog` a través de
-`getModelCatalog()`. Core mantiene la caché, mezcla el catálogo de OpenClaw con
-los proveedores declarados y expone el resultado desde:
+El Dash carga modelos, proveedores instalados, métodos de autenticación y
+proveedores instalables mediante `GET /gateway/models/catalog` a través de
+`getModelCatalog()`. `?refresh=1` fuerza la reconstrucción. Core conserva el
+último snapshot válido si OpenClaw está temporalmente inaccesible y expone el
+resultado desde:
 
 - `micelclaw-os/core/src/routes/gateway/models.routes.ts`
 - `micelclaw-os/core/src/routes/gateway/models-registry.routes.ts`
@@ -44,6 +49,13 @@ los proveedores declarados y expone el resultado desde:
 Las mutaciones normales de modelos y proveedores pasan por Core y su límite
 Gateway RPC/config-patch. No escribas `~/.openclaw/openclaw.json` ni invoques
 la CLI de OpenClaw para mutar configuración de producto.
+
+Los flujos de API key, OAuth y device code se ejecutan dentro de OpenClaw a
+través de `claw-provider-bridge`; el Dash solo representa prompts opacos y nunca
+recibe credenciales ya almacenadas. Los ids que OpenClaw clasifica como
+`cliBackendIds` se ocultan del catálogo general, salvo referencias legacy ya
+configuradas. Esas tarjetas ofrecen una migración al proveedor canónico que
+conserva la ejecución CLI mediante una política `agentRuntime` por modelo.
 
 ## Diagnóstico
 

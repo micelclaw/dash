@@ -30,3 +30,12 @@ current rule.
 - Si el checkout de Micelclaw OS u otro consumidor no está disponible, declara
   esa parte pendiente; no afirmes compatibilidad sin investigarla. Al ejecutar,
   revalida el código de partida y revisa dependencias nuevas antes de modificarlas.
+
+## Procedencia de entidades
+
+- Reutiliza `SourceBadge`/`EntitySource` (y `PhotoSource` en miniaturas) en nuevos
+  dominios. Contrato: `../micelclaw-os/docs/reference/entity-origins.md`.
+- Conserva `origins` en adaptadores, tipos, escrituras/Undo y mezclas de estado;
+  su ausencia no prueba origen local. No infieras marcas por nombre o protocolo.
+- Tras cambiar identidad o conexiones, invalida consumidores montados mediante
+  `useOriginRefresh`; refresca también detalles, búsquedas e hilos abiertos.

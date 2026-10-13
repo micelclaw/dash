@@ -1,5 +1,22 @@
 # Overnight Usability Log
 
+> **HISTÓRICO — CERRADO el 2026-06-24 (40 iteraciones).** Archivado el 2026-08-04.
+> Es la bitácora de un loop nocturno concreto, **no un documento vivo**. No lo uses
+> para decidir a qué módulo le toca una pasada de usabilidad: su tabla de cobertura
+> se quedó en la rama `feat/overnight-usability` y no cubre ni los módulos más
+> grandes ni los posteriores (`sketches`, `crypto`, `drive`, `agents/dreams`,
+> `agents/council`, shell móvil). La premisa técnica de su cabecera tampoco se
+> sostiene: decía «~132 errores pre-existentes» y el árbol de trabajo compila hoy
+> con **33 errores en 16 ficheros**.
+>
+> Lo vigente sobre el estado del dash está en `dash/CLAUDE.md`; la deuda abierta,
+> en `micelclaw-os/docs/roadmap/04_pending-debt.md`. Se conserva por trazabilidad:
+> cada iteración documenta qué se cambió, con qué commit y por qué.
+>
+> **Decisión que este log dejó pendiente y sigue abierta:** la política de idioma
+> del producto (ES / EN / mixto por módulo). Está registrada como pregunta a
+> validar en `dash/CLAUDE.md`.
+
 Bitácora del loop nocturno de usabilidad (`/loop` cada 30 min, rama
 `feat/overnight-usability`). Cada iteración revisa UN módulo del dash e
 implementa mejoras de usabilidad de bajo riesgo. Reglas: solo `dash/`, nunca
@@ -7,7 +24,7 @@ tocar Core, gate de `tsc -b` (mi fichero debe quedar con 0 errores nuevos; el
 dash arrastra ~132 errores pre-existentes documentados en pending-debt), un
 commit por fix, staging selectivo, sin push.
 
-## Cobertura de módulos
+## Cobertura de módulos (congelada al 2026-06-24)
 
 | Módulo | Estado | Última pasada |
 |---|---|---|
