@@ -65,6 +65,11 @@ export interface ChatMessage {
   createdAt: number;
   /** True while we're still receiving deltas for this message. */
   streaming?: boolean;
+  /** Solo en la burbuja-resumen que sustituye a los mensajes plegados
+   *  (M14): cuántos mensajes y cuántos turnos representa. Los contadores
+   *  derivados los suman, así que plegar NO hace bajar el gasto mostrado. */
+  collapsedCount?: number;
+  collapsedTurns?: number;
 }
 
 export interface FileEdit {
@@ -123,6 +128,64 @@ interface OpencodeStreamApi extends OpencodeStreamState {
 
 const RECENT_EDITS_MAX = 50;
 const TOOL_HISTORY_MAX = 50;
+/**
+ * M14 — tope de burbujas EN MEMORIA. `toolHistory` y `recentEdits` ya tenían
+ * el suyo; `messages` era el único que crecía sin límite, y un build largo son
+ * cientos de mensajes con el payload completo de cada tool dentro. No se
+ * pierde nada: los mensajes viven en la base de datos y `refreshMessages` los
+ * vuelve a traer — esto acota lo que el navegador sostiene a la vez.
+ */
+const MESSAGES_MAX = 300;
+/** Y el otro medio kilo: la salida de una tool (un `bash` que escupe miles de
+ *  líneas) se guardaba entera. Se acota AVISANDO, nunca en silencio. */
+const TOOL_OUTPUT_MAX = 20_000;
+
+/**
+ * Deja las últimas `MESSAGES_MAX` y pliega el resto en UNA burbuja-resumen.
+ *
+ * El resumen no es cosmético: `tokensUsed`/`turnsUsed` se DERIVAN de este
+ * array, así que tirar mensajes sin más haría BAJAR el gasto que ve el
+ * usuario a medida que avanza el build — un contador que se encoge miente
+ * peor que uno grande. El resumen se lleva los tokens y los turnos de lo
+ * plegado, y dice cuántos mensajes esconde (siguen en la base de datos).
+ *
+ * Función PURA: se llama dentro de los updaters de `setMessages`, que React
+ * puede invocar dos veces; cualquier efecto lateral aquí contaría doble.
+ */
+function capMessages(list: ChatMessage[]): ChatMessage[] {
+  if (list.length <= MESSAGES_MAX) return list;
+  const dropped = list.slice(0, list.length - MESSAGES_MAX);
+  const keep = list.slice(-MESSAGES_MAX);
+  let tokensInput = 0;
+  let tokensOutput = 0;
+  let turns = 0;
+  let count = 0;
+  for (const m of dropped) {
+    tokensInput += m.tokensInput ?? 0;
+    tokensOutput += m.tokensOutput ?? 0;
+    // Un resumen previo ya trae sus totales: se funden, no se apilan.
+    turns += m.collapsedTurns ?? (m.role === 'assistant' && !m.streaming ? 1 : 0);
+    count += m.collapsedCount ?? 1;
+  }
+  return [{
+    id: 'collapsed-head',
+    role: 'system',
+    parts: [{ type: 'text', text: `… ${count} earlier messages are hidden to keep this page responsive — they are still saved and reload with the project.` }],
+    createdAt: dropped[0]?.createdAt ?? Date.now(),
+    tokensInput,
+    tokensOutput,
+    collapsedCount: count,
+    collapsedTurns: turns,
+  }, ...keep];
+}
+
+/** Recorta una salida enorme dejando dicho que se recortó. Acepta `unknown`
+ *  porque es lo que llega del evento: lo que no sea texto se devuelve tal cual. */
+function capToolOutput<T>(output: T): T | string {
+  if (typeof output !== 'string' || output.length <= TOOL_OUTPUT_MAX) return output;
+  const shown = output.slice(0, TOOL_OUTPUT_MAX);
+  return `${shown}\n\n… (${output.length - TOOL_OUTPUT_MAX} caracteres más; la salida completa está en el workspace)`;
+}
 const SILENT_THRESHOLD_MS = 120_000;
 
 interface WsEnvelope {
@@ -177,7 +240,7 @@ export function useOpencodeStream(
     try {
       const rows = await fetchBuildMessages(projectId);
       const hydratedMessages = rowsToChatMessages(rows);
-      setMessages(hydratedMessages);
+      setMessages(capMessages(hydratedMessages));
       // Seed toolHistory from persisted tool parts so the Activity
       // feed isn't stuck on "(waiting for first action…)" after a
       // page refresh / fresh mount. Without this, toolHistory only
@@ -220,7 +283,6 @@ export function useOpencodeStream(
       const msg = err instanceof Error ? err.message : String(err);
       if (!/410|NOT_V2|PROJECT_NOT_FOUND/i.test(msg)) {
         // checklist is optional — never block on its load
-        // eslint-disable-next-line no-console
         console.warn('[studio] checklist refresh failed:', msg);
       }
     }
@@ -414,7 +476,7 @@ export function useOpencodeStream(
         parts,
         createdAt: Date.now(),
       });
-      return next;
+      return capMessages(next);
     });
   }
 
@@ -471,7 +533,7 @@ export function useOpencodeStream(
           streaming: true,
         });
       }
-      return next;
+      return capMessages(next);
     });
   }
 
@@ -502,7 +564,7 @@ export function useOpencodeStream(
           createdAt: Date.now(),
           streaming: true,
         });
-        return next;
+        return capMessages(next);
       }
       // Update or add the tool part keyed by callId.
       const existingIdx = lastIdx(last.parts, (p) => p.type === 'tool' && (p as ChatToolPart).callId === callId);
@@ -533,7 +595,7 @@ export function useOpencodeStream(
         finalised = {
           ...prevPart,
           status,
-          output: state.output ?? prevPart.output,
+          output: capToolOutput(state.output) ?? prevPart.output,
           error: state.error ?? prevPart.error,
           input: prevPart.input ?? state.input,
           completedAt,
@@ -629,7 +691,7 @@ export function useOpencodeStream(
   // ─── exposed API ───────────────────────────────────────────────
   const pushUserMessage = useCallback((text: string): string => {
     const id = `optim-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setMessages((prev) => [
+    setMessages((prev) => capMessages([
       ...prev,
       {
         id,
@@ -637,7 +699,7 @@ export function useOpencodeStream(
         parts: [{ type: 'text', text }],
         createdAt: Date.now(),
       },
-    ]);
+    ]));
     return id;
   }, []);
 
@@ -647,7 +709,9 @@ export function useOpencodeStream(
     let turns = 0;
     for (const m of messages) {
       tokens += (m.tokensInput ?? 0) + (m.tokensOutput ?? 0);
-      if (m.role === 'assistant' && !m.streaming) turns += 1;
+      // La burbuja-resumen trae los turnos de lo plegado; el resto, uno cada.
+      if (m.collapsedTurns !== undefined) turns += m.collapsedTurns;
+      else if (m.role === 'assistant' && !m.streaming) turns += 1;
     }
     return { tokensUsed: tokens, turnsUsed: turns };
   }, [messages]);
@@ -752,7 +816,7 @@ function convertOcParts(parts: unknown[]): ChatPart[] {
         tool: String(p.tool ?? ''),
         status,
         input: state.input,
-        output: state.output,
+        output: capToolOutput(state.output),
         error: state.error,
         startedAt: start,
         completedAt: end,

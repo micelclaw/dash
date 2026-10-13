@@ -32,24 +32,13 @@ import { RewindButton } from '../components/RewindButton';
 import { StreamDebugOverlay } from '../components/StreamDebugOverlay';
 import { PhaseSidebar } from '../components/PhaseSidebar';
 import { FriendlyError } from '../components/v2/FriendlyError';
-import { DesignSystemPicker } from '../components/DesignSystemPicker';
 import { FichaView } from '../components/FichaView';
-import { WireframeView } from '../components/WireframeView';
-import { MockupPreview } from '../components/MockupPreview';
 import { parseFicha, fichaHasContent } from '../lib/ficha';
-import { parseVisuals, hasWireframes, hasMockups, defaultTokensFromFeel } from '../lib/mockups';
+import { parseVisuals } from '../lib/mockups';
 import { useStudioMode } from '../hooks/useStudioMode';
 import { listDesignPages } from '../design/design.service';
 import { ViewDesignModal } from '../design/ViewDesignModal';
 
-// Frontend "feel" moods (§3.4) — each maps to a short hint folded into
-// the generation context so the DESIGN.md comes out in that character.
-const FEELS: { id: string; emoji: string; label: string; hint: string }[] = [
-  { id: 'elegant', emoji: '🖤', label: 'Sleek & understated', hint: 'neutral tones, lots of space, fine typography' },
-  { id: 'fresh', emoji: '🌈', label: 'Fresh & colorful', hint: 'vivid colors, cheerful, energetic' },
-  { id: 'warm', emoji: '🧡', label: 'Warm & friendly', hint: 'warm tones, rounded, approachable' },
-  { id: 'minimal', emoji: '⚪', label: 'Minimal & clean', hint: 'white, essential, no clutter' },
-];
 
 // Human, Spanish chrome for each doc phase in Guided mode (§3.3–3.5).
 // Only the surrounding copy changes — the generated document body is
@@ -94,7 +83,11 @@ const GUIDED_COPY: Record<'concept' | 'frontend' | 'foundation', {
 export interface DocPhaseLayoutProps {
   project: StudioProject;
   /** Phase identifier matching the WS event payload + cancel route. */
-  phase: 'concept' | 'frontend' | 'foundation';
+  // Solo 'foundation'. Este layout nació sirviendo a las tres fases de
+  // documento; ADR-18 retiró concept y frontend del viaje (hoy se derivan en
+  // silencio) y su único consumidor es FoundationPhase. El tipo ancho dejaba
+  // pasar un `target` de rewind hacia un estado sin pantalla.
+  phase: 'foundation';
   /** The doc field on the project to read the persisted version from. */
   docKey: 'doc_concept' | 'doc_frontend' | 'doc_foundation';
   /** Display title (e.g. "Documento de concepto"). */
@@ -145,26 +138,6 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // `_user_comment` so the backend `concept.service` extracts it and
   // passes it as `userContext` to the initial prompt.
   const [initialContext, setInitialContext] = useState('');
-  // Frontend "feel" pre-step (Guided, §3.4): a mood + brand colors that
-  // steer the DESIGN.md the Frontend phase emits. Folded into the
-  // first-turn user context. Only shown for phase==='frontend' + guided.
-  const [feel, setFeel] = useState<string | null>(null);
-  const [brandColors, setBrandColors] = useState('');
-  // S4 Fase C: live color tweaks on the chosen system ({ primary: "#…" }).
-  // Folded into the Frontend generation context (no persistence — the
-  // emitted DESIGN.md bakes them in). Reset when the base system changes.
-  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({});
-  // The bound base system is project state (persisted server-side).
-  const selectedSystem = project.design_system;
-  // A3: tokens CSS of the BOUND catalog system, fetched once so the
-  // post-generation mockups can be styled with it (else we fall back to
-  // the feel-derived tokens). null while loading / when no system bound.
-  const [boundTokensCss, setBoundTokensCss] = useState<string | null>(null);
-  // The project's OWN DESIGN.md tokens (from doc_frontend) — the mockups are
-  // rendered with THESE so they look on-brand (e.g. the project's dark theme),
-  // not the generic feel default. '' when the doc has no DESIGN.md yet.
-  const [projectTokensCss, setProjectTokensCss] = useState<string>('');
-  const [generatingMockups, setGeneratingMockups] = useState(false);
   // "View design" pill: when the project already has settled Design-mode
   // pages (no variant_group = chosen, not A/B candidates), surface a small
   // peek button in the toolbar of the Concept/Foundation phases.
@@ -173,10 +146,6 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
 
   const cancelGeneration = useStudioStore((s) => s.cancelGeneration);
   const refetchProject = useStudioStore((s) => s.refetchProject);
-  const setDesignSystem = useStudioStore((s) => s.setDesignSystem);
-  const fetchDesignSystemTokens = useStudioStore((s) => s.fetchDesignSystemTokens);
-  const generateMockups = useStudioStore((s) => s.generateMockups);
-  const fetchProjectDesignTokens = useStudioStore((s) => s.fetchProjectDesignTokens);
   const [studioMode] = useStudioMode();
   const guided = studioMode === 'guided';
   const gc = GUIDED_COPY[phase];
@@ -227,11 +196,10 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   }, [project.id, phase]);
 
   // "View design" pill probe — fires ONCE per (project, phase) mount, only
-  // on the Concept/Foundation phases. If the project has Design-mode pages
+  // en la fase del plan. If the project has Design-mode pages
   // that are already settled (no variant_group), the pill shows up so the
   // user can peek at the chosen design while reading the docs.
   useEffect(() => {
-    if (phase !== 'concept' && phase !== 'foundation') return;
     let cancelled = false;
     listDesignPages(project.id)
       .catch(() => null)
@@ -242,46 +210,9 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
     return () => { cancelled = true; };
   }, [phase, project.id]);
 
-  async function pickSystem(slug: string | null) {
-    try {
-      setColorOverrides({}); // tweaks belong to a system; reset on change
-      await setDesignSystem(project.id, slug);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Couldn\'t save the base design');
-    }
-  }
 
-  // A3: fetch the bound catalog system's derived tokens so the mockups can
-  // be styled with the user's actual design (else feel-derived fallback).
-  useEffect(() => {
-    if (!selectedSystem) { setBoundTokensCss(null); return; }
-    let cancelled = false;
-    fetchDesignSystemTokens(selectedSystem)
-      .then((css) => { if (!cancelled) setBoundTokensCss(css); })
-      .catch(() => { if (!cancelled) setBoundTokensCss(null); });
-    return () => { cancelled = true; };
-  }, [selectedSystem, fetchDesignSystemTokens]);
 
-  // The project's OWN DESIGN.md tokens (highest priority for mockups). Fetched
-  // on the frontend phase; deterministic server-side derivation, so it reflects
-  // exactly what the Build phase will use.
-  useEffect(() => {
-    if (phase !== 'frontend') return;
-    let cancelled = false;
-    fetchProjectDesignTokens(project.id)
-      .then((css) => { if (!cancelled) setProjectTokensCss(css || ''); })
-      .catch(() => { if (!cancelled) setProjectTokensCss(''); });
-    return () => { cancelled = true; };
-    // Re-fetch when the frontend doc changes (a new DESIGN.md may have landed).
-  }, [phase, project.id, project.doc_frontend, fetchProjectDesignTokens]);
 
-  // A3: feel-derived tokens for the ALWAYS-ON brand preview + the mockups
-  // fallback. Deterministic, no network — built from the Guided "feel" +
-  // free-text brand colors + the project name.
-  const feelTokensCss = useMemo(
-    () => defaultTokensFromFeel(feel, brandColors, project.name),
-    [feel, brandColors, project.name],
-  );
 
   const isStreaming = state.status === 'starting' || state.status === 'streaming';
   const docFromProject = (project[docKey] ?? '') as string;
@@ -309,38 +240,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
   // Frontend has NO ficha, so `fichaBody` === the body for this phase.
   const visuals = useMemo(() => parseVisuals(fichaBody), [fichaBody]);
   const cleanDocText = visuals.body;
-  const showWireframes = phase === 'frontend' && hasWireframes(visuals);
-  // Resolve the tokens CSS for the mockups, in priority order:
-  //  1. the project's OWN DESIGN.md tokens (what the app is actually built with),
-  //  2. the bound catalog system's tokens (if the user picked one),
-  //  3. the Guided feel-derived default (always non-empty).
-  const mockupTokensCss = projectTokensCss
-    || (selectedSystem ? (boundTokensCss ?? '') : '')
-    || feelTokensCss;
-  const showMockups = phase === 'frontend' && hasMockups(visuals) && mockupTokensCss.length > 0;
 
-  // "Ver cómo se verá (HTML)" — the dedicated mockups step. Shown after the
-  // wireframes when no mockups exist yet (matches the user's flow: ASCII first,
-  // then the HTML on demand). One click → generate → re-render with MockupPreview.
-  async function handleGenerateMockups() {
-    if (generatingMockups) return;
-    setGeneratingMockups(true);
-    try {
-      const out = await generateMockups(project.id);
-      await refetchProject(project.id);
-      try { setProjectTokensCss((await fetchProjectDesignTokens(project.id)) || ''); } catch { /* keep prior */ }
-      if (out.fell_back) {
-        toast('Mockups ready (basic version — the model didn\'t return full HTML).');
-      } else {
-        toast.success('Bocetos en HTML listos');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No pude generar los bocetos');
-    } finally {
-      setGeneratingMockups(false);
-    }
-  }
-  const canGenerateMockups = phase === 'frontend' && showWireframes && !showMockups;
   // Questions: prefer the LIVE-streamed ones (parsed incrementally
   // from the WS token stream as soon as the JSON block closes), fall
   // back to the persisted ones from the project row when not streaming.
@@ -357,25 +257,8 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
       // it into a synthetic answers map under the FREE_COMMENT_ID key
       // so the backend prompt receives it as `userContext`.
       let effectiveAnswers = answers;
-      if (!hasDoc && !answers) {
-        // Compose the first-turn context. For the Frontend phase in
-        // Guided mode, fold the chosen "feel" + brand colors in front of
-        // any free text so the emitted DESIGN.md is on-brand (§3.4).
-        const parts: string[] = [];
-        if (guided && phase === 'frontend') {
-          if (feel) {
-            const f = FEELS.find((x) => x.id === feel);
-            if (f) parts.push(`Sensación deseada: ${f.label} — ${f.hint}.`);
-          }
-          if (brandColors.trim()) parts.push(`Colores/marca: ${brandColors.trim()}.`);
-          // S4 Fase C — fold the user's color tweaks so the DESIGN.md bakes them in.
-          const ov = Object.entries(colorOverrides);
-          if (ov.length > 0) {
-            parts.push(`Ajusta estos colores exactos en el DESIGN.md: ${ov.map(([k, v]) => `${k} ${v}`).join(', ')}.`);
-          }
-        }
-        if (initialContext.trim()) parts.push(initialContext.trim());
-        if (parts.length > 0) effectiveAnswers = { _user_comment: parts.join(' ') };
+      if (!hasDoc && !answers && initialContext.trim()) {
+        effectiveAnswers = { _user_comment: initialContext.trim() };
       }
       await onGenerate(effectiveAnswers);
       // Primary refetch: the HTTP POST only returns AFTER the calling
@@ -428,7 +311,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           {guided ? gc.title : title}
         </h2>
         <div style={{ flex: 1 }} />
-        {hasDesignPages && (phase === 'concept' || phase === 'foundation') && (
+        {hasDesignPages && (
           <button
             type="button"
             onClick={() => setShowDesignModal(true)}
@@ -441,7 +324,10 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           <span style={{
             fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
           }}>
-            {state.tokensUsed} tokens
+            {state.tokensEstimated ? '≈' : ''}{state.tokensUsed} tokens
+            {state.tokensEstimated && (
+              <span title="The provider reported no usage, so this is our estimate"> (estimated)</span>
+            )}
           </span>
         )}
         {isPast ? (
@@ -451,7 +337,7 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
           // to a project still mid-journey. Pass `guided` for Spanish copy.
           ['published', 'frozen', 'archived'].includes(project.status)
             ? null
-            : <RewindButton projectId={project.id} target={phase} guided={guided} />
+            : <RewindButton projectId={project.id} target={phase} projectTarget={project.target} guided={guided} />
         ) : isStreaming ? (
           <button
             type="button"
@@ -503,6 +389,24 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             </div>
           ))}
 
+          {/* The model stopped because it ran out of output room, not because
+              it finished. Without this the document just LOOKS complete — and
+              with providers that report no token usage (tokens_used = 0) there
+              is no other clue. Never blocks: the text is saved and useful. */}
+          {state.truncatedByModel && state.status === 'done' && hasDoc && (
+            <div style={truncatedBanner}>
+              <AlertCircle size={16} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <strong>{guided ? 'Se quedó a medias.' : 'The model ran out of room.'}</strong>
+                <div style={{ marginTop: 4, color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+                  {guided
+                    ? 'El texto está cortado por el final, no terminado. Vuelve a generarlo para tenerlo entero.'
+                    : 'This document is cut off at the end, not finished. Regenerate it to get the rest.'}
+                </div>
+              </div>
+            </div>
+          )}
+
           {!hasDoc && state.status === 'idle' && (
             <div style={emptyState}>
               <Sparkles size={24} style={{ color: 'var(--amber)', marginBottom: 8 }} />
@@ -510,65 +414,6 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
                 {guided ? gc.empty : emptyHint}
               </div>
 
-              {/* "Feel" pre-step (Frontend, Guided, §3.4): mood + brand
-                  colors steer the DESIGN.md the phase emits. */}
-              {!isPast && guided && phase === 'frontend' && (
-                <div style={{ marginTop: 16, width: '100%', maxWidth: 520, textAlign: 'left' }}>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600, marginBottom: 8 }}>
-                    ¿Cómo quieres que se sienta tu app?
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                    {FEELS.map((f) => {
-                      const sel = feel === f.id;
-                      return (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => setFeel(sel ? null : f.id)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', textAlign: 'left',
-                            background: sel ? 'color-mix(in srgb, var(--amber) 12%, var(--card))' : 'var(--card)',
-                            border: `1.5px solid ${sel ? 'var(--amber)' : 'var(--border)'}`,
-                            borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                            color: 'var(--text)',
-                          }}
-                        >
-                          <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{f.emoji}</span>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{f.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <input
-                    value={brandColors}
-                    onChange={(e) => setBrandColors(e.target.value)}
-                    placeholder="Your colors or logo (optional): e.g. 'pink and gold'"
-                    style={{
-                      marginTop: 10, width: '100%', boxSizing: 'border-box', padding: '8px 10px',
-                      fontSize: '0.8rem', background: 'var(--surface)', color: 'var(--text)',
-                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                      fontFamily: 'var(--font-sans)',
-                    }}
-                  />
-
-                  {/* "…or start from a known design" — catalog picker (S4). */}
-                  <div style={{ marginTop: 16, fontSize: '0.85rem', color: 'var(--text)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Palette size={14} style={{ color: 'var(--text-muted)' }} />
-                    …o parte de un diseño que ya te guste
-                  </div>
-                  <DesignSystemPicker
-                    value={selectedSystem}
-                    onSelect={(slug) => { void pickSystem(slug); }}
-                    previewOverrides={colorOverrides}
-                    onPreviewOverride={(name, value) => setColorOverrides((prev) => ({ ...prev, [name]: value }))}
-                    onResetPreviewOverrides={() => setColorOverrides({})}
-                    fallbackTokensCss={feelTokensCss}
-                  />
-                  <div style={{ marginTop: 10, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                    Siempre incluyo accesibilidad, responsive, buenos nombres y patrones de componentes.
-                  </div>
-                </div>
-              )}
 
               {/* First-turn context input — phase-specific copy */}
               {!isPast && initialContextLabel && (
@@ -673,45 +518,9 @@ export function DocPhaseLayout(props: DocPhaseLayoutProps) {
             </>
           )}
 
-          {/* A3 — Frontend visual previews. In Guided: the wireframe cards +
-              real mockups come FIRST and the technical markdown sits behind
-              "Ver detalles". In Pro: markdown stays primary, visuals below. */}
-          {hasDoc && phase === 'frontend' && !showFicha && (
-            guided ? (
-              <>
-                {showWireframes && <WireframeView screens={visuals.wireframes} />}
-                {canGenerateMockups && (
-                  <MockupsCta generating={generatingMockups} onClick={handleGenerateMockups} guided />
-                )}
-                {showMockups && <MockupPreview screens={visuals.mockups} tokensCss={mockupTokensCss} />}
-                {cleanDocText.length > 0 && (
-                  (showWireframes || showMockups) ? (
-                    <details style={{ marginBottom: 8 }}>
-                      <summary style={detailsSummary}>Ver detalles</summary>
-                      <div style={{ marginTop: 8 }}>
-                        <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
-                      </div>
-                    </details>
-                  ) : (
-                    <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
-                  )
-                )}
-              </>
-            ) : (
-              <>
-                <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
-                {showWireframes && <WireframeView screens={visuals.wireframes} />}
-                {canGenerateMockups && (
-                  <MockupsCta generating={generatingMockups} onClick={handleGenerateMockups} />
-                )}
-                {showMockups && <MockupPreview screens={visuals.mockups} tokensCss={mockupTokensCss} />}
-              </>
-            )
-          )}
 
-          {/* Everything else (Concept/Foundation without a ficha, e.g. Pro
-              mode or malformed payload) — plain markdown fallback. */}
-          {hasDoc && phase !== 'frontend' && !showFicha && (
+          {/* Sin ficha (modo Pro o payload malformado) — markdown a secas. */}
+          {hasDoc && !showFicha && (
             <StreamingMarkdown text={cleanDocText} streaming={isStreaming} />
           )}
 
@@ -889,6 +698,15 @@ const errorBanner: React.CSSProperties = {
   color: 'var(--text)', fontSize: '0.8125rem',
 };
 
+const truncatedBanner: React.CSSProperties = {
+  display: 'flex', alignItems: 'flex-start', gap: 10,
+  padding: 14, marginBottom: 16,
+  background: 'color-mix(in srgb, var(--amber) 12%, var(--card))',
+  border: '1px solid color-mix(in srgb, var(--amber) 40%, var(--border))',
+  borderRadius: 'var(--radius-md)',
+  color: 'var(--text)', fontSize: '0.8125rem',
+};
+
 const emptyState: React.CSSProperties = {
   padding: 32, textAlign: 'center',
   background: 'var(--card)',
@@ -910,36 +728,3 @@ const detailsSummary: React.CSSProperties = {
 
 /** CTA shown under the wireframes to generate the rendered HTML mockups
  *  ("así se verá tu app") — the dedicated mockups step. */
-function MockupsCta({ generating, onClick, guided }: { generating: boolean; onClick: () => void; guided?: boolean }) {
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-      margin: '10px 0 14px',
-    }}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={generating}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px',
-          background: generating ? 'var(--card)' : 'var(--amber)',
-          color: generating ? 'var(--text-dim)' : '#000',
-          border: generating ? '1px solid var(--border)' : 'none',
-          borderRadius: 'var(--radius-md)', fontSize: '0.85rem', fontWeight: 600,
-          cursor: generating ? 'default' : 'pointer', fontFamily: 'var(--font-sans)',
-        }}
-      >
-        {generating
-          ? <><Loader2 size={15} className="animate-spin" /> Drawing the mockups…</>
-          : <><Sparkles size={15} /> See how it'll look (HTML)</>}
-      </button>
-      {!generating && (
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          {guided
-            ? 'Turn the sketches above into real screens with your design.'
-            : 'Generate rendered HTML mockups from the wireframes + design tokens.'}
-        </span>
-      )}
-    </div>
-  );
-}

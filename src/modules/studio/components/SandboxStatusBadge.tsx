@@ -50,7 +50,7 @@ export function SandboxStatusBadge({ projectId }: Props) {
     }
   }
 
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [projectId]);
+  useEffect(() => { refresh(); }, [projectId]);
 
   if (loading && !status) {
     return null;

@@ -11,21 +11,28 @@
 // instant-preview reflects the pick.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X, Check, Star } from 'lucide-react';
+import { Search, X, Check, Star, Plus, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useStudioStore, type StudioDesignSystem } from '@/stores/studio.store';
+import { api } from '@/services/api';
+import { ImportBrandDialog } from './ImportBrandDialog';
 
 interface Props {
   value: string | null;
   onSelect: (slug: string | null) => void;
   onClose: () => void;
+  /** Enables the optional model draft in the import dialog. */
+  projectId?: string;
 }
 
-export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
+export function DesignSystemGalleryModal({ value, onSelect, onClose, projectId }: Props) {
   const searchDesignSystems = useStudioStore((s) => s.searchDesignSystems);
   const [all, setAll] = useState<StudioDesignSystem[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +41,19 @@ export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
       .catch(() => { if (!cancelled) setAll([]); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [searchDesignSystems]);
+  }, [searchDesignSystems, reloadKey]);
+
+  // Deleting is soft server-side; a bound project keeps its pinned copy.
+  async function handleDelete(slug: string, name: string) {
+    try {
+      await api.delete(`/studio/design-systems/${encodeURIComponent(slug)}`);
+      toast.success(`Removed "${name}"`);
+      if (value === slug) onSelect(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove it');
+    }
+  }
 
   // Esc closes.
   useEffect(() => {
@@ -54,8 +73,10 @@ export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
       (!category || s.category === category) &&
       (!q || s.slug.includes(q) || s.name.toLowerCase().includes(q)),
     );
-    // First-party first, then keep catalog order (already name-sorted).
-    return [...list].sort((a, b) => Number(!!b.first_party) - Number(!!a.first_party));
+    // Yours first, then first-party, then catalog order (already name-sorted).
+    return [...list].sort((a, b) =>
+      Number(!!b.owned) - Number(!!a.owned)
+      || Number(!!b.first_party) - Number(!!a.first_party));
   }, [all, query, category]);
 
   return (
@@ -99,6 +120,23 @@ export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
             <div style={{ textAlign: 'center', color: 'var(--text-dim)', padding: '40px 0', fontSize: '0.82rem' }}>Loading…</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
+              {/* Your own brand, first: the most specific thing in the picker. */}
+              <button
+                type="button"
+                data-import-brand-card
+                onClick={() => setImporting(true)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4,
+                  padding: '11px 12px', textAlign: 'left', background: 'var(--surface)',
+                  border: '1px dashed var(--amber)', borderRadius: 'var(--radius-md)',
+                  cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>
+                  <Plus size={12} style={{ color: 'var(--amber)' }} /> Import my brand
+                </span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>your colours, fonts and rules</span>
+              </button>
               {shown.map((s) => {
                 const sel = value === s.slug;
                 return (
@@ -116,13 +154,25 @@ export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
                       borderRadius: 'var(--radius-md)', cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.82rem', fontWeight: 600, color: 'var(--text)', width: '100%' }}>
                       {s.first_party && <Star size={11} style={{ color: 'var(--amber)', fill: 'var(--amber)' }} />}
                       {sel && <Check size={12} style={{ color: 'var(--amber)' }} />}
-                      {s.name}
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                      {s.owned && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Remove ${s.name}`}
+                          onClick={(e) => { e.stopPropagation(); void handleDelete(s.slug, s.name); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); void handleDelete(s.slug, s.name); } }}
+                          style={{ display: 'flex', color: 'var(--text-muted)', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={11} />
+                        </span>
+                      )}
                     </span>
                     <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                      {s.category}{s.has_brand ? ' · inspired by' : ''}
+                      {s.owned ? 'yours' : `${s.category}${s.has_brand ? ' · inspired by' : ''}`}
                     </span>
                   </button>
                 );
@@ -134,6 +184,14 @@ export function DesignSystemGalleryModal({ value, onSelect, onClose }: Props) {
           )}
         </div>
       </div>
+
+      {importing && (
+        <ImportBrandDialog
+          projectId={projectId}
+          onClose={() => setImporting(false)}
+          onImported={(slug) => { setReloadKey((k) => k + 1); onSelect(slug); onClose(); }}
+        />
+      )}
     </div>
   );
 }

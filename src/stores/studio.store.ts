@@ -86,6 +86,14 @@ export interface StudioProject {
     questions?: Array<{ id: string; question: string; options?: string[]; multi?: boolean }>;
     answers?: Record<string, string>;
     generated_at?: string;
+    /** Unified-funnel intake draft (ADR-18): persisted sub-step +
+     *  confirmation so an F5 resumes exactly where the user was. */
+    intake?: {
+      step?: 'compose' | 'questions' | 'agreement';
+      confirmed_at?: string;
+      suggested_target?: string;
+      migrated_from?: string;
+    };
   };
   doc_concept: string | null;
   doc_frontend: string | null;
@@ -160,6 +168,9 @@ export interface StudioDesignSystem {
   /** First-party system (e.g. "Micelclaw OS") — pinned to the front of
    *  the picker grid. */
   first_party?: boolean;
+  /** The user's OWN imported brand (migration 0286) — removable, and shown
+   *  ahead of the catalog. */
+  owned?: boolean;
 }
 
 /** The engines that can RUN a governed Studio build (GET /studio/engines).
@@ -194,14 +205,13 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
   icon?: string;
-  /** `<provider>/<model>` identifier picked in the create wizard.
-   *  Applies to every LLM call for this project. */
+  /** `<provider>/<model>` identifier. Applies to every LLM call for this
+   *  project; null = the server resolves the recommended one on first use. */
   model?: string | null;
   /** Which engine runs the build (default 'opencode' server-side). */
   engine?: StudioEngineId;
-  /** WHAT the project produces (default 'micelclaw_app'). 'design'
-   *  creates a design-only canvas project. */
-  target?: StudioTarget;
+  // NOTE (ADR-18): no `target` at create — every project is born pre-target
+  // (design intake); the target commits at Continue after the design.
 }
 
 export interface UpdateProjectInput {
@@ -271,15 +281,10 @@ interface StudioState {
   getProject: (id: string) => StudioProject | undefined;
 
   // Scoping (Phase 2)
-  fetchScopingTree: (projectId: string) => Promise<ScopingTree>;
-  previewScoping: (projectId: string, answers: ScopingAnswers) => Promise<ScopingClassification>;
-  submitScoping: (projectId: string, answers: ScopingAnswers) => Promise<ScopingClassification>;
 
   // Generation (Phase 3+)
-  generateConcept: (projectId: string, answers?: Record<string, string>) => Promise<{ stream_id: string; tokens_used: number }>;
-  generateFrontend: (projectId: string, answers?: Record<string, string>) => Promise<{ stream_id: string; tokens_used: number }>;
   generateFoundation: (projectId: string, answers?: Record<string, string>) => Promise<{ stream_id: string; tokens_used: number }>;
-  approvePhase: (projectId: string, phase: 'concept' | 'frontend' | 'foundation', comment?: string) => Promise<{ status: string }>;
+  approvePhase: (projectId: string, phase: 'foundation', comment?: string) => Promise<{ status: string }>;
   cancelGeneration: (projectId: string, phase: string) => Promise<void>;
   refetchProject: (projectId: string) => Promise<StudioProject | null>;
 
@@ -317,7 +322,6 @@ interface StudioState {
 
   // Phase 11: templates + activity
   fetchTemplates: () => Promise<StudioTemplateMeta[]>;
-  instantiateTemplate: (slug: string, name?: string) => Promise<StudioProject>;
   fetchActivity: () => Promise<StudioActivityReport>;
 
   // Rewind: roll back to an earlier phase, cascade-clearing downstream
@@ -497,7 +501,11 @@ export interface StudioTestMessage {
   created_at: string;
 }
 
-export type StudioRewindTarget = 'scoping' | 'concept' | 'frontend' | 'foundation';
+// Espejo de `RewindTarget` en `core/src/studio/services/rewind.service.ts`.
+// Este espejo se quedó atrás: no tenía 'design' (el destino que ADR-18 hizo
+// canónico) y sí los tres retirados, lo que dejaba pasar por tipo el botón que
+// rebobinaba a `frontend` — un estado sin pantalla donde aterrizar.
+export type StudioRewindTarget = 'design' | 'foundation';
 
 export interface StudioTemplatePlaceholders {
   concept?: string;
@@ -662,43 +670,8 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
 
   // ─── Scoping (Phase 2) ────────────────────────────────────────────
 
-  async fetchScopingTree(projectId) {
-    const res = await api.get<ApiEnvelope<ScopingTree>>(
-      `/studio/projects/${projectId}/scoping/questions`,
-    );
-    return res.data;
-  },
 
-  async previewScoping(projectId, answers) {
-    const res = await api.post<ApiEnvelope<ScopingClassification>>(
-      `/studio/projects/${projectId}/scoping/preview`,
-      { answers },
-    );
-    return res.data;
-  },
 
-  async submitScoping(projectId, answers) {
-    const res = await api.post<ApiEnvelope<{
-      project: StudioProject;
-      app_level: AppLevel;
-      detected_components: string[];
-      credits_estimate: number;
-      scope?: Record<string, unknown>;
-    }>>(
-      `/studio/projects/${projectId}/scoping/answers`,
-      { answers },
-    );
-    const { project, app_level, detected_components, credits_estimate } = res.data;
-    set((state) => ({
-      projects: state.projects.map((p) => (p.id === projectId ? project : p)),
-    }));
-    return {
-      scope: project.scope,
-      app_level,
-      detected_components,
-      credits_estimate,
-    };
-  },
 
   // ─── Generation (Phase 3+) ────────────────────────────────────────
   //
@@ -709,23 +682,7 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
   // We use a 10-minute timeout for every Studio endpoint that triggers
   // an LLM call so the await holds until the runner truly finishes.
 
-  async generateConcept(projectId, answers) {
-    const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
-      `/studio/projects/${projectId}/generate/concept`,
-      answers ? { answers } : {},
-      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
-    );
-    return res.data;
-  },
 
-  async generateFrontend(projectId, answers) {
-    const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
-      `/studio/projects/${projectId}/generate/frontend`,
-      answers ? { answers } : {},
-      { timeout: STUDIO_LONG_RUNNING_TIMEOUT_MS },
-    );
-    return res.data;
-  },
 
   async generateFoundation(projectId, answers) {
     const res = await api.post<ApiEnvelope<{ stream_id: string; tokens_used: number }>>(
@@ -828,15 +785,6 @@ export const useStudioStore = create<StudioState>()((set, get) => ({
     const list = res.data ?? [];
     set({ templates: list });
     return list;
-  },
-
-  async instantiateTemplate(slug, name) {
-    const res = await api.post<ApiEnvelope<StudioProject>>(
-      `/studio/templates/${slug}/instantiate`,
-      name ? { name } : {},
-    );
-    set((state) => ({ projects: [res.data, ...state.projects] }));
-    return res.data;
   },
 
   async fetchActivity() {

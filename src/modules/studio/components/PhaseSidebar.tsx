@@ -23,7 +23,7 @@
 // in places that haven't migrated to the rewind-aware layout (mostly
 // during incremental refactors).
 
-import { Check, Lock, Hammer, Sparkles, LayoutGrid, ListChecks, Rocket, Package, FlaskConical } from 'lucide-react';
+import { Check, Lock, ListChecks, Rocket, Package, FlaskConical, Palette } from 'lucide-react';
 import type { StudioProject, StudioProjectStatus } from '@/stores/studio.store';
 // M22: pipeline order lives in lib/phases.ts (SSOT shared with ProjectDetailPage).
 import { statusIndex } from '../lib/phases';
@@ -41,9 +41,7 @@ interface Props {
 
 // Human-language phase names for Guided mode (§3 journey mapping).
 const HUMAN_LABELS: Partial<Record<StudioProjectStatus, string>> = {
-  scoping: 'Your idea',
-  concept: 'The agreement',
-  frontend: 'The design',
+  design: 'Your idea & design',
   foundation: 'The plan',
   build: 'Building',
   testing: 'Test it',
@@ -61,21 +59,26 @@ interface PhaseEntry {
   applicable: boolean;
 }
 
+// Unified funnel (ADR-18): the rail starts at Design (intake + canvas,
+// pre-target) and dims per BRANCH once the target commits at Continue:
+//   website        → plan + build + testing dimmed (pages ARE the site)
+//   webapp/mobile  → plan dimmed (no backend of their own)
+//   pre-target     → nothing dimmed (unknown ≠ inapplicable, UX-5)
+// The last chip is target-aware: Install (.claw) vs Publish (static).
 function buildPhases(project: StudioProject): PhaseEntry[] {
+  const target = project.target;
+  const preTarget = target === 'design';
+  const isStatic = target === 'website' || target === 'webapp' || target === 'mobile';
   const isL1 = project.app_level === 'L1';
-  // needs_ui is only resolved AFTER scoping. Default unknown → applies, so the
-  // rail doesn't gain "The design" the moment scoping finishes.
-  const needsUi = project.scope?.needs_ui;
-  const uiApplies = !isL1 && needsUi !== false;
-  const backendApplies = !isL1;
+  const planApplies = preTarget || (!isStatic && !isL1);
+  const buildApplies = preTarget || (target !== 'website' && !isL1);
+  const testApplies = preTarget || target !== 'website';
   return [
-    { id: 'scoping', label: 'Scope', icon: Hammer, applicable: true },
-    { id: 'concept', label: 'Concept', icon: Sparkles, applicable: true },
-    { id: 'frontend', label: 'Frontend', icon: LayoutGrid, applicable: uiApplies },
-    { id: 'foundation', label: 'Foundation', icon: ListChecks, applicable: backendApplies },
-    { id: 'build', label: 'Build', icon: Rocket, applicable: backendApplies },
-    { id: 'testing', label: 'Testing', icon: FlaskConical, applicable: true },
-    { id: 'packaging', label: 'Packaging', icon: Package, applicable: true },
+    { id: 'design', label: 'Design', icon: Palette, applicable: true },
+    { id: 'foundation', label: 'Plan', icon: ListChecks, applicable: planApplies },
+    { id: 'build', label: 'Build', icon: Rocket, applicable: buildApplies },
+    { id: 'testing', label: 'Testing', icon: FlaskConical, applicable: testApplies },
+    { id: 'packaging', label: isStatic ? 'Publish' : 'Install', icon: Package, applicable: true },
   ];
 }
 
@@ -121,7 +124,7 @@ export function PhaseSidebar({ project, viewedPhase, onSelect, guided }: Props) 
     const content = (
       <>
         <Icon size={13} style={{ color: iconColor, flexShrink: 0 }} />
-        <span>{guided ? (HUMAN_LABELS[p.id] ?? p.label) : p.label}</span>
+        <span>{guided ? (p.id === 'packaging' ? p.label : (HUMAN_LABELS[p.id] ?? p.label)) : p.label}</span>
         {isCurrent && !isViewed && (
           <span style={{
             fontSize: '0.5625rem',

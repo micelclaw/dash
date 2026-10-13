@@ -26,12 +26,17 @@ import { toast } from 'sonner';
 import {
   useStudioStore,
   type StudioRewindTarget,
+  type StudioTarget,
 } from '@/stores/studio.store';
 
 interface Props {
   projectId: string;
   /** Phase to rewind to. Must be ≤ project.status (caller's contract). */
   target: StudioRewindTarget;
+  /** The PROJECT's target (ADR-17/18). Only `micelclaw_app` builds a `.claw`
+   *  package; the static targets ship a site ZIP, so the dialog must not
+   *  promise to delete an artifact that never existed. Omitted → app copy. */
+  projectTarget?: StudioTarget | null;
   /** Optional override label for the trigger button (default: "Rewind here to edit"). */
   label?: string;
   /** Guided mode (D5): Spanish, reassuring copy framed as a safety net
@@ -44,49 +49,52 @@ interface Props {
 // Honest: the generated build is discarded; the idea/design/data are kept.
 const GUIDED_KEPT = 'Your idea, your design and your data are kept.';
 const GUIDED_LOST: Record<StudioRewindTarget, string> = {
-  scoping: 'Everything generated (design, plan and what was built) is deleted and you start over from your idea.',
-  concept: 'The design, the plan and what was built so far are discarded.',
-  frontend: 'The plan and what was built so far are discarded.',
+  design: 'The plan and what was built so far are discarded, and you go back to choosing what this should be.',
   foundation: 'What I\'ve built so far is discarded — I can rebuild it whenever you want.',
 };
 
 // Mirror of the cleared-fields table in `core/src/studio/services/rewind.service.ts`.
 // Used purely for the dialog copy.
-const CLEARED_BY_TARGET: Record<StudioRewindTarget, string[]> = {
-  scoping: [
-    'the entire scope (answers + scope + level)',
-    'the concept document',
-    'the frontend document',
-    'the foundation document',
-    'the build session + agent chat history',
-    'all generated code in the workspace',
-    'the test results',
-    'the built .claw package',
-  ],
-  concept: [
-    'the frontend document',
-    'the foundation document',
-    'the build session + agent chat history',
-    'all generated code in the workspace',
-    'the test results',
-    'the built .claw package',
-  ],
-  frontend: [
-    'the foundation document',
-    'the build session + agent chat history',
-    'all generated code in the workspace',
-    'the test results',
-    'the built .claw package',
-  ],
-  foundation: [
-    'the build session + agent chat history',
-    'all generated code in the workspace',
-    'the test results',
-    'the built .claw package',
-  ],
+//
+// The LAST entry is the packaged artifact and it is target-dependent: the
+// server clears the same `package_*` columns for everyone, but what those
+// columns point at is a `.claw` bundle only for `micelclaw_app`. The static
+// targets (website/webapp/mobile) are packaged by `packageStaticSite` as
+// `<slug>-<version>-site.zip` — telling their owner we delete "the built
+// .claw package" names a file they never had.
+const PACKAGE_LINE: Record<StudioTarget, string> = {
+  micelclaw_app: 'the built .claw package',
+  website: 'the built site ZIP',
+  webapp: 'the built site ZIP',
+  mobile: 'the built site ZIP',
+  design: 'the exported ZIP',
 };
 
-export function RewindButton({ projectId, target, label, guided }: Props) {
+function packageLine(projectTarget?: StudioTarget | null): string {
+  return PACKAGE_LINE[projectTarget ?? 'micelclaw_app'] ?? PACKAGE_LINE.micelclaw_app;
+}
+
+function clearedFor(target: StudioRewindTarget, projectTarget?: StudioTarget | null): string[] {
+  const tail = [
+    'the build session + agent chat history',
+    'all generated code in the workspace',
+    'the test results',
+    packageLine(projectTarget),
+  ];
+  switch (target) {
+    case 'design':
+      return [
+        'the type you chose (app / website / …) and its scope',
+        'the plan document',
+        ...tail,
+      ];
+    case 'foundation':
+    default:
+      return tail;
+  }
+}
+
+export function RewindButton({ projectId, target, projectTarget, label, guided }: Props) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
@@ -164,7 +172,7 @@ export function RewindButton({ projectId, target, label, guided }: Props) {
                   margin: '0 0 12px', paddingLeft: 18,
                   fontSize: '0.75rem', color: 'var(--text)', lineHeight: 1.6,
                 }}>
-                  {CLEARED_BY_TARGET[target].map((item) => (
+                  {clearedFor(target, projectTarget).map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>

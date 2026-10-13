@@ -76,7 +76,6 @@ export function BuildChecklist({ projectId, items, defaultExpanded }: Props) {
       // error so the user knows the change didn't stick instead of silently
       // swallowing it.
       const msg = err instanceof Error ? err.message : String(err);
-      // eslint-disable-next-line no-console
       console.warn('[checklist] patch failed', err);
       toast.error(`No se pudo actualizar "${item.text}": ${msg}`);
     } finally {

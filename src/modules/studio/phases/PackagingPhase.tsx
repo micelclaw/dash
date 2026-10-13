@@ -142,7 +142,11 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
                     <Download size={14} /> Download ZIP
                   </a>
                 )}
-                {isPast && <RewindButton projectId={project.id} target="frontend" label={guided ? undefined : 'Rewind to design'} guided={guided} />}
+                {/* A `design` — que es lo que esta etiqueta promete. Apuntaba a
+                    `frontend`, un estado que desde ADR-18 no tiene pantalla: el
+                    proyecto aterrizaba en "Nothing to show for this phase" sin
+                    ningún chip donde pinchar para salir. */}
+                {isPast && <RewindButton projectId={project.id} target="design" projectTarget={project.target} label={guided ? undefined : 'Rewind to design'} guided={guided} />}
               </div>
             </div>
           )}
@@ -166,7 +170,7 @@ export function PackagingPhase({ project, viewMode = 'edit', onSelectPhase }: Pr
 
             <div style={{ display: 'flex', gap: 8 }}>
               {isPast ? (
-                <RewindButton projectId={project.id} target="foundation" label={guided ? undefined : 'Rewind to foundation'} guided={guided} />
+                <RewindButton projectId={project.id} target="foundation" projectTarget={project.target} label={guided ? undefined : 'Rewind to foundation'} guided={guided} />
               ) : (
                 <button
                   type="button"

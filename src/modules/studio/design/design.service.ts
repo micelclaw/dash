@@ -26,10 +26,50 @@ export interface DesignPage {
   updated_at: string;
 }
 
+/** One brand-audit finding on a page (computed server-side on read). */
+export interface DesignIssue {
+  kind: 'hardcoded_color' | 'undeclared_token';
+  line: number;
+  /** Offset inside the line — generated CSS is often one minified line. */
+  column: number;
+  value: string;
+  /** Window of the source centred on the finding. */
+  snippet: string;
+}
+
+/** Aviso (nunca bloqueo) de que una versión nueva se dejó contenido. */
+export interface ContentWarning {
+  missing: string[];
+  lost: number;
+  before: number;
+}
+
+export interface DesignAudit {
+  ok: boolean;
+  issues: DesignIssue[];
+  truncated: boolean;
+}
+
+/** Pantalla que quedó a medias (no cierra `</html>`). Derivado al leer, como
+ *  la auditoría de marca: son víctimas de la tijera de 20.000 que ya no
+ *  existe, pero su HTML mutilado sigue guardado. */
+export interface PageIncomplete {
+  reason: 'no_closing_html';
+  chars: number;
+  /** El corte cayó justo en el viejo tope: fue la tijera, no otra cosa. */
+  guillotine: boolean;
+  /** Texto listo para la barra de instrucción. Pide COMPLETAR, no rehacer. */
+  suggested_instruction: string;
+}
+
 export interface DesignPagesResponse {
   pages: DesignPage[];
   design_md: string | null;
   design_system: string | null;
+  /** Only pages WITH findings appear here (keyed by page id). */
+  audit?: Record<string, DesignAudit>;
+  /** Idem: solo las pantallas cortadas (keyed by page id). */
+  incomplete?: Record<string, PageIncomplete>;
 }
 
 export interface ElementRef {
@@ -47,6 +87,17 @@ const GEN_TIMEOUT = 10 * 60 * 1000;
 
 export async function listDesignPages(projectId: string): Promise<DesignPagesResponse> {
   const res = await api.get<Envelope<DesignPagesResponse>>(`/studio/projects/${projectId}/design/pages`);
+  return res.data;
+}
+
+/** "Fix" button of the brand badge: routes the repair through the normal
+ *  edit path, so it lands as a regular version (revertible). */
+export async function fixPageBrand(projectId: string, pageId: string): Promise<{
+  fixed: boolean; version?: number; before?: number; after?: number; audit: DesignAudit; pages?: DesignPage[]; content_warning?: ContentWarning | null;
+}> {
+  const res = await api.post<Envelope<{ fixed: boolean; version?: number; before?: number; after?: number; audit: DesignAudit; pages?: DesignPage[]; content_warning?: ContentWarning | null }>>(
+    `/studio/projects/${projectId}/design/pages/${pageId}/fix-brand`, {}, { timeout: GEN_TIMEOUT },
+  );
   return res.data;
 }
 
@@ -95,6 +146,21 @@ export async function fetchDesignTemplate(slug: string): Promise<DesignTemplateM
   return res.data.template;
 }
 
+/** Persist the intake draft (ADR-18): sub-step + answers (shallow-merged
+ *  server-side) + template/style + edited idea. Fire on every sub-step
+ *  transition so an F5 resumes, and BEFORE the no-UI Continue (which never
+ *  passes through /design/generate). */
+export async function updateIntake(projectId: string, patch: {
+  step?: 'compose' | 'questions' | 'agreement';
+  answers?: Record<string, string>;
+  template?: string | null;
+  design_system?: string | null;
+  description?: string;
+  confirmed?: boolean;
+}): Promise<void> {
+  await api.patch(`/studio/projects/${projectId}/intake`, patch);
+}
+
 /** LLM-tailored questionnaire (visual questions + the fixed functional
  *  block). Can take ~15-30s — the caller shows a skeleton. */
 export async function fetchBriefQuestions(projectId: string, template?: string | null): Promise<DesignBriefQuestion[]> {
@@ -130,12 +196,33 @@ export async function createDesignPage(projectId: string, name: string, brief?: 
   return res.data;
 }
 
+export interface EditPageResult {
+  applied: Array<{ page_id: string; version: number }>;
+  /** Pantallas que fallaron en "aplicar a todas" (el toast debe ser honesto). */
+  failed?: Array<{ page_id: string; name: string; error: string }>;
+  /** Pantallas donde la edición perdió contenido. */
+  warned?: Array<{ page_id: string; name: string; warning: ContentWarning }>;
+  content_warning?: ContentWarning | null;
+  pages: DesignPage[];
+}
+
 export async function editDesignPage(projectId: string, pageId: string, body: {
   instruction: string; element?: ElementRef | null; apply_all?: boolean;
-}): Promise<{ applied: Array<{ page_id: string; version: number }>; pages: DesignPage[] }> {
-  const res = await api.post<Envelope<{ applied: Array<{ page_id: string; version: number }>; pages: DesignPage[] }>>(
+  /** Versión que se estaba viendo cuando el usuario seleccionó el elemento.
+   *  El servidor solo edita por fragmento (sin tocar el resto del documento)
+   *  si coincide con la actual: `claw_id` es un índice posicional y solo es
+   *  exacto mientras el documento no cambie. Si no coincide, el servidor cae
+   *  al camino completo sin error. */
+  based_on_version?: number;
+}): Promise<EditPageResult> {
+  const res = await api.post<Envelope<EditPageResult>>(
     `/studio/projects/${projectId}/design/pages/${pageId}/edit`,
-    { instruction: body.instruction, element: body.element ?? undefined, apply_all: body.apply_all },
+    {
+      instruction: body.instruction,
+      element: body.element ?? undefined,
+      apply_all: body.apply_all,
+      based_on_version: body.based_on_version,
+    },
     { timeout: GEN_TIMEOUT },
   );
   return res.data;
@@ -149,6 +236,17 @@ export async function saveDeterministicVersion(projectId: string, pageId: string
   return res.data.version;
 }
 
+/** El HTML de UNA versión — lectura pura: mirar una versión antigua ya no
+ *  exige restaurarla (y por tanto ya no ensucia el historial). */
+export async function getDesignVersion(projectId: string, pageId: string, version: number): Promise<{
+  version: number; html: string; source: string; instruction: string | null; created_at: string;
+}> {
+  const res = await api.get<Envelope<{ version: number; html: string; source: string; instruction: string | null; created_at: string }>>(
+    `/studio/projects/${projectId}/design/pages/${pageId}/versions/${version}`,
+  );
+  return res.data;
+}
+
 export async function listDesignVersions(projectId: string, pageId: string): Promise<Array<{ version: number; source: string; instruction: string | null; created_at: string }>> {
   const res = await api.get<Envelope<{ versions: Array<{ version: number; source: string; instruction: string | null; created_at: string }> }>>(
     `/studio/projects/${projectId}/design/pages/${pageId}/versions`,
@@ -156,11 +254,11 @@ export async function listDesignVersions(projectId: string, pageId: string): Pro
   return res.data.versions;
 }
 
-export async function revertDesignVersion(projectId: string, pageId: string, version: number): Promise<number> {
-  const res = await api.post<Envelope<{ version: number }>>(
+export async function revertDesignVersion(projectId: string, pageId: string, version: number): Promise<{ version: number; created: boolean }> {
+  const res = await api.post<Envelope<{ version: number; created?: boolean }>>(
     `/studio/projects/${projectId}/design/pages/${pageId}/revert`, { version },
   );
-  return res.data.version;
+  return { version: res.data.version, created: res.data.created !== false };
 }
 
 export async function deleteDesignPage(projectId: string, pageId: string): Promise<DesignPage[]> {

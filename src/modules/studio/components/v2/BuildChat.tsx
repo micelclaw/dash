@@ -18,7 +18,7 @@
 // render as inline ToolCallCards. Text content uses ReactMarkdown for
 // the same look and feel as v1 chats.
 
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Send, Square, Loader2 } from 'lucide-react';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { useStudioStore } from '@/stores/studio.store';
@@ -231,7 +231,14 @@ export function BuildChat({
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+/**
+ * M17 — memoizada. `messages` se reemplaza entero en CADA token del stream,
+ * pero solo el ÚLTIMO mensaje cambia de identidad: sin `memo`, un build de
+ * 200 burbujas volvía a renderizar —y a re-parsear el markdown de— las 200 por
+ * cada token que llegaba. Con la comparación superficial por defecto basta:
+ * `message` es inmutable (los reducers crean objetos nuevos al cambiarlo).
+ */
+const Bubble = memo(function Bubble({ message }: { message: ChatMessage }) {
   if (message.role === 'system') {
     return <SystemBubble>{partsToText(message.parts)}</SystemBubble>;
   }
@@ -273,7 +280,7 @@ function Bubble({ message }: { message: ChatMessage }) {
       </div>
     </div>
   );
-}
+});
 
 function SystemBubble({ children }: { children: React.ReactNode }) {
   return (

@@ -25,6 +25,7 @@ interface ProjectCardProps {
 }
 
 const STATUS_LABELS: Record<StudioProjectStatus, string> = {
+  design:     'Design',
   scoping:    'Scoping',
   concept:    'Concept',
   frontend:   'Frontend',
@@ -39,6 +40,7 @@ const STATUS_LABELS: Record<StudioProjectStatus, string> = {
 };
 
 const STATUS_COLORS: Record<StudioProjectStatus, string> = {
+  design:     '#a855f7',
   scoping:    'var(--amber)',
   concept:    'var(--amber)',
   frontend:   'var(--amber)',

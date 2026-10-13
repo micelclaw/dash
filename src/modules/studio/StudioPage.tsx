@@ -17,12 +17,10 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Hammer, Plus, Sparkles, FolderKanban } from 'lucide-react';
+import { Hammer, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useStudioStore } from '@/stores/studio.store';
 import { ProjectCard } from './components/ProjectCard';
-import { NewProjectModal } from './components/NewProjectModal';
-import { TemplateGallery } from './components/TemplateGallery';
 import { OnboardingWelcome } from './components/OnboardingWelcome';
 import { useConfirm } from './lib/useConfirm';
 
@@ -35,8 +33,6 @@ export function Component() {
   const deleteProject = useStudioStore((s) => s.deleteProject);
 
   const { confirm, confirmDialog } = useConfirm();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [tab, setTab] = useState<'projects' | 'templates'>('projects');
   // 'onboarding' = the warm §3.1 welcome (free-text idea + example gallery).
   // Shown on demand (header CTA) and always as the empty state.
   const [view, setView] = useState<'list' | 'onboarding'>('list');
@@ -67,7 +63,6 @@ export function Component() {
   }
 
   function handleCreated(id: string) {
-    setModalOpen(false);
     navigate(`/studio/${id}`);
   }
 
@@ -107,7 +102,7 @@ export function Component() {
           </span>
         </div>
         <button
-          onClick={() => { setTab('projects'); setView('onboarding'); }}
+          onClick={() => setView('onboarding')}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '8px 14px', borderRadius: 'var(--radius-md)',
@@ -121,33 +116,10 @@ export function Component() {
         </button>
       </header>
 
-      {/* Tab bar */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 0,
-        borderBottom: '1px solid var(--border)', flexShrink: 0,
-      }}>
-        <button
-          type="button"
-          onClick={() => setTab('projects')}
-          style={tabBtn(tab === 'projects')}
-        >
-          <FolderKanban size={12} /> My projects ({projects.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('templates')}
-          style={tabBtn(tab === 'templates')}
-        >
-          <Sparkles size={12} /> Templates
-        </button>
-      </div>
-
-      {/* Body */}
+      {/* Body — single list (the Templates tab died with the unified
+          funnel, ADR-18: examples are idea prefills on the create screen) */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
-        {tab === 'templates' && (
-          <TemplateGallery onInstantiated={(id) => navigate(`/studio/${id}`)} />
-        )}
-        {tab === 'projects' && <>
+        <>
         {loading && projects.length === 0 && (
           <div style={{
             color: 'var(--text-dim)', fontSize: '0.875rem', textAlign: 'center', padding: 40,
@@ -173,7 +145,6 @@ export function Component() {
         {!error && (view === 'onboarding' || (!loading && projects.length === 0)) && (
           <OnboardingWelcome
             onCreated={handleCreated}
-            onProMode={() => setModalOpen(true)}
             onBack={projects.length > 0 ? () => setView('list') : undefined}
           />
         )}
@@ -194,27 +165,11 @@ export function Component() {
             ))}
           </div>
         )}
-        </>}
+        </>
       </div>
 
-      <NewProjectModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreated={handleCreated}
-      />
       {confirmDialog}
     </div>
   );
 }
 
-const tabBtn = (active: boolean): React.CSSProperties => ({
-  display: 'flex', alignItems: 'center', gap: 6,
-  padding: '12px 20px',
-  background: 'transparent',
-  border: 'none',
-  borderBottom: `2px solid ${active ? 'var(--amber)' : 'transparent'}`,
-  color: active ? 'var(--text)' : 'var(--text-dim)',
-  fontSize: '0.75rem', fontWeight: active ? 600 : 400,
-  textTransform: 'uppercase', letterSpacing: '0.05em',
-  cursor: 'pointer', fontFamily: 'var(--font-sans)',
-});

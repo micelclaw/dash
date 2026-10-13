@@ -50,8 +50,17 @@ export interface StudioStreamState {
   reasoning: string;
   streamingQuestions: StudioPendingQuestion[] | null;
   tokensUsed: number;
+  /** true = la cifra es una ESTIMACIÓN (el proveedor no informó de uso). Se
+   *  pinta con «≈» para no dar por medido lo que es una conjetura. */
+  tokensEstimated: boolean;
   model: string | null;
   error: string | null;
+  /** The model hit its output ceiling: the document is CUT OFF, not finished.
+   *  Comes from `truncated_by_model` in `studio.generation.done` (core reads
+   *  `AssistantMessage.finish`). Providers that report no token usage leave
+   *  this as the ONLY signal, so dropping it made a half-written document
+   *  indistinguishable from a complete one. */
+  truncatedByModel: boolean;
 }
 
 export interface StudioStreamDebugEvent {
@@ -77,8 +86,11 @@ interface StudioStreamEventData {
   full_reasoning?: string;
   model?: string;
   tokens_used?: number;
+  tokens_estimated?: boolean;
   error?: string;
   started_at?: string;
+  finish?: string | null;
+  truncated_by_model?: boolean;
 }
 
 const INITIAL: StudioStreamState = {
@@ -89,8 +101,10 @@ const INITIAL: StudioStreamState = {
   reasoning: '',
   streamingQuestions: null,
   tokensUsed: 0,
+  tokensEstimated: false,
   model: null,
   error: null,
+  truncatedByModel: false,
 };
 
 // Sentinel constants — must match `core/src/studio/llm/structured-output.ts`.
@@ -164,8 +178,10 @@ export const useStudioStreamsStore = create<StreamsStoreState>()((set, get) => (
           reasoning: '',
           streamingQuestions: null,
           tokensUsed: 0,
+          tokensEstimated: false,
           model: null,
           error: null,
+          truncatedByModel: false,
         };
         break;
       }
@@ -179,6 +195,13 @@ export const useStudioStreamsStore = create<StreamsStoreState>()((set, get) => (
         if (data.stream_id !== activeStream) return;
         const t = data.token ?? '';
         const nextText = prev.text + t;
+        // MEDIDO el 2026-08-06 (ficha M16, que proponía cachear los
+        // desplazamientos por ser "O(n²)"): sobre un documento REAL de 40 KB
+        // que llega en 10.087 tokens, re-escanear entero cuesta 13 ms en TODA
+        // la generación, y la versión con desplazamientos memorizados salió a
+        // 16 ms — más lenta, porque `indexOf` va vectorizado y el trabajo de
+        // verdad es el `slice` + `trim` que las dos hacen igual. Se deja el
+        // escaneo simple: la ficha se cierra por medición, no por pereza.
         const parsed = parseIncrementalSentinels(nextText);
         next = {
           ...prev,
@@ -224,8 +247,14 @@ export const useStudioStreamsStore = create<StreamsStoreState>()((set, get) => (
           reasoning: data.full_reasoning ?? prev.reasoning,
           streamingQuestions: parsed.questions,
           tokensUsed: data.tokens_used ?? 0,
+          tokensEstimated: data.tokens_estimated === true,
           model: data.model ?? null,
           error: null,
+          // Both emitters of `studio.generation.done` send this (the live
+          // generate flow and the reconcile path that runs on every project
+          // GET). Reconciled events are the ones that matter most: a document
+          // recovered from a cut-off turn otherwise looks finished.
+          truncatedByModel: data.truncated_by_model === true,
         };
         break;
       }
@@ -313,6 +342,24 @@ export function useStudioGenerationStream(projectId: string, phase: string): Stu
 // useStudioStream.ts. Extract here because the store action needs it
 // at module scope (no closure tricks).
 
+/** El JSON del bloque de preguntas, tolerante a vallas y a basura de mitad
+ *  de stream (en cuyo caso devuelve null y se reintenta al siguiente token). */
+function parseQuestionsJson(raw: string): StudioPendingQuestion[] | null {
+  const jsonRaw = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  try {
+    const parsed: unknown = JSON.parse(jsonRaw);
+    if (parsed && typeof parsed === 'object') {
+      const arr = (parsed as { questions?: unknown }).questions;
+      if (Array.isArray(arr)) {
+        return arr.filter((q) => q && typeof q === 'object') as StudioPendingQuestion[];
+      }
+    }
+  } catch {
+    // JSON a medias: se espera al siguiente lote.
+  }
+  return null;
+}
+
 export function parseIncrementalSentinels(text: string): {
   body: string;
   questions: StudioPendingQuestion[] | null;
@@ -333,23 +380,7 @@ export function parseIncrementalSentinels(text: string): {
   const qStart = text.indexOf(QUESTIONS_START);
   const qEnd = text.indexOf(QUESTIONS_END);
   if (qStart >= 0 && qEnd > qStart) {
-    const jsonRaw = text
-      .slice(qStart + QUESTIONS_START.length, qEnd)
-      .trim()
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim();
-    try {
-      const parsed: unknown = JSON.parse(jsonRaw);
-      if (parsed && typeof parsed === 'object') {
-        const arr = (parsed as { questions?: unknown }).questions;
-        if (Array.isArray(arr)) {
-          questions = arr.filter((q) => q && typeof q === 'object') as StudioPendingQuestion[];
-        }
-      }
-    } catch {
-      // Mid-stream JSON probably has trailing junk — wait for next batch
-    }
+    questions = parseQuestionsJson(text.slice(qStart + QUESTIONS_START.length, qEnd));
   }
 
   return { body, questions };

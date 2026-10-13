@@ -22,7 +22,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, Send, FlaskConical, AlertCircle } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { toast } from 'sonner';
 import { useStudioStore, type StudioTestMessage } from '@/stores/studio.store';
 import { useWebSocketStore } from '@/stores/websocket.store';
@@ -242,7 +242,7 @@ export function TesterChat({ projectId }: Props) {
           <div style={assistantBubble}>
             <div style={bubbleLabel}>Studio Tester</div>
             <div className="studio-md-preview" style={{ fontSize: '0.8125rem', lineHeight: 1.6 }}>
-              <ReactMarkdown>{stripToolBlocks(streaming.text) || '…'}</ReactMarkdown>
+              <MarkdownRenderer content={stripToolBlocks(streaming.text) || '…'} highlight={false} />
             </div>
             {streaming.toolCalls.map((tc, i) => (
               <ToolCallCard key={i} call={tc} />
@@ -300,7 +300,7 @@ function MessageBubble({ message }: { message: StudioTestMessage }) {
       ) : (
         <>
           <div className="studio-md-preview" style={{ fontSize: '0.8125rem', lineHeight: 1.6 }}>
-            <ReactMarkdown>{stripToolBlocks(message.content)}</ReactMarkdown>
+            <MarkdownRenderer content={stripToolBlocks(message.content)} highlight={false} />
           </div>
           {toolCalls.map((tc, i) => (
             <ToolCallCard key={i} call={tc} />

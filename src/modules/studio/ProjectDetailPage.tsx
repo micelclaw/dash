@@ -18,16 +18,15 @@ import { useEffect, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { ChevronLeft, Hammer, Snowflake, Eye, PackageX } from 'lucide-react';
 import { useStudioStore, type StudioProjectStatus } from '@/stores/studio.store';
-import { ScopingWizard } from './phases/ScopingWizard';
-import { ConceptPhase } from './phases/ConceptPhase';
-import { FrontendPhase } from './phases/FrontendPhase';
 import { FoundationPhase } from './phases/FoundationPhase';
 import { BuildPhase } from './phases/v2/BuildPhase';
 import { TestingPhase } from './phases/TestingPhase';
 import { PackagingPhase } from './phases/PackagingPhase';
 import { LivingAppCard } from './components/LivingAppCard';
 import { SandboxStatusBadge } from './components/SandboxStatusBadge';
-import { DesignStudioPage } from './design/DesignStudioPage';
+import { DesignStudioPage, DesignWorkbench } from './design/DesignStudioPage';
+import { PhaseSidebar } from './components/PhaseSidebar';
+import { briefAgreementRows } from './design/brief-intel';
 import { useStudioMode } from './hooks/useStudioMode';
 // M22: pipeline order is a single source in lib/phases.ts (no more local
 // STATUS_ORDER copies that could drift from PhaseSidebar / the backend).
@@ -66,11 +65,16 @@ export function Component() {
   // param) is the project's actual current status — preserves the
   // pre-rewind UX. When `?phase=<x>` is set, clamp it to ≤ ceiling so
   // the user can never preview a future phase.
-  const requestedPhase = searchParams.get('phase');
+  const rawRequested = searchParams.get('phase');
+  // Unified funnel (ADR-18): the retired phases collapse into 'design' so
+  // legacy deep-links (?phase=scoping|concept|frontend) keep resolving.
+  const requestedPhase = rawRequested && ['scoping', 'concept', 'frontend'].includes(rawRequested)
+    ? 'design'
+    : rawRequested;
   const viewedPhase: StudioProjectStatus = (() => {
-    if (!project) return 'scoping';
+    if (!project) return 'design';
     const ceiling: StudioProjectStatus = isTerminal ? 'published' : project.status;
-    const fallback: StudioProjectStatus = isTerminal ? 'concept' : project.status;
+    const fallback: StudioProjectStatus = isTerminal ? 'design' : project.status;
     if (!requestedPhase) return fallback;
     const reqIdx = indexOfStatus(requestedPhase);
     const ceilIdx = indexOfStatus(ceiling);
@@ -153,10 +157,10 @@ export function Component() {
     );
   }
 
-  // Design-only projects (target='design') get the canvas experience —
-  // no phase rail, no doc phases. Conversion ("Build this app") flips the
-  // target/status server-side; refetch routes it into the normal pipeline.
-  if (project.target === 'design') {
+  // Pre-target projects (status='design': the intake + canvas, ADR-18) get
+  // the full-page canvas experience. Continue commits the target server-side;
+  // refetch routes the project into the pipeline below.
+  if (project.status === 'design') {
     return (
       <DesignStudioPage
         project={project}
@@ -295,22 +299,41 @@ export function Component() {
           column for it). */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
         <div style={{ flex: 1, overflow: 'hidden', minWidth: 0 }}>
-          {viewedPhase === 'scoping' ? (
-            <ScopingWizard
-              // A7: remount when past↔edit flips so the wizard's hook count
-              // never changes within a single fiber (it early-returns a
-              // read-only view before its hooks in 'past' mode).
-              key={`scoping-${viewMode}`}
-              projectId={project.id}
-              onComplete={() => { /* status refreshes from server */ }}
-              viewMode={viewMode}
-              project={project}
-              onSelectPhase={selectPhase}
-            />
-          ) : viewedPhase === 'concept' ? (
-            <ConceptPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
-          ) : viewedPhase === 'frontend' ? (
-            <FrontendPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
+          {viewedPhase === 'design' ? (
+            // Past view of the intake + design (the project already
+            // continued past it): the canvas read-only when pages exist,
+            // else (no-UI projects) the agreement summary read-only.
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <PhaseSidebar project={project} viewedPhase={viewedPhase} onSelect={selectPhase} guided={guided} />
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                {project.scope?.needs_ui === false ? (
+                  <div style={{ height: '100%', overflowY: 'auto', padding: 24 }}>
+                    <div style={{ maxWidth: 640, margin: '0 auto', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16 }}>
+                      <h2 style={{ margin: '0 0 6px', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text)' }}>{project.name}</h2>
+                      <p style={{ margin: '0 0 12px', fontSize: '0.8rem', color: 'var(--text-dim)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        {project.description ?? ''}
+                      </p>
+                      {briefAgreementRows(project.design_brief?.answers ?? {}).map((r) => (
+                        <div key={r.label} style={{ display: 'flex', gap: 10, fontSize: '0.78rem', lineHeight: 1.6 }}>
+                          <span style={{ color: 'var(--text-muted)', minWidth: 96, flexShrink: 0 }}>{r.label}</span>
+                          <span style={{ color: 'var(--text)' }}>{r.value}</span>
+                        </div>
+                      ))}
+                      <p style={{ margin: '12px 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        Read-only — this is what you agreed at the start. Rewind to change it.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <DesignWorkbench
+                    project={project}
+                    chrome="frontend-phase"
+                    readOnly
+                    onExit={() => navigate('/studio')}
+                  />
+                )}
+              </div>
+            </div>
           ) : viewedPhase === 'foundation' ? (
             <FoundationPhase project={project} viewMode={viewMode} onSelectPhase={selectPhase} />
           ) : viewedPhase === 'build' ? (

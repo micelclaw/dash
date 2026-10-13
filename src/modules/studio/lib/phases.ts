@@ -18,8 +18,11 @@
 
 import type { StudioProjectStatus } from '@/stores/studio.store';
 
+// Unified funnel (ADR-18): `design` (intake + canvas, pre-target) is the
+// explicit first phase; the legacy scoping/concept/frontend slots stay for
+// straggler rows until the 0284 migration retires them.
 export const STATUS_ORDER: StudioProjectStatus[] = [
-  'scoping', 'concept', 'frontend', 'foundation', 'build',
+  'design', 'scoping', 'concept', 'frontend', 'foundation', 'build',
   'testing', 'packaging', 'packaged', 'published',
 ];
 

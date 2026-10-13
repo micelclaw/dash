@@ -18,8 +18,8 @@
 // completes (status flips out of 'streaming').
 
 import { useEffect, useState } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 
 interface Props {
   text: string;
@@ -141,12 +141,7 @@ export function StreamingMarkdown({ text, streaming }: Props) {
 
   return (
     <div className="studio-markdown" style={{ fontSize: '0.875rem', lineHeight: 1.65, color: 'var(--text)' }}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={COMPONENTS}
-      >
-        {renderedText}
-      </ReactMarkdown>
+      <MarkdownRenderer content={renderedText} components={COMPONENTS} highlight={false} />
     </div>
   );
 }

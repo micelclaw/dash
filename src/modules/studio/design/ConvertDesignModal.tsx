@@ -10,15 +10,14 @@
  * https://micelclaw.com
  */
 
-// ─── ConvertDesignModal — "Build it…" conversion from the canvas ─────
+// ─── ConvertDesignModal — the Continue sheet (unified funnel, ADR-18) ─
 //
-// Opened from the design canvas when the user wants to turn their
-// approved design into a buildable project. Four target cards (same
-// visual language as the Guided onboarding target cards): App for my OS
-// vs Website vs Web app vs Mobile app. The key distinction is BACKEND:
-// only "App for my OS" builds a backend + data; the other three publish
-// the designed frontend. When the brief says the design needs to store
-// data, we nudge toward the app and warn the others are frontend-only.
+// THE moment the project acquires its target: opened by the canvas'
+// "Continue →" primary CTA. Four target cards; the brief-derived
+// recommendation is pre-selected with a plain-words rationale (R-A).
+// The key distinction is BACKEND: only "App for my OS" builds one; the
+// other three publish the designed frontend. R-C: nothing is final —
+// the design stays pinned and a rewind undoes the choice.
 
 import { useEffect, useState } from 'react';
 import { Hammer, Globe, AppWindow, Smartphone, Info, Loader2, X, type LucideIcon } from 'lucide-react';
@@ -30,6 +29,11 @@ interface Props {
   /** The design's brief said it needs to remember data / talk to services —
    *  only 'App for my OS' gives it a backend. Nudge accordingly. */
   needsBackend?: boolean;
+  /** Brief-derived recommendation (brief-intel mirror of the server's
+   *  mapIntakeToScope): pre-selected + pilled. */
+  recommendedTarget?: ConvertTarget;
+  /** Plain-words one-liner explaining the recommendation (R-A). */
+  recommendationReason?: string;
   onClose: () => void;
   onConverted: () => void;
 }
@@ -55,29 +59,31 @@ const CONVERT_CARDS: ConvertCard[] = [
     id: 'mobile',
     icon: Smartphone,
     title: 'Mobile app (PWA)',
-    desc: 'Your pages become an installable phone app — added to the home screen. Frontend only (no backend).',
+    desc: 'Your pages become an installable phone app — added to the home screen. Shows your pages; doesn\'t store anything by itself.',
     hasBackend: false,
   },
   {
     id: 'webapp',
     icon: AppWindow,
     title: 'Web app',
-    desc: 'Your pages become a standalone web app (SPA) that runs in the browser. Frontend only (no backend).',
+    desc: 'Your pages become a standalone app that runs in any browser. Shows your pages; doesn\'t store anything by itself.',
     hasBackend: false,
   },
   {
     id: 'website',
     icon: Globe,
     title: 'Website',
-    desc: 'Your designed pages become a public site on your domain — published directly, no build. Frontend only.',
+    desc: 'Your designed pages become a public site on your domain — published directly, no build needed.',
     hasBackend: false,
   },
 ];
 
-export function ConvertDesignModal({ projectId, needsBackend, onClose, onConverted }: Props) {
-  // Default to the app when the design needs a backend (the only target
-  // that provides one); otherwise leave it to the user.
-  const [selected, setSelected] = useState<ConvertTarget | null>(needsBackend ? 'micelclaw_app' : null);
+export function ConvertDesignModal({ projectId, needsBackend, recommendedTarget, recommendationReason, onClose, onConverted }: Props) {
+  // The brief-derived recommendation is pre-selected (backend need wins
+  // server-side too); the user can always pick another card.
+  const [selected, setSelected] = useState<ConvertTarget | null>(
+    recommendedTarget ?? (needsBackend ? 'micelclaw_app' : null),
+  );
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -106,18 +112,20 @@ export function ConvertDesignModal({ projectId, needsBackend, onClose, onConvert
       <div style={dialogStyle} onClick={(e) => e.stopPropagation()}>
         <div style={dialogHeader}>
           <h3 style={{ fontSize: '0.9375rem', margin: 0, color: 'var(--text)', flex: 1 }}>
-            Build it…
+            Where should this live?
           </h3>
           <button type="button" onClick={() => !busy && onClose()} disabled={busy} style={iconBtn} aria-label="Close">
             <X size={14} />
           </button>
         </div>
 
-        {needsBackend && (
+        {(recommendationReason || needsBackend) && (
           <div style={backendNote}>
             <Info size={14} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 1 }} />
-            <span>Your design stores data (from your answers), so it needs a <strong>backend</strong> —
-              only <strong>App for my OS</strong> builds one. The other three publish the frontend only.</span>
+            <span>
+              {recommendationReason ?? 'Your design stores data (from your answers), so it needs a backend.'}
+              {needsBackend && <> Only <strong>App for my OS</strong> builds a backend — the other three publish the frontend only.</>}
+            </span>
           </div>
         )}
 
@@ -125,7 +133,7 @@ export function ConvertDesignModal({ projectId, needsBackend, onClose, onConvert
           {CONVERT_CARDS.map((c) => {
             const active = selected === c.id;
             const Icon = c.icon;
-            const recommended = needsBackend && c.hasBackend;
+            const recommended = recommendedTarget ? c.id === recommendedTarget : (needsBackend === true && c.hasBackend);
             return (
               <button
                 key={c.id}
@@ -146,7 +154,7 @@ export function ConvertDesignModal({ projectId, needsBackend, onClose, onConvert
         </div>
 
         <p style={{ margin: '0 0 16px', fontSize: '0.7rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          Your design stays pinned — you can revisit it from the phase rail at any time.
+          You can change your mind later — your design stays pinned either way.
         </p>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -160,8 +168,8 @@ export function ConvertDesignModal({ projectId, needsBackend, onClose, onConvert
             style={confirmBtn(!selected || busy)}
           >
             {busy
-              ? <><Loader2 size={12} className="animate-spin" /> Deriving docs… ~1 min</>
-              : <>Convert &amp; continue</>
+              ? <><Loader2 size={12} className="animate-spin" /> Setting everything up… usually under a minute</>
+              : <>Confirm &amp; continue</>
             }
           </button>
         </div>
