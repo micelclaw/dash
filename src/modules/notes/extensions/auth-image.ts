@@ -19,9 +19,11 @@
 // es lo que viaja a la DB y lo que ven los agentes.
 
 import Image from '@tiptap/extension-image';
+import type { Editor } from '@tiptap/react';
 import { useAuthStore } from '@/stores/auth.store';
 
 const INTERNAL_PREFIX = '/api/v1/files/';
+const noteImages = new WeakMap<Editor, ReadonlyMap<string, string>>();
 
 function withDisplayToken(src: string): string {
   if (!src.startsWith(INTERNAL_PREFIX)) return src;
@@ -31,12 +33,29 @@ function withDisplayToken(src: string): string {
   return `${src}${sep}token=${encodeURIComponent(token)}`;
 }
 
+function displaySource(editor: Editor, nativeSource: string): string {
+  const images = noteImages.get(editor);
+  let decoded = nativeSource;
+  try { decoded = decodeURIComponent(nativeSource); } catch { /* Keep the native link. */ }
+  return withDisplayToken(images?.get(decoded) ?? nativeSource);
+}
+
+/** Display-only mapping: ProseMirror attributes and serialized Markdown keep provider paths. */
+export function setNoteImageDisplayResources(editor: Editor, images: ReadonlyMap<string, string>): void {
+  noteImages.set(editor, images);
+  editor.view.dom.querySelectorAll<HTMLImageElement>('img[data-note-native-src]').forEach(img => {
+    img.src = displaySource(editor, img.dataset.noteNativeSrc ?? '');
+  });
+}
+
 export const AuthImage = Image.extend({
   addNodeView() {
-    return ({ node }) => {
+    return ({ node, editor }) => {
       const img = document.createElement('img');
       const apply = (attrs: Record<string, unknown>) => {
-        img.src = withDisplayToken(String(attrs.src ?? ''));
+        const nativeSource = String(attrs.src ?? '');
+        img.dataset.noteNativeSrc = nativeSource;
+        img.src = displaySource(editor, nativeSource);
         if (attrs.alt) img.alt = String(attrs.alt);
         if (attrs.title) img.title = String(attrs.title);
       };

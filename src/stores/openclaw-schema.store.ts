@@ -60,7 +60,6 @@ export const useOpenclawSchemaStore = create<OpenclawSchemaState>()((set, get) =
       const message = err instanceof Error ? err.message : 'Failed to load schema';
       // Non-fatal: log to console for debugging but don't break the app.
       // Sections that need the schema (Raw editor) will surface the error.
-      // eslint-disable-next-line no-console
       console.warn('[openclaw-schema] failed to load config schema:', message);
       set({ loading: false, error: message });
     }

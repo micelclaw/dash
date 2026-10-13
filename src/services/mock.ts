@@ -1062,12 +1062,36 @@ export function getMockResponse(method: string, path: string, body?: unknown): u
   const route = url[0]!;
   const params = new URLSearchParams(url[1] ?? '');
 
-  // Auth
+  // Auth. Los tokens van en snake_case porque es lo que lee `auth.store` (contrato
+  // snake_case end-to-end). En camelCase el store guardaba `accessToken: undefined`,
+  // y como el Shell solo conecta el WebSocket `if (tokens?.accessToken)`, el modo mock
+  // se quedaba SIEMPRE sin cliente WS ("Offline"): ningún evento del servidor —voz,
+  // notificaciones, chat.stream.*— podía llegar al dash.
   if (method === 'POST' && route === '/auth/login') {
-    return { data: { user: MOCK_USER, accessToken: 'mock-access-token-xyz', refreshToken: 'mock-refresh-token-xyz' } };
+    return { data: { user: MOCK_USER, access_token: 'mock-access-token-xyz', refresh_token: 'mock-refresh-token-xyz' } };
   }
   if (method === 'POST' && route === '/auth/refresh') {
-    return { data: { accessToken: 'mock-access-token-new', refreshToken: 'mock-refresh-token-new' } };
+    return { data: { access_token: 'mock-access-token-new', refresh_token: 'mock-refresh-token-new' } };
+  }
+
+  // Módulos dinámicos del shell (apps L3 instaladas). Sin esta entrada el
+  // envelope caía en el `{ data: null }` final de la función y
+  // `useUiModulesStore` guardaba `modules: null`, con lo que el `.map` de
+  // Sidebar/use-visible-modules reventaba ("can't access property map,
+  // dynamicModules is null") y el shell ENTERO — chat incluido — quedaba
+  // sustituido por el error boundary en modo mock.
+  if (method === 'GET' && route === '/me/ui-modules') {
+    return { data: [] };
+  }
+
+  // Servicios del lifecycle. Mismo caso que el de arriba: sin entrada, el envelope
+  // caía en el `{ data: null }` final y `useServicesStore` guardaba `services: null`,
+  // con lo que el `.find` de `useServiceState` reventaba ("can't access property find,
+  // services is null") y toda pantalla que mire el estado de un servicio —Settings →
+  // Voice, la que gobierna el auto-play de TTS— quedaba en el error boundary.
+  // Lista vacía = "en modo mock no hay servicios corriendo" (STT/TTS salen Offline).
+  if (method === 'GET' && route === '/services') {
+    return { data: [] };
   }
 
   // Agents (chat sidebar)

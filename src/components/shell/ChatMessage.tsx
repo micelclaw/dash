@@ -10,71 +10,106 @@
  * https://micelclaw.com
  */
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { isValidElement, useCallback, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
-import { Layout, FileText, Image as ImageIcon, File, Loader2, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
-import type { Message, MessageApproval, ChatAttachment, ToolCallRecord } from '@/types/chat';
+import { Layout, FileText, File, Loader2, AlertTriangle, RefreshCw, Wand2, Settings } from 'lucide-react';
+import type { Message, MessageApproval, ChatAttachment, ToolCallRecord, ToolExecution } from '@/types/chat';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { useSecurityStore } from '@/stores/security.store';
 import { useChatStore } from '@/stores/chat.store';
 import { useCanvasStore } from '@/stores/canvas.store';
 import { startGateway } from '@/services/gateway.service';
-import { ToolRenderer } from '@/components/chat/tool-renderers';
+import { ApiError, api } from '@/services/api';
+import { ToolActivityGroup, ToolRenderer } from '@/components/chat/tool-renderers';
 import { ReasoningChip } from '@/components/chat/ReasoningChip';
-import { shouldRenderTool } from '@/config/tool-rendering';
+import { shouldRenderPresentedTool } from '@/config/tool-rendering';
 import { EntityRefChips } from '@/components/chat/tool-renderers/EntityRefChips';
 import { findSlashCommand, CATEGORY_COLORS } from '@/config/slash-commands';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
+import { MermaidBlock } from '@/components/markdown/MermaidBlock';
+
+interface WorkspaceLinkResolution {
+  agent_id: string;
+  relative_path: string;
+  deep_link: string;
+  preview: {
+    kind: 'markdown' | 'code' | 'text' | 'image' | 'pdf' | 'html';
+    mime_type: string;
+    filename: string;
+    content_url: string;
+    size_bytes: number;
+  } | null;
+}
 
 /** Convert a live streaming ToolExecution into the ToolCallRecord shape the
  *  per-tool renderers expect, so a streaming pill looks IDENTICAL to its
  *  finalized form (same per-tool component, same chrome). Unifies the two. */
-function streamingToolToRecord(t: { id: string; tool: string; status: string; summary?: string; input?: unknown; output?: unknown; text_offset?: number }): ToolCallRecord {
+function streamingToolToRecord(t: ToolExecution): ToolCallRecord {
   return {
     id: t.id,
     tool: t.tool,
-    status: t.status === 'completed' || t.status === 'success' ? 'success'
-      : t.status === 'error' ? 'error' : 'running',
+    status: t.status === 'completed' ? 'success' : t.status,
     summary: t.summary,
     input: (t.input as ToolCallRecord['input']) ?? undefined,
     output: typeof t.output === 'string' ? t.output : (t.output != null ? JSON.stringify(t.output) : undefined),
+    output_present: t.output_present,
     text_offset: t.text_offset,
+    sequence_index: t.sequence_index,
+    run_id: t.run_id,
+    started_at: t.started_at,
+    completed_at: t.completed_at,
+    duration_ms: t.duration_ms,
+    metadata: t.metadata,
+    entity_refs: t.entity_refs,
+    presentation: t.presentation,
+    presentation_version: t.presentation_version,
   };
 }
 
-type Segment = { type: 'text'; text: string } | { type: 'tool'; tool: ToolCallRecord };
+type Segment = { type: 'text'; text: string } | { type: 'tools'; tools: ToolCallRecord[] };
 
 /** Split the assistant text by each tool's `text_offset` so the tool pills
  *  render interleaved between the text segments (like the OpenClaw chat).
  *  Tools without an offset (legacy rows / yield path) fall back to the end. */
 function buildSegments(content: string, tools: ToolCallRecord[]): Segment[] {
-  const withOffset = tools
-    .filter((t) => typeof t.text_offset === 'number')
-    .sort((a, b) => (a.text_offset! - b.text_offset!));
-  const noOffset = tools.filter((t) => typeof t.text_offset !== 'number');
-  const segs: Segment[] = [];
-  if (withOffset.length === 0) {
-    if (content.trim()) segs.push({ type: 'text', text: content });
-    for (const t of tools) segs.push({ type: 'tool', tool: t });
-    return segs;
-  }
+  const ordered = tools.map((tool, originalIndex) => ({ tool, originalIndex })).sort((a, b) => {
+    const ao = typeof a.tool.text_offset === 'number' ? a.tool.text_offset : Number.MAX_SAFE_INTEGER;
+    const bo = typeof b.tool.text_offset === 'number' ? b.tool.text_offset : Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    const as = a.tool.sequence_index ?? a.originalIndex;
+    const bs = b.tool.sequence_index ?? b.originalIndex;
+    return as - bs;
+  });
+  const segs: Array<{ type: 'text'; text: string } | { type: 'tool'; tool: ToolCallRecord }> = [];
   let cursor = 0;
-  for (const t of withOffset) {
-    const off = Math.max(cursor, Math.min(t.text_offset!, content.length));
+  for (const { tool } of ordered) {
+    const off = typeof tool.text_offset === 'number'
+      ? Math.max(cursor, Math.min(tool.text_offset, content.length))
+      : content.length;
     if (off > cursor) {
       const slice = content.slice(cursor, off);
-      if (slice.trim()) segs.push({ type: 'text', text: slice });
+      if (slice.length > 0) segs.push({ type: 'text', text: slice });
       cursor = off;
     }
-    segs.push({ type: 'tool', tool: t });
+    segs.push({ type: 'tool', tool });
   }
   if (cursor < content.length) {
     const tail = content.slice(cursor);
-    if (tail.trim()) segs.push({ type: 'text', text: tail });
+    if (tail.length > 0) segs.push({ type: 'text', text: tail });
   }
-  for (const t of noOffset) segs.push({ type: 'tool', tool: t });
-  return segs;
+  const grouped: Segment[] = [];
+  for (const segment of segs) {
+    if (segment.type === 'text') {
+      grouped.push(segment);
+      continue;
+    }
+    const previous = grouped[grouped.length - 1];
+    if (previous?.type === 'tools') previous.tools.push(segment.tool);
+    else grouped.push({ type: 'tools', tools: [segment.tool] });
+  }
+  return grouped;
 }
 
 /** Assistant markdown, extracted so each interleaved text segment renders with
@@ -107,7 +142,12 @@ function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkCl
           }
           return <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--amber)' }}>{children}</a>;
         },
-        pre: ({ children }) => (
+        pre: ({ children }) => {
+          const code = isValidElement<{ className?: string; children?: ReactNode }>(children) ? children : null;
+          const source = code?.props.className?.includes('language-mermaid')
+            ? String(code.props.children ?? '').replace(/\n$/, '') : null;
+          if (source !== null) return <MermaidBlock source={source} />;
+          return (
           <div style={{ position: 'relative', margin: '8px 0' }}>
             <pre style={{
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -122,7 +162,8 @@ function AssistantMarkdown({ content, onLinkClick }: { content: string; onLinkCl
               return el.textContent ?? '';
             }} />
           </div>
-        ),
+          );
+        },
         code: ({ className, children, ...props }) => {
           const isBlock = className?.startsWith('language-');
           if (isBlock) return <code className={className} {...props}>{children}</code>;
@@ -162,7 +203,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   thinkingText?: string;
   isThinking?: boolean;
-  tools?: { id: string; tool: string; status: string; summary: string; input?: unknown; output?: unknown }[];
+  tools?: ToolExecution[];
   /** G9: previous message in the conv — used to compute `isFirstOfTurn` so
    *  consecutive bubbles from the same sender don't repeat the avatar. */
   previousMessage?: Message;
@@ -188,7 +229,24 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   const navigate = useNavigate();
   const isUser = message.role === 'user';
   const agents = useChatStore((s) => s.agents);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const setWorkspaceFile = useCanvasStore((s) => s.setWorkspaceFile);
+  const setCanvasError = useCanvasStore((s) => s.setCanvasError);
+  const setActiveMode = useCanvasStore((s) => s.setActiveMode);
   const { visibility } = useToolVisibility();
+
+  const handleTechnicalCanvas = ({ title, content }: { title: string; content: string }) => {
+    if (!activeConversationId) return;
+    setWorkspaceFile(activeConversationId, {
+      title,
+      relativePath: 'tool-result.txt',
+      previewKind: 'text',
+      mimeType: 'text/plain',
+      contentUrl: '',
+      deepLink: '',
+      sizeBytes: new TextEncoder().encode(content).byteLength,
+    }, { content, status: 'ready' });
+  };
 
   // G9: sticky avatar — show only when this is the first message of a turn
   // (the previous message is either missing, a system chip, or from a
@@ -346,16 +404,46 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
     );
   }
 
-  const handleLinkClick = useCallback(
-    (href: string) => {
-      if (href.startsWith('/')) {
+  const handleLinkClick = async (href: string) => {
+      if (/^\/(?:home|root|Users|var|opt|srv|mnt)\//.test(href)) {
+        try {
+          const res = await api.post<{ data: WorkspaceLinkResolution }>('/managed-agents/workspace-link/resolve', { path: href });
+          const { preview } = res.data;
+          if (!preview || !activeConversationId) {
+            navigate(res.data.deep_link);
+            return;
+          }
+
+          const file = {
+            title: preview.filename,
+            relativePath: res.data.relative_path,
+            previewKind: preview.kind,
+            mimeType: preview.mime_type,
+            contentUrl: api.mediaUrl(`/api/v1${preview.content_url}`),
+            deepLink: res.data.deep_link,
+            sizeBytes: preview.size_bytes,
+          };
+
+          if (preview.kind === 'markdown' || preview.kind === 'code' || preview.kind === 'text') {
+            setWorkspaceFile(activeConversationId, file, { status: 'loading' });
+            try {
+              const content = await api.getText(preview.content_url);
+              setWorkspaceFile(activeConversationId, file, { content, status: 'ready' });
+            } catch {
+              setCanvasError(activeConversationId, 'No se pudo leer el archivo del workspace.', 'WORKSPACE_PREVIEW_FAILED');
+            }
+          } else {
+            setWorkspaceFile(activeConversationId, file);
+          }
+        } catch {
+          toast.error('Este archivo no pertenece a un workspace accesible o ya no existe.');
+        }
+      } else if (href.startsWith('/')) {
         navigate(href);
       } else {
         window.open(href, '_blank', 'noopener');
       }
-    },
-    [navigate],
-  );
+    };
 
   // Parse [canvas_ready:description] from assistant messages
   const canvasReadyMatch = !isUser ? message.content.match(/\[canvas_ready:([^\]]+)\]/) : null;
@@ -363,22 +451,32 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   const displayContent = canvasReadyMatch
     ? message.content.replace(/\[canvas_ready:[^\]]+\]\s*/, '').trim()
     : message.content;
-  const setActiveMode = useCanvasStore((s) => s.setActiveMode);
-
+  const presentedTools: ToolCallRecord[] = isUser ? [] : isStreaming
+    ? (tools ?? []).map(streamingToolToRecord)
+    : (message.tool_calls ?? []);
+  const visiblePresentedTools = presentedTools.filter((tool) => shouldRenderPresentedTool(tool, visibility));
+  const seenEntityRefs = new Set<string>();
+  const entityRefs = presentedTools
+    .flatMap((tool) => tool.entity_refs ?? [])
+    .filter((ref) => {
+      const key = `${ref.type}:${ref.id}`;
+      if (seenEntityRefs.has(key)) return false;
+      seenEntityRefs.add(key);
+      return true;
+    });
+  const showMessageBubble = isUser
+    || Boolean(displayContent.trim())
+    || Boolean(canvasReadyDesc)
+    || Boolean(message.thinking || thinkingText)
+    || visiblePresentedTools.length > 0
+    || Boolean(isStreaming);
   // Burbuja VACÍA: con el ledger per-message, un turno deja filas assistant que
   // SOLO llevan tool_calls (sin texto). Si el usuario oculta esas tools por
   // preferencias, la fila se quedaba sin nada que pintar y salía una burbuja
   // vacía flotando encima del mensaje real. Si no queda NADA visible (ni texto,
   // ni tool visible, ni chip de entidad, ni razonamiento, ni canvas), no se pinta.
   if (!isUser && !isStreaming) {
-    const rows: ToolCallRecord[] = message.tool_calls ?? [];
-    const nothingVisible =
-      !displayContent.trim()
-      && !canvasReadyDesc
-      && !message.thinking
-      && rows.length > 0
-      && !rows.some((t) => shouldRenderTool(t.tool, visibility))
-      && !rows.some((t) => (t.entity_refs?.length ?? 0) > 0);
+    const nothingVisible = !showMessageBubble && entityRefs.length === 0;
     if (nothingVisible) return null;
   }
 
@@ -405,7 +503,8 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
   );
 
   return (
-    <Tooltip delayDuration={500}>
+    <>
+    {showMessageBubble && <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>
         <div
           style={{
@@ -437,6 +536,25 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
               opacity: isSide ? 0.85 : 1,
             }}
           >
+            {isUser && message.author && (
+              <div style={{
+                marginBottom: 4,
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                color: 'color-mix(in srgb, var(--text) 78%, var(--amber))',
+              }}>
+                {message.author.display_name}
+              </div>
+            )}
+            {message.message_metadata?.delegated === true && (
+              <div style={{
+                marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5,
+                fontSize: '0.6875rem', fontWeight: 700, color: 'var(--amber)',
+              }}>
+                <span aria-hidden>↗</span>
+                <span>Trabajo delegado{typeof message.message_metadata.delegated_from_agent === 'string' && typeof message.message_metadata.delegated_to_agent === 'string' ? ` · ${message.message_metadata.delegated_from_agent} → ${message.message_metadata.delegated_to_agent}` : ''}</span>
+              </div>
+            )}
             {isSide && (
               <span style={{
                 position: 'absolute',
@@ -494,42 +612,32 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                     tool's text_offset (like OpenClaw) — same per-tool renderer
                     for streaming AND finalized, filtered by visibility prefs. */}
                 {(() => {
-                  const rawTools: ToolCallRecord[] = isStreaming
-                    ? (tools ?? []).map(streamingToolToRecord)
-                    : (message.tool_calls ?? []);
-                  const visibleTools = rawTools.filter((t) => shouldRenderTool(t.tool, visibility));
-                  const segments = buildSegments(displayContent, visibleTools);
-                  // Las CHIPS de entidad NO son un interno de la tool: son el enlace
-                  // navegable al registro que se acaba de crear/tocar (la nota, el
-                  // evento…). Si el usuario oculta una tool, el bloque desaparece pero
-                  // la chip debe seguir — antes se iban juntas porque `ToolRenderer`
-                  // pinta bloque+chips y el filtro de visibilidad quitaba ambos.
-                  // Dedup por type+id: si un turno toca el MISMO registro con varias
-                  // tools ocultas, la chip debe salir UNA vez, no N.
-                  const seenRef = new Set<string>();
-                  const hiddenRefs = rawTools
-                    .filter((t) => !shouldRenderTool(t.tool, visibility))
-                    .flatMap((t) => t.entity_refs ?? [])
-                    .filter((r) => {
-                      const k = `${r.type}:${r.id}`;
-                      if (seenRef.has(k)) return false;
-                      seenRef.add(k);
-                      return true;
-                    });
+                  const segments = buildSegments(displayContent, visiblePresentedTools);
                   return (
                     <>
-                      {segments.map((seg, i) =>
-                        seg.type === 'text'
-                          ? <AssistantMarkdown key={`txt-${i}`} content={seg.text} onLinkClick={handleLinkClick} />
-                          : <div key={`tool-${seg.tool.id}`} style={{ margin: '4px 0' }}><ToolRenderer tool={seg.tool} /></div>,
-                      )}
-                      {hiddenRefs.length > 0 && <EntityRefChips refs={hiddenRefs} />}
+                      {segments.map((seg, i) => {
+                        if (seg.type === 'text') return <AssistantMarkdown key={`txt-${i}`} content={seg.text} onLinkClick={handleLinkClick} />;
+                        // `run_id` llega a veces después de la ejecución al
+                        // consolidar el stream. `tool.id` es canónico y
+                        // estable: usarlo evita desmontar tarjetas
+                        // interactivas (delegación, aprobaciones) a mitad de
+                        // una acción del usuario.
+                        if (seg.tools.length === 1) return <div key={`tool-${seg.tools[0]!.id}`} style={{ margin: '4px 0' }}>
+                          <ToolRenderer tool={seg.tools[0]!} onOpenTechnicalCanvas={handleTechnicalCanvas} />
+                        </div>;
+                        return <div key={`tools-${seg.tools.map((tool) => tool.id).join('-')}`} style={{ margin: '4px 0' }}>
+                          <ToolActivityGroup tools={seg.tools} onOpenTechnicalCanvas={handleTechnicalCanvas} />
+                        </div>;
+                      })}
                     </>
                   );
                 })()}
                 {canvasReadyDesc && (
                   <button
-                    onClick={() => setActiveMode('canvas')}
+                    onClick={() => {
+                      setActiveMode('canvas');
+                      window.dispatchEvent(new CustomEvent('micelclaw:open-canvas'));
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -552,7 +660,7 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
                   >
                     <Layout size={16} style={{ color: 'var(--amber)', flexShrink: 0 }} />
                     <span style={{ flex: 1 }}>{canvasReadyDesc}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Open Canvas</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Abrir Canvas</span>
                   </button>
                 )}
               </div>
@@ -597,7 +705,13 @@ export function ChatMessage({ message, isStreaming, thinkingText, isThinking, to
       <TooltipContent side={isUser ? 'left' : 'right'}>
         {timeStr}{message.model ? ` · ${message.model}` : ''}
       </TooltipContent>
-    </Tooltip>
+    </Tooltip>}
+    {!isUser && entityRefs.length > 0 && (
+      <div style={{ margin: '0 0 4px 32px', maxWidth: '85%' }}>
+        <EntityRefChips refs={entityRefs} />
+      </div>
+    )}
+    </>
   );
 }
 
@@ -605,51 +719,110 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
   const [loading, setLoading] = useState(false);
   const [credentialInput, setCredentialInput] = useState('');
   const [showCredentialInput, setShowCredentialInput] = useState(false);
+  const [pendingDecision, setPendingDecision] = useState<'allow_once' | 'allow_session' | 'allow_persistent_rule' | null>(null);
   const [error, setError] = useState('');
   const approveApproval = useSecurityStore((s) => s.approveApproval);
   const rejectApproval = useSecurityStore((s) => s.rejectApproval);
   const updateApprovalStatus = useChatStore((s) => s.updateApprovalStatus);
 
   const isPending = approval.status === 'pending';
-  const isL3 = approval.level === 3;
+  const isL3 = (approval.core_level ?? approval.level) === 3;
+  const authority = approval.authority
+    ?? (approval.source === 'openclaw_exec' ? 'openclaw_exec'
+      : approval.source === 'openclaw_plugin' ? 'openclaw_plugin'
+        : 'core_action');
+  const offeredDecisions = new Set(approval.allowed_decisions ?? []);
+  const decisionsDeclared = approval.allowed_decisions !== undefined;
+  // Core actions keep their established allow-once/deny compatibility path.
+  // Old provider frames without the field also retain that path, while an
+  // explicitly empty array means there is no action the UI may offer.
+  const compatibilityDecisions = authority === 'core_action' || !decisionsDeclared;
+  const canAllowOnce = compatibilityDecisions || offeredDecisions.has('allow-once');
+  const canAllowAlways = offeredDecisions.has('allow-always');
+  const canDeny = compatibilityDecisions || offeredDecisions.has('deny');
+  const risk = approval.risk ?? (isL3 ? 'critical' : approval.level === 2 ? 'medium' : 'low');
+  const protectedCategoryLabels: Record<string, string> = {
+    secrets_credentials: 'Secretos y credenciales',
+    destructive_filesystem: 'Cambios destructivos en archivos',
+    external_workspace_write: 'Escritura fuera del workspace',
+    security_control_plane: 'Control de seguridad',
+    audit_tampering: 'Modificación de auditoría',
+    system_services_packages: 'Servicios y paquetes del sistema',
+    network_control_plane: 'Control de red',
+    container_host_orchestration: 'Contenedores y host',
+    database_administration: 'Administración de bases de datos',
+    sensitive_external_effect: 'Efecto externo sensible',
+    financial_legal: 'Operación financiera o legal',
+    dynamic_code_execution: 'Ejecución de código',
+    unknown_operation: 'Operación no clasificada',
+  };
+  const protectedCategory = approval.presentation?.protected_category;
   const expiresAt = new Date(approval.expires_at);
   const now = new Date();
-  const minutesLeft = Math.max(0, Math.round((expiresAt.getTime() - now.getTime()) / 60000));
-  const isExpired = minutesLeft <= 0 && isPending;
+  const secondsLeft = Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / 1000));
+  const minutesLeft = Math.ceil(secondsLeft / 60);
+  const isExpired = secondsLeft <= 0 && isPending;
 
   const statusColor = {
     pending: 'var(--amber)',
     approved: '#22c55e',
     rejected: '#ef4444',
     expired: 'var(--text-dim)',
+    resolved_elsewhere: '#60a5fa',
+    interrupted: 'var(--text-dim)',
+    provider_removed: 'var(--text-dim)',
+    blocked_by_policy: '#ef4444',
+    executed: '#22c55e',
   }[approval.status];
 
   const statusLabel = {
-    pending: isExpired ? 'Expired' : 'Pending',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    expired: 'Expired',
+    pending: isExpired ? 'Caducada' : 'Pendiente',
+    approved: approval.resolution === 'allow_session' ? 'Permitida durante la sesión'
+      : approval.resolution === 'allow_persistent_rule' ? 'Regla persistente creada'
+      : approval.resolution === 'external' ? 'Resuelta desde otra interfaz' : 'Permitida una vez',
+    rejected: 'Denegada',
+    expired: 'Caducada',
+    resolved_elsewhere: 'Resuelta desde otra interfaz',
+    interrupted: 'Interrumpida',
+    provider_removed: 'Retirada por el proveedor',
+    blocked_by_policy: 'Bloqueada por la política',
+    executed: 'Ejecutada',
   }[approval.status];
 
-  const handleApprove = async () => {
+  const handleApprove = async (decision: 'allow_once' | 'allow_session' | 'allow_persistent_rule' = 'allow_once') => {
     if (isL3 && !showCredentialInput) {
+      setPendingDecision(decision);
       setShowCredentialInput(true);
       return;
     }
+    const effectiveDecision = pendingDecision ?? decision;
     setError('');
     setLoading(true);
     try {
-      await approveApproval(approval.id, isL3 ? credentialInput : undefined);
-      updateApprovalStatus(approval.id, 'approved');
-    } catch (e: any) {
-      const code = e?.response?.data?.error?.code || e?.message || 'Error';
-      setError(
-        code === 'INVALID_CREDENTIAL' || code === 'INVALID_PIN'
-          ? 'PIN o contrasena incorrectos'
-          : code === 'CREDENTIAL_REQUIRED' || code === 'PIN_REQUIRED'
-            ? 'Se requiere PIN o contrasena'
-            : 'Failed to approve',
-      );
+      const resolved = await approveApproval(approval.id, isL3 ? credentialInput : undefined, effectiveDecision);
+      if (resolved.status !== 'pending') {
+        updateApprovalStatus(approval.id, resolved.status, resolved.resolution);
+      }
+      setPendingDecision(null);
+    } catch (e: unknown) {
+      const code = e instanceof ApiError ? e.code : e instanceof Error ? e.message : 'Error';
+      const messages: Record<string, string> = {
+        INVALID_CREDENTIAL: 'Core no pudo validar el PIN o la contraseña de esta cuenta.',
+        INVALID_PIN: 'Core no pudo validar el PIN o la contraseña de esta cuenta.',
+        CREDENTIAL_REQUIRED: 'Introduce el PIN o la contraseña de esta cuenta.',
+        PIN_REQUIRED: 'Introduce el PIN o la contraseña de esta cuenta.',
+        GATEWAY_APPROVAL_FAILED: 'Gateway no confirmó la decisión. Esto no demuestra que el PIN sea incorrecto; actualiza el estado antes de reintentar.',
+        PROVIDER_UNAVAILABLE: 'El servicio de aprobaciones no está disponible. Esto no demuestra que el PIN sea incorrecto.',
+        SECURITY_POLICY_CHANGED: 'La política cambió desde que apareció esta aprobación. No se autorizó; pide una solicitud nueva.',
+        SECURITY_POLICY_UNVERIFIED: 'No se pudo verificar la política actual del agente; la aprobación se bloqueó por seguridad.',
+        GUARD_APPROVAL_STALE: 'La aprobación corresponde a una versión anterior de la política. Pide una solicitud nueva.',
+        PROTECTED_FLOOR_CHANGED: 'El nivel de protección cambió; no se autorizó esta solicitud antigua.',
+        CANONICAL_REQUEST_CHANGED: 'La operación cambió desde que apareció esta tarjeta; no se autorizó.',
+        UNATTENDED_APPROVAL_BLOCKED: 'Esta solicitud pertenece a una tarea automática y no puede aprobarse desde el chat.',
+        SECURE_CREDENTIAL_RATE_LIMITED: 'Se alcanzó el límite temporal de intentos. Espera un minuto antes de volver a probar.',
+        PROVIDER_RESOLUTION_NOT_RECONCILED: 'Gateway recibió una decisión, pero Core no pudo confirmar el estado. Actualiza la tarjeta antes de reintentar.',
+      };
+      setError(messages[code] ?? (e instanceof ApiError ? `No se pudo resolver la aprobación (${code}).` : 'No se pudo aprobar.'));
     } finally {
       setLoading(false);
     }
@@ -659,8 +832,10 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
     setError('');
     setLoading(true);
     try {
-      await rejectApproval(approval.id);
-      updateApprovalStatus(approval.id, 'rejected');
+      const resolved = await rejectApproval(approval.id);
+      if (resolved.status !== 'pending') {
+        updateApprovalStatus(approval.id, resolved.status, resolved.resolution);
+      }
     } catch {
       setError('Failed to reject');
     } finally {
@@ -685,7 +860,19 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: '1.1rem' }}>{'\u{1F6E1}'}</span>
           <span style={{ fontWeight: 600, color: statusColor }}>
-            Approval Required (L{approval.level})
+            {authority === 'openclaw_exec' ? 'El agente quiere ejecutar un comando'
+              : authority === 'openclaw_plugin' ? 'El runtime necesita permiso'
+                : authority === 'external_mcp' ? 'Un servicio externo necesita permiso'
+                  : `Permiso requerido (L${approval.level})`}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          <span style={{ padding: '2px 7px', borderRadius: 999, background: 'var(--surface)', color: 'var(--text-muted)', fontSize: '0.6875rem' }}>
+            {authority.replaceAll('_', ' ')}
+          </span>
+          <span style={{ padding: '2px 7px', borderRadius: 999, background: risk === 'critical' || risk === 'high' ? '#ef444418' : '#f59e0b18', color: risk === 'critical' || risk === 'high' ? '#ef4444' : '#f59e0b', fontSize: '0.6875rem' }}>
+            {risk} risk
           </span>
         </div>
 
@@ -695,10 +882,19 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
           <div style={{ color: 'var(--text-dim)', fontSize: '0.8125rem' }}>{approval.summary}</div>
         </div>
 
+        {approval.presentation?.secure_confirmation && (
+          <div role="note" style={{ marginBottom: 8, padding: '7px 9px', borderRadius: 'var(--radius-sm)', background: '#f59e0b12', color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+            <strong style={{ color: 'var(--amber)' }}>El PIN lo exige la política de seguridad</strong>
+            {protectedCategory && <span>: {protectedCategoryLabels[protectedCategory] ?? 'acción protegida'}</span>}
+            {approval.presentation.tool_name && <span> · Herramienta: {approval.presentation.tool_name}</span>}
+            <div>Esto no significa que todas las lecturas necesiten PIN. La ruta exacta se oculta si puede contener información sensible.</div>
+          </div>
+        )}
+
         {/* Expiry */}
         {isPending && !isExpired && (
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 8 }}>
-            Expires in {minutesLeft} min
+            Expira en {secondsLeft < 60 ? `${secondsLeft} s` : `${minutesLeft} min`}
           </div>
         )}
 
@@ -721,6 +917,11 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
         {/* Actions for pending */}
         {isPending && !isExpired && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {!canAllowOnce && !canAllowAlways && !canDeny && (
+              <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>
+                Esta solicitud no ofrece decisiones resolubles desde el Dash.
+              </div>
+            )}
             {showCredentialInput && (
               <input
                 type="password"
@@ -737,47 +938,59 @@ function ApprovalCard({ approval }: { approval: MessageApproval }) {
                   fontSize: '0.875rem',
                   width: 200,
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleApprove(); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') void handleApprove(pendingDecision ?? 'allow_once'); }}
               />
             )}
             {error && (
               <div style={{ color: '#ef4444', fontSize: '0.75rem' }}>{error}</div>
             )}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={handleApprove}
-                disabled={loading || (isL3 && showCredentialInput && !credentialInput)}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: 'none',
-                  background: '#22c55e',
-                  color: '#fff',
-                  fontWeight: 600,
-                  fontSize: '0.8125rem',
-                  cursor: loading ? 'wait' : 'pointer',
-                  opacity: loading ? 0.6 : 1,
-                }}
-              >
-                {loading ? '...' : showCredentialInput ? 'Confirm' : 'Approve'}
-              </button>
-              <button
-                onClick={handleReject}
-                disabled={loading}
-                style={{
-                  padding: '6px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
-                  color: '#ef4444',
-                  fontWeight: 600,
-                  fontSize: '0.8125rem',
-                  cursor: loading ? 'wait' : 'pointer',
-                  opacity: loading ? 0.6 : 1,
-                }}
-              >
-                Reject
-              </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {showCredentialInput ? (
+                <button
+                  onClick={() => void handleApprove(pendingDecision ?? 'allow_once')}
+                  disabled={loading || !credentialInput}
+                  style={{
+                    padding: '6px 16px', borderRadius: 'var(--radius-md)', border: 'none',
+                    background: '#22c55e', color: '#fff',
+                    fontWeight: 600, fontSize: '0.8125rem', cursor: loading ? 'wait' : 'pointer',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  {loading ? '...' : pendingDecision === 'allow_persistent_rule'
+                    ? 'Confirmar regla persistente'
+                    : pendingDecision === 'allow_session' ? 'Confirmar durante la sesión' : 'Confirmar una vez'}
+                </button>
+              ) : (
+                <>
+                  {canAllowOnce && (
+                    <button
+                      onClick={() => void handleApprove('allow_once')}
+                      disabled={loading}
+                      style={{ padding: '6px 16px', borderRadius: 'var(--radius-md)', border: 'none', background: '#22c55e', color: '#fff', fontWeight: 600, fontSize: '0.8125rem', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1 }}
+                    >
+                      {loading ? '...' : 'Permitir una vez'}
+                    </button>
+                  )}
+                  {canAllowAlways && (
+                    <button
+                      onClick={() => void handleApprove(authority === 'openclaw_exec' ? 'allow_persistent_rule' : 'allow_session')}
+                      disabled={loading}
+                      style={{ padding: '6px 16px', borderRadius: 'var(--radius-md)', border: '1px solid #22c55e', background: 'transparent', color: '#22c55e', fontWeight: 600, fontSize: '0.8125rem', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1 }}
+                    >
+                      {authority === 'openclaw_exec' ? 'Crear regla persistente' : 'Durante esta sesión'}
+                    </button>
+                  )}
+                </>
+              )}
+              {canDeny && (
+                <button
+                  onClick={handleReject}
+                  disabled={loading}
+                  style={{ padding: '6px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', background: 'transparent', color: '#ef4444', fontWeight: 600, fontSize: '0.8125rem', cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.6 : 1 }}
+                >
+                  Denegar
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -797,8 +1010,8 @@ function GatewayDownCard() {
     try {
       await startGateway();
       setResult('started');
-    } catch (e: any) {
-      setErrorMsg(e?.message ?? 'Error al iniciar el Gateway');
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al iniciar el Gateway');
       setResult('error');
     } finally {
       setLoading(false);
@@ -918,6 +1131,11 @@ const ERROR_INFO: Record<string, { title: string; description: string; hint: str
     description: 'No se pudo autenticar con el servicio de IA.',
     hint: 'Verifica la configuracion de la API key.',
   },
+  client_identity: {
+    title: 'Origen del chat no verificado',
+    description: 'OpenClaw no ha recibido una direccion de cliente validada por el proxy.',
+    hint: 'Abre el DASH mediante su dominio normal, no desde 127.0.0.1.',
+  },
   subscription_expired: {
     title: 'Modelo no disponible',
     description: 'El proveedor devolvio 410 - el modelo ya no existe o la suscripcion ha caducado.',
@@ -986,8 +1204,9 @@ function ApiErrorCard({ message }: { message: Message }) {
     const convMessages = messages.get(message.conversation_id) ?? [];
     const lastUserMsg = [...convMessages].reverse().find(m => m.role === 'user');
     if (lastUserMsg) {
-      setRetried(true);
-      sendMessage(lastUserMsg.content, undefined, lastUserMsg.attachments);
+      const result = sendMessage(lastUserMsg.content, undefined, lastUserMsg.attachments);
+      if (result.accepted) setRetried(true);
+      else toast.error('No se pudo enviar el reintento.');
     }
   };
 
@@ -1074,7 +1293,7 @@ function ApiErrorCard({ message }: { message: Message }) {
             )}
             {isSandboxBroken && (
               <button
-                onClick={() => navigate('/settings/sandbox')}
+                onClick={() => navigate('/settings/security?security_tab=isolation')}
                 style={{
                   padding: '6px 16px',
                   borderRadius: 'var(--radius-md)',

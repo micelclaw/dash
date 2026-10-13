@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { Disc3, Play, Shuffle } from 'lucide-react';
 import { MediaHero } from '@/components/media';
 import { useMusicStore } from '@/stores/music.store';
@@ -29,6 +30,7 @@ export function AlbumDetailView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       <BackButton onClick={closeDetail} />
+      <EntitySource entity={album} domain="music" native detail />
       <MediaHero
         image={album.cover_art ? coverUrl(album.cover_art, 600) : null}
         fallbackIcon={Disc3}

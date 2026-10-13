@@ -19,7 +19,14 @@ interface AddCalendarModalProps {
   open: boolean;
   onClose: () => void;
   onCreated?: () => void;
-  connectors?: Array<{ id: string; connector_type: string; display_name: string | null }>;
+  connectors?: Array<{
+    id: string;
+    connector_type: string;
+    display_name: string | null;
+    name?: string;
+    /** El protocolo del catálogo: es lo que decide si aquí puede vivir un calendario. */
+    protocol?: string;
+  }>;
 }
 
 const PRESET_COLORS = [
@@ -34,8 +41,12 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
   const [connectorId, setConnectorId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // CalDAV connectors for the "location" picker
-  const caldavConnectors = (connectors ?? []).filter(c => c.connector_type === 'caldav');
+  // Dónde puede vivir un calendario nuevo: lo dice el PROTOCOLO del catálogo, no
+  // el nombre del tipo. Con `connector_type === 'caldav'`, un segundo proveedor
+  // CalDAV (o un renombrado) desaparecería del selector en silencio.
+  const caldavConnectors = (connectors ?? []).filter(
+    (c) => c.protocol === 'caldav' || c.connector_type === 'caldav', // el 2.º, respaldo de filas antiguas
+  );
 
   useEffect(() => {
     if (open) {
@@ -193,7 +204,11 @@ export function AddCalendarModal({ open, onClose, onCreated, connectors }: AddCa
                     onChange={() => { setSource('caldav'); setConnectorId(conn.id); }}
                     style={{ accentColor: 'var(--amber)' }}
                   />
-                  {conn.display_name ?? 'Synology Calendar'}
+                  {/* El nombre lo pone la integración. Antes había aquí un
+                      «Synology Calendar» fijo, así que CUALQUIER servidor
+                      CalDAV sin nombre se anunciaba como un Synology — y el
+                      usuario veía un Synology que ya no tenía. */}
+                  {conn.display_name ?? conn.name ?? 'Servidor CalDAV'}
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>CalDAV</span>
                 </label>
               ))}

@@ -439,13 +439,17 @@ function LinksSub() {
   return (
     <div style={{ padding: '12px 16px' }}>
       <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', margin: '0 0 10px' }}>
-        Todos tus enlaces públicos activos (ficheros y carpetas). Cópialos, ábrelos o revócalos.
+        Todos tus enlaces públicos activos (ficheros, carpetas y álbumes de fotos). Cópialos, ábrelos o revócalos.
       </p>
 
       {links.map(link => {
         const url = buildShareUrl(link.token, primaryDomain);
         const expired = link.expires_at ? new Date(link.expires_at).getTime() < now : false;
-        const name = link.filename ?? 'Archivo no disponible';
+        // DR1: `shared_links` guarda también los enlaces de ÁLBUM de Fotos. El backend
+        // resuelve su nombre por su propio join; aquí solo hay que no pintarlos como
+        // ficheros (icono de imagen + etiqueta), y su "no disponible" es de álbum.
+        const isAlbum = link.target_type === 'album';
+        const name = link.filename ?? (isAlbum ? 'Álbum no disponible' : 'Archivo no disponible');
         const menuItems: ContextMenuItem[] = [
           { label: 'Copiar enlace', icon: CopyIcon, onClick: () => copy(url) },
           { label: 'Abrir enlace', icon: ExternalLink, onClick: () => { window.open(url, '_blank', 'noopener'); } },
@@ -458,7 +462,7 @@ function LinksSub() {
             items={menuItems}
             trigger={
               <ShareRow>
-                <FileIcon mime="" isDirectory={!!link.is_directory} size="sm" />
+                <FileIcon mime={isAlbum ? 'image/jpeg' : ''} isDirectory={!!link.is_directory} size="sm" />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{
                     fontSize: '0.8125rem', color: 'var(--text)',
@@ -487,6 +491,7 @@ function LinksSub() {
                       </span>
                     )}
                     {link.is_directory && <span>· carpeta</span>}
+                    {isAlbum && <span>· álbum de fotos</span>}
                   </div>
                 </div>
                 <IconButton icon={CopyIcon} title="Copiar enlace" onClick={() => copy(url)} />

@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { Users } from 'lucide-react';
@@ -57,6 +58,12 @@ export function Component() {
   // Contact from list, or fetched directly if not in the paginated list
   const [directContact, setDirectContact] = useState<Contact | null>(null);
   const selectedContact = contacts.find(c => c.id === selectedId) ?? directContact;
+
+  useOriginRefresh('contacts', async () => {
+    if (!selectedId || contacts.some(c => c.id === selectedId)) return;
+    const res = await api.get<{ data: Contact }>(`/contacts/${selectedId}`);
+    setDirectContact(prev => prev?.id === res.data.id ? { ...prev, origins: res.data.origins } : prev);
+  });
 
   // Fetch contact directly when not in the paginated list (e.g. deep-link from search)
   useEffect(() => {

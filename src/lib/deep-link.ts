@@ -54,7 +54,7 @@ export function parseDeepLink(raw: string | null | undefined): string | null {
   if (!route.startsWith('/')) return null;
   if (route.startsWith('//')) return null;
   if (/^\/\\/.test(route)) return null; // "/\" trucos
-  if (/[a-z][a-z0-9+.-]*:/i.test(route.split(/[?#]/)[0])) return null; // esquema embebido en el path
+  if (/[a-z][a-z0-9+.-]*:/i.test(route.split(/[?#]/)[0] ?? '')) return null; // esquema embebido en el path
 
   return route;
 }

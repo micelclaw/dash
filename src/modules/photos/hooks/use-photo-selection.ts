@@ -27,7 +27,7 @@ export function usePhotoSelection(items: { id: string }[]) {
           for (let i = start; i <= end; i++) next.add(items[i]!.id);
         }
       } else {
-        next.has(id) ? next.delete(id) : next.add(id);
+        if (next.has(id)) next.delete(id); else next.add(id);
       }
       lastToggleRef.current = id;
       return next;

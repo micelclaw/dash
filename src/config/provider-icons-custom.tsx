@@ -115,3 +115,19 @@ export const Vydra: FC<CustomIconProps> = ({ size, style, className }) => (
     <path d="M3 4h4l5 12 5-12h4l-7 16h-4z" />
   </svg>
 );
+
+// hub-and-spoke — OmniRoute (one endpoint routing to many providers). A central
+// node with six providers around it, connected by routes.
+export const OmniRoute: FC<CustomIconProps> = ({ size, style, className }) => (
+  <svg {...baseProps(size)} style={style} className={className}>
+    <g stroke="currentColor" strokeWidth={1.3} strokeLinecap="round">
+      <line x1="12" y1="12" x2="20" y2="12" />
+      <line x1="12" y1="12" x2="16" y2="5" />
+      <line x1="12" y1="12" x2="8" y2="5" />
+      <line x1="12" y1="12" x2="4" y2="12" />
+      <line x1="12" y1="12" x2="8" y2="19" />
+      <line x1="12" y1="12" x2="16" y2="19" />
+    </g>
+    <path d="M9.4 12a2.6 2.6 0 1 0 5.2 0 2.6 2.6 0 1 0-5.2 0zM18.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0zM14.5 5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0zM6.5 5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0zM2.5 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0zM6.5 19a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0zM14.5 19a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z" />
+  </svg>
+);

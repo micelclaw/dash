@@ -85,7 +85,7 @@ interface InventoryState {
   updateMeter: (itemId: string, value: number, unit?: string) => Promise<void>;
   approveProposal: (id: string, payload?: Record<string, unknown>) => Promise<void>;
   rejectProposal: (id: string) => Promise<void>;
-  uploadItemFile: (itemId: string, file: File, type: 'photo' | 'receipt' | 'manual' | 'doc') => Promise<void>;
+  uploadItemFile: (itemId: string, file: File, type: 'photo' | 'receipt' | 'manual' | 'doc') => Promise<string>;
   selectItem: (id: string | null) => void;
 }
 
@@ -320,8 +320,9 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
   uploadItemFile: async (itemId, file, type) => {
     const form = new FormData();
     form.append('file', file);
-    await api.upload(`/inventory/items/${itemId}/upload?type=${type}`, form);
-    await get().fetchItems();
+    const res = await api.upload<{ data: { file: { id: string }; item: InventoryItem } }>(`/inventory/items/${itemId}/upload?type=${type}`, form);
+    set({ items: get().items.map(item => item.id === itemId ? res.data.item : item) });
+    return res.data.file.id;
   },
 
   selectItem: (id) => set({ selectedItemId: id }),

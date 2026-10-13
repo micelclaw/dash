@@ -22,7 +22,7 @@ const LANGUAGES = ['javascript', 'typescript', 'python', 'go', 'rust', 'sql', 'j
 /** Basic syntax coloring via regex */
 function colorize(code: string, _lang?: string): React.ReactNode[] {
   return code.split('\n').map((line, i) => {
-    let colored = line
+    const colored = line
       // Strings
       .replace(/(["'`])(?:(?!\1).)*?\1/g, '<s>$&</s>')
       // Comments (// or #)

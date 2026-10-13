@@ -14,12 +14,11 @@ import { useEffect, useState } from 'react';
 import {
   Radio, RotateCw, Play, Square,
   Cable, MessageSquare, Bot,
-  Stethoscope, ShieldCheck, ExternalLink,
+  Stethoscope, ShieldCheck,
   RefreshCw, DollarSign, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
-import { resolveServiceUrl } from '@/config/service-urls';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { StatusPill } from '../components/StatusPill';
@@ -315,9 +314,6 @@ export function OverviewTab() {
                 setAuditResult((res as any).data ?? res);
               } catch { toast.error('Failed to run security audit'); }
               finally { setAuditLoading(false); }
-            }} />
-            <QuickActionBtn icon={ExternalLink} label="Open Dashboard" onClick={() => {
-              window.open(resolveServiceUrl('portainer', `http://127.0.0.1:${status?.port ?? 18789}/`), '_blank', 'noopener,noreferrer');
             }} />
           </div>
         </div>

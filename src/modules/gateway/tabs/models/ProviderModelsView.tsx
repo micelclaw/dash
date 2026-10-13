@@ -16,8 +16,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { getProviderIcon } from '@/config/provider-icons';
 import type * as gwService from '@/services/gateway.service';
 import { StatusPill } from '../../components/StatusPill';
-import type { CatalogModel } from '../../types';
-import { PROVIDER_COLORS, PROVIDER_LABELS, isUserManagedProvider } from './constants';
+import type { CatalogModel, ModelTestResult } from '../../types';
+import { PROVIDER_COLORS, isUserManagedProvider } from './constants';
 import type { ProviderEntry } from './types';
 import { CatalogRow } from './CatalogRow';
 
@@ -43,21 +43,39 @@ interface ProviderModelsViewProps {
   onAddModel: (key: string) => void;
   onAddCustomModelDirect: (provider: string, modelId: string) => void;
   onRemoveModel: (key: string) => void;
+  /** GM3: claves con borrado ENCOLADO (ventana de Deshacer del gateway.store) —
+   *  la fila del catálogo se atenúa igual que la de Configured. */
+  queuedRemovals: string[];
+  /** GM3: claves cuyo borrado YA salió en el batch POST (hasta 90 s). Siguen
+   *  atenuadas y SIN Deshacer — antes revivían con un «Remove» muerto. */
+  inflightRemovals: string[];
+  onUndoRemove: (key: string) => void;
   onConfigure: (model: CatalogModel) => void;
   onEditOllama: (key: string) => void;
   onEditCustomModel: (model: CatalogModel) => void;
   onDeleteFromDisk: (model: CatalogModel) => void;
   onOpenAddOllama: () => void;
+  /** Tests de salud por modelo (key = 'provider/modelId') — del store. */
+  modelTests: Record<string, ModelTestResult>;
+  testingModels: string[];
+  onTestModel: (key: string) => void;
 }
 
 export function ProviderModelsView({
   provider, entry, isMobile, search, catalog, filteredCatalog, customProviderIds,
   discoveredModels, discovering, discoverError, hoveredRow, onHover,
   mutatingModel, addingKey, addProgress, onBack, onAddModel, onAddCustomModelDirect,
-  onRemoveModel, onConfigure, onEditOllama, onEditCustomModel, onDeleteFromDisk, onOpenAddOllama,
+  onRemoveModel, queuedRemovals, inflightRemovals, onUndoRemove, onConfigure, onEditOllama, onEditCustomModel, onDeleteFromDisk, onOpenAddOllama,
+  modelTests, testingModels, onTestModel,
 }: ProviderModelsViewProps) {
   const color = PROVIDER_COLORS[provider] ?? 'var(--text-dim)';
   const ProviderIcon = getProviderIcon(provider);
+  // Señal de auth del provider — viene del providers-overview vía entry.hasAuth
+  // (ModelsTab la deriva de overview.has_credential). Gobierna el badge del
+  // header y el gate +Add/"Configure provider" de TODAS las filas, incluidas
+  // las descubiertas. Sin entry (p.ej. deep-link a un provider desconocido) =
+  // sin credencial → las filas ofrecen "Configure provider", nunca +Add.
+  const hasCredential = entry?.hasAuth ?? false;
 
   const providerModels = filteredCatalog.filter(m => m.provider === provider);
   const isCustom = customProviderIds.includes(provider);
@@ -91,20 +109,27 @@ export function ProviderModelsView({
   //
   // `discoveredAsCatalog` adapts the discovered shape into the
   // CatalogModel-shape that CatalogRow already consumes, so we
-  // don't duplicate render code. `available: true` because if the
-  // provider exposes the model via /v1/models we have auth (or
-  // it's a public catalog like OpenRouter).
+  // don't duplicate render code. `available` ya NO se fuerza a true:
+  // el gate de +Add lo decide providerHasCredential (overview) — un
+  // catálogo público (OpenRouter sin key) lista modelos que NO se
+  // pueden añadir sin credencial.
   const discoveredAsCatalog: CatalogModel[] = filteredAvailable.map((dm) => ({
     key: `${provider}/${dm.id}`,
     name: dm.name || dm.id,
     provider,
     context_window: null,
     input_type: 'text',
-    available: true,
+    available: hasCredential,
     configured: false,
     is_default: false,
     local: false,
     size_bytes: dm.size_bytes ?? null,
+    // Metadata del catálogo CURADO — el endpoint discover ya la trae por modelo
+    max_context: dm.max_context ?? null,
+    max_output: dm.max_output ?? null,
+    caps: dm.caps ?? null,
+    knowledge: dm.knowledge ?? null,
+    aa_slug: dm.aa_slug ?? null,
   }));
   // Tamaño en disco por tag (de /api/tags vía discover). Los modelos
   // Configured vienen del catálogo (sin size); se lo inyectamos cruzando
@@ -145,10 +170,13 @@ export function ProviderModelsView({
               : <Cpu size={12} style={{ color }} />}
           </div>
           <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>
-            {PROVIDER_LABELS[provider] ?? provider}
+            {entry?.label ?? provider}
           </span>
-          {entry?.hasAuth
-            ? <StatusPill status="available" />
+          {/* Badge del PROVIDER = credencial. Se etiqueta "Authenticated" para
+              no colisionar con el "Available" de las filas, que desde el
+              2026-07-13 significa "el modelo respondió al TEST real". */}
+          {hasCredential
+            ? <StatusPill status="available" label="Authenticated" title="This provider has a usable credential" />
             : <StatusPill status="no_auth" />
           }
         </div>
@@ -177,9 +205,16 @@ export function ProviderModelsView({
           icon={Cpu}
           title={search
             ? 'No models match your search'
-            : isCustom && !discovering
-              ? 'No models available. If this is LM Studio, make sure at least one model is loaded.'
-              : 'No models available for this provider'}
+            : discovering
+              ? 'No models available for this provider'
+              : isUserManagedProvider(provider)
+                // Local server / custom endpoint: el hint de "carga un modelo /
+                // servidor arrancado" sí aplica.
+                ? 'No models available. For a local server (Ollama/LM Studio/vLLM) make sure at least one model is loaded and the Base URL is correct.'
+                // Provider cloud (google/nvidia/groq/…): si tras dar la key no
+                // salen modelos, casi siempre la key es inválida o el provider
+                // no devolvió catálogo.
+                : 'No models found for this provider. Check that the API key is valid — the provider returned no models.'}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -220,12 +255,19 @@ export function ProviderModelsView({
             <CatalogRow
               key={model.key}
               model={model}
+              providerHasCredential={hasCredential}
               isMobile={isMobile}
               isHovered={hoveredRow === model.key}
               onHover={onHover}
               mutatingModel={mutatingModel}
               isAdding={addingKey === model.key}
               addProgress={addProgress}
+              removalQueued={queuedRemovals.includes(model.key)}
+              removalInflight={inflightRemovals.includes(model.key)}
+              onUndoRemove={onUndoRemove}
+              testResult={modelTests[model.key] ?? null}
+              isTesting={testingModels.includes(model.key)}
+              onTest={onTestModel}
               // Dispatch del Add según el tipo de provider:
               //   - Custom (en `models.providers.<id>`: nvidia, ollama,
               //     custom-api-*, lm-studio, etc.) → llama directamente

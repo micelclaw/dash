@@ -16,7 +16,7 @@ import { useNotificationStore } from '@/stores/notification.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import type { Meeting, MeetingMessage, ActionItem, MeetingAdvancedOptions } from '../../types';
 
-interface CreateMeetingPayload {
+export interface CreateMeetingPayload {
   title: string;
   description?: string;
   participants: string[];
@@ -25,10 +25,34 @@ interface CreateMeetingPayload {
   advanced_options?: MeetingAdvancedOptions;
 }
 
+export interface EditMeetingPayload {
+  title: string;
+  description: string | null;
+  participants: string[];
+  user_participates: boolean;
+  scheduled_at: string | null;
+  advanced_options?: MeetingAdvancedOptions;
+}
+
 export function useMeetings() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
+  // Meetings con ventana de intervención humana ABIERTA (el orquestador espera al usuario).
+  const [awaitingUser, setAwaitingUser] = useState<Set<string>>(new Set());
   const { addNotification } = useNotificationStore();
+
+  // Reconciliar la ventana de intervención desde el servidor (rehidratación: el
+  // evento WS se pierde si la sala se abre después de abrirse la ventana).
+  const reconcileAwaiting = useCallback((rows: Meeting[]) => {
+    setAwaitingUser(prev => {
+      const next = new Set(prev);
+      for (const m of rows) {
+        if (m.awaiting_user) next.add(m.id);
+        else if (m.awaiting_user === false) next.delete(m.id);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +61,7 @@ export function useMeetings() {
         const res = await api.get<{ data: Meeting[] }>('/meetings');
         if (!cancelled) {
           setMeetings(res.data);
+          reconcileAwaiting(res.data);
           setLoading(false);
         }
       } catch (err) {
@@ -52,7 +77,7 @@ export function useMeetings() {
     }
     load();
     return () => { cancelled = true; };
-  }, [addNotification]);
+  }, [addNotification, reconcileAwaiting]);
 
   // ── Recovery polling ───────────────────────────────────────────────
   // WS broadcasts can drop momentarily during a long orchestration
@@ -85,10 +110,11 @@ export function useMeetings() {
           }
           return Array.from(byId.values());
         });
+        reconcileAwaiting(res.data);
       } catch { /* swallow — next tick will retry */ }
     }, 5000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [hasRunning]);
+  }, [hasRunning, reconcileAwaiting]);
 
   const createMeeting = useCallback(async (payload: CreateMeetingPayload): Promise<Meeting | null> => {
     try {
@@ -157,14 +183,7 @@ export function useMeetings() {
    * participants (the BE accepts string[] on PATCH; the response comes
    * back enriched with display_name/avatar/role/color).
    */
-  const editMeeting = useCallback(async (id: string, payload: {
-    title: string;
-    description: string | null;
-    participants: string[];
-    user_participates: boolean;
-    scheduled_at: string | null;
-    advanced_options?: MeetingAdvancedOptions;
-  }): Promise<Meeting | null> => {
+  const editMeeting = useCallback(async (id: string, payload: EditMeetingPayload): Promise<Meeting | null> => {
     try {
       const res = await api.patch<{ data: Meeting }>(`/meetings/${id}`, payload);
       setMeetings(prev => prev.map(m => (m.id === id ? res.data : m)));
@@ -210,6 +229,66 @@ export function useMeetings() {
         body: err instanceof Error ? err.message : 'Unknown error',
       });
       return null;
+    }
+  }, [addNotification]);
+
+  /**
+   * Continuar un council YA COMPLETADO (conserva el debate y las tareas). mode 'debate' = N rondas
+   * más + re-conclusión + merge de tareas; mode 'qa' = una vuelta ligera sin re-concluir. Update
+   * optimista a in_progress (reactiva streaming + la barra de intervención si participas).
+   */
+  const continueMeeting = useCallback(async (
+    id: string,
+    opts: { mode: 'debate' | 'qa'; directive: string; rounds?: number; participate?: boolean },
+  ): Promise<boolean> => {
+    try {
+      const res = await api.post<{ data: { continuing: boolean; started_at: string } }>(
+        `/meetings/${id}/continue`,
+        {
+          mode: opts.mode,
+          directive: opts.directive,
+          ...(opts.mode === 'debate' ? { rounds: opts.rounds ?? 2, participate: opts.participate === true } : {}),
+        },
+      );
+      setMeetings(prev => prev.map(m => m.id === id
+        ? { ...m, status: 'in_progress', started_at: res.data.started_at }
+        : m));
+      addNotification({
+        type: 'system',
+        title: opts.mode === 'qa' ? 'Preguntando al council' : 'Continuando el council',
+        body: 'Los agentes están retomando la conversación. Aparecerá en tiempo real.',
+      });
+      return true;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'No se pudo continuar el council',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
+    }
+  }, [addNotification]);
+
+  /** Añade UNA tarea al Workboard bajo demanda. Marca el ítem con workboard_card_id en el estado. */
+  const addItemToWorkboard = useCallback(async (meetingId: string, itemId: string): Promise<boolean> => {
+    try {
+      const res = await api.post<{ data: { item_id: string; workboard_card_id: string | null; item: ActionItem } }>(
+        `/meetings/${meetingId}/action-items/${itemId}/to-workboard`,
+        {},
+      );
+      setMeetings(prev => prev.map(m => {
+        if (m.id !== meetingId) return m;
+        return { ...m, action_items: m.action_items.map(it => (it.id === itemId ? res.data.item : it)) };
+      }));
+      addNotification({ type: 'system', title: 'Tarea añadida al Workboard', body: 'La verás en "Por reclamar".' });
+      return true;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'No se pudo añadir al Workboard',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
     }
   }, [addNotification]);
 
@@ -343,6 +422,50 @@ export function useMeetings() {
     }));
   }, [messageEv]);
 
+  // Ventana de intervención humana (user_participates): el orquestador pausa y
+  // espera; estos eventos encienden/apagan el banner + input de la sala.
+  const awaitingEv = useWebSocket('meeting.awaiting_user');
+  useEffect(() => {
+    if (!awaitingEv) return;
+    const data = awaitingEv.data as { meeting_id?: string } | undefined;
+    if (!data?.meeting_id) return;
+    const id = data.meeting_id;
+    setAwaitingUser(prev => new Set(prev).add(id));
+    addNotification({ type: 'system', title: 'El council espera tu intervención', body: 'Escribe tu mensaje en la sala o pulsa «Continuar sin mí».' });
+  }, [awaitingEv, addNotification]);
+
+  const windowClosedEv = useWebSocket('meeting.user_window_closed');
+  useEffect(() => {
+    if (!windowClosedEv) return;
+    const data = windowClosedEv.data as { meeting_id?: string } | undefined;
+    if (!data?.meeting_id) return;
+    const id = data.meeting_id;
+    setAwaitingUser(prev => { const next = new Set(prev); next.delete(id); return next; });
+  }, [windowClosedEv]);
+
+  const sendUserMessage = useCallback(async (id: string, content: string): Promise<boolean> => {
+    try {
+      await api.post(`/meetings/${id}/messages`, { content });
+      return true;
+    } catch (err) {
+      addNotification({
+        type: 'system',
+        title: 'No se pudo enviar tu intervención',
+        body: err instanceof Error ? err.message : 'Unknown error',
+      });
+      return false;
+    }
+  }, [addNotification]);
+
+  const skipIntervention = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await api.post(`/meetings/${id}/messages`, { skip: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const completedEv = useWebSocket('meeting.completed');
   useEffect(() => {
     if (!completedEv) return;
@@ -353,7 +476,16 @@ export function useMeetings() {
     if (!id) return;
     setMeetings(prev => prev.map(m =>
       m.id === id
-        ? { ...m, status: 'completed', completed_at: new Date().toISOString(), action_items: items }
+        ? {
+            ...m,
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            action_items: items,
+            // Descarta placeholders de streaming vacíos: un meeting completado no tiene mensajes a
+            // medio-stream. Limpia la burbuja del chief que #2 emite al arrancar si el council no
+            // llegó a producir su primer token (p.ej. un fallo de arranque → failMeeting).
+            messages: m.messages.filter(x => !(x.streaming && !x.content)),
+          }
         : m
     ));
   }, [completedEv]);
@@ -361,6 +493,7 @@ export function useMeetings() {
   return {
     meetings,
     loading,
+    awaitingUser,
     createMeeting,
     editMeeting,
     runMeeting,
@@ -371,5 +504,9 @@ export function useMeetings() {
     deleteMeeting,
     updateActionItemStatus,
     fetchPendingItemsForName,
+    sendUserMessage,
+    skipIntervention,
+    continueMeeting,
+    addItemToWorkboard,
   };
 }

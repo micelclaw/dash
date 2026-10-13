@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
  *
  * This file is part of Micelclaw OS and is proprietary software.
@@ -20,60 +20,58 @@ interface OnboardingBannerProps {
 
 export function OnboardingBanner({ variant, onDismiss }: OnboardingBannerProps) {
   const navigate = useNavigate();
-
   const isCompleted = variant === 'completed';
 
+  if (!isCompleted) {
+    return (
+      <button type="button" onClick={() => navigate('/gateway')} style={bannerStyle('#dc2626', true)}>
+        <AlertTriangle size={16} aria-hidden="true" />
+        <span>OpenClaw necesita configuración. Abre Gateway para completarla.</span>
+      </button>
+    );
+  }
+
   return (
-    <div
-      onClick={isCompleted ? undefined : () => navigate('/terminal')}
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 9999,
-        background: isCompleted ? '#16a34a' : '#dc2626',
-        color: '#fff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 10,
-        padding: '10px 16px',
-        cursor: isCompleted ? 'default' : 'pointer',
-        fontSize: '0.8125rem',
-        fontWeight: 600,
-        fontFamily: 'var(--font-sans)',
-        letterSpacing: '0.01em',
-        userSelect: 'none',
-      }}
-    >
-      {isCompleted ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-      <span>
-        {isCompleted
-          ? 'Configuracion completada. Ve a Telegram o a Chat para iniciar tu agente.'
-          : 'OpenClaw no esta configurado. Haz clic aqui para completar la configuracion.'}
-      </span>
-      {isCompleted && onDismiss && (
+    <div role="status" style={bannerStyle('#16a34a', false)}>
+      <CheckCircle size={16} aria-hidden="true" />
+      <span>Configuración completada. Ya puedes usar AI Chat y Agents.</span>
+      {onDismiss && (
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDismiss();
-          }}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: '#fff',
-            cursor: 'pointer',
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-            marginLeft: 8,
-            opacity: 0.8,
-          }}
+          type="button"
+          aria-label="Cerrar aviso de configuración completada"
+          onClick={onDismiss}
+          style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 6, display: 'flex', alignItems: 'center', marginLeft: 8, opacity: 0.85 }}
         >
-          <X size={16} />
+          <X size={16} aria-hidden="true" />
         </button>
       )}
     </div>
   );
+}
+
+function bannerStyle(background: string, clickable: boolean): React.CSSProperties {
+  return {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    width: '100%',
+    minHeight: 40,
+    background,
+    color: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: '10px 16px',
+    cursor: clickable ? 'pointer' : 'default',
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    fontFamily: 'var(--font-sans)',
+    letterSpacing: '0.01em',
+    userSelect: 'none',
+    border: 'none',
+    textAlign: 'center',
+  };
 }

@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { MicVocal, SearchX } from 'lucide-react';
 import { MediaGrid, MediaCard } from '@/components/media';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -77,6 +78,7 @@ export function SearchResults() {
                 image={artist.cover_art ? coverUrl(artist.cover_art) : null}
                 fallbackIcon={MicVocal}
                 title={artist.name}
+            badge={<EntitySource entity={artist} domain="music" native />}
                 rounded="circle"
                 onClick={() => void useMusicStore.getState().openArtist(artist.id)}
               />

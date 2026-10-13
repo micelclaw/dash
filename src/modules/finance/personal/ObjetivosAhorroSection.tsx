@@ -56,8 +56,8 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
   const commit = () => {
     const t = Number(String(target).replace(',', '.'));
     const s = Number(String(saved).replace(',', '.'));
-    if (!name.trim()) { toast.error('Pon un nombre'); return; }
-    if (!Number.isFinite(t) || t <= 0) { toast.error('Importe objetivo no válido'); return; }
+    if (!name.trim()) { toast.error('Enter a name'); return; }
+    if (!Number.isFinite(t) || t <= 0) { toast.error('Invalid target amount'); return; }
     onPatch({ ...goal, name: name.trim(), target: Math.round(t * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
     setEdit(false);
   };
@@ -65,12 +65,12 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
   if (edit) {
     return (
       <div style={{ background: 'var(--card)', border: '1px solid var(--info)', borderRadius: 'var(--radius-md, 6px)', padding: '12px 14px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre del objetivo" style={{ ...inputStyle, flex: '1 1 180px', minWidth: 140 }} />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Goal name" style={{ ...inputStyle, flex: '1 1 180px', minWidth: 140 }} />
         <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="Objetivo €" title="Importe objetivo" style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
         <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder="Ahorrado €" title="Ahorrado hasta ahora" style={{ ...inputStyle, width: 110, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Fecha límite (opcional)" style={{ ...inputStyle, width: 150 }} />
-        <button onClick={commit} title="Guardar" style={{ padding: '7px 10px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Check size={15} /></button>
-        <button onClick={() => setEdit(false)} title="Cancelar" style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={15} /></button>
+        <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Deadline (optional)" style={{ ...inputStyle, width: 150 }} />
+        <button onClick={commit} title="Save" style={{ padding: '7px 10px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Check size={15} /></button>
+        <button onClick={() => setEdit(false)} title="Cancel" style={{ padding: '7px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><X size={15} /></button>
       </div>
     );
   }
@@ -92,7 +92,7 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
               {dl != null && dl >= 0 ? `${dl} días` : overdue ? 'vencido' : fmtDeadline(goal.deadline)}
             </span>
           )}
-          <button onClick={() => { setName(goal.name); setTarget(String(goal.target)); setSaved(String(goal.saved)); setDeadline(goal.deadline ?? ''); setEdit(true); }} title="Editar" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Pencil size={14} /></button>
+          <button onClick={() => { setName(goal.name); setTarget(String(goal.target)); setSaved(String(goal.saved)); setDeadline(goal.deadline ?? ''); setEdit(true); }} title="Edit" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Pencil size={14} /></button>
           <button onClick={onDelete} title="Borrar objetivo" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}><Trash2 size={14} /></button>
         </div>
       </div>
@@ -104,7 +104,7 @@ function GoalRow({ goal, onPatch, onDelete }: { goal: SavingsGoal; onPatch: (g: 
           {fmtMoney(goal.saved)} <span style={{ color: 'var(--text-muted)' }}>de {fmtMoney(goal.target)}</span>
         </span>
         <span style={{ color: 'var(--text-muted)' }}>
-          {done ? '¡completado!' : `faltan ${fmtMoney(remaining)}`} · {pct}%
+          {done ? 'done!' : `faltan ${fmtMoney(remaining)}`} · {pct}%
         </span>
       </div>
     </div>
@@ -129,19 +129,19 @@ function AddGoal({ onAdd }: { onAdd: (g: Omit<SavingsGoal, 'id'>) => void }) {
     e.preventDefault();
     const t = Number(String(target).replace(',', '.'));
     const s = Number(String(saved).replace(',', '.'));
-    if (!name.trim()) { toast.error('Pon un nombre'); return; }
-    if (!Number.isFinite(t) || t <= 0) { toast.error('Importe objetivo no válido'); return; }
+    if (!name.trim()) { toast.error('Enter a name'); return; }
+    if (!Number.isFinite(t) || t <= 0) { toast.error('Invalid target amount'); return; }
     onAdd({ name: name.trim(), target: Math.round(t * 100) / 100, saved: Math.max(0, Math.round((s || 0) * 100) / 100), deadline: deadline || null });
     setName(''); setTarget(''); setSaved(''); setDeadline(''); setOpen(false);
   };
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: 12, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
-      <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="Ej. Fondo de emergencia, Viaje…" style={{ ...inputStyle, flex: '1 1 200px', minWidth: 160 }} />
+      <input value={name} onChange={(e) => setName(e.target.value)} autoFocus placeholder="e.g. Emergency fund, Holiday…" style={{ ...inputStyle, flex: '1 1 200px', minWidth: 160 }} />
       <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="Objetivo €" style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
       <input value={saved} onChange={(e) => setSaved(e.target.value)} inputMode="decimal" placeholder="Ya ahorrado €" style={{ ...inputStyle, width: 120, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-      <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Fecha límite (opcional)" style={{ ...inputStyle, width: 150 }} />
-      <button type="submit" style={{ padding: '8px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Crear</button>
-      <button type="button" onClick={() => setOpen(false)} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+      <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} title="Deadline (optional)" style={{ ...inputStyle, width: 150 }} />
+      <button type="submit" style={{ padding: '8px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Create</button>
+      <button type="button" onClick={() => setOpen(false)} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
     </form>
   );
 }
@@ -149,22 +149,33 @@ function AddGoal({ onAdd }: { onAdd: (g: Omit<SavingsGoal, 'id'>) => void }) {
 export function ObjetivosAhorroSection() {
   const { fetchGoals, saveGoals } = useFinancePersonalStore();
   const [goals, setGoals] = useState<SavingsGoal[] | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
+  // El PUT reemplaza la lista ENTERA, así que escribir sin haberla leído la borra.
+  // Un fallo de carga NO puede degradar a "no hay objetivos" (indistinguible de la
+  // lista vacía): se marca y se bloquea el alta hasta que una lectura tenga éxito.
   useEffect(() => {
     let alive = true;
-    void fetchGoals().then((g) => { if (alive) setGoals(g); }).catch(() => { if (alive) setGoals([]); });
+    setLoadFailed(false);
+    void fetchGoals()
+      .then((g) => { if (alive) { setGoals(g); setLoadFailed(false); } })
+      .catch(() => { if (alive) { setGoals(null); setLoadFailed(true); } });
     return () => { alive = false; };
-  }, [fetchGoals]);
+  }, [fetchGoals, reloadKey]);
 
   // Persiste la lista entera (PUT) y refleja el resultado validado por el backend.
   const persist = async (next: SavingsGoal[]) => {
+    const prev = goals;
+    if (prev === null) { toast.error('Todavía no se han cargado tus objetivos'); return; } // guard anti-borrado
     setGoals(next); // optimista
     try {
       const saved = await saveGoals(next);
       setGoals(saved);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el objetivo');
-      void fetchGoals().then(setGoals).catch(() => {});
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save the goal');
+      setGoals(prev);
+      setReloadKey((k) => k + 1);
     }
   };
 
@@ -189,7 +200,14 @@ export function ObjetivosAhorroSection() {
       </div>
 
       {goals === null ? (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Cargando objetivos…</div>
+        loadFailed ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'var(--text-dim)', padding: '10px 14px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
+            <span>No se han podido cargar tus objetivos de ahorro. No se puede crear ni editar hasta leerlos (guardar reemplaza la lista entera).</span>
+            <button onClick={() => setReloadKey((k) => k + 1)} style={{ marginLeft: 'auto', padding: '5px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 12, flexShrink: 0 }}>Reintentar</button>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Loading goals…</div>
+        )
       ) : goals.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 14px', background: 'var(--card)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)' }}>
           Marca metas de ahorro (un viaje, un colchón de emergencia…) y sigue tu progreso. Apunta cuánto llevas ahorrado y la app calcula lo que falta y los días restantes.
@@ -207,11 +225,13 @@ export function ObjetivosAhorroSection() {
         </div>
       )}
 
-      <AddGoal onAdd={(g) => {
-        // id provisional local (el backend lo confirma/regenera si hace falta).
-        const id = (globalThis.crypto?.randomUUID?.() ?? String(Date.now()));
-        void persist([...(goals ?? []), { ...g, id }]);
-      }} />
+      {goals !== null && (
+        <AddGoal onAdd={(g) => {
+          // id provisional local (el backend lo confirma/regenera si hace falta).
+          const id = (globalThis.crypto?.randomUUID?.() ?? String(Date.now()));
+          void persist([...goals, { ...g, id }]);
+        }} />
+      )}
     </div>
   );
 }

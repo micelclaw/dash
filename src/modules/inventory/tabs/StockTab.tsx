@@ -19,6 +19,7 @@ import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { fmtMoney, type InventoryMove } from '@/modules/inventory/types';
+import { moveEvidenceDownloadPath } from '@/modules/inventory/components/count-evidence';
 
 const MOVE_TYPES = [
   'purchase_in',
@@ -817,6 +818,7 @@ export function StockTab() {
                 <th style={thStyle}>Balance</th>
                 <th style={thStyle}>Cost</th>
                 <th style={thStyle}>By</th>
+                <th style={thStyle}>Evidence</th>
                 <th style={thStyle} />
               </tr>
             </thead>
@@ -864,6 +866,18 @@ export function StockTab() {
                   </td>
                   <td style={tdStyle}>{fmtMoney(move.unit_cost, move.currency)}</td>
                   <td style={tdStyle}><ByChip createdBy={move.created_by} /></td>
+                  <td style={tdStyle}>
+                    {moveEvidenceDownloadPath(move.doc_file_id) ? (
+                      <a
+                        href={api.mediaUrl(moveEvidenceDownloadPath(move.doc_file_id)!)}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: 'var(--amber)', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Download size={12} /> Photo
+                      </a>
+                    ) : <span style={{ color: 'var(--text-dim)' }}>—</span>}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {move.type !== 'reversal' && move.ref_type !== 'reversal' && (
                       <button

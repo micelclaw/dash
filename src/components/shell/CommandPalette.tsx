@@ -132,7 +132,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { id: 'create-board', label: 'Create new board', icon: Kanban, group: 'Actions', action: () => navigate('/projects?action=new') },
     { id: 'media-play-pause', label: 'Play/Pause Media', icon: Play, group: 'Actions', action: () => {
       const ps = usePlayerStore.getState();
-      ps.isPlaying ? ps.pause() : ps.resume();
+      if (ps.isPlaying) ps.pause(); else ps.resume();
     }},
     { id: 'media-next', label: 'Next Track', icon: SkipForward, group: 'Actions', action: () => usePlayerStore.getState().playNext() },
     { id: 'media-download', label: 'Download Media from URL', icon: DownloadIcon, group: 'Actions', action: () => {

@@ -3,81 +3,28 @@
  * All rights reserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import * as agentsAdmin from '@/services/agents-admin.service';
-import { api } from '@/services/api';
 import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
-
-const TOOL_DESCRIPTIONS: Record<string, string> = {
-  read: 'Read file contents from the agent workspace',
-  write: 'Create new files or overwrite existing ones',
-  edit: 'Make precise line-level edits to files',
-  apply_patch: 'Apply unified diffs/patches to files (OpenAI format)',
-  exec: 'Run shell commands (ls, git, curl, etc.)',
-  process: 'Manage long-running background processes',
-  web_search: 'Search the web via Brave, Perplexity, or other providers',
-  web_fetch: 'Download and read web page content',
-  memory_search: 'Semantic search across agent memory files',
-  memory_get: 'Read specific memory files by path',
-  sessions_list: 'List active chat sessions',
-  sessions_history: 'Read message history from a session',
-  sessions_send: 'Send a message to another session',
-  sessions_spawn: 'Create a sub-agent to handle a task',
-  sessions_yield: 'Receive results from a spawned sub-agent',
-  subagents: 'List, steer, or terminate running sub-agents',
-  session_status: 'Check current session state and metadata',
-  browser: 'Control a headless browser (navigate, click, type, screenshot)',
-  canvas: 'Render HTML/SVG canvas for visual output',
-  message: 'Send messages to external channels (Telegram, Discord, etc.)',
-  cron: 'Create, edit, or manage scheduled tasks',
-  gateway: 'Read or modify gateway configuration',
-  nodes: 'Interact with remote nodes and devices',
-  agents_list: 'List other agents in the system',
-  image: 'Analyze and understand image content',
-  tts: 'Convert text replies to audio (text-to-speech)',
-};
-
-const ALL_TOOLS = Object.keys(TOOL_DESCRIPTIONS);
-
-// Native OpenClaw preset definitions (base, before allow/deny overrides)
-const CODING_PRESET = new Set([
-  'read', 'write', 'edit', 'apply_patch', 'exec', 'process',
-  'web_search', 'web_fetch', 'memory_search', 'memory_get',
-  'sessions_list', 'sessions_history', 'sessions_send',
-  'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
-  'cron', 'image',
-  // bundle-mcp: las claw_* se materializan en coding/messaging/full (no minimal).
-  'bundle-mcp',
-]);
-
-const PRESET_TOOLS: Record<string, Set<string>> = {
-  minimal: new Set(['session_status']),
-  coding: CODING_PRESET,
-  messaging: new Set([
-    'sessions_list', 'sessions_history', 'sessions_send',
-    'session_status', 'message',
-    'bundle-mcp',
-  ]),
-  full: new Set([...ALL_TOOLS, 'bundle-mcp']),
-};
-
-const PROFILES = [
-  { value: 'minimal', label: 'Minimal', desc: '1 tool — session_status only' },
-  { value: 'coding', label: 'Coding', desc: '19 tools — files, runtime, web, memory, sessions (recommended)' },
-  { value: 'messaging', label: 'Messaging', desc: '5 tools — sessions + message' },
-  { value: 'full', label: 'Full', desc: 'All 26 tools enabled' },
-];
+import { useToolCatalog } from '@/modules/agents/hooks/use-tool-catalog';
+import { useAuthStore } from '@/stores/auth.store';
 
 // Tool access response shape lives in agents-admin.service.ts now.
 
 export function ToolAccessDefaultsSection() {
+  const role = useAuthStore((state) => state.user?.role);
+  const canEdit = role === 'owner' || role === 'admin';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  // Catálogo dinámico (nativas + presets + workboard) — sustituye TOOL_DESCRIPTIONS/
+  // ALL_TOOLS/CODING_PRESET/PRESET_TOOLS hardcodeados, compartido con AgentToolAccess.
+  const catalog = useToolCatalog();
 
   const [profile, setProfile] = useState('coding');
   // alsoAllow: tools to add ON TOP of the preset (without replacing allow)
@@ -86,14 +33,16 @@ export function ToolAccessDefaultsSection() {
   const [deny, setDeny] = useState<Set<string>>(new Set());
 
   const [firstAgentId, setFirstAgentId] = useState<string | null>(null);
-  // Fase 3.6-B: tools MCP (claw_*) descubiertas del registro.
-  const [mcpTools, setMcpTools] = useState<{ name: string; domain: string; label: string; actions: string[] }[]>([]);
 
-  useEffect(() => {
-    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[] } }>('/managed-agents/available-tools')
-      .then((r) => setMcpTools(r.data.mcp_tools ?? []))
-      .catch(() => { /* la UI nativa sigue sin el grupo MCP */ });
-  }, []);
+  const toolDescriptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const g of catalog.nativeGroups) for (const t of g.tools) m.set(t.name, t.desc);
+    return m;
+  }, [catalog.nativeGroups]);
+
+  const basePresetTools = useCallback((p: string): Set<string> => {
+    return new Set(catalog.nativePresets[p] ?? catalog.nativePresets.coding ?? []);
+  }, [catalog.nativePresets]);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -120,12 +69,12 @@ export function ToolAccessDefaultsSection() {
   const isToolEnabled = (tool: string): boolean => {
     if (deny.has(tool)) return false;
     if (alsoAllow.has(tool)) return true;
-    const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
-    return base.has(tool);
+    return basePresetTools(profile).has(tool);
   };
 
   const handleToolToggle = (tool: string) => {
-    const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
+    if (!canEdit) return;
+    const base = basePresetTools(profile);
     const currentlyEnabled = isToolEnabled(tool);
     const newAlsoAllow = new Set(alsoAllow);
     const newDeny = new Set(deny);
@@ -152,6 +101,7 @@ export function ToolAccessDefaultsSection() {
   };
 
   const handleProfileSelect = (value: string) => {
+    if (!canEdit) return;
     setProfile(value);
     // Reset overrides when changing profile
     setAlsoAllow(new Set());
@@ -178,8 +128,26 @@ export function ToolAccessDefaultsSection() {
     }
   };
 
-  const enabledCount = ALL_TOOLS.filter(t => isToolEnabled(t)).length;
+  const enabledCount = catalog.allNativeTools.filter(t => isToolEnabled(t)).length;
   const hasOverrides = alsoAllow.size > 0 || deny.size > 0;
+
+  const profiles = useMemo(() => (['minimal', 'coding', 'messaging', 'full'] as const).map((value) => {
+    const nativeCount = catalog.nativePresets[value]?.length ?? 0;
+    const wbCount = catalog.workboardEnabled ? (catalog.profileTools[value]?.tools.length ?? 0) : 0;
+    const desc = wbCount > 0
+      ? `${nativeCount} tools + ${wbCount} workboard tools`
+      : `${nativeCount} tools`;
+    return {
+      value,
+      label: value.charAt(0).toUpperCase() + value.slice(1),
+      desc: value === 'coding' ? `${desc} (recommended)` : desc,
+    };
+  }), [catalog.nativePresets, catalog.profileTools, catalog.workboardEnabled]);
+
+  // Set de workboard que trae el perfil global ELEGIDO — informativo (el override
+  // global por-tool no lo soporta el backend en v1; esto solo VISUALIZA qué trae
+  // cada perfil, sin toggle que persista).
+  const workboardForProfile = useMemo(() => new Set(catalog.profileTools[profile]?.tools ?? []), [catalog.profileTools, profile]);
 
   // Loading state is rendered by SectionShell. The "no agents" state
   // is a separate empty-state — bypass the shell entirely.
@@ -193,11 +161,11 @@ export function ToolAccessDefaultsSection() {
 
   return (
     <SectionShell
-      title="Tool Access Defaults"
-      loading={loading}
+      title="Default tool profile"
+      loading={loading || catalog.loading}
       dirty={dirty}
       saving={saving}
-      onSave={handleSave}
+      onSave={canEdit ? handleSave : undefined}
     >
       <p style={{ margin: '-12px 0 20px', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, fontFamily: 'var(--font-sans)' }}>
         Global default applied to every agent set to <strong>Inherit</strong> mode.
@@ -209,11 +177,12 @@ export function ToolAccessDefaultsSection() {
           Per-agent overrides <ExternalLink size={10} style={{ display: 'inline', verticalAlign: 'baseline' }} />
         </Link>
         {hasOverrides && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>· custom overrides active</span>}
+        {!canEdit && <span style={{ marginLeft: 6 }}>· read only</span>}
       </p>
 
       {/* Profile selector */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
-        {PROFILES.map(p => (
+        {profiles.map(p => (
           <label
             key={p.value}
             onClick={() => handleProfileSelect(p.value)}
@@ -223,7 +192,7 @@ export function ToolAccessDefaultsSection() {
               background: profile === p.value ? 'var(--surface-hover)' : 'var(--surface)',
               border: profile === p.value ? '1px solid var(--amber-dim)' : '1px solid var(--border)',
               borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
+              cursor: canEdit ? 'pointer' : 'default',
               transition: 'var(--transition-fast)',
             }}
           >
@@ -244,15 +213,15 @@ export function ToolAccessDefaultsSection() {
       {/* Interactive tool tags */}
       <div>
         <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Tools enabled ({enabledCount}/{ALL_TOOLS.length})
+          Tools enabled ({enabledCount}/{catalog.allNativeTools.length})
         </h3>
         <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '0 0 10px' }}>
           Click to toggle. Overrides are saved on top of the selected profile.
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {ALL_TOOLS.map(tool => {
+          {catalog.allNativeTools.map(tool => {
             const enabled = isToolEnabled(tool);
-            const base = PRESET_TOOLS[profile] ?? CODING_PRESET;
+            const base = basePresetTools(profile);
             const isOverrideAdded = alsoAllow.has(tool); // added on top of preset
             const isOverrideRemoved = deny.has(tool) && base.has(tool); // removed from preset
             return (
@@ -270,12 +239,12 @@ export function ToolAccessDefaultsSection() {
                   }`,
                   borderRadius: 'var(--radius-sm)',
                   fontFamily: 'var(--font-mono, var(--font-sans))',
-                  cursor: 'pointer',
+                  cursor: canEdit ? 'pointer' : 'default',
                   transition: 'var(--transition-fast)',
                   textDecoration: isOverrideRemoved ? 'line-through' : 'none',
                   userSelect: 'none',
                 }}
-                title={TOOL_DESCRIPTIONS[tool] ?? tool}
+                title={toolDescriptions.get(tool) ?? tool}
               >
                 {tool}
               </span>
@@ -284,7 +253,8 @@ export function ToolAccessDefaultsSection() {
         </div>
         {hasOverrides && (
           <button
-            onClick={() => { setAlsoAllow(new Set()); setDeny(new Set()); setDirty(true); }}
+            onClick={() => { if (!canEdit) return; setAlsoAllow(new Set()); setDeny(new Set()); setDirty(true); }}
+            disabled={!canEdit}
             style={{
               marginTop: 8, padding: '3px 8px', fontSize: '0.6875rem',
               background: 'transparent', border: '1px solid var(--border)',
@@ -297,46 +267,82 @@ export function ToolAccessDefaultsSection() {
         )}
       </div>
 
-      {/* Fase 3.6-B: tools de Micelclaw OS (claw_*) desde el registro. */}
-      {mcpTools.length > 0 && (
+      <div>
+        <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Micelclaw System
+        </h3>
+        <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '0 0 10px' }}>
+          Tools de sistema incluidas por perfil o contexto. Las obligatorias de diagnóstico, skills y heartbeat no pueden desactivarse.
+        </p>
+        {catalog.systemGroups.map((group) => (
+          <div key={group.id} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>{group.label}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {group.tools.map((tool) => {
+                const state = catalog.effectiveTools.find((item) => item.name === tool.name);
+                const enabled = state?.effective ?? false;
+                return (
+                  <span key={tool.name} title={tool.description} style={{ padding: '4px 8px', fontSize: '0.625rem', borderRadius: 'var(--radius-sm)', background: enabled ? '#22c55e18' : 'var(--surface)', color: enabled ? 'var(--success)' : 'var(--text-muted)', border: `1px solid ${enabled ? '#22c55e30' : 'var(--border)'}`, fontFamily: 'var(--font-mono)' }}>
+                    {tool.name}{tool.required ? ' 🔒' : ''}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '10px 0 0' }}>
+          Apps y conexiones MCP personales se configuran por agente.{' '}
+          <Link to="/agents" style={{ color: 'var(--amber)', textDecoration: 'none' }}>Open Agents</Link>{' · '}
+          <Link to={catalog.mcpConnectionsLink} style={{ color: 'var(--amber)', textDecoration: 'none' }}>MCP Connections</Link>
+        </p>
+      </div>
+
+      {/* Workboard (plugin de primera clase): informativo a nivel global — muestra qué
+          set de tools trae el perfil global elegido (profile_tools[profile]). El backend
+          no soporta override global por-tool en v1 (solo per-agent), así que aquí NO hay
+          toggle que persista; se ve por-agente en Agents → Tools. Va ENTRE "Tools enabled"
+          y "Micelclaw OS · bundle-mcp" (petición del usuario). */}
+      {catalog.workboardEnabled && catalog.workboardGroups.length > 0 && (
         <div>
           <h3 style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Micelclaw OS · bundle-mcp
+            Workboard ({workboardForProfile.size}/{catalog.allWorkboardTools.length} in {profile})
           </h3>
           <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', margin: '0 0 10px' }}>
-            Habilita en bloque las {mcpTools.length} herramientas claw_*. El acceso por dominio/etiqueta de cada agente se ajusta en Agent Permissions.
+            Coordinación de tareas entre agentes. Set que trae el perfil <strong>{profile}</strong> elegido arriba —
+            informativo (el override global por-tool se hace por agente en <strong>Agents → Tools</strong>).
           </p>
-          <span
-            onClick={() => handleToolToggle('bundle-mcp')}
-            title="Agrupa todas las tools MCP (claw_*)"
-            style={{
-              display: 'inline-block', padding: '4px 10px', fontSize: '0.6875rem',
-              background: isToolEnabled('bundle-mcp') ? '#22c55e18' : 'var(--surface)',
-              color: isToolEnabled('bundle-mcp') ? '#22c55e' : 'var(--text-muted)',
-              border: `1px solid ${isToolEnabled('bundle-mcp') ? '#22c55e30' : 'var(--border)'}`,
-              borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono, var(--font-sans))',
-              cursor: 'pointer', userSelect: 'none',
-            }}
-          >
-            bundle-mcp
-          </span>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.45 }}>
-            {mcpTools.map((t) => (
-              <span
-                key={t.name}
-                title={t.actions.join(', ')}
-                style={{
-                  padding: '3px 8px', fontSize: '0.625rem', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-dim)', fontFamily: 'var(--font-mono, var(--font-sans))',
-                }}
-              >
-                {t.name} ({t.actions.length})
-              </span>
-            ))}
-          </div>
+          {catalog.workboardGroups.map((group) => (
+            <div key={group.key} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 4 }}>
+                {group.label}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {group.tools.map((t) => {
+                  const inProfile = workboardForProfile.has(t.name);
+                  return (
+                    <span
+                      key={t.name}
+                      title={t.desc}
+                      style={{
+                        padding: '3px 8px', fontSize: '0.625rem',
+                        background: inProfile ? '#22c55e18' : 'var(--surface)',
+                        color: inProfile ? '#22c55e' : 'var(--text-muted)',
+                        border: `1px solid ${inProfile ? '#22c55e30' : 'var(--border)'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        fontFamily: 'var(--font-mono, var(--font-sans))',
+                        cursor: 'default', userSelect: 'none',
+                      }}
+                    >
+                      {t.name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
+
     </SectionShell>
   );
 }

@@ -10,8 +10,10 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
+import { ExternalLink } from 'lucide-react';
+import { toast } from 'sonner';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { handleSpaAnchorClick } from '@/lib/nav';
 import { useGatewayStore } from '@/stores/gateway.store';
@@ -24,6 +26,7 @@ import { DevicesTab } from './tabs/DevicesTab';
 import { HeartbeatTab } from './tabs/HeartbeatTab';
 import { ConfigHealthBanner } from './components/ConfigHealthBanner';
 import type { GatewayTab } from './types';
+import { openOpenclawControlUi } from '@/services/openclaw-control-ui.service';
 
 const TABS: { key: GatewayTab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
@@ -42,6 +45,7 @@ export function Component() {
   const initialTab = (searchParams.get('tab') as GatewayTab) || 'overview';
   const [activeTab, setActiveTab] = useState<GatewayTab>(initialTab);
   const [hoveredTab, setHoveredTab] = useState<GatewayTab | null>(null);
+  const [openingControlUi, setOpeningControlUi] = useState(false);
 
   const { fetchSnapshot, statusLoading } = useGatewayStore();
 
@@ -62,6 +66,12 @@ export function Component() {
     setActiveTab(tab);
     setSearchParams(tab === 'overview' ? {} : { tab });
   };
+  const handleOpenControlUi = useCallback(async () => {
+    setOpeningControlUi(true);
+    try { await openOpenclawControlUi(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo abrir la Control UI'); }
+    finally { setOpeningControlUi(false); }
+  }, []);
 
   if (statusLoading && !useGatewayStore.getState().status) {
     return (
@@ -147,8 +157,15 @@ export function Component() {
           })}
         </div>
 
-        {/* Right spacer for alignment */}
-        {!isMobile && <div style={{ width: 80 }} />}
+        <button
+          type="button"
+          onClick={() => void handleOpenControlUi()}
+          disabled={openingControlUi}
+          title="Abrir la Control UI de OpenClaw con tu identidad personal"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 9px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', cursor: openingControlUi ? 'wait' : 'pointer', opacity: openingControlUi ? .6 : 1, fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+        >
+          <ExternalLink size={14} />{!isMobile && 'Control UI'}
+        </button>
       </div>
 
       {/* Config-health banner — solo aparece si hay orphans en openclaw.json */}

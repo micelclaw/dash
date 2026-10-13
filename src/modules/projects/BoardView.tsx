@@ -10,13 +10,15 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { useProjectsStore } from '@/stores/projects.store';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useBackGuard } from '@/hooks/use-back-guard';
 import { BoardHeader } from './components/BoardHeader';
+import { SemanticSuggestModal, tableroDescartado } from './components/SemanticSuggestModal';
 import { KanbanBoard } from './views/KanbanBoard';
 import { ListView } from './views/ListView';
 import { TimelineView } from './views/TimelineView';
@@ -28,6 +30,7 @@ import { CustomFieldManager } from './components/CustomFieldManager';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { ShortcutsOverlay } from './components/ShortcutsOverlay';
 import { useKanbanKeyboard } from './hooks/use-kanban-keyboard';
+import type { Column } from './types';
 
 export function Component() {
   const { boardId } = useParams<{ boardId: string }>();
@@ -41,6 +44,27 @@ export function Component() {
   const cardDetailOpen = useProjectsStore((s) => s.cardDetailOpen);
   const handleWsEvent = useProjectsStore((s) => s.handleWsEvent);
   const isMobile = useIsMobile();
+
+  // Sugerir el significado de las columnas SOLO si ninguna lo tiene declarado y
+  // el usuario no lo pospuso ya para este tablero. Nunca se aplica nada solo.
+  const [sugerirSemantica, setSugerirSemantica] = useState(false);
+  // Se suscribe a los diccionarios CRUDOS, no a un array derivado: un selector
+  // que construye un array nuevo en cada render hace que Zustand re-renderice sin
+  // parar. El array se compone con useMemo, ya fuera del store.
+  const columnasPorId = useProjectsStore((s) => s.columns);
+  const idsDelTablero = useProjectsStore((s) => s.boardColumnIds[boardId ?? '']);
+  const columnasDelTablero = useMemo(
+    () => (idsDelTablero ?? [])
+      .map((cid) => columnasPorId[cid])
+      .filter((column): column is Column => column !== undefined),
+    [idsDelTablero, columnasPorId],
+  );
+  useEffect(() => {
+    if (!boardId || columnasDelTablero.length === 0) return;
+    if (tableroDescartado(boardId)) return;
+    if (columnasDelTablero.some((c) => c.status_semantic)) return;
+    setSugerirSemantica(true);
+  }, [boardId, columnasDelTablero]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -61,6 +85,8 @@ export function Component() {
   useEffect(() => {
     if (boardId) fetchFullBoard(boardId);
   }, [boardId, fetchFullBoard]);
+
+  useOriginRefresh('tasks', () => boardId ? fetchFullBoard(boardId) : undefined);
 
   // Handle ?card= query param (e.g. from calendar navigation)
   useEffect(() => {
@@ -128,6 +154,14 @@ export function Component() {
           />
         )}
       </div>
+
+      {sugerirSemantica && boardId && (
+        <SemanticSuggestModal
+          boardId={boardId}
+          columnas={columnasDelTablero}
+          onClose={() => setSugerirSemantica(false)}
+        />
+      )}
 
       {settingsOpen && boardId && (
         <BoardSettings boardId={boardId} onClose={() => setSettingsOpen(false)} />

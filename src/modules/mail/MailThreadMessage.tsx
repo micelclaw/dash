@@ -10,8 +10,13 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronUp, FileText } from 'lucide-react';
 import { formatEmailTime } from '@/lib/date-helpers';
+import { downloadAuthed } from '@/lib/file-download';
+import { prepararCuerpo, cargarRemitentesPermitidos, recordarRemitente, remitenteNormalizado } from './lib/mail-html';
+import { RemoteContentBanner } from './lib/RemoteContentBanner';
 import type { Email } from './types';
 
 interface MailThreadMessageProps {
@@ -27,14 +32,54 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const DARK_MODE_STYLES = `<style>
-body { background: transparent; color: #e0e0e0; font-family: -apple-system, sans-serif; font-size: 14px; line-height: 1.6; margin: 0; padding: 8px; }
-a { color: #d4a017; }
-img { max-width: 100%; }
-blockquote { border-left: 3px solid #333; margin: 8px 0; padding-left: 12px; color: #999; }
-</style>`;
-
 export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLatest }: MailThreadMessageProps) {
+  // MISMA política de contenido remoto que el panel de lectura (y el MISMO
+  // módulo): una conversación pinta N cuerpos, y cada uno avisaría a su
+  // remitente. Este era el segundo punto de pintado que se quedaba fuera.
+  const [mostrarRemotas, setMostrarRemotas] = useState(false);
+  const [permitidos, setPermitidos] = useState<Set<string> | null>(null);
+  const [bajando, setBajando] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    cargarRemitentesPermitidos().then((s) => { if (!cancelado) setPermitidos(s); });
+    return () => { cancelado = true; };
+  }, []);
+
+  const remitente = remitenteNormalizado(email.from_address);
+  const remitenteRecordado = !!(permitidos && remitente && permitidos.has(remitente));
+  const mostrandoRemotas = mostrarRemotas || remitenteRecordado;
+  const cuerpo = useMemo(
+    () => (email.body_html
+      ? prepararCuerpo(email.body_html, {
+          emailId: email.id,
+          bloquearRemotas: !mostrandoRemotas,
+          variante: 'hilo',
+          adjuntos: email.attachments ?? [],
+        })
+      : null),
+    [email.body_html, email.id, email.attachments, mostrandoRemotas],
+  );
+
+  const handleSiempreRemitente = async () => {
+    if (!email.from_address) return;
+    try {
+      setPermitidos(await recordarRemitente(email.from_address));
+      setMostrarRemotas(true);
+    } catch {
+      /* el toast lo da el panel de lectura; aquí no se rompe nada si falla */
+    }
+  };
+
+  const handleDescargarAdjunto = async (idx: number, filename: string) => {
+    setBajando(idx);
+    try {
+      await downloadAuthed(`/api/v1/emails/${email.id}/attachments/${idx}/download`, filename || `adjunto-${idx + 1}`);
+    } finally {
+      setBajando(null);
+    }
+  };
+
   if (collapsed) {
     return (
       <div
@@ -64,7 +109,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
             flexShrink: 0,
           }}
         >
-          {email.from_name ?? email.from_address}
+          {email.from_name ?? email.from_address} <EntitySource entity={email} domain="mail" />
         </span>
         <span
           style={{
@@ -105,6 +150,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
         fontFamily: 'var(--font-sans)',
       }}
     >
+      <div style={{ padding: "8px 12px 0" }}><EntitySource entity={email} domain="mail" detail /></div>
       {/* Header */}
       <div
         style={{
@@ -126,11 +172,11 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
           {/* To / CC */}
           <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: 2 }}>
             <span>
-              To: {email.to_addresses.map(a => a.name ?? a.address).join(', ')}
+              To: {(email.to_addresses ?? []).map(a => a.name ?? a.address).join(', ')}
             </span>
-            {email.cc_addresses.length > 0 && (
+            {(email.cc_addresses ?? []).length > 0 && (
               <span style={{ marginLeft: 12 }}>
-                CC: {email.cc_addresses.map(a => a.name ?? a.address).join(', ')}
+                CC: {(email.cc_addresses ?? []).map(a => a.name ?? a.address).join(', ')}
               </span>
             )}
           </div>
@@ -168,11 +214,30 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
 
       {/* Body */}
       <div style={{ padding: '0 12px 12px' }}>
-        {email.body_html ? (
+        {cuerpo && permitidos !== null && (
+          <RemoteContentBanner
+            compacto
+            remotas={cuerpo.remotas}
+            hosts={cuerpo.hosts}
+            cid={cuerpo.cid}
+            mostrando={mostrandoRemotas}
+            recordado={remitenteRecordado}
+            remitente={remitente}
+            onMostrar={() => setMostrarRemotas(true)}
+            onSiempre={handleSiempreRemitente}
+          />
+        )}
+        {cuerpo ? (
           <iframe
+            key={`${email.id}:${mostrandoRemotas ? 'show' : 'block'}`}
             title={email.subject || 'Email content'}
-            srcDoc={DARK_MODE_STYLES + email.body_html}
-            sandbox=""
+            srcDoc={cuerpo.doc}
+            // `allow-same-origin` SIN `allow-scripts` (igual que el panel de
+            // lectura): un correo con <script> sigue sin ejecutarse, y el padre
+            // puede leer `contentDocument` para ajustar el alto — con `sandbox=""`
+            // (origen opaco) el onLoad de abajo NUNCA podía medirlo y todo mensaje
+            // del hilo se quedaba clavado en 100px.
+            sandbox="allow-same-origin"
             style={{ width: '100%', border: 'none', minHeight: 100 }}
             onLoad={(e) => {
               const iframe = e.target as HTMLIFrameElement;
@@ -196,7 +261,7 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
       </div>
 
       {/* Attachments */}
-      {email.attachments.length > 0 && (
+      {(email.attachments ?? []).length > 0 && (
         <div style={{ padding: '0 12px 12px' }}>
           <div
             style={{
@@ -208,9 +273,9 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
               paddingTop: 8,
             }}
           >
-            Attachments ({email.attachments.length})
+            Attachments ({(email.attachments ?? []).length})
           </div>
-          {email.attachments.map((att, idx) => (
+          {(email.attachments ?? []).map((att, idx) => (
             <div
               key={idx}
               style={{
@@ -228,22 +293,32 @@ export function MailThreadMessage({ email, collapsed, onToggle, isLatest: _isLat
               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}>
                 {formatFileSize(att.size)}
               </span>
-              <button
-                disabled
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'transparent',
-                  color: 'var(--text-muted)',
-                  fontSize: '0.75rem',
-                  padding: '2px 8px',
-                  cursor: 'not-allowed',
-                  opacity: 0.5,
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                Download
-              </button>
+              {att.source_id || (att as { content?: string }).content ? (
+                <button
+                  data-testid={`thread-att-download-${idx}`}
+                  onClick={() => handleDescargarAdjunto(idx, att.filename)}
+                  disabled={bajando === idx}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'transparent',
+                    color: bajando === idx ? 'var(--text-muted)' : 'var(--text)',
+                    fontSize: '0.75rem',
+                    padding: '2px 8px',
+                    cursor: bajando === idx ? 'progress' : 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  {bajando === idx ? 'Bajando…' : 'Download'}
+                </button>
+              ) : (
+                <span
+                  title="De este adjunto solo se guardó el nombre y el tamaño. Vuelve a sincronizar la cuenta."
+                  style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}
+                >
+                  no disponible
+                </span>
+              )}
             </div>
           ))}
         </div>

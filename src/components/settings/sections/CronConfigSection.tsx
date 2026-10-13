@@ -14,36 +14,12 @@
  *     If you need cross-instance sync, lift to a Zustand store.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-
-function parseBackoff(raw: string): { ok: true; values: number[] } | { ok: false; error: string } {
-  const parts = raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
-  if (parts.length === 0) return { ok: false, error: 'Enter at least one delay' };
-  const values: number[] = [];
-  for (const p of parts) {
-    if (!/^\d+$/.test(p)) return { ok: false, error: `"${p}" is not a positive integer` };
-    const n = parseInt(p, 10);
-    if (n < 0) return { ok: false, error: `"${p}" must be ≥ 0` };
-    if (n > 24 * 60 * 60 * 1000) return { ok: false, error: `"${p}" exceeds 24h` };
-    values.push(n);
-  }
-  return { ok: true, values };
-}
-
-function formatMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const s = ms / 1000;
-  if (s < 60) return `${s % 1 === 0 ? s : s.toFixed(1)}s`;
-  const m = s / 60;
-  if (m < 60) return `${m % 1 === 0 ? m : m.toFixed(1)}m`;
-  const h = m / 60;
-  return `${h % 1 === 0 ? h : h.toFixed(1)}h`;
-}
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
@@ -66,33 +42,37 @@ export function CronConfigSection() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  const [maxConcurrent, setMaxConcurrent] = useState(1);
-  const [retryMax, setRetryMax] = useState(0);
-  const [retryBackoff, setRetryBackoff] = useState('30000,60000,300000');
+  const [enabled, setEnabled] = useState(true);
+  const [skipMissedJobs, setSkipMissedJobs] = useState(false);
+  const [triggersEnabled, setTriggersEnabled] = useState(true);
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [alertAfter, setAlertAfter] = useState(3);
+  const [alertCooldownMinutes, setAlertCooldownMinutes] = useState(60);
+  const [includeSkipped, setIncludeSkipped] = useState(false);
   const [alertMode, setAlertMode] = useState('announce');
   const [alertChannel, setAlertChannel] = useState('');
+  const [alertTo, setAlertTo] = useState('');
+  const [alertAccountId, setAlertAccountId] = useState('');
   const [sessionRetention, setSessionRetention] = useState('24h');
-  const [webhook, setWebhook] = useState('');
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
       const data = await gwService.getCronConfig();
-      setMaxConcurrent((data.max_concurrent_runs ?? 1) as number);
-      const retry = (data.retry ?? {}) as Record<string, unknown>;
-      setRetryMax((retry.max_attempts ?? 0) as number);
-      const backoff = (retry.backoff_ms ?? [30000, 60000, 300000]) as number[];
-      setRetryBackoff(backoff.join(','));
+      setEnabled((data.enabled ?? true) as boolean);
+      setSkipMissedJobs((data.skip_missed_jobs ?? false) as boolean);
+      const triggers = (data.triggers ?? {}) as Record<string, unknown>;
+      setTriggersEnabled((triggers.enabled ?? true) as boolean);
       const fa = (data.failure_alert ?? {}) as Record<string, unknown>;
       setAlertEnabled((fa.enabled ?? false) as boolean);
       setAlertAfter((fa.after ?? 3) as number);
+      setAlertCooldownMinutes(Math.max(0, Math.round(((fa.cooldown_ms ?? 3600000) as number) / 60000)));
+      setIncludeSkipped((fa.include_skipped ?? false) as boolean);
       setAlertMode((fa.mode ?? 'announce') as string);
-      const fd = (data.failure_destination ?? {}) as Record<string, unknown>;
-      setAlertChannel((fd.channel ?? '') as string);
-      setSessionRetention((data.session_retention ?? '24h') as string);
-      setWebhook((data.webhook ?? '') as string);
+      setAlertChannel((fa.channel ?? '') as string);
+      setAlertTo((fa.to ?? '') as string);
+      setAlertAccountId((fa.account_id ?? '') as string);
+      setSessionRetention(data.session_retention === false ? 'false' : (data.session_retention ?? '24h') as string);
       setDirty(false);
     } catch (err) { toast.error(describeError(err, 'Failed to load cron config')); }
     finally { setLoading(false); }
@@ -101,24 +81,24 @@ export function CronConfigSection() {
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
   const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
 
-  const backoffParsed = useMemo(() => parseBackoff(retryBackoff), [retryBackoff]);
-  const backoffInvalid = retryMax > 0 && !backoffParsed.ok;
-
   const handleSave = async () => {
-    if (retryMax > 0 && !backoffParsed.ok) {
-      toast.error(`Invalid backoff: ${backoffParsed.error}`);
-      return;
-    }
     setSaving(true);
     try {
-      const backoffArr = backoffParsed.ok ? backoffParsed.values : [30000, 60000, 300000];
       await gwService.updateCronConfig({
-        maxConcurrentRuns: maxConcurrent,
-        retry: { maxAttempts: retryMax, backoffMs: backoffArr, retryOn: ['rate_limit', 'overloaded', 'network', 'timeout', 'server_error'] },
-        failureAlert: { enabled: alertEnabled, after: alertAfter, mode: alertMode },
-        ...(alertChannel ? { failureDestination: { channel: alertChannel, mode: alertMode } } : {}),
-        sessionRetention,
-        ...(webhook ? { webhook } : {}),
+        enabled,
+        skipMissedJobs,
+        triggers: { enabled: triggersEnabled },
+        failureAlert: {
+          enabled: alertEnabled,
+          after: alertAfter,
+          cooldownMs: alertCooldownMinutes * 60000,
+          includeSkipped,
+          mode: alertMode,
+          ...(alertChannel.trim() ? { channel: alertChannel.trim() } : {}),
+          ...(alertTo.trim() ? { to: alertTo.trim() } : {}),
+          ...(alertAccountId.trim() ? { accountId: alertAccountId.trim() } : {}),
+        },
+        sessionRetention: sessionRetention.trim().toLowerCase() === 'false' ? false : sessionRetention.trim(),
       });
       toast.success('Cron saved');
       setDirty(false);
@@ -129,52 +109,15 @@ export function CronConfigSection() {
   return (
     <SectionShell
       title="Cron Settings"
-      description="Global retry, concurrency, and failure alerting for scheduled jobs."
+      description="Scheduler, retention, triggers, and failure alerts supported by OpenClaw 2026.9.4."
       loading={loading}
       dirty={dirty}
       saving={saving}
       onSave={handleSave}
-      saveDisabledReason={backoffInvalid ? 'Fix the backoff input before saving' : null}
     >
-      <Row label="Max concurrent runs" desc="How many cron jobs can execute simultaneously">
-        <input type="number" value={maxConcurrent} min={1} max={10} onChange={e => d(setMaxConcurrent)(parseInt(e.target.value, 10) || 1)} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-      </Row>
-
-      <Row label="Retry max attempts" desc="Times to retry a failed job (0 = no retry)">
-        <input type="number" value={retryMax} min={0} max={10} onChange={e => d(setRetryMax)(parseInt(e.target.value, 10) || 0)} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-      </Row>
-
-      {retryMax > 0 && (
-        <Row label="Backoff delays (ms)" desc="Comma-separated delays between retries (e.g. 30000,60000,300000)">
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <input
-              type="text"
-              value={retryBackoff}
-              onChange={e => { setRetryBackoff(e.target.value); setDirty(true); }}
-              style={{
-                padding: '4px 8px', fontSize: '0.75rem', width: 240,
-                background: 'var(--surface)',
-                border: `1px solid ${backoffInvalid ? '#ef4444' : 'var(--border)'}`,
-                borderRadius: 'var(--radius-sm)',
-                color: 'var(--text)',
-                fontFamily: 'var(--font-mono, monospace)',
-              }}
-            />
-            <div style={{
-              fontSize: '0.6875rem',
-              color: backoffParsed.ok ? 'var(--text-muted)' : '#ef4444',
-              fontFamily: 'var(--font-sans)',
-              maxWidth: 240, textAlign: 'right',
-            }}>
-              {backoffParsed.ok
-                ? backoffParsed.values.length > 0
-                  ? `${backoffParsed.values.length} retr${backoffParsed.values.length === 1 ? 'y' : 'ies'}: ${backoffParsed.values.map(formatMs).join(' → ')}`
-                  : ''
-                : `! ${backoffParsed.error}`}
-            </div>
-          </div>
-        </Row>
-      )}
+      <Row label="Scheduler enabled" desc="Allow scheduled jobs to run"><Toggle value={enabled} onChange={d(setEnabled)} /></Row>
+      <Row label="Skip missed jobs" desc="Do not replay recurring slots missed while the Gateway was stopped"><Toggle value={skipMissedJobs} onChange={d(setSkipMissedJobs)} /></Row>
+      <Row label="Triggers enabled" desc="Allow trigger-driven scheduled jobs"><Toggle value={triggersEnabled} onChange={d(setTriggersEnabled)} /></Row>
 
       <div style={{ height: 1, background: 'var(--border)', margin: '12px 0' }} />
 
@@ -184,6 +127,10 @@ export function CronConfigSection() {
         <Row label="Alert after N failures" desc="Consecutive failures before alerting">
           <input type="number" value={alertAfter} min={1} max={20} onChange={e => d(setAlertAfter)(parseInt(e.target.value, 10) || 3)} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 60, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
         </Row>
+        <Row label="Cooldown (minutes)" desc="Minimum delay before repeating an alert">
+          <input type="number" value={alertCooldownMinutes} min={0} max={10080} onChange={e => d(setAlertCooldownMinutes)(parseInt(e.target.value, 10) || 0)} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 80, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
+        </Row>
+        <Row label="Include skipped runs" desc="Count skipped executions as failures for alerting"><Toggle value={includeSkipped} onChange={d(setIncludeSkipped)} /></Row>
         <Row label="Alert mode" desc="How to deliver failure alerts">
           <select value={alertMode} onChange={e => d(setAlertMode)(e.target.value)} style={{ padding: '4px 8px', fontSize: '0.75rem', minWidth: 140, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>
             <option value="announce">Announce (channel message)</option>
@@ -193,16 +140,18 @@ export function CronConfigSection() {
         <Row label="Alert channel" desc="Channel for announcements (e.g. telegram, discord)">
           <input type="text" value={alertChannel} onChange={e => { setAlertChannel(e.target.value); setDirty(true); }} placeholder="telegram" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 120, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
         </Row>
+        <Row label="Alert target" desc="Chat, room, or recipient identifier">
+          <input type="text" value={alertTo} onChange={e => { setAlertTo(e.target.value); setDirty(true); }} placeholder="recipient" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 160, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
+        </Row>
+        <Row label="Account ID" desc="Optional channel account when more than one is configured">
+          <input type="text" value={alertAccountId} onChange={e => { setAlertAccountId(e.target.value); setDirty(true); }} placeholder="default" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 160, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
+        </Row>
       </>}
 
       <div style={{ height: 1, background: 'var(--border)', margin: '12px 0' }} />
 
       <Row label="Session retention" desc="How long to keep cron run sessions (e.g. 24h, 7d, false=forever)">
         <input type="text" value={sessionRetention} onChange={e => { setSessionRetention(e.target.value); setDirty(true); }} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 80, textAlign: 'right', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} />
-      </Row>
-
-      <Row label="Webhook URL" desc="HTTP endpoint for webhook delivery mode (leave empty to disable)">
-        <input type="text" value={webhook} onChange={e => { setWebhook(e.target.value); setDirty(true); }} placeholder="https://..." style={{ padding: '4px 8px', fontSize: '0.75rem', width: 250, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} />
       </Row>
     </SectionShell>
   );

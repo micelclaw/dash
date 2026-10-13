@@ -11,15 +11,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import {
-  Search, Globe, Shield, Plus, X, Lock,
-  Eye, EyeOff, CheckCircle, XCircle, Loader2,
-} from 'lucide-react';
+import { Search, Globe, Shield, Plus, X, CheckCircle, XCircle, Loader2, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import * as browserSecuritySvc from '@/services/browser-security.service';
-import { useApiKeyStore } from '@/stores/apikey.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { api } from '@/services/api';
 
 
 // ─── Types ───────────────────────────────────────────────
@@ -244,32 +242,67 @@ function DefaultSearchModeRow() {
 // ─── Web Search Config ───────────────────────────────────
 
 function WebSearchConfig() {
-  const providers = useApiKeyStore((s) => s.providers);
-  const testing = useApiKeyStore((s) => s.testing);
-  const configureKey = useApiKeyStore((s) => s.configureKey);
-  const deleteKey = useApiKeyStore((s) => s.deleteKey);
-  const testConnection = useApiKeyStore((s) => s.testConnection);
-  const tier = useAuthStore((s) => s.user?.tier ?? 'free');
+  type Provider = { id: string; label?: string; configured?: boolean; available?: boolean; reason?: string; credentialSource?: 'none' | 'secretRef' | 'config' | 'env' | 'auth-profile' | 'missing'; credential?: { configured?: boolean } };
+  type Status = { provider?: string | null; providers?: Provider[]; route?: { provider?: string; kind?: string; testable?: boolean; reason?: string }; model?: { provider?: string; id?: string; runtimeLabel?: string }; testProvider?: { id?: string } | null };
+  type AgentOption = { id: string; name: string; display_name: string; model: string };
+  const role = useAuthStore((s) => s.user?.role);
+  const canManage = role === 'owner' || role === 'admin';
+  const [status, setStatus] = useState<Status | null>(null);
+  const [provider, setProvider] = useState('');
+  const [query, setQuery] = useState('Novedades de OpenClaw 2026.9.6');
+  const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveState, setSaveState] = useState<'effective' | 'persisted' | 'uncertain' | null>(null);
+  const [testResult, setTestResult] = useState<{ provider: string; results: Array<{ title?: string; url?: string }>; citations?: unknown[]; answer?: string | null } | null>(null);
+  const [testError, setTestError] = useState('');
+  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [agentId, setAgentId] = useState('');
 
-  const [tavilyKey, setTavilyKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-
-  const tavilyProvider = providers?.tavily;
-
-  const handleSaveTavily = async () => {
-    if (!tavilyKey) return;
+  const loadStatus = async () => {
+    setLoading(true);
     try {
-      await configureKey('tavily', tavilyKey);
-      setTavilyKey('');
-      toast.success('Tavily API key saved');
-    } catch {
-      toast.error('Failed to save key');
-    }
+      const response = await api.get<{ data: Status }>('/web-search/status', agentId ? { agent_id: agentId } : undefined);
+      setStatus(response.data);
+      setProvider(response.data.provider ?? response.data.route?.provider ?? '');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo consultar OpenClaw Web Search');
+    } finally { setLoading(false); }
+  };
+  useEffect(() => {
+    void api.get<{ data: AgentOption[] }>('/managed-agents').then((response) => {
+      setAgents(response.data ?? []);
+      const francis = response.data?.find((item) => item.name === 'francis');
+      if (francis) setAgentId(francis.id);
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => { void loadStatus(); }, [agentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveProvider = async () => {
+    setSaving(true);
+    try {
+      const response = await api.patch<{ data: { confirmation: 'effective' | 'persisted' | 'uncertain' } }>('/web-search/config', { provider }, { timeout: 240_000 });
+      const confirmation = response.data.confirmation;
+      setSaveState(confirmation);
+      if (confirmation === 'effective') toast.success('Proveedor guardado y activo');
+      else if (confirmation === 'persisted') toast.success('Proveedor guardado; OpenClaw aún no confirmó su activación');
+      else toast.error('El Gateway no confirmó el guardado. Comprueba el estado antes de repetir.');
+      if (confirmation !== 'uncertain') await loadStatus();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar'); }
+    finally { setSaving(false); }
   };
 
-  const handleTestTavily = async () => {
-    const result = await testConnection('tavily');
-    toast[result.valid ? 'success' : 'error'](result.valid ? 'Tavily connected!' : 'Connection failed');
+  const testProvider = async () => {
+    setTesting(true);
+    setTestResult(null);
+    setTestError('');
+    try {
+      const response = await api.post<{ data: { provider: string; results: Array<{ title?: string; url?: string }>; citations?: unknown[]; answer?: string | null } }>('/web-search', { query, max_results: 5 }, { timeout: 40_000 });
+      setTestResult(response.data);
+      const total = response.data.results?.length ?? response.data.citations?.length ?? 0;
+      toast.success(`Búsqueda completada con ${response.data.provider}: ${total} resultados/citas`);
+    } catch (error) { const message = error instanceof Error ? error.message : 'La prueba ha fallado'; setTestError(message); toast.error(message); }
+    finally { setTesting(false); }
   };
 
   return (
@@ -280,106 +313,47 @@ function WebSearchConfig() {
         fontFamily: 'var(--font-sans)', marginBottom: 12,
       }}>
         <Globe size={16} style={{ color: 'var(--amber)' }} />
-        Web Search Engine
+        Búsqueda web · OpenClaw
       </div>
-
-      {/* Tavily */}
-      <SettingRow
-        label="Tavily API Key"
-        description="Free search engine — get your key at tavily.com"
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {tavilyProvider?.configured ? (
-            <>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'monospace' }}>
-                ••••{tavilyProvider.last_4}
-              </span>
-              {tavilyProvider.valid === true && <CheckCircle size={14} style={{ color: '#22c55e' }} />}
-              {tavilyProvider.valid === false && <XCircle size={14} style={{ color: '#ef4444' }} />}
-              <button
-                onClick={handleTestTavily}
-                disabled={testing === 'tavily'}
-                style={{
-                  padding: '3px 8px', background: 'var(--surface)',
-                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                  color: 'var(--text-dim)', fontSize: '0.6875rem',
-                  fontFamily: 'var(--font-sans)', cursor: 'pointer',
-                }}
-              >
-                {testing === 'tavily' ? <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} /> : 'Test'}
-              </button>
-              <button
-                onClick={() => deleteKey('tavily')}
-                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
-              >
-                <X size={14} />
-              </button>
-            </>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type={showKey ? 'text' : 'password'}
-                  value={tavilyKey}
-                  onChange={(e) => setTavilyKey(e.target.value)}
-                  placeholder="tvly-..."
-                  style={{
-                    width: 180, padding: '4px 28px 4px 8px',
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-                    fontSize: '0.75rem', fontFamily: 'monospace', outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={() => setShowKey(!showKey)}
-                  style={{
-                    position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-                    background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2,
-                  }}
-                >
-                  {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
-                </button>
-              </div>
-              <button
-                onClick={handleSaveTavily}
-                disabled={!tavilyKey}
-                style={{
-                  padding: '4px 10px', background: tavilyKey ? 'var(--amber)' : 'var(--surface)',
-                  color: tavilyKey ? '#06060a' : 'var(--text-muted)',
-                  border: 'none', borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.6875rem', fontWeight: 600,
-                  fontFamily: 'var(--font-sans)', cursor: tavilyKey ? 'pointer' : 'default',
-                }}
-              >
-                Save
-              </button>
+      {loading ? <div style={{ color: 'var(--text-muted)', padding: 12 }}><Loader2 size={14} style={{ display: 'inline', animation: 'spin 1s linear infinite' }} /> Consultando OpenClaw…</div> : (
+        <>
+          <SettingRow label="Proveedor compartido" description="Configuración global administrada por owner/admin; las credenciales se guardan en Secrets.">
+            <div style={{ display: 'flex', gap: 6 }}>
+              <select disabled={!canManage} value={provider} onChange={(event) => { setProvider(event.target.value); setSaveState(null); }} style={{ padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }}>
+                {(status?.providers ?? []).map((item) => <option key={item.id} value={item.id}>{item.label ?? item.id}</option>)}
+              </select>
+              {canManage && <button data-testid="web-search-save-provider" onClick={saveProvider} disabled={!provider || saving} style={{ padding: '6px 10px', background: 'var(--amber)', border: 0, borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>{saving ? 'Guardando…' : 'Guardar'}</button>}
             </div>
-          )}
-        </div>
-      </SettingRow>
-
-      {/* Brave (Pro) */}
-      <SettingRow
-        label="Brave Search"
-        description={tier !== 'free' ? 'Pre-configured with Claw Credits' : 'Available with Pro subscription'}
-      >
-        {tier !== 'free' ? (
-          <span style={{ fontSize: '0.75rem', color: '#22c55e', fontFamily: 'var(--font-sans)' }}>
-            <CheckCircle size={14} style={{ display: 'inline', marginRight: 4, verticalAlign: 'middle' }} />
-            Configured
-          </span>
-        ) : (
-          <span style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: '0.6875rem', padding: '2px 8px',
-            background: 'rgba(212,160,23,0.15)', color: 'var(--amber)',
-            borderRadius: 'var(--radius-sm)', fontWeight: 600,
-          }}>
-            <Lock size={10} />
-            PRO
-          </span>
-        )}
-      </SettingRow>
+            {saveState === 'uncertain' && <span style={{ color: 'var(--amber)', fontSize: '0.72rem' }}>Estado incierto: usa Recargar estado antes de reintentar.</span>}
+            {saveState === 'persisted' && <span style={{ color: 'var(--amber)', fontSize: '0.72rem' }}>Guardado; activación todavía no confirmada.</span>}
+            <button onClick={() => void loadStatus()} disabled={loading} style={{ border: 0, background: 'transparent', color: 'var(--amber)', cursor: 'pointer', fontSize: '0.72rem', padding: 0 }}>Recargar estado</button>
+          </SettingRow>
+          {canManage && <SettingRow label="Credenciales compartidas" description="Las claves personales antiguas no se copian ni se eliminan automáticamente.">
+            <Link to="/settings/secrets" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--amber)', textDecoration: 'none', fontSize: '0.75rem' }}><Shield size={13} /> Configurar Secrets</Link>
+          </SettingRow>}
+          {(status?.providers ?? []).map((item) => (
+            <SettingRow key={item.id} label={item.label ?? item.id} description={item.reason ?? (item.credentialSource === 'secretRef' ? 'Credencial resuelta desde Secrets' : item.credentialSource === 'auth-profile' ? 'Autenticación del perfil de OpenClaw' : item.credentialSource === 'none' ? 'No requiere credencial' : item.configured || item.credential?.configured ? `Configurado por OpenClaw${item.credentialSource ? ` · ${item.credentialSource}` : ''}` : 'Sin credencial compartida')}>
+              {item.available ? <span style={{ color: '#22c55e', fontSize: '0.75rem' }}><CheckCircle size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Configurado · cuota sin verificar</span> : <span style={{ color: '#ef4444', fontSize: '0.75rem' }}><XCircle size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> No configurado</span>}
+            </SettingRow>
+          ))}
+          <SettingRow label="Ruta del agente" description={status?.route?.reason ?? 'La búsqueda incorporada al modelo se prueba mediante un turno normal de chat.'}>
+            <div style={{ display: 'grid', gap: 5, minWidth: 240 }}>
+              <select value={agentId} onChange={(event) => setAgentId(event.target.value)} style={{ padding: '6px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }}>
+                {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.display_name}</option>)}
+              </select>
+              <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>Modelo: {status?.model ? `${status.model.provider ?? ''}/${status.model.id ?? ''}` : agents.find((agent) => agent.id === agentId)?.model ?? '—'} · Ruta: {status?.route?.kind === 'external' ? 'Nativa del modelo' : status?.route?.provider ?? 'Proveedor gestionado'}</span>
+            </div>
+          </SettingRow>
+          <div style={{ marginTop: 14, padding: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', display: 'grid', gap: 8 }}>
+            <strong style={{ fontSize: '0.8rem' }}>Probar proveedor gestionado</strong>
+            <div style={{ display: 'flex', gap: 8 }}><input value={query} onChange={(event) => setQuery(event.target.value)} style={{ flex: 1, padding: '7px 9px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} /><button onClick={testProvider} disabled={testing || saving || !query.trim() || provider !== (status?.provider ?? status?.route?.provider)} style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}>{testing ? 'Probando…' : 'Probar'}</button></div>
+            {provider !== (status?.provider ?? status?.route?.provider) && <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Guarda el proveedor elegido antes de probarlo.</span>}
+            {testResult && <div style={{ display: 'grid', gap: 5, fontSize: '0.75rem' }}><strong>Respuesta de {testResult.provider}</strong>{testResult.answer && <span>{testResult.answer}</span>}{testResult.results.map((item, index) => <a key={`${item.url ?? index}`} href={item.url} target="_blank" rel="noreferrer" style={{ color: 'var(--amber)' }}>{item.title || item.url}</a>)}</div>}
+            {testError && <div role="alert" style={{ color: 'var(--amber)', fontSize: '0.75rem' }}>{testError}</div>}
+            <button onClick={() => { window.location.href = '/chat'; }} style={{ justifySelf: 'start', border: 0, background: 'transparent', color: 'var(--amber)', cursor: 'pointer', padding: 0 }}><ExternalLink size={13} style={{ display: 'inline', marginRight: 5 }} />Probar búsqueda nativa del modelo en el chat</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

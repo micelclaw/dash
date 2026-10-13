@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect } from 'react';
 import { MicVocal } from 'lucide-react';
 import { MediaGrid, MediaCard } from '@/components/media';
@@ -44,6 +45,7 @@ export function ArtistsView() {
             image={artist.cover_art ? coverUrl(artist.cover_art) : null}
             fallbackIcon={MicVocal}
             title={artist.name}
+            badge={<EntitySource entity={artist} domain="music" native />}
             subtitle={
               artist.album_count !== undefined
                 ? `${artist.album_count} album${artist.album_count === 1 ? '' : 's'}`

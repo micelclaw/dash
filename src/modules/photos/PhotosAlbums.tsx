@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState } from 'react';
 import { Camera, Plus, Pencil, Upload, Share2, Trash2, Sparkles } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -129,7 +130,7 @@ function AlbumCard({
                 textOverflow: 'ellipsis',
               }}
             >
-              {album.name}
+              <EntitySource entity={album} domain="photos" /> {album.name}
             </div>
             <div
               style={{

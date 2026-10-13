@@ -158,7 +158,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
           </div>
         ) : entries.length === 0 ? (
           <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)' }}>
-            No clipboard entries
+            Los elementos que envíes desde CrawlMicel o MiniMicel aparecerán aquí
           </div>
         ) : (
           entries.map((entry) => (
@@ -189,7 +189,7 @@ export function ClipboardPanel({ open, onClose }: ClipboardPanelProps) {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
-                    {timeAgo(entry.createdAt)}
+                    {timeAgo(entry.created_at)}
                   </span>
                   <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontFamily: 'var(--font-sans)' }}>
                     {entry.source}

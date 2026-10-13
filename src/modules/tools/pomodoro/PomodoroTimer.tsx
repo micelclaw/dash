@@ -141,7 +141,7 @@ export function PomodoroTimer() {
 
   const start = useCallback(() => {
     if (timer.status === 'running') return;
-    let duration = timer.duration;
+    let duration: number;
 
     if (timer.status === 'idle') {
       if (mode === 'pomodoro') {
@@ -167,7 +167,7 @@ export function PomodoroTimer() {
   }, [timer, getElapsed]);
 
   const reset = useCallback(() => {
-    let d = DEFAULT_FOCUS;
+    let d: number;
     if (mode === 'pomodoro') d = focusMin * 60000;
     else if (mode === 'timer') {
       const parts = timerInput.split(':').map(Number);

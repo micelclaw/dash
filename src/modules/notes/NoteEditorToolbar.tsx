@@ -35,6 +35,8 @@ interface NoteEditorToolbarProps {
   /** Abre el selector de imagen (galería en móvil / explorador en PC). Si se
    *  provee, el botón de imagen lo usa en vez del prompt de URL. */
   onPickImage?: () => void;
+  /** Connected native notes only expose commands their adapter can preserve. */
+  inlineOnly?: boolean;
 }
 
 interface ToolbarButton {
@@ -135,7 +137,7 @@ const BUTTONS: ToolbarButton[] = [
   { icon: Trash2, label: 'Delete table', tableContext: true, action: e => e.chain().focus().deleteTable().run() },
 ];
 
-export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleToc, onPickImage }: NoteEditorToolbarProps) {
+export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleToc, onPickImage, inlineOnly = false }: NoteEditorToolbarProps) {
   if (!editor) return null;
   const inTable = editor.isActive('table');
 
@@ -150,6 +152,7 @@ export function NoteEditorToolbar({ editor, format = 'html', tocOpen, onToggleTo
       flexWrap: 'wrap',
     }}>
       {BUTTONS.map((btn, i) => {
+        if (inlineOnly && !btn.separator && !['Bold', 'Italic', 'Underline', 'Strikethrough', 'Link', 'Undo', 'Redo'].includes(btn.label)&&!(btn.special==='pickImage'&&onPickImage)) return null;
         if (btn.hiddenFor?.includes(format)) return null;
         if (btn.tableContext && !inTable) return null;
         if (btn.separator) {

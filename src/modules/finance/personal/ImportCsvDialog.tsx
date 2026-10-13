@@ -82,7 +82,7 @@ interface ParsedRow {
 // Auto-detección de columnas por nombre de cabecera.
 const DATE_HINTS = ['fecha', 'date'];
 const AMOUNT_HINTS = ['importe', 'amount', 'cantidad'];
-const DESC_HINTS = ['concepto', 'descripcion', 'descripción', 'description', 'detalle'];
+const DESC_HINTS = ['description', 'descripcion', 'description', 'description', 'detalle'];
 
 function detectColumn(headers: string[], hints: string[]): number {
   for (let i = 0; i < headers.length; i++) {
@@ -187,13 +187,13 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
     try {
       const { created, failed } = await importTransactions(rows);
       if (created === 0) {
-        toast.error('No se importó ningún movimiento');
+        toast.error('No movements were imported');
       } else {
         toast.success(`Importados ${created} movimientos${failed.length ? `, ${failed.length} con error` : ''}`);
         close();
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo importar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t import');
     } finally {
       setBusy(false);
     }
@@ -225,7 +225,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
           {/* Entrada: textarea + fichero */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Pega el CSV o sube un fichero</label>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Paste the CSV or upload a file</label>
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
@@ -253,21 +253,21 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
               {/* Mapeo de columnas */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
-                  <label style={labelStyle}>Columna de Fecha</label>
+                  <label style={labelStyle}>Date column</label>
                   <select value={dateCol} onChange={setMapped(setDateCol)} style={fieldStyle}>
                     <option value={-1}>— elige —</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Columna de Importe</label>
+                  <label style={labelStyle}>Amount column</label>
                   <select value={amountCol} onChange={setMapped(setAmountCol)} style={fieldStyle}>
                     <option value={-1}>— elige —</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Columna de Concepto (opcional)</label>
+                  <label style={labelStyle}>Description column (optional)</label>
                   <select value={descCol} onChange={setMapped(setDescCol)} style={fieldStyle}>
                     <option value={-1}>— ninguna —</option>
                     {colOptions.map((i) => <option key={i} value={i}>{colLabel(i)}</option>)}
@@ -277,7 +277,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
 
               {/* Cuenta destino */}
               <div>
-                <label style={labelStyle}>Cuenta destino</label>
+                <label style={labelStyle}>Destination account</label>
                 <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
                   <option value="">— elige cuenta —</option>
                   {assetAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -287,7 +287,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
               {/* Previsualización */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                  <label style={{ ...labelStyle, marginBottom: 0 }}>Previsualización</label>
+                  <label style={{ ...labelStyle, marginBottom: 0 }}>Preview</label>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     <span style={{ color: 'var(--mod-finance)' }}>{valid.length}</span> válida{valid.length === 1 ? '' : 's'}
                     {invalid > 0 && <> · <span style={{ color: 'var(--amber)' }}>{invalid}</span> descartada{invalid === 1 ? '' : 's'}</>}
@@ -297,16 +297,16 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={th}>Fecha</th>
-                        <th style={th}>Tipo</th>
-                        <th style={{ ...th, textAlign: 'right' }}>Importe</th>
-                        <th style={th}>Concepto</th>
+                        <th style={th}>Date</th>
+                        <th style={th}>Type</th>
+                        <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                        <th style={th}>Description</th>
                       </tr>
                     </thead>
                     <tbody>
                       {valid.length === 0 && (
                         <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={4}>
-                          {colCount > 0 ? 'Sin filas válidas. Revisa el mapeo de columnas.' : 'Pega un CSV arriba.'}
+                          {colCount > 0 ? 'No valid rows. Check the column mapping.' : 'Pega un CSV arriba.'}
                         </td></tr>
                       )}
                       {valid.slice(0, 8).map((r, i) => {
@@ -314,7 +314,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
                         return (
                           <tr key={i}>
                             <td style={{ ...td, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>{r.date}</td>
-                            <td style={{ ...td, color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>{isExpense ? 'Gasto' : 'Ingreso'}</td>
+                            <td style={{ ...td, color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>{isExpense ? 'Expense' : 'Income'}</td>
                             <td style={{ ...td, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', color: isExpense ? '#ef4444' : 'var(--mod-finance)' }}>
                               {isExpense ? '-' : '+'}{fmtMoney(Math.abs(r.amount))}
                             </td>
@@ -334,7 +334,7 @@ export function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={close} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+          <button onClick={close} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={doImport} disabled={!canImport} style={{ padding: '8px 16px', background: canImport ? 'var(--amber)' : 'var(--bg)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: canImport ? '#0a0a0a' : 'var(--text-muted)', cursor: busy ? 'wait' : canImport ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 600 }}>
             {busy ? 'Importando…' : `Importar ${valid.length || ''}`.trim()}
           </button>

@@ -33,6 +33,31 @@ class ApiClient {
     return useAuthStore.getState().tokens?.accessToken ?? null;
   }
 
+  /**
+   * URL absoluta para un recurso binario ya prefijado con `/api/v1` (media proxeada,
+   * descargas) usable en `<img src>` / `<a href>`, con `?token=` para autenticar sin
+   * header (el navegador no manda el Bearer en un `<img>`). El backend lo acepta
+   * (plugins/auth.ts §query-token). Devuelve '' si no hay path.
+   */
+  mediaUrl(pathWithPrefix: string | null | undefined): string {
+    if (!pathWithPrefix) return '';
+    const base = `${BASE_URL}${pathWithPrefix}`;
+    const token = this.getToken();
+    if (!token) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
+  }
+
+  /**
+   * URL for a same-site iframe which authenticates only through the existing
+   * HttpOnly `claw_session` cookie. Unlike mediaUrl this never puts a bearer
+   * token in a URL, referrer or iframe document.
+   */
+  frameUrl(path: string): string {
+    if (!path.startsWith('/')) throw new Error('Frame API path must start with /');
+    return `${BASE_URL}${API_PREFIX}${path}`;
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -202,7 +227,7 @@ class ApiClient {
     const blob = await res.blob();
     const cd = res.headers.get('content-disposition') ?? '';
     const match = /filename="?([^"]+)"?/i.exec(cd);
-    return { blob, filename: match ? match[1] : null, mime: res.headers.get('content-type') ?? blob.type ?? 'application/octet-stream' };
+    return { blob, filename: match?.[1] ?? null, mime: res.headers.get('content-type') ?? blob.type ?? 'application/octet-stream' };
   }
 
   /**
@@ -259,16 +284,16 @@ class ApiClient {
     return this.request<T>('POST', path, { body, ...opts });
   }
 
-  patch<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('PATCH', path, { body });
+  patch<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+    return this.request<T>('PATCH', path, { body, ...opts });
   }
 
   put<T>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PUT', path, { body });
   }
 
-  delete<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('DELETE', path, body !== undefined ? { body } : undefined);
+  delete<T>(path: string, body?: unknown, opts?: { timeout?: number }): Promise<T> {
+    return this.request<T>('DELETE', path, body !== undefined ? { body, ...opts } : opts);
   }
 
   async upload<T>(path: string, formData: FormData, method: 'POST' | 'PUT' = 'POST', opts?: { timeout?: number }): Promise<T> {

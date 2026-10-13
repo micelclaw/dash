@@ -11,30 +11,36 @@
  */
 
 import { useState } from 'react';
-import { LayoutGrid, Loader2 } from 'lucide-react';
+import { LayoutGrid, Loader2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { workboardApi } from './workboard.service';
 
 interface Props {
   /** ¿el plugin ya está enabled en config pero el Gateway aún no lo cargó? */
   enabledPendingReload: boolean;
-  onEnabled: () => void;
+  availabilityError?: string | null;
+  onEnabled: () => void | Promise<unknown>;
 }
 
-export function WorkboardBootstrapCard({ enabledPendingReload, onEnabled }: Props) {
+export function WorkboardBootstrapCard({ enabledPendingReload, availabilityError, onEnabled }: Props) {
   const [busy, setBusy] = useState(false);
 
   const enable = async () => {
     setBusy(true);
     try {
       await workboardApi.enable();
-      toast.success('Workboard activado — recarga el Gateway para que cargue el plugin');
-      onEnabled();
+      toast.success('Workboard habilitado. Comprobando disponibilidad…');
+      await onEnabled();
     } catch {
       toast.error('No se pudo activar el Workboard');
     } finally {
       setBusy(false);
     }
+  };
+
+  const retry = async () => {
+    setBusy(true);
+    try { await onEnabled(); } finally { setBusy(false); }
   };
 
   return (
@@ -52,10 +58,18 @@ export function WorkboardBootstrapCard({ enabledPendingReload, onEnabled }: Prop
           asignables a agentes, separado del Kanban de Proyectos (esto es coordinación de agentes, no tu trabajo).
         </p>
 
-        {enabledPendingReload ? (
+        {availabilityError ? (
+          <div role="alert" style={{ display: 'grid', gap: 10, color: 'var(--error)', fontSize: '0.8125rem' }}>
+            <span><AlertTriangle size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 6 }} />Error al acceder a Workboard</span>
+            <span>{availabilityError}</span>
+            <button type="button" disabled={busy} onClick={() => void retry()} style={{ color: 'var(--text)', padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface)' }}>
+              {busy ? 'Comprobando…' : 'Reintentar'}
+            </button>
+          </div>
+        ) : enabledPendingReload ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem', color: 'var(--amber)', marginTop: 4 }}>
             <Loader2 size={15} className="animate-spin" />
-            Activado — esperando la recarga del Gateway para cargar el plugin.
+            Habilitado, pero aún no disponible en el Gateway. Comprobando…
           </div>
         ) : (
           <button

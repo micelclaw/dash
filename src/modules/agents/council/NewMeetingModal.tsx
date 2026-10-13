@@ -12,7 +12,7 @@
 
 import { useState, useMemo } from 'react';
 import { X } from 'lucide-react';
-import { useMeetings } from './hooks/use-meetings';
+import type { CreateMeetingPayload, EditMeetingPayload } from './hooks/use-meetings';
 import { ParticipantPreview } from './ParticipantPreview';
 import type { ManagedAgent, Meeting } from '../types';
 
@@ -21,6 +21,13 @@ interface NewMeetingModalProps {
   agents: ManagedAgent[];
   onClose: () => void;
   onCreated: (meeting: Meeting) => void;
+  // createMeeting/editMeeting llegan POR PROPS desde el owner (CouncilTab / MeetingDetail) que YA
+  // tiene la instancia de useMeetings que se renderiza. Antes el modal montaba su PROPIA instancia →
+  // el meeting recién creado entraba en la lista del modal (que se desmonta) pero NO en la de
+  // CouncilTab, así que setSelectedMeetingId no encontraba el meeting y se quedaba en la lista en vez
+  // de abrir la sala. Al compartir la instancia, crear → el meeting aparece al instante y navega.
+  createMeeting?: (payload: CreateMeetingPayload) => Promise<Meeting | null>;
+  editMeeting?: (id: string, payload: EditMeetingPayload) => Promise<Meeting | null>;
   // When set, the modal opens in "edit" mode: form pre-fills with this
   // meeting's values, the submit button becomes "Save changes", and on
   // submit it calls PATCH /meetings/:id instead of POST. Only meetings
@@ -53,9 +60,9 @@ const labelStyle: React.CSSProperties = {
 
 export function NewMeetingModal({
   open, agents, onClose, onCreated,
+  createMeeting, editMeeting,
   existingMeeting, onUpdated,
 }: NewMeetingModalProps) {
-  const { createMeeting, editMeeting } = useMeetings();
   const [submitting, setSubmitting] = useState(false);
   const isEdit = !!existingMeeting;
 
@@ -94,6 +101,7 @@ export function NewMeetingModal({
   const [maxWords, setMaxWords] = useState<number>(() => existingMeeting?.advanced_options?.max_words ?? 80);
   const [devilsAdvocate, setDevilsAdvocate] = useState<boolean>(() => existingMeeting?.advanced_options?.devils_advocate ?? false);
   const [extractActionItems, setExtractActionItems] = useState<boolean>(() => existingMeeting?.advanced_options?.extract_action_items ?? true);
+  const [intervention, setIntervention] = useState<'each_round' | 'before_conclusion'>(() => existingMeeting?.advanced_options?.intervention ?? 'before_conclusion');
 
   // The chief agent is always checked + disabled in the participant grid.
   // Use is_chief instead of hard-coding "francis" so future renames work.
@@ -131,9 +139,11 @@ export function NewMeetingModal({
       max_words: maxWords,
       devils_advocate: devilsAdvocate,
       extract_action_items: extractActionItems,
+      intervention,
     };
 
     if (isEdit && existingMeeting) {
+      if (!editMeeting) { setSubmitting(false); return; }
       const updated = await editMeeting(existingMeeting.id, {
         title: topic.trim(),
         description: description.trim() || null,
@@ -150,6 +160,7 @@ export function NewMeetingModal({
       return;
     }
 
+    if (!createMeeting) { setSubmitting(false); return; }
     const meeting = await createMeeting({
       title: topic.trim(),
       description: description.trim() || undefined,
@@ -361,6 +372,34 @@ export function NewMeetingModal({
                 Participate in meeting
               </span>
             </label>
+
+            {/* Cuándo te da la palabra el council (solo si participas) */}
+            {userParticipates && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px 2px 28px' }}>
+                {([
+                  { value: 'before_conclusion', label: 'Solo antes de concluir', hint: 'una pausa, tras el debate' },
+                  { value: 'each_round', label: 'Tras la intro y cada ronda', hint: 'máximo control' },
+                ] as const).map(opt => (
+                  <label
+                    key={opt.value}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                      fontSize: '0.75rem', color: 'var(--text)',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="intervention-mode"
+                      checked={intervention === opt.value}
+                      onChange={() => setIntervention(opt.value)}
+                      style={{ accentColor: 'var(--amber)' }}
+                    />
+                    <span>{opt.label}</span>
+                    <span style={{ fontSize: '0.6563rem', color: 'var(--text-muted)' }}>{opt.hint}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

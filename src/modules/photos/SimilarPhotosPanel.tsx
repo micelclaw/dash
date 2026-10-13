@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { type OriginEntity } from '@/types/origins';
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useState } from 'react';
 import { X, Image } from 'lucide-react';
 import { usePhotoAiStore } from '@/stores/photo-ai.store';
@@ -148,6 +150,7 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
             {similarResults.map((result) => (
               <SimilarThumbnail
                 key={result.id}
+                entity={result}
                 id={result.id}
                 filename={result.filename}
                 similarity={result.similarity}
@@ -162,11 +165,13 @@ export function SimilarPhotosPanel({ onNavigateToPhoto }: SimilarPhotosPanelProp
 }
 
 function SimilarThumbnail({
+  entity,
   id,
   filename,
   similarity,
   onClick,
 }: {
+  entity: OriginEntity;
   id: string;
   filename: string;
   similarity: number;
@@ -194,6 +199,7 @@ function SimilarThumbnail({
         background: 'rgba(255,255,255,0.05)',
       }}
     >
+      <PhotoSource entity={entity} />
       {!imgError ? (
         <img
           src={previewUrl}

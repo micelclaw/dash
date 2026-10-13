@@ -10,11 +10,11 @@
  * https://micelclaw.com
  */
 
-// Chips de entidad bajo un bloque de tool del chat. El backend marca el
-// tool_call con `entity_refs: [{ type, id, title }]` (piloto: notas) y aquí
-// renderizamos una pill cliqueable por ref que navega al registro. Aditivo: se
-// muestra DEBAJO del bloque de tool, sin reemplazarlo. Sin flecha — toda la
-// pill es cliqueable y el hover (fondo más claro) lo indica.
+// Chips de entidad independientes de la visualización de tools. El backend
+// marca el tool_call con `entity_refs: [{ type, id, title }]` y ChatMessage las
+// deduplica y coloca fuera de la burbuja técnica. Settings → Tool display puede
+// ocultar la actividad, pero nunca estos enlaces funcionales. Sin flecha: toda
+// la pill es cliqueable y el hover (fondo más claro) lo indica.
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router';

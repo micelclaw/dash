@@ -19,11 +19,12 @@ import type { ConnectorInfo as SyncConnectorInfo } from '@/services/sync.service
 import { SettingSection } from '../SettingSection';
 import { SettingSelect } from '../SettingSelect';
 import { SaveBar } from '../SaveBar';
-import { ConnectorCard } from '../ConnectorCard';
-import { AddIntegrationModal } from '../AddIntegrationModal';
+import { ConnectedList } from '../connect/ConnectedList';
+import { ConnectWizard } from '../connect/ConnectWizard';
 import { EditConnectorModal } from '../EditConnectorModal';
-import { SettingsBlock } from '../shared/SettingsBlock';
-import { ChannelObserversSection } from './ChannelObserversSection';
+import { Link } from 'react-router';
+import { MessageCircle, ChevronRight } from 'lucide-react';
+import { DavAccessPanel } from './DavAccessPanel';
 
 const INTERVAL_OPTIONS = [
   { value: '5', label: '5 minutes' },
@@ -81,6 +82,7 @@ export function SyncSection() {
 
   return (
     <>
+      <DavAccessPanel />
       <SettingSection
         title="Integrations"
         description="Connected services and data sources."
@@ -107,7 +109,7 @@ export function SyncSection() {
             }}
           >
             <Plus size={14} />
-            Add
+            Conectar
           </button>
         }
       >
@@ -117,7 +119,7 @@ export function SyncSection() {
             fontSize: '0.8125rem', color: 'var(--text-muted)',
             fontFamily: 'var(--font-sans)',
           }}>
-            <div style={{ marginBottom: 8 }}>No integrations configured yet.</div>
+            <div style={{ marginBottom: 8 }}>Todavía no hay nada conectado.</div>
             <button
               onClick={() => setModalOpen(true)}
               style={{
@@ -128,24 +130,16 @@ export function SyncSection() {
                 fontWeight: 500,
               }}
             >
-              Add your first integration
+              Conectar lo primero
             </button>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: 8,
-          }}>
-            {connectors.map((c) => (
-              <ConnectorCard
-                key={c.id}
-                connector={c}
-                onRefresh={loadConnectors}
-                onConfigure={(id) => setEditingId(id)}
-              />
-            ))}
-          </div>
+          // Agrupadas por proveedor, una tarjeta por tipo de dato.
+          <ConnectedList
+            connectors={connectors}
+            onRefresh={loadConnectors}
+            onConfigure={(id) => setEditingId(id)}
+          />
         )}
       </SettingSection>
 
@@ -163,7 +157,7 @@ export function SyncSection() {
 
       <SaveBar visible={!!dirty.sync} saving={saving} onSave={handleSave} onDiscard={() => resetSection('sync')} />
 
-      <AddIntegrationModal
+      <ConnectWizard
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onConnected={loadConnectors}
@@ -178,21 +172,28 @@ export function SyncSection() {
   );
 }
 
-// ── Fused block: Channel Observers (was its own /settings/observers
-// section before Ola 9 reorg). Lives here because both belong to the
-// "sync with external services" domain.
+// ── Link card to Channel Observers (now its own sidebar section, so this
+// avoids the double-mount that the embedded block used to cause).
 function ChannelObserversBlock() {
-  const [expanded, setExpanded] = useState(false);
   return (
-    <SettingsBlock
-      title="Channel Observers"
-      description="Read-only bridges — your agents see incoming messages from external channels (RSS, Slack, etc.) without being able to reply."
-      expanded={expanded}
-      onToggle={() => setExpanded((v) => !v)}
-    >
-      <div style={{ marginTop: 4 }}>
-        <ChannelObserversSection />
-      </div>
-    </SettingsBlock>
+    <SettingSection title="Channel Observers" description="Two-way bridges — observe incoming messages and reply from Messages on the platforms you authorize.">
+      <Link
+        to="/settings/observers"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-md)', textDecoration: 'none', color: 'var(--text)',
+        }}
+      >
+        <MessageCircle size={20} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '0.8125rem', fontWeight: 600 }}>Open Channel Observers</div>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 1 }}>
+            Connect Signal, WhatsApp, Telegram, Discord, Matrix and more.
+          </div>
+        </div>
+        <ChevronRight size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+      </Link>
+    </SettingSection>
   );
 }

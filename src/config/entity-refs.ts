@@ -26,6 +26,8 @@ import type { AppEntityType } from '@/services/app-access.service';
 // `stores/entity-types.store.ts` al boot.
 
 export interface EntityRefDef {
+  /** Alias histórico: el auditor exige que el tipo canónico siga emitiéndose. */
+  aliasOf?: string;
   Icon: LucideIcon;
   /** Color del icono/borde — variable CSS del módulo (ej. var(--mod-notes)). */
   color: string;
@@ -92,7 +94,8 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
   },
   // Tarjeta kanban: abrir el CardDetailPanel requiere el boardId (BoardView lee
   // `?card=`). La chip codifica el id como "<boardId>/<cardId>" (lo provee el
-  // search, ver mention-suggestion.tsx). Fallback degradado si llega sin board.
+  // search, ver mention-suggestion.tsx). Si llega sin board (chips antiguas), cae en
+  // /projects?card=<id> y ProjectsPage resuelve el tablero antes de redirigir.
   kanban_card: {
     Icon: SquareCheckBig,
     color: 'var(--mod-projects)',
@@ -309,6 +312,7 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
   // FacturacionLens lee ?doc= para abrir la factura. Los clientes/proveedores
   // son CONTACTOS (dominio `contact`), no un dominio de facturación propio.
   finance_invoice: {
+    aliasOf: 'finance_document',
     Icon: Receipt,
     color: 'var(--mod-finance)',
     label: 'Factura',
@@ -351,7 +355,12 @@ export const ENTITY_REF_MAP: Record<string, EntityRefDef> = {
 };
 
 /** Dominios buscables para el dropdown de menciones `@` del editor de notas. */
-export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', 'diary', 'inventory', 'inventory_location', 'inventory_move', 'inventory_proposal', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'];
+// `bookmark` entra aquí desde que la 0291 le dio `search_vector` a la tabla y el
+// dominio se sumó a VALID_DOMAINS de `/search` (deuda PIM3/MCP-S7). Antes no
+// tenía sentido pedirlo: `/search` filtra los `domains` contra VALID_DOMAINS y
+// lo habría descartado. La chip aterriza bien — ENTITY_REF_MAP tiene su fila y
+// BookmarksPage lee `?id=` (resalta la tarjeta y hace scroll).
+export const MENTION_DOMAINS: string[] = ['note', 'event', 'contact', 'email', 'diary', 'bookmark', 'inventory', 'inventory_location', 'inventory_move', 'inventory_proposal', 'kanban_board', 'kanban_card', 'finance_document', 'finance_journal_entry'];
 
 // ─── Extensión dinámica por apps L3 (`ui.entities` del manifest) ────────────
 // Invocada una vez al boot (`stores/entity-types.store.ts`) tras fetchear

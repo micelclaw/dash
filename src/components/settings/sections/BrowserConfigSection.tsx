@@ -9,6 +9,7 @@ import * as gwService from '@/services/gateway.service';
 import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
+import { privateNetworkAccessEnabled } from './browser-config.ui-state';
 
 // Profile keys that we know how to label. Anything else is rendered
 // with the raw key (so user-defined profiles in openclaw.json show up).
@@ -45,7 +46,7 @@ export function BrowserConfigSection() {
   const [headless, setHeadless] = useState(false);
   const [evaluateEnabled, setEvaluateEnabled] = useState(true);
   const [defaultProfile, setDefaultProfile] = useState('openclaw');
-  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(true);
+  const [allowPrivateNetwork, setAllowPrivateNetwork] = useState(false);
   const [profileOptions, setProfileOptions] = useState<ProfileOption[]>(
     buildProfileOptions(undefined, 'openclaw'),
   );
@@ -61,7 +62,7 @@ export function BrowserConfigSection() {
       setDefaultProfile(profile);
       setProfileOptions(buildProfileOptions(data.profiles, profile));
       const ssrf = (data.ssrf_policy ?? {}) as Record<string, unknown>;
-      setAllowPrivateNetwork((ssrf.dangerously_allow_private_network ?? true) as boolean);
+      setAllowPrivateNetwork(privateNetworkAccessEnabled(ssrf));
       setDirty(false);
     } catch (err) {
       toast.error(describeError(err, 'Failed to load browser config'));

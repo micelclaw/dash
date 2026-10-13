@@ -15,12 +15,16 @@ import type { ActionItem } from '../types';
 
 interface ActionItemsProps {
   items: ActionItem[];
+  /** Título del council de origen — se muestra como procedencia de la tarea. */
+  meetingTitle?: string;
   /**
    * If provided, the status badge becomes clickable and cycles
    * pending → in_progress → complete → pending. Caller is responsible
    * for the API call + optimistic update.
    */
   onCycleStatus?: (itemId: string, newStatus: ActionItem['status']) => void;
+  /** Si se pasa, muestra el botón "Añadir al Workboard" por tarea. */
+  onAddToWorkboard?: (itemId: string) => Promise<boolean>;
 }
 
 /** Cycle order for the click handler. */
@@ -64,11 +68,12 @@ function statusIcon(status: ActionItem['status']): string {
   }
 }
 
-export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
+export function ActionItems({ items, meetingTitle, onCycleStatus, onAddToWorkboard }: ActionItemsProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
     items.length > 0 ? items[0]!.id : null
   );
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const completedCount = items.filter(i => i.status === 'complete').length;
   const allComplete = completedCount === items.length;
@@ -217,8 +222,15 @@ export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
                   fontSize: '0.8125rem',
                   color: 'var(--text-dim)',
                   lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
                 }}>
                   {selectedItem.description}
+                </p>
+              )}
+
+              {meetingTitle && (
+                <p style={{ margin: 0, fontSize: '0.6875rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  Del council «{meetingTitle}»
                 </p>
               )}
 
@@ -262,7 +274,9 @@ export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
                   }}>
                     Status:
                   </span>
-                  {onCycleStatus ? (
+                  {/* Con tarjeta del Workboard: el status LO MANDA la tarjeta (solo lectura + enlace).
+                      Sin tarjeta (item asignado al usuario): clic manual que cicla el estado. */}
+                  {onCycleStatus && !selectedItem.workboard_card_id ? (
                     <button
                       onClick={() => onCycleStatus(selectedItem.id, nextStatus(selectedItem.status))}
                       title="Click to cycle status: pending → in progress → complete → pending"
@@ -285,20 +299,30 @@ export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
                       {statusLabel(selectedItem.status)}
                     </button>
                   ) : (
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: statusColor(selectedItem.status),
-                      background: statusBg(selectedItem.status),
-                      padding: '2px 10px',
-                      borderRadius: 'var(--radius-full)',
-                    }}>
+                    <span
+                      title={selectedItem.workboard_card_id ? 'Se sincroniza con la tarjeta del Workboard' : undefined}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: statusColor(selectedItem.status),
+                        background: statusBg(selectedItem.status),
+                        padding: '2px 10px',
+                        borderRadius: 'var(--radius-full)',
+                      }}>
                       <span>{statusIcon(selectedItem.status)}</span>
                       {statusLabel(selectedItem.status)}
                     </span>
+                  )}
+                  {selectedItem.workboard_card_id && (
+                    <button
+                      onClick={() => window.dispatchEvent(new CustomEvent('claw:agents-tab', { detail: 'workboard' }))}
+                      style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    >
+                      sincronizado con la tarjeta →
+                    </button>
                   )}
                 </div>
 
@@ -332,6 +356,38 @@ export function ActionItems({ items, onCycleStatus }: ActionItemsProps) {
                   </div>
                 )}
               </div>
+
+              {/* Añadir al Workboard (bajo demanda) */}
+              {onAddToWorkboard && (
+                selectedItem.workboard_card_id ? (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+                    fontSize: '0.75rem', fontWeight: 600, color: 'var(--green, #10b981)',
+                    padding: '5px 12px', borderRadius: 'var(--radius-full)',
+                    background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)',
+                  }}>
+                    ✓ En el Workboard
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const item = selectedItem;
+                      setAddingId(item.id);
+                      void onAddToWorkboard(item.id).finally(() => setAddingId(null));
+                    }}
+                    disabled={addingId === selectedItem.id}
+                    style={{
+                      alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                      fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-sans)',
+                      padding: '6px 14px', borderRadius: 'var(--radius-full)',
+                      border: '1px solid var(--amber)', background: 'rgba(245,166,35,0.10)', color: 'var(--amber)',
+                      cursor: addingId === selectedItem.id ? 'wait' : 'pointer',
+                    }}
+                  >
+                    {addingId === selectedItem.id ? 'Añadiendo…' : '+ Añadir al Workboard'}
+                  </button>
+                )
+              )}
             </>
           ) : (
             <div style={{

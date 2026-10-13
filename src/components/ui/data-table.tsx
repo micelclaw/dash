@@ -77,7 +77,7 @@ export function DataTable<T>({
   const toggleOne = (k: string) => {
     if (!onSelectionChange) return;
     const next = new Set(selectedKeys);
-    next.has(k) ? next.delete(k) : next.add(k);
+    if (next.has(k)) next.delete(k); else next.add(k);
     onSelectionChange(next);
   };
 

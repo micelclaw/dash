@@ -21,6 +21,7 @@
  * Se arrastran a una baldosa de tablero para sacarlas de aquí.
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, AlertTriangle, Paperclip, CheckSquare, X } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
@@ -28,6 +29,8 @@ import { TagChip } from '@/components/shared/TagChip';
 import { parsearCaptura, trozosAPayload } from '../utils/quick-add-parser';
 import { api } from '@/services/api';
 import { getPreviewUrl } from '@/lib/file-utils';
+import { ConnectButton } from '@/components/shared/ConnectButton';
+import { Link } from 'react-router';
 import type { Card, ChecklistItem } from '../types';
 
 function esVencida(c: Card): boolean {
@@ -51,11 +54,12 @@ function progresoChecklist(c: Card): { hechos: number; total: number } | null {
 
 /** Iniciales para el chip de asignado; si no hay nombre, las del email. */
 function iniciales(nombre: string): string {
-  const limpio = nombre.split('@')[0].replace(/[._-]+/g, ' ').trim();
+  const limpio = (nombre.split('@')[0] ?? nombre).replace(/[._-]+/g, ' ').trim();
   const partes = limpio.split(/\s+/).filter(Boolean);
-  if (partes.length === 0) return '?';
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
-  return (partes[0][0] + partes[1][0]).toUpperCase();
+  const primera = partes[0];
+  if (!primera) return '?';
+  if (partes.length === 1) return primera.slice(0, 2).toUpperCase();
+  return (primera.charAt(0) + (partes[1] ?? '').charAt(0)).toUpperCase();
 }
 
 function fechaCorta(iso: string): string {
@@ -81,7 +85,8 @@ export function InboxZone({
   const quickAdd = useProjectsStore((s) => s.quickAddTask);
   // Para resolver `+tablero` por nombre a su id.
   const boards = useProjectsStore((s) => s.boards);
-  const toggle = useProjectsStore((s) => s.toggleTaskComplete);
+  const fetchBoards = useProjectsStore((s) => s.fetchBoards);
+  const fetchInbox = useProjectsStore((s) => s.fetchInbox);
 
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -291,15 +296,6 @@ export function InboxZone({
                   borderLeft: seleccionada ? '2px solid var(--amber)' : '2px solid transparent',
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={!!c.completed_at}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => void toggle(c.id, e.target.checked)}
-                  aria-label={`Marcar "${c.title}" como hecha`}
-                  style={{ marginTop: 3, accentColor: 'var(--amber)', cursor: 'pointer', flexShrink: 0 }}
-                />
-
                 {/* Miniatura de portada, solo si la tarea tiene una. */}
                 {c.cover_image_id && (
                   <img
@@ -314,10 +310,11 @@ export function InboxZone({
                     palabra sigue ocupando una línea. */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span style={{ flex: 1, minWidth: 0, color: 'var(--text)', fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word', textDecoration: c.completed_at ? 'line-through' : undefined, opacity: c.completed_at ? 0.55 : 1 }}>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--text)', fontSize: 13, lineHeight: 1.35, wordBreak: 'break-word' }}>
                       {vencida && <AlertTriangle size={12} style={{ color: 'var(--red, #e5484d)', marginRight: 4, verticalAlign: -1 }} />}
                       {c.title}
                     </span>
+                    <EntitySource entity={c} domain="tasks" />
                     {c.due_date && (
                       <span style={{ color: vencida ? 'var(--red, #e5484d)' : 'var(--text-dim)', fontSize: 11, flexShrink: 0 }}>
                         {fechaCorta(c.due_date)}
@@ -341,6 +338,21 @@ export function InboxZone({
             );
           })
         )}
+      </div>
+      <div style={{ borderTop: '1px solid var(--border)', padding: 8 }}>
+        <ConnectButton
+          dataType="tasks"
+          onConnected={() => {
+            void fetchBoards();
+            void fetchInbox();
+          }}
+        />
+        <Link
+          to="/settings/sync#dav-access"
+          style={{ display: 'block', padding: '4px 10px', color: 'var(--text-muted)', fontSize: 11, textDecoration: 'none' }}
+        >
+          Conectar una app a Micelclaw
+        </Link>
       </div>
     </div>
   );

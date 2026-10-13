@@ -24,6 +24,8 @@ import type {
   LogEntry,
   ModelTestResult,
   ProviderOverview,
+  CatalogProvider,
+  InstallableCatalogProvider,
 } from '@/modules/gateway/types';
 import { describeCredentialError } from '@/modules/gateway/lib/credential-errors';
 import * as gw from '@/services/gateway.service';
@@ -52,6 +54,10 @@ interface GatewayStore {
   cronLoading: boolean;
   cronError: string | null;
   catalog: CatalogModel[];
+  catalogProviders: CatalogProvider[];
+  installableProviders: InstallableCatalogProvider[];
+  catalogOpenclawVersion: string | null;
+  catalogDegraded: boolean;
   catalogLoading: boolean;
   catalogError: string | null;
   logsLoading: boolean;
@@ -90,7 +96,7 @@ interface GatewayStore {
   fetchSessions: () => Promise<void>;
   fetchUsage: () => Promise<void>;
   fetchCronJobs: () => Promise<void>;
-  fetchCatalog: () => Promise<void>;
+  fetchCatalog: (refresh?: boolean) => Promise<void>;
   fetchProvidersOverview: () => Promise<void>;
   runModelTest: (key: string) => Promise<void>;
   hydrateModelTests: () => Promise<void>;
@@ -174,6 +180,10 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
   sessionsLoading: false,
   sessionsError: null,
   catalog: [],
+  catalogProviders: [],
+  installableProviders: [],
+  catalogOpenclawVersion: null,
+  catalogDegraded: false,
   catalogLoading: false,
   catalogError: null,
   cronLoading: false,
@@ -318,11 +328,18 @@ export const useGatewayStore = create<GatewayStore>()((set) => ({
     }
   },
 
-  fetchCatalog: async () => {
+  fetchCatalog: async (refresh = false) => {
     set({ catalogLoading: true, catalogError: null });
     try {
-      const result = await gw.getModelCatalog();
-      set({ catalog: result.models, catalogLoading: false });
+      const result = await gw.getModelCatalog(refresh);
+      set({
+        catalog: result.models,
+        catalogProviders: result.providers,
+        installableProviders: result.available_providers,
+        catalogOpenclawVersion: result.openclaw_version,
+        catalogDegraded: result.degraded,
+        catalogLoading: false,
+      });
     } catch (err) {
       set({
         catalogError: err instanceof Error ? err.message : 'Failed to fetch catalog',

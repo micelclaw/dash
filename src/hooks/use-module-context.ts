@@ -184,8 +184,16 @@ export function useModuleContext(): ModuleContext {
       activeItem = { id: projectsActiveBoardId, type: 'kanban-board', title: projectsActiveBoardTitle || 'Board' };
     }
 
-    // Inject diagram context when on a diagram editor route
-    if (mod?.id === 'sketches' && path.match(/\/diagrams\/.+/)) {
+    // Inject diagram context when on a diagram editor route.
+    // La ruta real es `/sketches/:fileId` (App.tsx) — `/diagrams/*` son solo
+    // redirects heredados del rename, así que nunca llegan a montarse aquí.
+    // Se excluye `/sketches/whiteboard[/…]`: la pizarra es Excalidraw, no
+    // React Flow, y no alimenta el diagrams.store.
+    if (
+      mod?.id === 'sketches' &&
+      /^\/sketches\/[^/]+\/?$/.test(path) &&
+      !path.startsWith('/sketches/whiteboard')
+    ) {
       let selectedNode: Record<string, unknown> | null = null;
       if (selectedElement?.type === 'node') {
         const node = diagramNodes.find((n) => n.id === selectedElement.id);

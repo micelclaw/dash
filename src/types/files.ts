@@ -10,7 +10,8 @@
  * https://micelclaw.com
  */
 
-export interface FileRecord {
+import type { OriginEntity } from '@/types/origins';
+export interface FileRecord extends OriginEntity {
   id: string;
   filename: string;
   filepath: string;
@@ -49,7 +50,7 @@ export interface Photo extends FileRecord {
   } | null;
 }
 
-export interface Album {
+export interface Album extends OriginEntity {
   id: string;
   name: string;
   description: string | null;

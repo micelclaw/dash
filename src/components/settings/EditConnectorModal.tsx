@@ -11,9 +11,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, Loader2, CheckCircle2, XCircle, FolderOpen } from 'lucide-react';
+import { X, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import * as syncSvc from '@/services/sync.service';
+import { CollectionsEditor } from './connect/CollectionsEditor';
+import { MappingEditor } from './connect/MappingEditor';
 import * as emailAccountsSvc from '@/services/email-accounts.service';
 
 interface EditConnectorModalProps {
@@ -25,6 +27,10 @@ interface EditConnectorModalProps {
 interface ConnectorDetail {
   id: string;
   connector_type: string;
+  /** `oauth2_rest` | `imap` | `caldav` | `carddav`. Lo dice el servidor. */
+  protocol?: string;
+  /** De qué es la integración (`emails`/`events`/`contacts`), del catálogo. */
+  domains?: string[];
   display_name: string | null;
   name: string;
   status: string;
@@ -52,8 +58,6 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   const [emailAccount, setEmailAccount] = useState<EmailAccountDetail | null>(null);
 
   const [testResult, setTestResult] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle');
-  const [folders, setFolders] = useState<string[]>([]);
-  const [foldersLoading, setFoldersLoading] = useState(false);
 
   // Form fields
   const [displayName, setDisplayName] = useState('');
@@ -67,6 +71,15 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
   const [serverUrl, setServerUrl] = useState('');
   const [interval, setInterval] = useState(15);
   const [maxMessages, setMaxMessages] = useState(2000);
+  /**
+   * La casilla del certificado propio, EDITABLE.
+   *
+   * Vivía solo en el alta y plegada dentro de «Ver detalles técnicos»: si no la
+   * marcabas ahí, no había NINGUNA forma de marcarla después — la integración se
+   * quedaba con su error de certificado para siempre y solo se salía borrándola
+   * y volviendo a crearla.
+   */
+  const [allowSelfSigned, setAllowSelfSigned] = useState(false);
 
   // Load connector detail
   useEffect(() => {
@@ -80,6 +93,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
         setConnector(c);
         setDisplayName(c.display_name ?? c.name);
         setInterval(c.config.sync_interval_minutes ?? 15);
+        setAllowSelfSigned(c.config.allow_self_signed === true);
 
         if (c.connector_type === 'imap-generic' && c.account_id) {
           // Fetch linked email account
@@ -93,9 +107,21 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           setUsername(acc.imap_username ?? '');
           setInterval(acc.sync_interval_minutes ?? 5);
           setDisplayName(acc.name);
-        } else if (c.connector_type === 'caldav' || c.connector_type === 'carddav') {
+        } else if (c.connector_type === 'caldav' || c.connector_type === 'carddav' || c.connector_type === 'caldav-tasks') {
           setServerUrl(c.config.server_url ?? '');
           setUsername(c.config.username ?? '');
+        } else {
+          // Limpiar SIEMPRE lo que no aplica a esta integración.
+          //
+          // Sin este `else`, abrir la ficha de una integración después de otra
+          // mostraba los datos de la ANTERIOR: el estado del formulario vive en
+          // el componente y solo se rellenaba en las dos ramas de arriba. Por eso
+          // la ficha de Microsoft aparecía con la dirección y el usuario del
+          // Synology dentro — no eran sus datos, eran los que quedaban puestos.
+          setServerUrl('');
+          setUsername('');
+          setEmailAccount(null);
+          setEmailAddress('');
         }
 
         // Load max_messages for connectors that support it
@@ -135,13 +161,19 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           max_initial_messages: maxMessages,
           host: imapHost,
           port: imapPort,
+          // Se manda SIEMPRE (también `false`) para que se pueda desmarcar: el
+          // PATCH mezcla el cuerpo en la config, así que omitirlo dejaría la
+          // casilla imposible de quitar una vez puesta.
+          allow_self_signed: allowSelfSigned,
         });
-      } else if (isOAuth) {
-        // OAuth connectors (Gmail, Google Calendar, etc.)
+      } else if (isOAuth || isToken) {
+        // OAuth connectors (Gmail, Google Calendar, etc.). El tope solo se
+        // escribe si es de correo: en calendario y contactos no lo lee nadie y
+        // guardarlo era escribir en la configuración una promesa que nada cumple.
         await syncSvc.updateConnectorConfig(connectorId, {
           display_name: displayName,
           sync_interval_minutes: interval,
-          max_initial_messages: maxMessages,
+          ...(esCorreo ? { max_initial_messages: maxMessages } : {}),
         });
       } else {
         // CalDAV/CardDAV
@@ -150,6 +182,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
           server_url: serverUrl,
           username,
           sync_interval_minutes: interval,
+          allow_self_signed: allowSelfSigned,
           ...(password ? { password_encrypted: password } : {}),
         });
       }
@@ -168,7 +201,7 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     if (!emailAccount) return;
     setTestResult('testing');
     try {
-      const result = await emailAccountsSvc.testEmailAccount(emailAccount.id);
+      const result = await emailAccountsSvc.testEmailAccount(emailAccount.id, { allowSelfSigned });
       const ok = result.imap?.status === 'ok';
       setTestResult(ok ? 'success' : 'failed');
       // Un aspa roja sin causa es lo que dejó 13 conexiones en rojo sin que
@@ -184,21 +217,37 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
     }
   };
 
-  const handleLoadFolders = async () => {
-    if (!emailAccount) return;
-    setFoldersLoading(true);
-    try {
-      setFolders(await emailAccountsSvc.listEmailFolders(emailAccount.id));
-    } catch {
-      toast.error('Failed to load folders');
-    }
-    setFoldersLoading(false);
-  };
-
   if (!connectorId) return null;
 
-  const isImap = connector?.connector_type === 'imap-generic';
-  const isOAuth = connector?.connector_type?.startsWith('google') || connector?.connector_type === 'gmail';
+  // Igual que el OAuth de abajo: el PROTOCOLO lo dice el catálogo. Con el nombre
+  // del tipo, un segundo proveedor IMAP obligaría a tocar este fichero.
+  const isImap = connector?.protocol === 'imap'
+    // Respaldo para filas antiguas guardadas sin protocolo.
+    || connector?.connector_type === 'imap-generic';
+  // El PROTOCOLO lo dice el servidor; aquí no se adivina por el nombre.
+  //
+  // Antes era `startsWith('google') || === 'gmail'`, y esa lista dejaba fuera a
+  // Microsoft: su integración no contaba como OAuth, así que caía en la rama de
+  // «servidor DAV» y se le pintaba un formulario con dirección de servidor,
+  // usuario y contraseña —los del Synology, por el estado sin limpiar—. Cada
+  // proveedor nuevo repetiría el fallo mientras la condición sea una lista.
+  const isOAuth = connector?.protocol === 'oauth2_rest'
+    // Respaldo para filas antiguas guardadas sin protocolo.
+    || connector?.connector_type?.startsWith('google') === true
+    || connector?.connector_type === 'gmail'
+    || connector?.connector_type?.startsWith('microsoft') === true;
+  const isToken = connector?.protocol === 'token_rest';
+  // El tope del primer pull es del CORREO y solo del correo. Antes se enseñaba
+  // para cualquier integración de Google, así que la tarjeta de Contactos decía
+  // «Max Emails (initial sync): 2.000» — un número que no lo lee nadie y que
+  // encima habla de correos en una integración de contactos.
+  // Y de qué es la integración lo dicen sus DOMINIOS, que también vienen del
+  // catálogo: así el tope sale para cualquier integración de correo, incluida la
+  // que se añada mañana, y no sale en calendario ni en contactos.
+  const esCorreo = connector?.domains?.includes('emails')
+    ?? (isImap
+      || connector?.connector_type === 'gmail'
+      || connector?.connector_type === 'microsoft-mail');
 
   const inputStyle: React.CSSProperties = {
     width: '100%', height: 32, padding: '0 8px',
@@ -313,32 +362,12 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                          testResult === 'failed' ? <XCircle size={12} style={{ color: '#ef4444' }} /> : null}
                         {testResult === 'testing' ? 'Testing...' : testResult === 'success' ? 'Connected' : testResult === 'failed' ? 'Failed' : 'Test Connection'}
                       </button>
-                      <button
-                        onClick={handleLoadFolders}
-                        disabled={foldersLoading}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 4, padding: '5px 12px',
-                          background: 'var(--surface)', border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-dim)',
-                          fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                        }}
-                      >
-                        <FolderOpen size={12} />
-                        {foldersLoading ? 'Loading...' : 'Show Folders'}
-                      </button>
-                    </div>
-                  )}
-                  {folders.length > 0 && (
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {folders.map(f => (
-                        <span key={f} style={{ padding: '2px 6px', background: 'var(--surface-hover)', borderRadius: 'var(--radius-sm)' }}>{f}</span>
-                      ))}
                     </div>
                   )}
                 </>
               )}
 
-              {!isImap && !isOAuth && (
+              {!isImap && !isOAuth && !isToken && (
                 <>
                   <div>
                     <label style={labelStyle}>Server URL</label>
@@ -351,16 +380,45 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                 </>
               )}
 
-              {!isOAuth && (
+              {!isOAuth && !isToken && (
                 <div>
                   <label style={labelStyle}>Password <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(leave empty to keep current)</span></label>
                   <input style={inputStyle} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
                 </div>
               )}
 
+              {/*
+                El certificado. Solo para integraciones con servidor propio
+                (correo por IMAP y DAV): en OAuth el certificado lo pone el
+                proveedor y no hay nada que aceptar.
+
+                Es el remedio del error más común de un NAS —«el certificado no
+                coincide con el nombre»— y hasta ahora solo se podía marcar en el
+                alta, dentro de un pliegue.
+              */}
+              {!isOAuth && !isToken && (
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  <input
+                    type="checkbox"
+                    checked={allowSelfSigned}
+                    onChange={(e) => setAllowSelfSigned(e.target.checked)}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span>
+                    Es mi servidor: acepto su certificado aunque no esté firmado por una
+                    autoridad conocida o esté emitido para otro nombre.
+                  </span>
+                </label>
+              )}
+
               {isOAuth && (
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0' }}>
                   Authenticated via Google OAuth. To re-authenticate, disconnect and reconnect.
+                </div>
+              )}
+              {isToken && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 0' }}>
+                  El token está cifrado. Para sustituirlo, desconecta y vuelve a conectar esta integración.
                 </div>
               )}
 
@@ -374,9 +432,9 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                 </select>
               </div>
 
-              {(isImap || isOAuth) && (
+              {esCorreo && (
                 <div>
-                  <label style={labelStyle}>Max Emails (initial sync)</label>
+                  <label style={labelStyle}>Correos del primer sync</label>
                   <select value={maxMessages} onChange={(e) => setMaxMessages(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
                     <option value={500}>500 emails</option>
                     <option value={1000}>1,000 emails</option>
@@ -388,6 +446,18 @@ export function EditConnectorModal({ connectorId, onClose, onSaved }: EditConnec
                     Only affects the first sync. Subsequent syncs fetch new emails incrementally.
                   </div>
                 </div>
+              )}
+
+              {/* Qué se trae esta integración. Vale para las seis (correo,
+                  calendario, contactos), y sustituye al viejo «Show Folders»,
+                  que solo enseñaba etiquetas grises del correo con contraseña. */}
+              {connectorId && <CollectionsEditor connectorId={connectorId} connectorType={connector?.connector_type} />}
+              {connectorId && connector && (
+                <MappingEditor
+                  connectorId={connectorId}
+                  connectorType={connector.connector_type}
+                  mappings={(connector.config.mappings ?? {}) as Record<string, Record<string, unknown>>}
+                />
               )}
 
               {error && (

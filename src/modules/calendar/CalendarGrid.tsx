@@ -183,7 +183,9 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
     (dayIndex: number, e: React.MouseEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
       const y = e.clientY - rect.top;
-      const totalMinutes = Math.floor((y / TOTAL_HEIGHT) * 1440);
+      // rect.height, not TOTAL_HEIGHT: with page/browser zoom the rect scales but the
+      // constant doesn't, and every click landed on the wrong slot.
+      const totalMinutes = Math.floor((y / rect.height) * 1440);
       const hours = Math.floor(totalMinutes / 30) * 0.5; // snap to half hour
       const snappedHours = Math.floor(hours);
       const snappedMinutes = (hours % 1) * 60;
@@ -215,7 +217,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
 
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const totalMinutes = snapMinutes(Math.floor((y / TOTAL_HEIGHT) * 1440));
+    const totalMinutes = snapMinutes(Math.floor((y / rect.height) * 1440));
 
     // Calculate the dragged event's original duration
     const ev = events.find(ev => ev.id === dragEventId);
@@ -243,7 +245,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
 
     const rect = e.currentTarget.getBoundingClientRect();
     const y = e.clientY - rect.top;
-    const totalMinutes = snapMinutes(Math.floor((y / TOTAL_HEIGHT) * 1440));
+    const totalMinutes = snapMinutes(Math.floor((y / rect.height) * 1440));
     const newHours = Math.floor(totalMinutes / 60);
     const newMinutes = totalMinutes % 60;
 
@@ -275,6 +277,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
     startClientY: number;
     originalEndMin: number;
     originalStartMin: number;
+    pxPerMin: number;
   } | null>(null);
   const [resizePreviewHeight, setResizePreviewHeight] = useState<number | null>(null);
   const resizeRef = useRef(resizeState);
@@ -286,11 +289,16 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
     const startMin = evStart.getHours() * 60 + evStart.getMinutes();
     const endMin = evEnd.getHours() * 60 + evEnd.getMinutes();
 
+    // Escala real de render (zoom de página/navegador): px de viewport por minuto.
+    const col = document.querySelector('[data-day-col]');
+    const pxPerMin = col ? col.getBoundingClientRect().height / 1440 : 1;
+
     setResizeState({
       eventId: event.id,
       startClientY: clientY,
       originalEndMin: endMin,
       originalStartMin: startMin,
+      pxPerMin,
     });
   }, []);
 
@@ -301,7 +309,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
       const rs = resizeRef.current;
       if (!rs) return;
       const deltaY = e.clientY - rs.startClientY;
-      const deltaMinutes = snapMinutes(Math.floor((deltaY / TOTAL_HEIGHT) * 1440));
+      const deltaMinutes = snapMinutes(Math.floor(deltaY / rs.pxPerMin));
       const newEndMin = Math.max(rs.originalStartMin + 15, rs.originalEndMin + deltaMinutes);
       const newHeight = ((newEndMin - rs.originalStartMin) / 1440) * TOTAL_HEIGHT;
       setResizePreviewHeight(Math.max(newHeight, 20));
@@ -323,7 +331,7 @@ function TimeGrid({ days, events, onEventClick, onSlotClick, onEventUpdate, onEv
       }
 
       const deltaY = e.clientY - rs.startClientY;
-      const deltaMinutes = snapMinutes(Math.floor((deltaY / TOTAL_HEIGHT) * 1440));
+      const deltaMinutes = snapMinutes(Math.floor(deltaY / rs.pxPerMin));
       const newEndMin = Math.max(rs.originalStartMin + 15, rs.originalEndMin + deltaMinutes);
       const newEndHours = Math.floor(newEndMin / 60);
       const newEndMinutes = newEndMin % 60;

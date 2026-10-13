@@ -93,7 +93,7 @@ export function Component() {
   const accentColor = useSettingsStore((s) => s.settings?.dash?.accent_color);
   const bgChoice = useSettingsStore((s) => s.settings?.dash?.background);
   const pushOsTheme = useCallback(() => {
-    let doc: Document | null = null;
+    let doc: Document | null;
     try { doc = iframeRef.current?.contentDocument ?? null; } catch { doc = null; } // cross-origin → bail
     const appRoot = doc?.documentElement;
     if (!appRoot) return;

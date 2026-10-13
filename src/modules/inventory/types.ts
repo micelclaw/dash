@@ -366,12 +366,12 @@ export function itemFormToCreatePayload(form: ItemFormFields): CreateItemPayload
 
 /** Estados de sistema con label/semántica para la UI. */
 export const SYSTEM_STATUS_LABELS: Record<string, string> = {
-  owned: 'En uso',
-  lent: 'Prestado',
-  in_repair: 'En reparación',
-  sold: 'Vendido',
-  disposed: 'Baja',
-  lost: 'Perdido',
+  owned: 'In use',
+  lent: 'Lent out',
+  in_repair: 'In repair',
+  sold: 'Sold',
+  disposed: 'Disposed',
+  lost: 'Lost',
 };
 
 export const STATUS_PILL_MAP: Record<string, string> = {

@@ -12,8 +12,7 @@
 
 import { useState, useCallback } from 'react';
 import { X, Pencil, Eye, Save, Loader2, FileText } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { useAgentFile } from './hooks/use-agent-detail';
 import { getAgentFileMeta } from './agent-file-meta';
 
@@ -202,8 +201,9 @@ function FileCard({ filename, agentId }: FileRowProps) {
                 />
               ) : (
                 <div style={{ padding: '16px 20px' }}>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
+                  <MarkdownRenderer
+                    content={content || 'No content available'}
+                    highlight={false}
                     components={{
                       h1: ({ children }) => <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '1.2em 0 0.6em', color: 'var(--text)', borderBottom: '1px solid var(--border)', paddingBottom: '0.3em' }}>{children}</h1>,
                       h2: ({ children }) => <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '1em 0 0.5em', color: 'var(--text)' }}>{children}</h2>,
@@ -218,9 +218,7 @@ function FileCard({ filename, agentId }: FileRowProps) {
                       em: ({ children }) => <em style={{ color: 'var(--text-dim)' }}>{children}</em>,
                       hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '1em 0' }} />,
                     }}
-                  >
-                    {content || 'No content available'}
-                  </ReactMarkdown>
+                  />
                 </div>
               )}
             </div>

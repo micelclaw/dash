@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuthStore } from '@/stores/auth.store';
 import { useTerminalStore } from '@/stores/terminal.store';
 import { TerminalWebSocket } from './terminal-ws';
@@ -36,6 +37,9 @@ export function Component() {
   const [sshDialogOpen, setSSHDialogOpen] = useState(false);
   const [snippetsOpen, setSnippetsOpen] = useState(false);
   const gatewayConfigured = useGatewayStore((s) => s.configured);
+  const fetchSnapshot = useGatewayStore((s) => s.fetchSnapshot);
+  const navigate = useNavigate();
+  const [checkingGateway, setCheckingGateway] = useState(false);
 
   // Connect WS on mount
   useEffect(() => {
@@ -65,13 +69,9 @@ export function Component() {
     // Wait until gateway configured status is known
     if (gatewayConfigured === null) return;
 
-    // If onboarding needed, open terminal in ~/.openclaw
+    // La configuración se administra desde Gateway; el terminal no ejecuta el
+    // wizard upstream ni abre el home de OpenClaw como paso de onboarding.
     if (gatewayConfigured === false) {
-      addTab('local', { label: 'OpenClaw', cwd: '~/.openclaw' });
-      const { tabs: created } = useTerminalStore.getState();
-      if (created.length > 0) {
-        useTerminalStore.getState().setActiveTab(created[0]!.id);
-      }
       return;
     }
 
@@ -171,6 +171,29 @@ export function Component() {
     );
   }
 
+  // No abrir una shell hasta que el estado esté confirmado: null es el estado
+  // inicial mientras llega el snapshot y no debe convertirse en un atajo al
+  // wizard ni al home de OpenClaw.
+  if (gatewayConfigured !== true) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', overflow: 'auto', padding: 16, background: 'var(--bg)' }}>
+        <OnboardingGuide
+          open
+          checking={checkingGateway}
+          onOpenGateway={() => navigate('/gateway')}
+          onRetry={async () => {
+            setCheckingGateway(true);
+            try {
+              await fetchSnapshot();
+            } finally {
+              setCheckingGateway(false);
+            }
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{
       position: 'absolute',
@@ -192,7 +215,6 @@ export function Component() {
           onClose={() => setSnippetsOpen(false)}
           onPaste={handlePasteSnippet}
         />
-        <OnboardingGuide open={gatewayConfigured === false} />
       </div>
 
       <ConnectionDialog

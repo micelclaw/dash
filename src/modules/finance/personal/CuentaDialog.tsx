@@ -24,27 +24,27 @@ type WalletType = 'asset' | 'liability';
 
 const TYPES: { id: WalletType; label: string }[] = [
   { id: 'asset', label: 'Banco / Efectivo' },
-  { id: 'liability', label: 'Tarjeta / Préstamo' },
+  { id: 'liability', label: 'Card / Loan' },
 ];
 
 // Tupla no vacía: garantiza al tipado que siempre hay un primer subtipo por defecto.
 const SUBTYPES: Record<WalletType, [{ id: string; label: string }, ...{ id: string; label: string }[]]> = {
   asset: [
-    { id: 'bank', label: 'Cuenta bancaria' },
+    { id: 'bank', label: 'Bank account' },
     { id: 'cash', label: 'Efectivo' },
-    { id: 'savings', label: 'Ahorro' },
+    { id: 'savings', label: 'Savings' },
     { id: 'other', label: 'Otro' },
   ],
   liability: [
-    { id: 'credit_card', label: 'Tarjeta de crédito' },
-    { id: 'loan', label: 'Préstamo' },
+    { id: 'credit_card', label: 'Credit card' },
+    { id: 'loan', label: 'Loan' },
     { id: 'other', label: 'Otro' },
   ],
 };
 
 const CURRENCIES: { id: string; label: string }[] = [
   { id: 'EUR', label: '€ Euro' },
-  { id: 'USD', label: '$ Dólar' },
+  { id: 'USD', label: '$ Dollar' },
   { id: 'GBP', label: '£ Libra' },
 ];
 
@@ -102,21 +102,21 @@ export function CuentaDialog({
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('Indica un nombre'); return; }
+    if (!trimmed) { toast.error('Enter a name'); return; }
     setSaving(true);
     try {
       let result: FinanceAccount;
       if (isEdit && account) {
         result = await updateAccount(account.id, { name: trimmed, type, subtype, currency, is_active: isActive });
-        toast.success('Cuenta actualizada');
+        toast.success('Account updated');
       } else {
         result = await createAccount({ name: trimmed, type, subtype, currency });
-        toast.success('Cuenta creada');
+        toast.success('Account created');
       }
       onSaved?.(result);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
     } finally {
       setSaving(false);
     }
@@ -138,12 +138,12 @@ export function CuentaDialog({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Nombre</label>
-            <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="p.ej. Cuenta nómina" style={fieldStyle} />
+            <label style={labelStyle}>Name</label>
+            <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Salary account" style={fieldStyle} />
           </div>
 
           <div>
-            <label style={labelStyle}>Tipo</label>
+            <label style={labelStyle}>Type</label>
             {/* Segmented control */}
             <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
               {TYPES.map((t) => (
@@ -157,14 +157,14 @@ export function CuentaDialog({
           </div>
 
           <div>
-            <label style={labelStyle}>Subtipo</label>
+            <label style={labelStyle}>Subtype</label>
             <select value={subtype} onChange={(e) => setSubtype(e.target.value)} style={fieldStyle}>
               {SUBTYPES[type].map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
 
           <div>
-            <label style={labelStyle}>Divisa</label>
+            <label style={labelStyle}>Currency</label>
             <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={fieldStyle}>
               {CURRENCIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
@@ -179,9 +179,9 @@ export function CuentaDialog({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : 'Guardar'}
+            {saving ? 'Guardando…' : 'Save'}
           </button>
         </div>
       </div>

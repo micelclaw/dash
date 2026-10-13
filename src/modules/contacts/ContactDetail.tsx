@@ -10,11 +10,12 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import {
   ChevronLeft, Mail, Phone, MapPin, FileText, Tag,
-  Globe, Edit3, Trash2, PhoneCall, Camera, Upload, FolderOpen,
+  Edit3, Trash2, PhoneCall, Camera, Upload, FolderOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
@@ -400,6 +401,7 @@ export function ContactDetail({
           }}>
             {contact.display_name}
           </div>
+          <EntitySource entity={contact} domain="contacts" detail />
           {(contact.job_title || contact.company) && (
             <div style={{
               fontSize: '0.8125rem',
@@ -524,27 +526,6 @@ export function ContactDetail({
                 />
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Source badge */}
-        {contact.source !== 'local' && (
-          <div style={{ marginBottom: 16 }}>
-            <span style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '2px 8px',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.6875rem',
-              fontFamily: 'var(--font-sans)',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-muted)',
-            }}>
-              <Globe size={10} />
-              {contact.source}
-            </span>
           </div>
         )}
 

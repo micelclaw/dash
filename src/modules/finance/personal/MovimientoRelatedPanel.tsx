@@ -27,7 +27,7 @@ interface JeRelated {
 }
 
 const docLabel = (type: string, number: string | null) => {
-  const base = type === 'bill' ? 'Factura recibida' : type === 'credit_note' ? 'Abono' : type === 'quote' ? 'Presupuesto' : 'Factura';
+  const base = type === 'bill' ? 'Factura recibida' : type === 'credit_note' ? 'Credit note' : type === 'quote' ? 'Quote' : 'Invoice';
   return number ? `${base} ${number}` : base;
 };
 
@@ -48,7 +48,7 @@ export function MovimientoRelatedPanel({ entryId, onNavigate }: { entryId: strin
 
   return (
     <div>
-      <div style={{ ...refSectionTitle, marginBottom: 7 }}>Relacionado</div>
+      <div style={{ ...refSectionTitle, marginBottom: 7 }}>Related</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {data.contact && (
           <div {...clickable(() => go(`/finance?tab=facturacion&contact=${data.contact!.id}`))} title="Abrir contacto"
@@ -63,7 +63,7 @@ export function MovimientoRelatedPanel({ entryId, onNavigate }: { entryId: strin
           </div>
         )}
         {data.accounts.map((a) => (
-          <div key={a.account_id} title={`${a.side === 'debit' ? 'Debe' : 'Haber'} ${a.amount} €`}
+          <div key={a.account_id} title={`${a.side === 'debit' ? 'Debit' : 'Credit'} ${a.amount} €`}
             style={{ ...chipBase, color: 'var(--text-dim)' }}>
             <Wallet size={12} style={{ color: 'var(--mod-finance)' }} />
             {a.code ? <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-muted)' }}>{a.code}</span> : null}

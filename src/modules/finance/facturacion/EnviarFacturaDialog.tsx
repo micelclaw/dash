@@ -58,7 +58,7 @@ export function EnviarFacturaDialog({
   const [sending, setSending] = useState(false);
   const toRef = useRef<HTMLInputElement>(null);
 
-  const docNumber = doc?.number ?? 'borrador';
+  const docNumber = doc?.number ?? 'draft';
 
   // Carga de cuentas + prefill al abrir.
   useEffect(() => {
@@ -81,7 +81,7 @@ export function EnviarFacturaDialog({
       } catch (e) {
         if (!cancelled) {
           setAccounts([]);
-          toast.error(e instanceof Error ? e.message : 'No se pudieron cargar las cuentas de correo');
+          toast.error(e instanceof Error ? e.message : 'Couldn\'t load the email accounts');
         }
       } finally {
         if (!cancelled) setLoadingAccounts(false);
@@ -100,8 +100,8 @@ export function EnviarFacturaDialog({
 
   const onSend = async () => {
     const recipient = to.trim();
-    if (!recipient) { toast.error('Indica un destinatario'); return; }
-    if (!accountId) { toast.error('Elige una cuenta emisora'); return; }
+    if (!recipient) { toast.error('Enter a recipient'); return; }
+    if (!accountId) { toast.error('Pick the issuing account'); return; }
     setSending(true);
     try {
       const r = await sendInvoice(doc.id, {
@@ -113,7 +113,7 @@ export function EnviarFacturaDialog({
       toast.success(`Factura enviada a ${r.to?.join(', ') || recipient}`);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo enviar el email');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t send the email');
     } finally {
       setSending(false);
     }
@@ -139,7 +139,7 @@ export function EnviarFacturaDialog({
         {noAccounts ? (
           <div style={{ padding: '20px 16px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', textAlign: 'center' }}>
             <Mail size={22} style={{ color: 'var(--text-muted)', marginBottom: 8 }} />
-            <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 6 }}>No tienes cuentas de correo configuradas</div>
+            <div style={{ fontSize: 14, color: 'var(--text)', fontWeight: 600, marginBottom: 6 }}>You have no email accounts set up</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
               Para enviar facturas por email necesitas una cuenta emisora. Añade una en Mail.
             </div>
@@ -151,7 +151,7 @@ export function EnviarFacturaDialog({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {/* Cuenta emisora */}
             <div>
-              <label style={labelStyle}>Cuenta emisora</label>
+              <label style={labelStyle}>Issuing account</label>
               {loadingAccounts ? (
                 <div style={{ ...fieldStyle, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
                   <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Cargando cuentas…
@@ -169,26 +169,26 @@ export function EnviarFacturaDialog({
 
             {/* Destinatario */}
             <div>
-              <label style={labelStyle}>Destinatario</label>
+              <label style={labelStyle}>Recipient</label>
               <input ref={toRef} type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="cliente@empresa.com" style={fieldStyle} />
             </div>
 
             {/* Asunto */}
             <div>
-              <label style={labelStyle}>Asunto</label>
+              <label style={labelStyle}>Subject</label>
               <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={`Factura ${docNumber}`} style={fieldStyle} />
             </div>
 
             {/* Mensaje */}
             <div>
-              <label style={labelStyle}>Mensaje</label>
+              <label style={labelStyle}>Message</label>
               <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={4} style={{ ...fieldStyle, resize: 'vertical' }} />
             </div>
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button
             onClick={onSend}
             disabled={!canSend}

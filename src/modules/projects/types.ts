@@ -12,7 +12,8 @@
 
 // ─── Core entities ────────────────────────────────────
 
-export interface Board {
+import type { OriginEntity } from '@/types/origins';
+export interface Board extends OriginEntity {
   id: string;
   title: string;
   description: string | null;
@@ -32,6 +33,12 @@ export interface Board {
    * normal en la base — se renombra, se comparte y se archiva.
    */
   is_default?: boolean;
+  /** Identidad del origen para distinguir tableros locales de espejos externos. */
+  source?: string;
+  source_id?: string | null;
+  connector_id?: string | null;
+  /** Marca resuelta por Core (Todoist, Notion, Nextcloud…), nunca inferida por título. */
+  _provider_slug?: string | null;
   created_at: string;
   updated_at: string;
   _permission?: 'owner' | 'edit' | 'view';
@@ -57,12 +64,15 @@ export interface Column {
   color: string | null;
   position: number;
   wip_limit: number | null;
+  /** A qué estado del estándar equivale esta columna. `null` = a ninguno, y es
+   *  legítimo: "Bloqueado" no es ninguno de los cuatro. Ver utils/status-semantic. */
+  status_semantic: 'needs_action' | 'in_progress' | 'completed' | 'cancelled' | null;
   collapsed: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export interface Card {
+export interface Card extends OriginEntity {
   id: string;
   board_id: string;
   column_id: string;
@@ -73,15 +83,29 @@ export interface Card {
   color: string | null;
   due_date: string | null;
   start_date: string | null;
+  all_day?: boolean;
+  start_all_day?: boolean;
+  due_all_day?: boolean;
+  timezone?: string | null;
   completed_at: string | null;
   estimated_hours: number | null;
   actual_hours: number | null;
   assignee_ids: string[] | null;
+  external_assignees?: ExternalAssignee[] | null;
   tags: string[] | null;
   checklist: ChecklistItem[] | null;
   attachment_ids: string[] | null;
   cover_image_id: string | null;
   custom_fields: Record<string, unknown> | null;
+  recurrence?: unknown;
+  reminders?: unknown;
+  source?: string;
+  source_id?: string | null;
+  connector_id?: string | null;
+  remote_url?: string | null;
+  external_payload?: Record<string, unknown> | null;
+  status?: string;
+  percent_complete?: number | null;
   created_by: string | null;
   parent_card_id: string | null;
   card_number: number | null;
@@ -99,6 +123,18 @@ export interface ChecklistItem {
   checked: boolean;
 }
 
+export interface ExternalAssignee {
+  provider_id?: string;
+  providerId?: string;
+  display_name?: string;
+  displayName?: string;
+  email?: string | null;
+  avatar_url?: string | null;
+  provider_slug?: string;
+  providerSlug?: string;
+  is_current_user?: boolean;
+}
+
 // ─── Extended entities ────────────────────────────────
 
 export interface Comment {
@@ -109,6 +145,12 @@ export interface Comment {
   content: string | null;
   activity_action: string | null;
   activity_meta: Record<string, unknown> | null;
+  connector_id?: string | null;
+  source?: string;
+  source_id?: string | null;
+  remote_author?: { id?: string; display_name?: string; displayName?: string; email?: string | null; avatar_url?: string | null; avatarUrl?: string | null } | null;
+  remote_created_at?: string | null;
+  remote_metadata?: Record<string, unknown> | null;
   edited_at: string | null;
   created_at: string;
 }

@@ -37,12 +37,11 @@ import {
   Search as SearchIcon, Newspaper, HardDrive, FolderOpen, Users, Network, Zap,
   Bell, Calendar, Keyboard, Rss, Server, Database,
   Mic, Radio, Key, UserCircle, Copy, Brain, History, Link2,
-  Container, Globe2, Terminal, Lock, Eye, Wrench, MemoryStick,
-  Puzzle, Plug, Bot,
+  Container, Globe2, Terminal, Lock, Eye, MemoryStick,
+  Puzzle, Plug, Bot, MessageCircle,
 } from 'lucide-react';
 
 import { AccountSection } from './AccountSection';
-import { PermissionsSection } from './PermissionsSection';
 import { LicenseSection } from './LicenseSection';
 import { ApprovalsHistorySection } from './ApprovalsHistorySection';
 import { DashSection } from './DashSection';
@@ -52,8 +51,6 @@ import { NotificationsSection } from './NotificationsSection';
 import { AISection } from './AISection';
 import { GpuVramSection } from './GpuVramSection';
 import { VoiceSection } from './VoiceSection';
-import { ToolAccessDefaultsSection } from './ToolAccessDefaultsSection';
-import { ChatToolsSection } from './ChatToolsSection';
 import { MemorySearchSection } from './MemorySearchSection';
 import { ActiveMemorySection } from './ActiveMemorySection';
 import { PreferencesSection } from './PreferencesSection';
@@ -141,10 +138,13 @@ const GroupsAliasSection: ComponentType = () =>
  */
 export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   // ── Account ──
+  // (Unificación 2026-07-12: la sección "Permissions" / Agent Permissions se eliminó.
+  //  Los permisos de un agente los concede ahora la asignación de APPS: asignar una app
+  //  da visibilidad de sus tools + el scope para usarlas. Ver Agent → Overview → Apps.)
   'account':              { component: AccountSection,              meta: { label: 'Account', icon: UserCircle, group: 'account' } },
-  'permissions':          { component: PermissionsSection,          meta: { label: 'Permissions', icon: Shield, group: 'account' } },
   'license':              { component: LicenseSection,              meta: { label: 'License', icon: CreditCard, group: 'account' } },
-  'approvals-history':    { component: ApprovalsHistorySection,     meta: { label: 'Approvals History', icon: History, group: 'account' } },
+  // Legacy bookmark only; the visible history now lives in Security → Audit log.
+  'approvals-history':    { component: ApprovalsHistorySection,     meta: { label: 'Approval history', icon: History } },
 
   // ── Appearance ──
   'dash':                 { component: DashSection,                 meta: { label: 'Dash', icon: Palette, group: 'appearance' } },
@@ -156,8 +156,6 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   'ai':                   { component: AISection,                   meta: { label: 'AI & Intelligence', icon: Cpu, group: 'ai-agents' } },
   'gpu-vram':             { component: GpuVramSection,              meta: { label: 'GPU & VRAM', icon: MemoryStick, group: 'ai-agents' } },
   'voice':                { component: VoiceSection,                meta: { label: 'Voice', icon: Mic, group: 'ai-agents' } },
-  'tool-access-defaults': { component: ToolAccessDefaultsSection,   meta: { label: 'Tool Access', icon: Wrench, group: 'ai-agents' } },
-  'chat-tools':           { component: ChatToolsSection,            meta: { label: 'Chat Tools Display', icon: Wrench, group: 'ai-agents' } },
   'studio-engines':       { component: StudioEnginesSection,        meta: { label: 'Studio Engines', icon: Bot, group: 'ai-agents' } },
   'memory-search':        { component: MemorySearchSection,         meta: { label: 'Memory', icon: Brain, group: 'ai-agents' } },
   'active-memory':        { component: ActiveMemorySection,         meta: { label: 'Memoria Activa', icon: Brain, group: 'ai-agents' } },
@@ -176,6 +174,7 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
 
   // ── Connectivity ──
   'sync':                 { component: SyncSection,                 meta: { label: 'Sync', icon: RefreshCw, group: 'connectivity' } },
+  'observers':            { component: ChannelObserversSection,     meta: { label: 'Channel Observers', icon: MessageCircle, group: 'connectivity' } },
   'network':              { component: NetworkSection,              meta: { label: 'Network', icon: Network, group: 'connectivity' } },
   'domains':              { component: DomainsSection,              meta: { label: 'Domains', icon: Globe2, group: 'connectivity' } },
   'gateway-auth':         { component: GatewayAuthSection,          meta: { label: 'Gateway', icon: Radio, group: 'connectivity' } },
@@ -192,9 +191,11 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
 
   // ── Security ──
   'security':             { component: SecuritySection,             meta: { label: 'Security', icon: Shield, group: 'security' } },
-  'sandbox':              { component: SandboxSection,              meta: { label: 'Sandbox', icon: Container, group: 'security' } },
-  'browser-config':       { component: BrowserConfigSection,        meta: { label: 'Browser', icon: Globe2, group: 'security' } },
-  'commands':             { component: CommandsSection,             meta: { label: 'Commands', icon: Terminal, group: 'security' } },
+  // Legacy URLs remain registered for bookmark compatibility, but the visible
+  // navigation is the unified /settings/security control plane.
+  'sandbox':              { component: SandboxSection,              meta: { label: 'Sandbox', icon: Container } },
+  'browser-config':       { component: BrowserConfigSection,        meta: { label: 'Browser', icon: Globe2 } },
+  'commands':             { component: CommandsSection,             meta: { label: 'Channel commands', icon: Terminal, group: 'security' } },
 
   // ── Administration (solo admins; el gating lo aplica SettingsPage) ──
   'users-groups':         { component: UsersAndGroupsSection,       meta: { label: 'Usuarios y grupos', icon: Users, group: 'admin' } },
@@ -209,7 +210,6 @@ export const SECTION_REGISTRY: Record<string, SettingsSectionEntry> = {
   // ── Solo por URL (sin entrada de sidebar) ──
   'users':                { component: UsersAliasSection,           meta: { label: 'Users' } },
   'groups':               { component: GroupsAliasSection,          meta: { label: 'Groups' } },
-  'observers':            { component: ChannelObserversSection,     meta: { label: 'Channel Observers' } },
   'devices':              { component: DevicesSection,              meta: { label: 'Devices' } },
   'approvals-forwarding': { component: ApprovalsForwardingSection,  meta: { label: 'Approvals Forwarding' } },
   'cron-config':          { component: CronConfigSection,           meta: { label: 'Cron' } },

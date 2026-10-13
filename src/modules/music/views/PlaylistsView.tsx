@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect, useState } from 'react';
 import { ListMusic, MoreVertical, Pencil, Play, Plus, Trash2 } from 'lucide-react';
 import {
@@ -181,7 +182,7 @@ export function PlaylistsView() {
                   fontSize: '0.875rem', color: 'var(--text)',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}>
-                  {pl.name}
+                  <EntitySource entity={pl} domain="music" native /> {pl.name}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
                   {pl.song_count} song{pl.song_count === 1 ? '' : 's'} · {formatTotalDuration(pl.duration)}

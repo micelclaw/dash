@@ -9,24 +9,34 @@
  * See LICENSE in the root of this repository for full terms.
  * https://micelclaw.com
  *
- * ─── Idempotency contract (B7) ─────────────────────────────────────
- * May be mounted twice simultaneously: standalone at `/settings/observers`
- * and as a `<SettingsBlock>` inside Sync (`/settings/sync`). Each
- * instance fetches and saves independently — no module-level state,
- * no shared refs. Lift to a store only if cross-instance sync becomes
- * a real requirement.
+ * ─── Channel Observers (capability-driven) ─────────────────────────
+ * Rows are generated from `GET /messages/capabilities` (the backend SSOT),
+ * not a hardcoded list. Each platform's send/observe/pairing state, connector
+ * status and stream health come from the backend; branding/icons come from the
+ * shared messaging-platforms registry. May be mounted at `/settings/observers`.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Settings, Trash2, Loader2, Upload } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
+import { RefreshCw, Settings, Trash2, Loader2, Upload, Play, Pause } from 'lucide-react';
 import { toast } from 'sonner';
 import * as syncSvc from '@/services/sync.service';
 import * as messagesSvc from '@/services/messages.service';
+import { ApiError } from '@/services/api';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { usePlatformCapabilitiesStore } from '@/stores/platform-capabilities.store';
+import { MESSAGING_PLATFORMS, platformMeta, accountModelOf, type AccountModel } from '@/config/messaging-platforms';
+import type { PlatformCapability } from '@/services/messages.service';
+import { PlatformIcon } from '@/components/shared/platform-icons';
 import { SettingSection } from '../SettingSection';
 import { AddIntegrationModal } from '../AddIntegrationModal';
 import { WhatsAppImportDialog } from './WhatsAppImportDialog';
 import { ChannelConfigModal } from './ChannelConfigModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { PLATFORM_PRIVACY } from './observers/privacy-data';
+import { PrivacyTags, PrivacyScore } from './observers/PrivacyTagList';
+import { ObserverStatusBadge } from './observers/ObserverStatusBadge';
+import { observerDisconnectTarget } from './observers/observer-disconnect';
 
 interface ConnectorInfo {
   id: string;
@@ -39,162 +49,53 @@ interface ConnectorInfo {
   errors_count: number;
 }
 
-interface PlatformStats {
-  platform: string;
-  channel_count: number;
-  message_count: number;
-}
-
 interface ObserverPrivacy {
   direction_filter: 'all' | 'my_messages';
   content_filter: 'full' | 'metadata_only';
 }
 
-const OBSERVER_TYPES = ['slack-observer', 'discord-observer', 'telegram-observer', 'teams-observer', 'signal-observer', 'simplex-observer', 'session-observer', 'threema-observer'];
-
-// ─── Privacy metadata per platform ───────────────────────
-
-// excellent = top privacy feature, good = positive, mild = slightly concerning,
-// neutral = mixed, warning = concerning, bad = negative, critical = severe
-type TagType = 'excellent' | 'good' | 'mild' | 'neutral' | 'warning' | 'bad' | 'critical';
-
-interface PrivacyTag {
-  label: string;
-  type: TagType;
-}
-
-interface PlatformPrivacy {
-  subtitle: string;
-  score: number;
-  tags: PrivacyTag[];
-}
-
-const TAG_COLORS: Record<TagType, { bg: string; text: string; border: string }> = {
-  excellent: { bg: 'rgba(16, 185, 129, 0.14)', text: '#34d399', border: 'rgba(16, 185, 129, 0.30)' },  // emerald
-  good:      { bg: 'rgba(34, 197, 94, 0.12)',  text: '#4ade80', border: 'rgba(34, 197, 94, 0.25)' },   // green
-  mild:      { bg: 'rgba(132, 204, 22, 0.12)', text: '#a3e635', border: 'rgba(132, 204, 22, 0.25)' },  // lime
-  neutral:   { bg: 'rgba(212, 160, 23, 0.12)', text: '#d4a017', border: 'rgba(212, 160, 23, 0.25)' },  // amber
-  warning:   { bg: 'rgba(234, 138, 30, 0.12)', text: '#f59e0b', border: 'rgba(234, 138, 30, 0.25)' },  // orange
-  bad:       { bg: 'rgba(220, 38, 38, 0.12)',  text: '#f87171', border: 'rgba(220, 38, 38, 0.25)' },   // red
-  critical:  { bg: 'rgba(159, 18, 57, 0.15)',  text: '#fb7185', border: 'rgba(159, 18, 57, 0.30)' },   // rose/maroon
+/**
+ * Which platforms currently have a working Connect wizard, and the SERVICES id
+ * to prefilter the AddIntegrationModal with. Extended per implementation batch
+ * (WhatsApp/WeChat/… land here as their forms ship).
+ */
+const WIZARD_SERVICE_ID: Record<string, string> = {
+  signal: 'signal-observer',
+  simplex: 'simplex-observer',
+  // "SimpleX · tu móvil (XRCP)": wizard propio (el sidecar + emparejar con el móvil).
+  simplex_xrcp: 'simplex-xrcp',
+  session: 'session-observer',
+  session_link: 'session-link-observer',
+  // Telegram = tu CUENTA REAL vía el hub Matrix (mautrix-telegram). Ya no hay
+  // wizard de bot: una sola fila "Telegram".
+  telegram: 'telegram-matrix',
+  // WhatsApp = tu CUENTA REAL vía el hub Matrix (mautrix-whatsapp, 2026-07-17).
+  whatsapp: 'whatsapp-matrix',
+  // Messenger = tu CUENTA REAL vía el hub Matrix (mautrix-meta, 2026-08-05).
+  fb_messenger: 'messenger-matrix',
+  google_messages: 'gmessages-matrix',
+  irc: 'irc-matrix',
+  viber: 'viber-observer',
+  googlechat: 'googlechat-matrix',
+  qq: 'qq-matrix',
+  discord: 'discord-observer',
+  slack: 'slack-observer',
+  teams: 'teams-observer',
 };
 
-function scoreBarColor(score: number): string {
-  if (score >= 80) return '#10b981';
-  if (score >= 60) return '#22c55e';
-  if (score >= 40) return '#d4a017';
-  if (score >= 25) return '#ea8a1e';
-  return '#dc2626';
-}
-
-const PLATFORM_PRIVACY: Record<string, PlatformPrivacy> = {
-  SimpleX: {
-    subtitle: 'Proyecto open source',
-    score: 96,
-    tags: [
-      { label: 'Código abierto', type: 'good' },
-      { label: 'Cifrado extremo a extremo', type: 'good' },
-      { label: 'No requiere teléfono', type: 'good' },
-      { label: 'Sin identificadores de usuario', type: 'excellent' },
-      { label: 'Zero-knowledge', type: 'excellent' },
-      { label: 'Red descentralizada', type: 'good' },
-      { label: 'Auto-hospedable', type: 'good' },
-      { label: 'Resistente a censura', type: 'excellent' },
-    ],
-  },
-  Threema: {
-    subtitle: 'Suiza · Pago único',
-    score: 90,
-    tags: [
-      { label: 'Código abierto', type: 'good' },
-      { label: 'Cifrado extremo a extremo', type: 'good' },
-      { label: 'No requiere teléfono', type: 'good' },
-      { label: 'Zero-knowledge', type: 'excellent' },
-      { label: 'Servidores en Suiza', type: 'good' },
-      { label: 'Sin anuncios ni rastreo', type: 'good' },
-      { label: 'Borrado inmediato en servidor', type: 'excellent' },
-    ],
-  },
-  Session: {
-    subtitle: 'Suiza · Descentralizado',
-    score: 85,
-    tags: [
-      { label: 'Código abierto', type: 'good' },
-      { label: 'Cifrado extremo a extremo', type: 'good' },
-      { label: 'No requiere teléfono', type: 'good' },
-      { label: 'Red descentralizada', type: 'good' },
-      { label: 'Oculta tu IP', type: 'excellent' },
-      { label: 'Sin anuncios ni rastreo', type: 'good' },
-      { label: 'Vinculado a criptomoneda', type: 'neutral' },
-    ],
-  },
-  Signal: {
-    subtitle: 'EEUU · Fundación sin ánimo de lucro',
-    score: 78,
-    tags: [
-      { label: 'Código abierto', type: 'good' },
-      { label: 'Cifrado extremo a extremo', type: 'good' },
-      { label: 'Requiere teléfono', type: 'mild' },
-      { label: 'Sin anuncios ni rastreo', type: 'good' },
-      { label: 'Servidores centralizados', type: 'neutral' },
-    ],
-  },
-  Telegram: {
-    subtitle: 'Dubái · Empresa privada',
-    score: 35,
-    tags: [
-      { label: 'Solo cliente abierto', type: 'neutral' },
-      { label: 'Cifrado solo en chats secretos', type: 'warning' },
-      { label: 'Requiere teléfono', type: 'bad' },
-      { label: 'Servidor cerrado', type: 'bad' },
-      { label: 'Guarda mensajes en la nube', type: 'bad' },
-    ],
-  },
-  WhatsApp: {
-    subtitle: 'EEUU · Propiedad de Meta',
-    score: 30,
-    tags: [
-      { label: 'Código cerrado', type: 'bad' },
-      { label: 'Cifrado extremo a extremo', type: 'good' },
-      { label: 'Requiere teléfono', type: 'warning' },
-      { label: 'Propiedad de Meta', type: 'bad' },
-      { label: 'Comparte datos con Meta', type: 'critical' },
-    ],
-  },
-  Teams: {
-    subtitle: 'EEUU · Microsoft',
-    score: 20,
-    tags: [
-      { label: 'Código cerrado', type: 'bad' },
-      { label: 'Sin cifrado real', type: 'critical' },
-      { label: 'Recopila datos extensos', type: 'critical' },
-      { label: 'La empresa lee tu contenido', type: 'critical' },
-      { label: 'Orientado a empresas', type: 'neutral' },
-    ],
-  },
-  Slack: {
-    subtitle: 'EEUU · Salesforce',
-    score: 18,
-    tags: [
-      { label: 'Código cerrado', type: 'bad' },
-      { label: 'Sin cifrado real', type: 'critical' },
-      { label: 'Recopila datos extensos', type: 'critical' },
-      { label: 'La empresa lee tu contenido', type: 'critical' },
-      { label: 'Orientado a empresas', type: 'neutral' },
-    ],
-  },
-  Discord: {
-    subtitle: 'EEUU · Empresa privada',
-    score: 15,
-    tags: [
-      { label: 'Código cerrado', type: 'bad' },
-      { label: 'Sin cifrado real', type: 'critical' },
-      { label: 'Recopila datos extensos', type: 'critical' },
-      { label: 'La empresa lee tu contenido', type: 'critical' },
-      { label: 'Publicidad integrada', type: 'bad' },
-    ],
-  },
-};
+/**
+ * Display order: highest privacy first, then the rest by score desc.
+ * Se excluyen los TRANSPORTES internos (Matrix): son la tubería del hub, no un
+ * canal que el usuario conecte — Telegram ya ES esa fila.
+ */
+const DISPLAY_ORDER = MESSAGING_PLATFORMS
+  .filter((m) => !m.internalTransport)
+  .map((m) => m.platform)
+  .sort((a, b) => {
+    const sa = PLATFORM_PRIVACY[a]?.score ?? -1;
+    const sb = PLATFORM_PRIVACY[b]?.score ?? -1;
+    return sb - sa;
+  });
 
 function timeAgo(ts: string | null): string {
   if (!ts) return '';
@@ -208,31 +109,41 @@ function timeAgo(ts: string | null): string {
 }
 
 export function ChannelObserversSection() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [connectors, setConnectors] = useState<ConnectorInfo[]>([]);
-  const [whatsappStats, setWhatsappStats] = useState<PlatformStats | null>(null);
+  const [stats, setStats] = useState<Record<string, { channel_count: number; message_count: number }>>({});
   const [showImport, setShowImport] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
+  // Qué plataforma se está configurando: el hub Matrix mete Telegram/Messenger/
+  // Google Messages en UN connector → el selector debe filtrar por ella.
+  const [configPlatform, setConfigPlatform] = useState<string | null>(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addModalPrefilter, setAddModalPrefilter] = useState<string | undefined>();
   const [privacy, setPrivacy] = useState<ObserverPrivacy>({ direction_filter: 'all', content_filter: 'full' });
   const [privacyDirty, setPrivacyDirty] = useState(false);
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [syncProgress, setSyncProgress] = useState<Record<string, { channel?: string; processed: number; total: number }>>({});
+  const [disconnectTarget, setDisconnectTarget] = useState<ReturnType<typeof observerDisconnectTarget> | null>(null);
+  // Selection-first: after a channel connects, auto-open its chat picker so the
+  // user chooses which contacts/groups to sync (no confusing empty inbox).
+  const [pendingSelect, setPendingSelect] = useState<string | null>(null);
+  const [pendingSelectPlatform, setPendingSelectPlatform] = useState<string | null>(null);
+  /** Plataforma cuyo wizard está abierto (para saber qué picker abrir al acabar). */
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
 
-  // Listen for sync progress events
+  const capabilities = usePlatformCapabilitiesStore((s) => s.byPlatform);
+  const loadCaps = usePlatformCapabilitiesStore((s) => s.load);
+  const refreshCaps = usePlatformCapabilitiesStore((s) => s.refresh);
+
   const progressEvent = useWebSocket('sync.progress');
   useEffect(() => {
     if (!progressEvent) return;
     const data = progressEvent.data;
     const connectorId = data.connector_id as string;
     if (!connectorId) return;
-    setSyncProgress(prev => ({
+    setSyncProgress((prev) => ({
       ...prev,
-      [connectorId]: {
-        channel: data.channel as string | undefined,
-        processed: data.processed as number,
-        total: data.total as number,
-      },
+      [connectorId]: { channel: data.channel as string | undefined, processed: data.processed as number, total: data.total as number },
     }));
   }, [progressEvent]);
 
@@ -241,70 +152,196 @@ export function ChannelObserversSection() {
     if (!completedEvent) return;
     const connectorId = completedEvent.data.connector_id as string;
     if (connectorId) {
-      setSyncProgress(prev => {
+      setSyncProgress((prev) => {
         const next = { ...prev };
         delete next[connectorId];
         return next;
       });
     }
     loadData();
-  }, [completedEvent]);
+    refreshCaps();
+  }, [completedEvent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = useCallback(async () => {
     try {
       const list = await syncSvc.listConnectors();
-      setConnectors(list.filter((c) => OBSERVER_TYPES.includes(c.connector_type)));
+      setConnectors(list as ConnectorInfo[]);
     } catch {
-      // Ignore if API not available
+      /* ignore */
     }
-
     try {
       const list = await messagesSvc.getPlatformStats();
-      const wa = list.find(p => p.platform === 'whatsapp');
-      setWhatsappStats(wa ?? null);
+      const map: Record<string, { channel_count: number; message_count: number }> = {};
+      for (const p of list) map[p.platform] = { channel_count: p.channel_count, message_count: p.message_count };
+      setStats(map);
     } catch {
-      // Ignore
+      /* ignore */
     }
-
     try {
       const data = await syncSvc.getObserverPrivacy();
       if (data) setPrivacy(data);
     } catch {
-      // Ignore — use defaults
+      /* ignore */
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    loadCaps();
+    loadData();
+  }, [loadCaps, loadData]);
 
-  const discordConnector = connectors.find(c => c.connector_type === 'discord-observer');
-  const telegramConnector = connectors.find(c => c.connector_type === 'telegram-observer');
-  const signalConnector = connectors.find(c => c.connector_type === 'signal-observer');
-  const simplexConnector = connectors.find(c => c.connector_type === 'simplex-observer');
-  const sessionConnector = connectors.find(c => c.connector_type === 'session-observer');
-  const configConnector = connectors.find(c => c.id === configId);
+  // Re-preguntar al backend al volver a la pestaña. Sin esto, una pestaña abierta
+  // desde hace horas seguía pintando el estado del primer fetch: pasó de verdad —
+  // una fila "Connected" con un connector ya borrado, imposible de desconectar.
+  useEffect(() => {
+    const onFocus = () => {
+      if (document.visibilityState !== 'visible') return;
+      refreshCaps();
+      loadData();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [refreshCaps, loadData]);
 
-  const handleConnect = (serviceId: string) => {
+  // Deep-links:
+  //  ?connect=<platform>   → open the connect wizard (new channel)
+  //  ?configure=<platform> → open the chat picker for an already-connected channel
+  useEffect(() => {
+    const connect = searchParams.get('connect');
+    const configure = searchParams.get('configure');
+    if (!connect && !configure) return;
+    if (connect) {
+      const serviceId = WIZARD_SERVICE_ID[connect];
+      if (serviceId) {
+        setAddModalPrefilter(serviceId);
+        setAddModalOpen(true);
+      }
+    }
+    if (configure) {
+      const ct = platformMeta(configure).connectorType;
+      if (ct) {
+        setPendingSelectPlatform(configure);
+        setPendingSelect(ct); // the pendingSelect effect opens the picker once the connector is loaded
+      }
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('connect');
+    next.delete('configure');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const connectorById = useMemo(() => new Map(connectors.map((c) => [c.id, c])), [connectors]);
+
+  // Selection-first: once the just-connected connector appears in the list, open
+  // its chat picker so the user chooses which contacts/groups to sync.
+  useEffect(() => {
+    if (!pendingSelect) return;
+    const conn = connectors.find((c) => c.connector_type === pendingSelect);
+    if (conn) {
+      setConfigPlatform(pendingSelectPlatform);
+      setConfigId(conn.id);
+      setPendingSelect(null);
+      setPendingSelectPlatform(null);
+    }
+  }, [connectors, pendingSelect]);
+
+  const handleConnect = (platform: string) => {
+    const serviceId = WIZARD_SERVICE_ID[platform];
+    if (!serviceId) {
+      toast.info('This channel isn’t available to connect yet.');
+      return;
+    }
+    setConnectingPlatform(platform);
     setAddModalPrefilter(serviceId);
     setAddModalOpen(true);
   };
 
+  /**
+   * El modal solo renderiza si el connector está en `connectorById`. Antes, con
+   * una fila stale, el botón NO HACÍA NADA (silencio total, sin toast ni pista).
+   * Ahora se dice qué pasa y se re-sincroniza para que la fila se corrija sola.
+   */
+  const handleConfigure = (connectorId: string | null, platform?: string) => {
+    if (connectorId && connectorById.has(connectorId)) {
+      setConfigPlatform(platform ?? null);
+      setConfigId(connectorId);
+      return;
+    }
+    toast.error('That channel is no longer connected — refreshing');
+    refreshCaps();
+    loadData();
+  };
+
   const handleSync = async (connectorId: string) => {
     try {
-      await syncSvc.runConnector(connectorId);
-      toast.success('Sync started');
+      // El toast se deriva de lo que el backend HIZO de verdad (contrato {action})
+      // — nunca "Sync started" sobre un no-op (bug real: la fila de un bridge del
+      // Gateway toasteaba éxito sin hacer nada).
+      const action = await syncSvc.runConnector(connectorId);
+      const TOAST: Record<string, string> = {
+        sync_started: 'Sync started',
+        stream_reconnected: 'Reconnecting stream…',
+        stream_already_live: 'Stream is already live',
+        refreshed: 'Refreshing chats — new history will appear shortly',
+        noop: 'Nothing to sync — this channel ingests in real time',
+      };
+      toast.success(TOAST[action] ?? 'Done');
+      // El estado del stream puede cambiar en segundos: refetch corto.
+      setTimeout(() => refreshCaps(), 2_500);
     } catch {
+      // Si el connector ya no existe, la fila estaba stale → re-sincronizar con
+      // el backend repara la fila sola en vez de dejar un botón que solo falla.
       toast.error('Failed to start sync');
+      refreshCaps();
+      loadData();
     }
   };
 
-  const handleDisconnect = async (connectorId: string) => {
+  /**
+   * XRCP: tomar/soltar el control del móvil. Reutiliza el par pause/resume del
+   * connector (pause = soltar control → el móvil libre; resume = tomar control →
+   * reconecta+sincroniza). El estado se deriva del backend (status del connector).
+   */
+  const handleToggleControl = async (connectorId: string, currentStatus: string) => {
+    const release = currentStatus !== 'paused'; // 'connected' → soltar
     try {
-      await syncSvc.deleteConnector(connectorId);
+      if (release) {
+        await syncSvc.pauseConnector(connectorId);
+        toast.success('Control soltado — tu móvil queda libre');
+      } else {
+        await syncSvc.resumeConnector(connectorId);
+        toast.success('Tomando el control — abre «Usar desde escritorio» en el móvil');
+      }
+      setTimeout(() => { refreshCaps(); loadData(); }, 2_500);
+    } catch {
+      toast.error(release ? 'No se pudo soltar el control' : 'No se pudo tomar el control');
+      refreshCaps();
+      loadData();
+    }
+  };
+
+  const handleDisconnect = async (target: ReturnType<typeof observerDisconnectTarget>) => {
+    try {
+      await syncSvc.deleteConnector(target.id, target.options);
       toast.success('Disconnected');
       loadData();
-    } catch {
-      toast.error('Failed to disconnect');
+      refreshCaps();
+    } catch (err) {
+      // Un 404 = el connector YA no está (doble pulsación, o el servidor lo borró y el cliente
+      // reintentó): eso ES estar desconectado, no un fallo. Solo es error de verdad otra cosa.
+      if (err instanceof ApiError && err.status === 404) {
+        toast.success('Disconnected');
+      } else {
+        toast.error('Failed to disconnect');
+      }
+      loadData();
+      refreshCaps();
     }
+    setDisconnectTarget(null);
   };
 
   const handleSavePrivacy = async () => {
@@ -323,281 +360,70 @@ export function ChannelObserversSection() {
     <>
       <SettingSection
         title="Channel Observers"
-        description="Import and observe your messaging platforms."
+        description="Connect your messaging platforms — observe incoming messages and reply from Messages on the platforms you authorize."
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {/* SimpleX — 96/100 */}
-          <PlatformRow
-            icon={<SimplexIcon size={32} />}
-            name="SimpleX"
-            privacy={PLATFORM_PRIVACY.SimpleX}
-            connector={simplexConnector}
-            progress={simplexConnector ? syncProgress[simplexConnector.id] : undefined}
-            onConnect={() => handleConnect('simplex-observer')}
-            onConfigure={() => simplexConnector && setConfigId(simplexConnector.id)}
-            onSync={() => simplexConnector && handleSync(simplexConnector.id)}
-            onDisconnect={() => simplexConnector && handleDisconnect(simplexConnector.id)}
-          />
-
-          {/* Threema — 90/100 (frontend only) */}
-          <PlatformRow
-            icon={<ThreemaIcon size={32} />}
-            name="Threema"
-            privacy={PLATFORM_PRIVACY.Threema}
-          />
-
-          {/* Session — 85/100 */}
-          <PlatformRow
-            icon={<SessionIcon size={32} />}
-            name="Session"
-            privacy={PLATFORM_PRIVACY.Session}
-            connector={sessionConnector}
-            progress={sessionConnector ? syncProgress[sessionConnector.id] : undefined}
-            onConnect={() => handleConnect('session-observer')}
-            onConfigure={() => sessionConnector && setConfigId(sessionConnector.id)}
-            onSync={() => sessionConnector && handleSync(sessionConnector.id)}
-            onDisconnect={() => sessionConnector && handleDisconnect(sessionConnector.id)}
-          />
-
-          {/* Signal — 78/100 */}
-          <PlatformRow
-            icon={<SignalIcon size={32} />}
-            name="Signal"
-            privacy={PLATFORM_PRIVACY.Signal}
-            connector={signalConnector}
-            progress={signalConnector ? syncProgress[signalConnector.id] : undefined}
-            onConnect={() => handleConnect('signal-observer')}
-            onConfigure={() => signalConnector && setConfigId(signalConnector.id)}
-            onSync={() => signalConnector && handleSync(signalConnector.id)}
-            onDisconnect={() => signalConnector && handleDisconnect(signalConnector.id)}
-          />
-
-          {/* Telegram — 35/100 */}
-          <PlatformRow
-            icon={<TelegramIcon size={32} />}
-            name="Telegram"
-            privacy={PLATFORM_PRIVACY.Telegram}
-            connector={telegramConnector}
-            progress={telegramConnector ? syncProgress[telegramConnector.id] : undefined}
-            onConnect={() => handleConnect('telegram-observer')}
-            onConfigure={() => telegramConnector && setConfigId(telegramConnector.id)}
-            onSync={() => telegramConnector && handleSync(telegramConnector.id)}
-            onDisconnect={() => telegramConnector && handleDisconnect(telegramConnector.id)}
-          />
-
-          {/* Teams — 20/100 (not implemented yet) */}
-          <PlatformRow
-            icon={<TeamsIcon size={32} />}
-            name="Teams"
-            privacy={PLATFORM_PRIVACY.Teams}
-          />
-
-          {/* Slack — 18/100 (not implemented yet) */}
-          <PlatformRow
-            icon={<SlackIcon size={32} />}
-            name="Slack"
-            privacy={PLATFORM_PRIVACY.Slack}
-          />
-
-          {/* Discord — 15/100 */}
-          <PlatformRow
-            icon={<DiscordIcon size={32} />}
-            name="Discord"
-            privacy={PLATFORM_PRIVACY.Discord}
-            connector={discordConnector}
-            progress={discordConnector ? syncProgress[discordConnector.id] : undefined}
-            onConnect={() => handleConnect('discord-observer')}
-            onConfigure={() => discordConnector && setConfigId(discordConnector.id)}
-            onSync={() => discordConnector && handleSync(discordConnector.id)}
-            onDisconnect={() => discordConnector && handleDisconnect(discordConnector.id)}
-          />
-
-          {/* WhatsApp — 30/100 (import-only) */}
-          {(() => { const wap = PLATFORM_PRIVACY.WhatsApp!; return (
-          <div style={{
-            padding: '10px 14px',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              {/* Left: icon + name */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 140 }}>
-                <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <WhatsAppIcon size={32} />
-                </div>
-                <div style={{ lineHeight: 1.2 }}>
-                  <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>WhatsApp</span>
-                  <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 1 }}>
-                    {wap.subtitle}
-                    {whatsappStats && (
-                      <span> · {whatsappStats.channel_count} chat{whatsappStats.channel_count !== 1 ? 's' : ''} ({whatsappStats.message_count.toLocaleString()} msgs)</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {/* Center: tags */}
-              <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', alignContent: 'center', gap: 4 }}>
-                {wap.tags.map(tag => {
-                  const c = TAG_COLORS[tag.type];
-                  return (
-                    <span key={tag.label} style={{
-                      fontSize: '0.6875rem',
-                      lineHeight: 1,
-                      padding: '3px 9px',
-                      borderRadius: 8,
-                      background: c.bg,
-                      color: c.text,
-                      border: `1px solid ${c.border}`,
-                      fontFamily: 'var(--font-sans)',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {tag.label}
-                    </span>
-                  );
-                })}
-              </div>
-              {/* Right: score + import */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Privacidad</div>
-                  <div style={{ width: 60, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                    <div style={{ width: `${wap.score}%`, height: '100%', borderRadius: 2, background: scoreBarColor(wap.score) }} />
-                  </div>
-                  <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: scoreBarColor(wap.score), whiteSpace: 'nowrap' }}>
-                    {wap.score}/100
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowImport(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    padding: '4px 12px',
-                    background: 'none',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md)',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-sans)',
-                    fontSize: '0.6875rem',
-                    transition: 'all var(--transition-fast)',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
-                >
-                  <Upload size={12} />
-                  {whatsappStats ? 'Import another' : 'Import chat'}
-                </button>
-              </div>
-            </div>
-          </div>
-          ); })()}
+          {DISPLAY_ORDER.map((platform) => {
+            const cap = capabilities[platform];
+            const connectorId = cap?.connector?.id ?? null;
+            const connector = connectorId ? connectorById.get(connectorId) : undefined;
+            const progress = connectorId ? syncProgress[connectorId] : undefined;
+            return (
+              <PlatformRow
+                key={platform}
+                platform={platform}
+                capability={cap}
+                connector={connector}
+                stats={stats[platform]}
+                progress={progress}
+                hasWizard={Boolean(WIZARD_SERVICE_ID[platform])}
+                onConnect={() => handleConnect(platform)}
+                onConfigure={() => handleConfigure(connectorId, platform)}
+                onSync={() => connectorId && handleSync(connectorId)}
+                onDisconnect={() => connectorId && setDisconnectTarget(observerDisconnectTarget(connectorId, platformMeta(platform).channelType === 'matrix'))}
+                onToggleControl={connectorId ? () => handleToggleControl(connectorId, connector?.status ?? 'connected') : undefined}
+                onImport={platform === 'whatsapp' ? () => setShowImport(true) : undefined}
+              />
+            );
+          })}
         </div>
       </SettingSection>
 
-      {/* Privacy section */}
-      <SettingSection
-        title="Privacy"
-        description="Default privacy settings for all channel observers."
-      >
+      {/* Privacy defaults */}
+      <SettingSection title="Privacy" description="Default privacy settings for all channel observers.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <div style={{
-              fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              marginBottom: 8,
-            }}>
-              Message scope
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={radioLabelStyle}>
-                <input
-                  type="radio" name="observer-direction"
-                  checked={privacy.direction_filter === 'all'}
-                  onChange={() => { setPrivacy(p => ({ ...p, direction_filter: 'all' })); setPrivacyDirty(true); }}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Full conversations</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>All messages in selected channels</div>
-                </div>
-              </label>
-              <label style={radioLabelStyle}>
-                <input
-                  type="radio" name="observer-direction"
-                  checked={privacy.direction_filter === 'my_messages'}
-                  onChange={() => { setPrivacy(p => ({ ...p, direction_filter: 'my_messages' })); setPrivacyDirty(true); }}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>My messages only</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Only messages you sent</div>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div>
-            <div style={{
-              fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
-              textTransform: 'uppercase', letterSpacing: '0.05em',
-              marginBottom: 8,
-            }}>
-              Content storage
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={radioLabelStyle}>
-                <input
-                  type="radio" name="observer-content"
-                  checked={privacy.content_filter === 'full'}
-                  onChange={() => { setPrivacy(p => ({ ...p, content_filter: 'full' })); setPrivacyDirty(true); }}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Full content</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Store complete message text</div>
-                </div>
-              </label>
-              <label style={radioLabelStyle}>
-                <input
-                  type="radio" name="observer-content"
-                  checked={privacy.content_filter === 'metadata_only'}
-                  onChange={() => { setPrivacy(p => ({ ...p, content_filter: 'metadata_only' })); setPrivacyDirty(true); }}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <div>
-                  <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Metadata only</div>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>Store sender, time, channel (not content)</div>
-                </div>
-              </label>
-            </div>
-          </div>
-
+          <PrivacyRadioGroup
+            title="Message scope"
+            options={[
+              { value: 'all', label: 'Full conversations', hint: 'All messages in selected channels' },
+              { value: 'my_messages', label: 'My messages only', hint: 'Only messages you sent' },
+            ]}
+            name="observer-direction"
+            selected={privacy.direction_filter}
+            onChange={(v) => { setPrivacy((p) => ({ ...p, direction_filter: v as 'all' | 'my_messages' })); setPrivacyDirty(true); }}
+          />
+          <PrivacyRadioGroup
+            title="Content storage"
+            options={[
+              { value: 'full', label: 'Full content', hint: 'Store complete message text' },
+              { value: 'metadata_only', label: 'Metadata only', hint: 'Store sender, time, channel (not content)' },
+            ]}
+            name="observer-content"
+            selected={privacy.content_filter}
+            onChange={(v) => { setPrivacy((p) => ({ ...p, content_filter: v as 'full' | 'metadata_only' })); setPrivacyDirty(true); }}
+          />
           {privacyDirty && (
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={() => { loadData(); setPrivacyDirty(false); }}
-                style={{
-                  padding: '6px 14px',
-                  background: 'none', border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  color: 'var(--text-dim)', cursor: 'pointer',
-                  fontFamily: 'var(--font-sans)', fontSize: '0.75rem',
-                }}
+                style={{ padding: '6px 14px', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.75rem' }}
               >
                 Discard
               </button>
               <button
                 onClick={handleSavePrivacy}
                 disabled={savingPrivacy}
-                style={{
-                  padding: '6px 14px',
-                  background: 'var(--amber)', border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  color: '#000', cursor: savingPrivacy ? 'default' : 'pointer',
-                  fontFamily: 'var(--font-sans)', fontSize: '0.75rem',
-                  fontWeight: 600, opacity: savingPrivacy ? 0.7 : 1,
-                }}
+                style={{ padding: '6px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md)', color: '#000', cursor: savingPrivacy ? 'default' : 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.75rem', fontWeight: 600, opacity: savingPrivacy ? 0.7 : 1 }}
               >
                 {savingPrivacy ? 'Saving...' : 'Save'}
               </button>
@@ -608,192 +434,181 @@ export function ChannelObserversSection() {
 
       {/* Modals */}
       {showImport && (
-        <WhatsAppImportDialog
-          onClose={() => setShowImport(false)}
-          onImported={() => { loadData(); setShowImport(false); }}
-        />
+        <WhatsAppImportDialog onClose={() => setShowImport(false)} onImported={() => { loadData(); setShowImport(false); }} />
       )}
-
-      {configId && configConnector && (
+      {configId && connectorById.get(configId) && (
         <ChannelConfigModal
           connectorId={configId}
-          connectorType={configConnector.connector_type}
-          onClose={() => setConfigId(null)}
-          onSaved={loadData}
+          connectorType={connectorById.get(configId)!.connector_type}
+          platform={configPlatform ?? undefined}
+          onClose={() => { setConfigId(null); setConfigPlatform(null); }}
+          onSaved={() => { loadData(); refreshCaps(); }}
         />
       )}
-
       {addModalOpen && (
         <AddIntegrationModal
           open={addModalOpen}
           onClose={() => { setAddModalOpen(false); setAddModalPrefilter(undefined); }}
-          onConnected={() => { loadData(); setAddModalOpen(false); setAddModalPrefilter(undefined); }}
+          onConnected={() => {
+            // OJO: `addModalPrefilter` es el id del SERVICIO ('telegram-matrix'),
+            // no el connector_type ('gateway-observer') → compararlo con
+            // `c.connector_type` no casaba nunca y el picker no se abría solo.
+            // El connector_type se deriva de la plataforma que se estaba conectando.
+            const platform = connectingPlatform;
+            const ct = platform ? platformMeta(platform).connectorType : null;
+            loadData();
+            refreshCaps();
+            setAddModalOpen(false);
+            setAddModalPrefilter(undefined);
+            setConnectingPlatform(null);
+            if (ct) {
+              setPendingSelectPlatform(platform);
+              setPendingSelect(ct); // dispara el selector de chats
+            }
+          }}
           prefilterService={addModalPrefilter}
         />
       )}
+      <ConfirmDialog
+        open={disconnectTarget != null}
+        title={disconnectTarget?.title ?? 'Disconnect channel?'}
+        description={disconnectTarget?.description ?? ''}
+        confirmLabel={disconnectTarget?.label ?? 'Disconnect'}
+        variant="danger"
+        onConfirm={() => { if (disconnectTarget) handleDisconnect(disconnectTarget); }}
+        onClose={() => setDisconnectTarget(null)}
+      />
     </>
   );
 }
 
-// ─── Platform row component ──────────────────────────────
+// ─── Platform row ────────────────────────────────────────────────────
 
 interface PlatformRowProps {
-  icon: React.ReactNode;
-  name: string;
-  privacy?: PlatformPrivacy;
-  connector?: ConnectorInfo | undefined;
+  platform: string;
+  capability?: PlatformCapability;
+  connector?: ConnectorInfo;
+  stats?: { channel_count: number; message_count: number };
   progress?: { channel?: string; processed: number; total: number };
-  onConnect?: () => void;
-  onConfigure?: () => void;
-  onSync?: () => void;
-  onDisconnect?: () => void;
+  hasWizard: boolean;
+  onConnect: () => void;
+  onConfigure: () => void;
+  onSync: () => void;
+  onDisconnect: () => void;
+  /** XRCP: tomar/soltar el control del móvil (pause/resume del connector). */
+  onToggleControl?: () => void;
+  onImport?: () => void;
 }
 
-function PlatformRow({ icon, name, privacy, connector, progress, onConnect, onConfigure, onSync, onDisconnect }: PlatformRowProps) {
-  const connected = connector && connector.status !== 'disconnected';
-  const syncing = !!progress;
+function PlatformRow({ platform, capability, connector, stats, progress, hasWizard, onConnect, onConfigure, onSync, onDisconnect, onToggleControl, onImport }: PlatformRowProps) {
+  const meta = platformMeta(platform);
+  const privacy = PLATFORM_PRIVACY[platform];
+  // "Connected" is derived from the backend capability alone — the listConnectors
+  // row is only for extra display (name / last sync), so its async arrival never
+  // flips the row back to "Connect" (feedback_button_state_persistence).
+  const connected = capability?.connector != null;
+  const syncing = Boolean(progress);
+  const unsupported = capability?.transport === 'none';
+
+  const countLabel = stats
+    ? ` · ${stats.channel_count} chat${stats.channel_count !== 1 ? 's' : ''} (${stats.message_count.toLocaleString()} msgs)`
+    : '';
 
   return (
-    <div style={{
-      padding: '10px 14px',
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 'var(--radius-md)',
-    }}>
-      {/* Main row: icon+name | tags | score+button */}
+    <div data-platform={platform} style={{ padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', opacity: unsupported ? 0.72 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         {/* Left: icon + name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 140 }}>
-          <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {icon}
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, minWidth: 150 }}>
+          <PlatformIcon platform={platform} size={32} muted={unsupported} />
           <div style={{ lineHeight: 1.2 }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{name}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)' }}>{meta.label}</span>
+              <AccountModelBadge model={accountModelOf(platform)} />
+            </div>
             {privacy && (
               <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 1 }}>
                 {privacy.subtitle}
+                {countLabel}
               </div>
             )}
           </div>
         </div>
 
-        {/* Center: tags */}
-        {privacy && (
-          <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', alignItems: 'center', alignContent: 'center', gap: 4 }}>
-            {privacy.tags.map(tag => {
-              const c = TAG_COLORS[tag.type];
-              return (
-                <span key={tag.label} style={{
-                  fontSize: '0.6875rem',
-                  lineHeight: 1,
-                  padding: '3px 9px',
-                  borderRadius: 8,
-                  background: c.bg,
-                  color: c.text,
-                  border: `1px solid ${c.border}`,
-                  fontFamily: 'var(--font-sans)',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {tag.label}
-                </span>
-              );
-            })}
-          </div>
-        )}
+        {/* Center: privacy tags */}
+        {privacy ? <PrivacyTags privacy={privacy} /> : <div style={{ flex: 1 }} />}
 
-        {/* Right: score + button */}
+        {/* Right: score + status/action */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          {privacy && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Privacidad</div>
-              <div style={{
-                width: 60, height: 3, borderRadius: 2,
-                background: 'var(--border)',
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${privacy.score}%`, height: '100%',
-                  borderRadius: 2,
-                  background: scoreBarColor(privacy.score),
-                }} />
-              </div>
-              <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: scoreBarColor(privacy.score), whiteSpace: 'nowrap' }}>
-                {privacy.score}/100
-              </span>
-            </div>
+          {privacy && <PrivacyScore privacy={privacy} />}
+
+          {unsupported ? (
+            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', padding: '4px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }} title={capability?.note ?? undefined}>
+              Unavailable
+            </span>
+          ) : connected ? (
+            <ObserverStatusBadge capability={capability} syncing={syncing} />
+          ) : hasWizard ? (
+            <ConnectButton onClick={onConnect} />
+          ) : onImport ? (
+            <ConnectButton onClick={onConnect} label="Connect" />
+          ) : (
+            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', padding: '4px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              Coming soon
+            </span>
           )}
 
-          {connected ? (
-            <span style={{
-              fontSize: '0.625rem', fontWeight: 500,
-              color: '#22c55e',
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e' }} />
-              Connected
-            </span>
-          ) : onConnect ? (
+          {onImport && (
             <button
-              onClick={onConnect}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                padding: '4px 12px',
-                background: 'none',
-                border: '1px solid var(--amber)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--amber)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-sans)',
-                fontSize: '0.6875rem', fontWeight: 500,
-                transition: 'all var(--transition-fast)',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212, 160, 23, 0.1)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+              onClick={onImport}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.6875rem' }}
             >
-              Connect &rarr;
+              <Upload size={12} /> {stats ? 'Import more' : 'Import history'}
             </button>
-          ) : (
-            <span style={{
-              fontSize: '0.6875rem', fontWeight: 500,
-              color: 'var(--text-muted)',
-              padding: '4px 12px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-            }}>
-              Próximamente
-            </span>
           )}
         </div>
       </div>
 
-      {/* Connected details below */}
-      {connected && connector && (
+      {/* Connected details */}
+      {connected && (
         <div style={{ marginTop: 6, paddingLeft: 46 }}>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginBottom: 5 }}>
-            {connector.display_name && <span>{connector.display_name}</span>}
-            {connector.last_sync_at && (
-              <span>{connector.display_name ? ' · ' : ''}Last sync: {timeAgo(connector.last_sync_at)}</span>
+            {connector?.display_name && <span>{connector.display_name}</span>}
+            {(connector?.last_sync_at ?? capability?.connector?.last_sync_at) && (
+              <span>{connector?.display_name ? ' · ' : ''}Last sync: {timeAgo(connector?.last_sync_at ?? capability?.connector?.last_sync_at ?? null)}</span>
             )}
           </div>
-
           {syncing && progress && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              fontSize: '0.6875rem', color: 'var(--amber)',
-              marginBottom: 5,
-            }}>
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
-              <span>
-                Syncing{progress.channel ? ` ${progress.channel}` : ''}...
-                {progress.total > 0 && ` ${progress.processed}/${progress.total}`}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.6875rem', color: 'var(--amber)', marginBottom: 5 }}>
+              <Loader2 size={11} className="animate-spin" />
+              <span>Syncing{progress.channel ? ` ${progress.channel}` : ''}...{progress.total > 0 && ` ${progress.processed}/${progress.total}`}</span>
             </div>
           )}
-
           <div style={{ display: 'flex', gap: 5 }}>
-            {onConfigure && <ActionButton icon={<Settings size={11} />} label="Configure" onClick={onConfigure} />}
-            {onSync && <ActionButton icon={<RefreshCw size={11} />} label="Sync now" onClick={onSync} />}
-            {onDisconnect && <ActionButton icon={<Trash2 size={11} />} label="Disconnect" onClick={onDisconnect} danger />}
+            <ActionButton icon={<Settings size={11} />} label="Configure" onClick={onConfigure} />
+            {/* Label según transporte = lo que el botón HACE de verdad: pull
+                sincroniza; push nativo reconecta el stream; los bridges Matrix
+                refrescan portales+historial (la ingesta ya es en tiempo real). */}
+            <ActionButton
+              icon={<RefreshCw size={11} />}
+              label={
+                platform === 'simplex_xrcp' ? 'Sincronizar'
+                : capability?.transport === 'matrix-bridge' ? 'Refresh'
+                : capability?.stream !== 'not_applicable' ? 'Reconnect'
+                : 'Sync now'
+              }
+              onClick={onSync}
+            />
+            {/* XRCP: tomar/soltar el control del móvil (exclusión mutua móvil↔PC).
+                'paused' = control soltado → "Tomar control" = RE-EMPAREJAR con QR (en esta
+                red WSL2 el multicast de reconexión no llega al móvil → la única vía fiable de
+                tener sesión activa es escanear un QR nuevo; el móvil se conecta por unicast).
+                Controlando → "Soltar control" (release, conserva el emparejamiento). */}
+            {platform === 'simplex_xrcp' && onToggleControl && (
+              connector?.status === 'paused'
+                ? <ActionButton icon={<Play size={11} />} label="Tomar control" onClick={onConnect} />
+                : <ActionButton icon={<Pause size={11} />} label="Soltar control" onClick={onToggleControl} />
+            )}
+            <ActionButton icon={<Trash2 size={11} />} label={meta.channelType === 'matrix' ? 'Disconnect hub' : 'Disconnect'} onClick={onDisconnect} danger />
           </div>
         </div>
       )}
@@ -801,37 +616,46 @@ function PlatformRow({ icon, name, privacy, connector, progress, onConnect, onCo
   );
 }
 
-// ─── Small action button ─────────────────────────────────
+function AccountModelBadge({ model }: { model: AccountModel }) {
+  if (model === 'none') return null;
+  const account = model === 'account';
+  return (
+    <span
+      title={account ? 'Your account — you see your real conversations with other people.' : 'Bot — you only see DMs sent to the bot and groups the bot is in, not your personal 1:1 chats.'}
+      style={{
+        fontSize: '0.5625rem', fontWeight: 600, lineHeight: 1,
+        padding: '2px 6px', borderRadius: 5,
+        textTransform: 'uppercase', letterSpacing: '0.04em',
+        background: account ? 'rgba(16,185,129,0.14)' : 'rgba(148,163,184,0.14)',
+        color: account ? '#34d399' : 'var(--text-muted)',
+        border: `1px solid ${account ? 'rgba(16,185,129,0.30)' : 'var(--border)'}`,
+      }}
+    >
+      {account ? 'Your account' : 'Bot'}
+    </span>
+  );
+}
 
-function ActionButton({ icon, label, onClick, danger }: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
+function ConnectButton({ onClick, label = 'Connect' }: { onClick: () => void; label?: string }) {
   return (
     <button
       onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 4,
-        padding: '4px 8px',
-        background: 'none',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        color: danger ? 'var(--error)' : 'var(--text-dim)',
-        cursor: 'pointer',
-        fontFamily: 'var(--font-sans)',
-        fontSize: '0.6875rem',
-        transition: 'all var(--transition-fast)',
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.background = danger ? 'rgba(244, 63, 94, 0.1)' : 'var(--surface-hover)';
-        e.currentTarget.style.borderColor = danger ? 'var(--error)' : 'var(--border-hover)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.background = 'none';
-        e.currentTarget.style.borderColor = 'var(--border)';
-      }}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 12px', background: 'none', border: '1px solid var(--amber)', borderRadius: 'var(--radius-md)', color: 'var(--amber)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.6875rem', fontWeight: 500, transition: 'all var(--transition-fast)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(212, 160, 23, 0.1)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+    >
+      {label} &rarr;
+    </button>
+  );
+}
+
+function ActionButton({ icon, label, onClick, danger }: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: danger ? 'var(--error)' : 'var(--text-dim)', cursor: 'pointer', fontFamily: 'var(--font-sans)', fontSize: '0.6875rem', transition: 'all var(--transition-fast)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = danger ? 'rgba(244, 63, 94, 0.1)' : 'var(--surface-hover)'; e.currentTarget.style.borderColor = danger ? 'var(--error)' : 'var(--border-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = 'var(--border)'; }}
     >
       {icon}
       {label}
@@ -839,101 +663,29 @@ function ActionButton({ icon, label, onClick, danger }: {
   );
 }
 
-// ─── Inline radio label style ────────────────────────────
-
-const radioLabelStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'flex-start', gap: 8,
-  cursor: 'pointer',
-  padding: '4px 0',
-};
-
-// ─── Platform SVG icons ──────────────────────────────────
-
-function SlackIcon({ size = 24 }: { size?: number }) {
+function PrivacyRadioGroup({ title, options, name, selected, onChange }: {
+  title: string;
+  options: { value: string; label: string; hint: string }[];
+  name: string;
+  selected: string;
+  onChange: (v: string) => void;
+}) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M5.042 15.165a2.528 2.528 0 01-2.52 2.523A2.528 2.528 0 010 15.165a2.527 2.527 0 012.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 012.521-2.52 2.527 2.527 0 012.521 2.52v6.313A2.528 2.528 0 018.834 24a2.528 2.528 0 01-2.521-2.522v-6.313z" fill="#E01E5A"/>
-      <path d="M8.834 5.042a2.528 2.528 0 01-2.521-2.52A2.528 2.528 0 018.834 0a2.528 2.528 0 012.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 012.521 2.521 2.528 2.528 0 01-2.521 2.521H2.522A2.528 2.528 0 010 8.834a2.528 2.528 0 012.522-2.521h6.312z" fill="#36C5F0"/>
-      <path d="M18.956 8.834a2.528 2.528 0 012.522-2.521A2.528 2.528 0 0124 8.834a2.528 2.528 0 01-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 01-2.523 2.521 2.527 2.527 0 01-2.52-2.521V2.522A2.527 2.527 0 0115.165 0a2.528 2.528 0 012.523 2.522v6.312z" fill="#2EB67D"/>
-      <path d="M15.165 18.956a2.528 2.528 0 012.523 2.522A2.528 2.528 0 0115.165 24a2.527 2.527 0 01-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 01-2.52-2.523 2.526 2.526 0 012.52-2.52h6.313A2.527 2.527 0 0124 15.165a2.528 2.528 0 01-2.522 2.523h-6.313z" fill="#ECB22E"/>
-    </svg>
-  );
-}
-
-function DiscordIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="#5865F2">
-      <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-    </svg>
-  );
-}
-
-function TelegramIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="11" fill="#0088cc"/>
-      <path d="M5.4 11.6l10.1-4.3c.5-.2.9.1.7.7L14.5 16c-.2.5-.6.6-1 .4l-2.8-2.1-1.3 1.3c-.1.1-.3.2-.5.2l.2-2.8 5.1-4.6c.2-.2 0-.3-.3-.1L7.6 13.2l-2.7-.8c-.6-.2-.6-.6.1-.8z" fill="white"/>
-    </svg>
-  );
-}
-
-function TeamsIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <rect x="1" y="4" width="14" height="16" rx="2" fill="#6264a7"/>
-      <text x="8" y="15" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold" fontFamily="sans-serif">T</text>
-      <circle cx="19" cy="7" r="3.5" fill="#6264a7"/>
-      <rect x="15.5" y="11" width="7" height="7" rx="1.5" fill="#6264a7" opacity="0.8"/>
-    </svg>
-  );
-}
-
-function ThreemaIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C7.03 2 3 5.58 3 10c0 2.13 1.02 4.05 2.66 5.44L5 20l3.54-1.47C9.6 18.84 10.77 19 12 19c4.97 0 9-3.58 9-8s-4.03-8-9-8z" fill="#3a3a3a"/>
-      <circle cx="8.5" cy="10" r="1.5" fill="#fff"/>
-      <circle cx="12" cy="10" r="1.5" fill="#fff"/>
-      <circle cx="15.5" cy="10" r="1.5" fill="#fff"/>
-    </svg>
-  );
-}
-
-function SignalIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#3a76f0"/>
-      <path d="M12 6.5c-3.04 0-5.5 2.46-5.5 5.5 0 .97.25 1.88.7 2.67L6.5 17.5l2.83-.7c.79.45 1.7.7 2.67.7 3.04 0 5.5-2.46 5.5-5.5S15.04 6.5 12 6.5z" fill="white"/>
-    </svg>
-  );
-}
-
-function SimplexIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" fill="#3DB548" opacity="0.15"/>
-      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#3DB548" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
-      <path d="M12 7v10M7.5 9.5L12 12l4.5-2.5M7.5 14.5L12 12l4.5 2.5" stroke="#3DB548" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function SessionIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" fill="#00F782" opacity="0.15"/>
-      <circle cx="12" cy="12" r="10" stroke="#00F782" strokeWidth="1.5"/>
-      <circle cx="12" cy="12" r="4" fill="#00F782"/>
-      <path d="M12 2v4M12 18v4M2 12h4M18 12h4" stroke="#00F782" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function WhatsAppIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" fill="#25D366"/>
-      <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#25D366" strokeWidth="1.5" fill="none"/>
-    </svg>
+    <div>
+      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+        {title}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {options.map((opt) => (
+          <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '4px 0' }}>
+            <input type="radio" name={name} checked={selected === opt.value} onChange={() => onChange(opt.value)} style={{ accentColor: 'var(--amber)' }} />
+            <div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{opt.label}</div>
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{opt.hint}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }

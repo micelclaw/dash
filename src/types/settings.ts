@@ -123,7 +123,6 @@ export interface Settings {
 }
 
 export interface SecurityConfig {
-  unrestricted_shell: boolean;
   approval_timeouts: {
     reminder_minutes: number;
     escalation_minutes: number;
@@ -150,9 +149,20 @@ export interface ApprovalRequest {
   operation: string;
   level: number;
   summary: string;
-  params: Record<string, unknown> | null;
-  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  source: 'core' | 'openclaw_plugin' | 'openclaw_exec' | 'runtime_native' | 'external_mcp';
+  authority: 'core_action' | 'openclaw_exec' | 'openclaw_plugin' | 'runtime_native' | 'external_mcp';
+  provider_kind: string | null;
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  core_level: number | null;
+  correlation_id: string;
+  subject_type: string | null;
+  subject_ref: string | null;
+  presentation: Record<string, unknown>;
+  allowed_decisions: Array<'allow-once' | 'allow-always' | 'deny'>;
+  resolution: 'allow_once' | 'allow_session' | 'allow_persistent_rule' | 'deny' | 'external' | null;
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'resolved_elsewhere' | 'interrupted' | 'provider_removed' | 'blocked_by_policy' | 'executed';
   channel: string | null;
+  conversation_id: string | null;
   resolved_by: string | null;
   resolved_at: string | null;
   pin_verified: boolean;

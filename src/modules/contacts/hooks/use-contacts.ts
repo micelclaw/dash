@@ -57,7 +57,7 @@ export function useContacts(filters: ContactFilters = {}) {
 
   useEffect(() => { fetchContacts(); }, [fetchContacts]);
 
-  useRealtimeList('contact', contacts, setContacts);
+  useRealtimeList('contact', contacts, setContacts, fetchContacts);
 
   const createContact = async (input: ContactCreateInput): Promise<Contact> => {
     const res = await api.post<ApiResponse<Contact>>('/contacts', input);
@@ -82,8 +82,8 @@ export function useContacts(filters: ContactFilters = {}) {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.post(`/contacts/${id}/restore`);
-              if (removed) setContacts(prev => [...prev, removed].sort((a, b) => a.display_name.localeCompare(b.display_name)));
+              const restored = await api.post<ApiResponse<Contact>>(`/contacts/${id}/restore`);
+              if (restored.data) setContacts(prev => [...prev, restored.data].sort((a, b) => a.display_name.localeCompare(b.display_name)));
             } catch { toast.error('Failed to restore contact'); }
           },
         } : undefined,

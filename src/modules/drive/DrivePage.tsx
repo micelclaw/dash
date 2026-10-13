@@ -13,7 +13,7 @@
 import { useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import {
-  HardDrive, Clock, Star, Users, Trash2, Copy, Settings,
+  HardDrive, Clock, Star, Users, Trash2, Copy, Settings, Server,
 } from 'lucide-react';
 import { Tabs } from '@/components/shared/Tabs';
 import { useDriveStore, isDriveTab, type DriveTab } from '@/stores/drive.store';
@@ -24,6 +24,7 @@ import { StarredView } from './views/StarredView';
 import { SharedView } from './views/SharedView';
 import { TrashView } from './views/TrashView';
 import { DuplicatesView } from './views/DuplicatesView';
+import { NetworkFoldersView } from './views/NetworkFoldersView';
 
 /**
  * Drive module shell (D3) — tab row (My Drive / Recent / Starred / Shared /
@@ -76,6 +77,7 @@ export function Component() {
     { id: 'recent', label: 'Recent', icon: Clock, href: '/drive?tab=recent' },
     { id: 'starred', label: 'Starred', icon: Star, href: '/drive?tab=starred' },
     { id: 'shared', label: 'Shared', icon: Users, href: '/drive?tab=shared' },
+    { id: 'network-folders', label: 'Carpetas de red', icon: Server, href: '/drive?tab=network-folders' },
     { id: 'trash', label: 'Trash', icon: Trash2, href: '/drive?tab=trash' },
     { id: 'duplicates', label: 'Duplicates', icon: Copy, href: '/drive?tab=duplicates' },
   ], []);
@@ -131,6 +133,7 @@ export function Component() {
         {activeTab === 'recent' && <RecentView />}
         {activeTab === 'starred' && <StarredView />}
         {activeTab === 'shared' && <SharedView />}
+        {activeTab === 'network-folders' && <NetworkFoldersView />}
         {activeTab === 'trash' && <TrashView />}
         {activeTab === 'duplicates' && <DuplicatesView />}
       </div>

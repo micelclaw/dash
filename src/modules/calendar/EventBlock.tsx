@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useCallback, type CSSProperties } from 'react';
 import { formatTime } from '@/lib/date-helpers';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
@@ -110,7 +111,7 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
             fontWeight: 500,
           }}
         >
-          {event.title}
+          <span style={{ float: "right", marginLeft: 4 }}><EntitySource entity={event} domain="calendar" size="xs" /></span>{event.title}
           {lines === 2 && (
             <span style={{ fontWeight: 400, opacity: 0.7, fontSize: '0.6875rem' }}>
               {' · '}{timeStr}
@@ -129,7 +130,7 @@ export function EventBlock({ event, onClick, onDelete, style, heightPx, draggabl
               fontWeight: 500,
             }}
           >
-            {event.title}
+            <span style={{ float: "right", marginLeft: 4 }}><EntitySource entity={event} domain="calendar" size="xs" /></span>{event.title}
           </div>
 
           {/* Time */}

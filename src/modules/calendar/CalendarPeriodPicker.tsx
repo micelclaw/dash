@@ -14,8 +14,8 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import {
-  startOfMonth, addMonths, addDays, getMonthGridDays, getWeekDayNames,
-  getISOWeek, getISOWeeksInYear, mondayOfISOWeek, startOfWeek,
+  addMonths, addDays, getMonthGridDays, getWeekDayNames,
+  getISOWeek, getISOWeeksInYear, mondayOfISOWeek,
   isSameDay, isSameMonth, isToday,
 } from '@/lib/date-helpers';
 import type { CalendarView } from './types';

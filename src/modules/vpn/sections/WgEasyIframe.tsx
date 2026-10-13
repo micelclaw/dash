@@ -27,6 +27,13 @@ export function WgEasyIframe({ status, loading, starting, onStart }: WgEasyIfram
   const { fullscreen, toggle, rootStyle } = useEmbedFullscreen();
   // Auto-start once when not installed (via useEffect, not during render)
   const autoStarted = useRef(false);
+  // Hooks must be called on every render. `status.running` changes as the
+  // start request completes, so placing this below the stopped/loading early
+  // returns made React see a new hook and send the user to the error boundary.
+  const iframeSrc = useMemo(
+    () => status?.url ? `${status.url}?_v=${Date.now()}` : null,
+    [status?.url],
+  );
   useEffect(() => {
     if (!loading && !starting && status && !status.installed && !autoStarted.current) {
       autoStarted.current = true;
@@ -87,12 +94,6 @@ export function WgEasyIframe({ status, loading, starting, onStart }: WgEasyIfram
       </CenteredState>
     );
   }
-
-  // Stable cache-buster (generated once per mount)
-  const iframeSrc = useMemo(
-    () => status?.url ? `${status.url}?_v=${Date.now()}` : null,
-    [status?.url],
-  );
 
   // Ready — show iframe
   if (iframeSrc) {

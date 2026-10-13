@@ -45,6 +45,7 @@ import { UploadQueuePanel } from '../components/UploadQueuePanel';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { TagsModal } from '../components/TagsModal';
 import type { FileRecord } from '@/types/files';
+import { buildAllFilesSearchRoute } from '@/modules/search/search-route-state';
 
 /**
  * My Drive — the classic folder-browsing view (toolbar + grid/list +
@@ -474,6 +475,7 @@ export function MyDriveView() {
         onNavigate={navigateTo}
         search={search}
         onSearchChange={setSearch}
+        onSearchAllFiles={(query) => navigate(buildAllFilesSearchRoute(query))}
         view={view}
         onViewChange={changeView}
         onNewFolder={handleNewFolder}

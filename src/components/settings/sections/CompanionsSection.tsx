@@ -64,10 +64,19 @@ export function CompanionsSection() {
       const r = await companions.generatePairingCode();
       setCode(r);
       setRemaining(r.expires_in);
-      // QR para la app móvil (CG-M1): micelclaw://pair?v=1&code=<6díg>&base=<origen>.
-      // El código ES la credencial (claim anónimo); el base ahorra el discovery.
-      const payload = `micelclaw://pair?v=1&code=${r.code}&base=${encodeURIComponent(window.location.origin)}`;
-      QRCode.toDataURL(payload, { margin: 1, width: 180, color: { dark: '#000000', light: '#ffffff' } })
+      // QR v2: micelclaw://pair?v=2&code=<6díg>&t=<destino>&t=<destino>…&ca=<huella>
+      // Los DESTINOS los dicta el servidor (`targets`), no `window.location.origin`: el dash
+      // suele estar abierto en un .claw que el móvil NO resuelve (PowerDNS solo escucha en
+      // loopback) → el QR llevaba una URL inútil. `ca` permite verificar la CA descargada.
+      // Se conserva `base` para los clientes v1 ya instalados (leen base, ignoran t/ca).
+      const parts = [`v=2`, `code=${r.code}`];
+      for (const t of r.targets ?? []) parts.push(`t=${encodeURIComponent(t.url)}`);
+      if (r.ca_sha256) parts.push(`ca=${r.ca_sha256}`);
+      parts.push(`base=${encodeURIComponent(r.targets?.[0]?.url ?? window.location.origin)}`);
+      const payload = `micelclaw://pair?${parts.join('&')}`;
+      // Escala ENTERA (480 → 240 en pantalla) + quiet-zone de 4 módulos: antes generaba a
+      // 180 y pintaba a 140, un reescalado no entero que difumina los módulos y cuesta enfocar.
+      QRCode.toDataURL(payload, { margin: 4, width: 480, color: { dark: '#000000', light: '#ffffff' } })
         .then(setQr)
         .catch(() => setQr(null));
     } catch {
@@ -122,11 +131,14 @@ export function CompanionsSection() {
             </div>
             {qr && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: expired ? 0.4 : 1 }}>
-                <img src={qr} alt="QR de emparejamiento" width={140} height={140}
+                <img src={qr} alt="QR de emparejamiento" width={240} height={240}
                   style={{ borderRadius: 8, background: '#fff', padding: 4 }} data-testid="pair-qr" />
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: 220 }}>
-                  Con la <strong>app móvil</strong>: «Escanear QR del dash» — empareja en un paso
-                  (lleva el código y la dirección del servidor).
+                  Con la <strong>app móvil</strong>: «Escanear QR del dash» — empareja en un paso.
+                  Lleva el código y las direcciones por las que tu servidor es alcanzable
+                  {code.targets?.[0] ? (
+                    <>: <code style={{ fontSize: '0.7rem' }}>{code.targets[0].url}</code></>
+                  ) : null}.
                 </div>
               </div>
             )}

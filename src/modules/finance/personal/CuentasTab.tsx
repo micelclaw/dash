@@ -22,7 +22,7 @@ import { CuentaDialog } from './CuentaDialog';
 import { usePersonalNav } from './navigation';
 import { RecurrenceBadge } from './RecurrenceBadge';
 
-const TYPE_LABEL: Record<AccountType, string> = { asset: 'Banco/Efectivo', liability: 'Tarjeta/Préstamo', equity: 'Patrimonio', income: 'Ingresos', expense: 'Gastos' };
+const TYPE_LABEL: Record<AccountType, string> = { asset: 'Banco/Efectivo', liability: 'Card/Loan', equity: 'Net worth', income: 'Income', expense: 'Expenses' };
 
 export function CuentasTab() {
   const isMobile = useIsMobile();
@@ -46,12 +46,12 @@ export function CuentasTab() {
     if (!window.confirm(`¿Borrar la cuenta «${a.name}»? Sus movimientos no se eliminan.`)) return;
     try {
       await deleteAccount(a.id);
-      toast.success('Cuenta borrada');
+      toast.success('Account deleted');
       // Selecciona la primera cuenta restante (excluyendo la borrada).
       const remaining = accounts.filter((x) => x.id !== a.id && (x.type === 'asset' || x.type === 'liability'));
       setSelectedAccount(remaining[0]?.id ?? null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t delete');
     }
   };
 
@@ -71,7 +71,7 @@ export function CuentasTab() {
             }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 13, color: 'var(--text)' }}>{a.name}</span>
-                {inactive && <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full, 999px)', padding: '0 6px', lineHeight: '16px' }}>inactiva</span>}
+                {inactive && <span style={{ fontSize: 10, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full, 999px)', padding: '0 6px', lineHeight: '16px' }}>inactive</span>}
               </span>
               <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono, monospace)', color: Number(a.balance) < 0 ? 'var(--error)' : 'var(--text)' }}>{fmtMoney(a.balance, a.currency)}</span>
             </button>
@@ -84,20 +84,20 @@ export function CuentasTab() {
 
       {/* Detalle de la cuenta */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Crea una cuenta para empezar.</div>}
+        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Create an account to get started.</div>}
         {selected && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{selected.name}</div>
-                  {!selected.is_active && <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full, 999px)', padding: '1px 8px' }}>inactiva</span>}
+                  {!selected.is_active && <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full, 999px)', padding: '1px 8px' }}>inactive</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{TYPE_LABEL[selected.type]}{selected.subtype ? ` · ${selected.subtype}` : ''}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
                 <button onClick={() => openEdit(selected)} title="Editar cuenta" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 12 }}>
-                  <Pencil size={13} /> Editar
+                  <Pencil size={13} /> Edit
                 </button>
                 <button onClick={() => onDelete(selected)} title="Borrar cuenta" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--error)', cursor: 'pointer', fontSize: 12 }}>
                   <Trash2 size={13} /> Borrar
@@ -106,7 +106,7 @@ export function CuentasTab() {
               </div>
             </div>
             <div style={{ borderTop: '1px solid var(--border)' }}>
-              {transactions.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0' }}>Sin movimientos en esta cuenta.</div>}
+              {transactions.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '12px 0' }}>No movements in this account.</div>}
               {transactions.map((tx) => {
                 const f = movementFace(tx, accounts);
                 const cat = f.categoryId ? catById.get(f.categoryId) : undefined;
@@ -120,7 +120,7 @@ export function CuentasTab() {
                     style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 6px', margin: '0 -6px', borderRadius: 'var(--radius-sm, 4px)', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 12, cursor: 'pointer' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', minWidth: 0 }}>
                       <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', flexShrink: 0, fontSize: 13, background: cv ? tintBackground(cv.color) : 'var(--surface-hover)' }}>{cv ? cv.emoji : f.glyph}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || (f.isTransfer ? 'Transferencia' : 'Movimiento')}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || (f.isTransfer ? 'Transfer' : 'Movement')}</span>
                       {tx.recurring_rule_id && <RecurrenceBadge compact />}
                     </span>
                     <span style={{ display: 'flex', gap: 12, alignItems: 'center', flexShrink: 0 }}>

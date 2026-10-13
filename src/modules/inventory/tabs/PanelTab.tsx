@@ -16,7 +16,7 @@ import { AlertTriangle, Boxes, Check, CheckCircle2, Coins, HandHeart, Inbox, Pen
 import { toast } from 'sonner';
 import { MetricCard } from '@/modules/gateway/components/MetricCard';
 import { useInventoryStore } from '@/stores/inventory.store';
-import { daysSince, daysUntil, fmtMoney, thumbUrl } from '@/modules/inventory/types';
+import { daysSince, daysUntil, fmtMoney } from '@/modules/inventory/types';
 import type { InventoryProposal } from '@/modules/inventory/types';
 import { PanelCharts } from '@/modules/inventory/components/PanelCharts';
 
@@ -80,43 +80,6 @@ function fmtShortDate(date: string): string {
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return date;
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-
-function Thumb({ fileId, size = 36 }: { fileId: string | null | undefined; size?: number }) {
-  if (fileId) {
-    return (
-      <img
-        src={thumbUrl(fileId)}
-        alt=""
-        style={{
-          width: size,
-          height: size,
-          aspectRatio: '1 / 1',
-          objectFit: 'cover',
-          borderRadius: 'var(--radius-sm)',
-          background: 'var(--surface)',
-          flexShrink: 0,
-        }}
-      />
-    );
-  }
-  return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        aspectRatio: '1 / 1',
-        borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}
-    >
-      <Boxes size={16} style={{ color: 'var(--text-dim)' }} />
-    </div>
-  );
 }
 
 function SourceChip({ source }: { source: InventoryProposal['source'] }) {
@@ -232,9 +195,13 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
   const { locations, approveProposal, rejectProposal } = useInventoryStore();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const [form, setForm] = useState<ProposalEditForm>({ name: '', category: '', purchase_price: '', location_id: '' });
 
   const p = proposal.payload;
+  // Documento de origen (el ticket/albarán/foto del que se extrajo la propuesta): las de OCR
+  // lo guardan en file_ids; las de cámara en photo_file_ids. Fallback a source_ref (= file_id).
+  const sourceFileId = p.photo_file_ids?.[0] ?? p.file_ids?.[0] ?? proposal.source_ref ?? undefined;
 
   const openEdit = () => {
     setForm({
@@ -291,7 +258,6 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
   return (
     <div style={{ padding: '10px 0', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <Thumb fileId={p.photo_file_ids?.[0]} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {p.name}
@@ -362,6 +328,15 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
               </select>
             </div>
           </div>
+          {sourceFileId && (
+            <button
+              type="button"
+              onClick={() => setViewing(true)}
+              style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--mod-inventory)', fontSize: '0.8125rem', textDecoration: 'underline' }}
+            >
+              Ver el ticket de origen
+            </button>
+          )}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button style={secondaryBtn} disabled={busy} onClick={() => setEditing(false)}>
               Cancel
@@ -369,6 +344,26 @@ function ProposalRow({ proposal }: { proposal: InventoryProposal }) {
             <button style={primaryBtn} disabled={busy} onClick={approveEdited}>
               <Check size={13} /> Approve with changes
             </button>
+          </div>
+        </div>
+      )}
+
+      {viewing && sourceFileId && (
+        <div
+          onClick={() => setViewing(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, zIndex: 2000, padding: 24 }}
+        >
+          <img
+            src={`/api/v1/files/${sourceFileId}/download`}
+            alt="Documento de origen"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '92vw', maxHeight: '82vh', objectFit: 'contain', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 48px rgba(0,0,0,0.6)', background: 'var(--surface)' }}
+          />
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+            <a href={`/api/v1/files/${sourceFileId}/download`} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: 'var(--primary, var(--amber))' }}>
+              Abrir original ↗
+            </a>
+            <button style={secondaryBtn} onClick={() => setViewing(false)}>Cerrar</button>
           </div>
         </div>
       )}

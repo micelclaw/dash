@@ -29,6 +29,14 @@ interface ParsedEdge {
   label?: string;
 }
 
+export function analyzeMermaidForSketches(source: string): { supported: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  if (!/^\s*(flowchart|graph)\s+(TD|TB|LR|RL|BT)\b/im.test(source)) reasons.push('solo se admiten flowcharts');
+  if (/^\s*(sequenceDiagram|classDiagram|stateDiagram|erDiagram|journey|gantt|pie|mindmap|timeline|gitGraph)\b/im.test(source)) reasons.push('este tipo de diagrama');
+  if (/^\s*(subgraph|classDef|class|style|click|linkStyle)\b/im.test(source)) reasons.push('subgrupos o estilos Mermaid');
+  return { supported: reasons.length === 0, reasons };
+}
+
 function detectShape(text: string): { id: string; label: string; shape: string } {
   // [label] → rectangle
   let m = text.match(/^(\w+)\[(.+)\]$/);

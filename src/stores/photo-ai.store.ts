@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { type OriginEntity, type OriginPhoto } from '@/types/origins';
 import { create } from 'zustand';
 import { api } from '@/services/api';
 
@@ -17,7 +18,7 @@ import type { Photo } from '@/types/files';
 
 // ─── Types ──────────────────────────────────────────────
 
-export interface PhotoSearchResult {
+export interface PhotoSearchResult extends OriginEntity {
   id: string;
   filename: string;
   similarity: number;
@@ -25,7 +26,7 @@ export interface PhotoSearchResult {
   created_at: string;
 }
 
-export interface SimilarPhotoResult {
+export interface SimilarPhotoResult extends OriginEntity {
   id: string;
   filename: string;
   similarity: number;
@@ -33,10 +34,11 @@ export interface SimilarPhotoResult {
   created_at: string;
 }
 
-export interface FaceCluster {
+export interface FaceCluster extends OriginEntity {
   id: string;
   name: string | null;
   representative_file_id: string | null;
+  origin_photos?: OriginPhoto[];
   photo_count: number;
   linked_contact_id: string | null;
   created_at: string;
@@ -110,6 +112,7 @@ interface PhotoAiState {
   toggleFaceOverlay: () => void;
 }
 
+let searchRevision = 0;
 export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   searchResults: null,
   searchLoading: false,
@@ -133,6 +136,7 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
   showFaceOverlay: true,
 
   searchPhotos: async (query: string, semantic = true) => {
+    const revision = ++searchRevision;
     if (!query.trim()) {
       set({ searchResults: null, searchMeta: null, searchLoading: false });
       return;
@@ -146,13 +150,16 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
         // comportamiento por tier (pro=semántico).
         ...(semantic ? {} : { semantic: '0' }),
       });
+      if (revision !== searchRevision) return;
       set({ searchResults: res.data, searchMeta: res.meta, searchLoading: false });
     } catch {
+      if (revision !== searchRevision) return;
       set({ searchResults: [], searchMeta: null, searchLoading: false });
     }
   },
 
   clearSearch: () => {
+    searchRevision++;
     set({ searchResults: null, searchMeta: null, searchLoading: false });
   },
 
@@ -164,8 +171,10 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
         `/photos/similar/${fileId}`,
         { mode: m, limit: 20 },
       );
+      if (get().similarFileId !== fileId || get().similarMode !== m || !get().similarPanelOpen) return;
       set({ similarResults: res.data, similarLoading: false });
     } catch {
+      if (get().similarFileId !== fileId || get().similarMode !== m || !get().similarPanelOpen) return;
       set({ similarResults: [], similarLoading: false });
     }
   },
@@ -204,8 +213,10 @@ export const usePhotoAiStore = create<PhotoAiState>()((set, get) => ({
     set({ clusterPhotosLoading: true });
     try {
       const res = await api.get<{ data: Photo[] }>(`/photos/faces/${clusterId}`, { limit: 100 });
+      if (get().selectedClusterId !== clusterId) return;
       set({ clusterPhotos: res.data, clusterPhotosLoading: false });
     } catch {
+      if (get().selectedClusterId !== clusterId) return;
       set({ clusterPhotos: [], clusterPhotosLoading: false });
     }
   },

@@ -3,25 +3,46 @@
  * All rights reserved.
  *
  * Informational overview of configured providers and their auth profiles.
- * Replaces the old BuiltinProviderKeysBlock + ModelProvidersBlock + AuthProfilesBlock
- * with a single read-oriented panel. Credentials are added via the Catalog tab.
+ * Reestructuración 2026-07-13: las filas derivan del providers-overview
+ * (la SSOT de auth del módulo Models), no del antiguo fan-out de 3
+ * endpoints que mezclaba señales (mirrors spliceados como "1 profile" no
+ * desplegable, api_key enmascarada, etc.). Acciones por fila:
+ *   - declared_only        → "Clean up"  (mirror sin secreto → logout)
+ *   - orphan_credentials   → "Rescue key" (promueve la key huérfana)
+ *   - has_credential       → borrar credencial del PROVIDER (logout)
+ * Los toasts son honestos: condicionados a removed/rescued reales.
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Trash2, Loader2, ChevronDown, ChevronRight, Save, AlertTriangle } from 'lucide-react';
+import { Trash2, Loader2, ChevronDown, ChevronRight, Save, AlertTriangle, LifeBuoy, Eraser } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { useGatewayStore } from '@/stores/gateway.store';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import type { ModelsStatus, AuthProfileEntry } from '../types';
+import { describeCredentialError } from '../lib/credential-errors';
+import type { AuthProfileEntry, ProviderOverview } from '../types';
+
+// Texto humano de la fuente de credencial del overview.
+const SOURCE_LABELS: Record<string, string> = {
+  api_key: 'API key',
+  local_marker: 'local (no key needed)',
+  auth_store: 'auth store',
+};
 
 export function ProviderStatusBlock() {
-  const [status, setStatus] = useState<ModelsStatus | null>(null);
+  const { providersOverview, providersOverviewError } = useGatewayStore();
+
   const [profiles, setProfiles] = useState<AuthProfileEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [removingProfile, setRemovingProfile] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<string | null>(null);
+  // Acción por-provider en vuelo ('<provider>' → clean up / logout / rescue).
+  // Los writes de credenciales pueden tardar (cola del Gateway reintenta
+  // hasta ~120s) → loading persistente, nunca estados optimistas.
+  const [providerAction, setProviderAction] = useState<string | null>(null);
+  const [confirmLogout, setConfirmLogout] = useState<string | null>(null);
 
   // Cooldowns
   const [cooldownsExpanded, setCooldownsExpanded] = useState(false);
@@ -35,12 +56,13 @@ export function ProviderStatusBlock() {
     setLoading(true);
     setError(null);
     try {
-      const [statusData, profilesData, providersConfig] = await Promise.all([
-        gwService.getModelsStatus(),
+      // El overview lo sirve el store (SSOT compartida con el Catalog);
+      // aquí solo se cargan los extras: perfiles y cooldowns.
+      const [profilesData, providersConfig] = await Promise.all([
         gwService.getAuthProfiles(),
         gwService.getProvidersConfig(),
+        useGatewayStore.getState().fetchProvidersOverview(),
       ]);
-      setStatus(statusData);
       setProfiles(profilesData);
       const cooldowns = (providersConfig.auth?.cooldowns ?? {}) as Record<string, unknown>;
       setBillingBackoff((cooldowns.billing_backoff_hours ?? 5) as number);
@@ -62,13 +84,51 @@ export function ProviderStatusBlock() {
     setRemovingProfile(profileId);
     setConfirmTarget(null);
     try {
-      await gwService.removeAuthProfile(profileId);
-      toast.success('Auth profile removed');
+      const { removed } = await gwService.removeAuthProfile(profileId);
+      // Toast honesto: solo "removed" si el backend borró algo de verdad
+      // (antes era optimista y decía OK aunque el perfil siguiera vivo).
+      if (removed) toast.success('Auth profile removed');
+      else toast.warning('Nothing to remove for this profile');
       await fetchAll();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove profile');
+      toast.error(describeCredentialError(err, 'Failed to remove profile'));
     } finally {
       setRemovingProfile(null);
+    }
+  };
+
+  // "Clean up" (declared_only) y borrado de credencial por provider comparten
+  // el mismo write canónico: POST /gateway/models/auth/logout.
+  const doLogoutProvider = async (provider: string, kind: 'cleanup' | 'logout') => {
+    setProviderAction(provider);
+    try {
+      const { removed } = await gwService.logoutProvider(provider);
+      if (removed) {
+        toast.success(kind === 'cleanup'
+          ? `Cleaned up declared entry for ${provider}`
+          : `Credential removed for ${provider}`);
+      } else {
+        toast.warning(`Nothing to remove for ${provider}`);
+      }
+      await fetchAll();
+    } catch (err) {
+      toast.error(describeCredentialError(err, `Failed to remove credential for ${provider}`));
+    } finally {
+      setProviderAction(null);
+    }
+  };
+
+  const doRescue = async (provider: string) => {
+    setProviderAction(provider);
+    try {
+      const { rescued, donor } = await gwService.rescueProviderKey(provider);
+      if (rescued) toast.success(`Key rescued for ${provider}${donor ? ` (from ${donor})` : ''}`);
+      else toast.warning(`No orphan key found to rescue for ${provider}`);
+      await fetchAll();
+    } catch (err) {
+      toast.error(describeCredentialError(err, `Failed to rescue key for ${provider}`));
+    } finally {
+      setProviderAction(null);
     }
   };
 
@@ -93,7 +153,7 @@ export function ProviderStatusBlock() {
     }
   };
 
-  if (loading) {
+  if (loading && providersOverview === null) {
     return (
       <div style={{ padding: 12, color: 'var(--text-dim)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 8 }}>
         <Loader2 size={12} className="spin" /> Loading provider status...
@@ -101,10 +161,12 @@ export function ProviderStatusBlock() {
     );
   }
 
-  if (error) {
+  if (error || providersOverviewError) {
     return (
       <div style={{ padding: 12 }}>
-        <p style={{ color: 'var(--error, #ef4444)', fontSize: '0.8125rem', marginBottom: 8 }}>{error}</p>
+        <p style={{ color: 'var(--error, #ef4444)', fontSize: '0.8125rem', marginBottom: 8 }}>
+          {error ?? providersOverviewError}
+        </p>
         <button onClick={fetchAll} style={{
           padding: '4px 12px', fontSize: '0.75rem', background: 'var(--surface)',
           border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
@@ -116,7 +178,20 @@ export function ProviderStatusBlock() {
     );
   }
 
-  const providerList = status?.auth?.providers ?? [];
+  // Filas con alguna señal real: credencial, mirror declarado, key huérfana o
+  // entrada en config. Providers meramente "destacados" del catálogo no
+  // aportan nada aquí.
+  const providerList: ProviderOverview[] = (providersOverview ?? []).filter(
+    (p) => p.has_credential || p.declared_only || p.orphan_credentials || p.entry_in_config,
+  );
+
+  const smallButton = (opts: { color: string; border: string }): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 4,
+    padding: '3px 10px', fontSize: '0.6875rem', fontWeight: 600,
+    background: 'transparent', border: `1px solid ${opts.border}`,
+    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+    color: opts.color, fontFamily: 'var(--font-sans)', whiteSpace: 'nowrap',
+  });
 
   return (
     <div>
@@ -136,24 +211,35 @@ export function ProviderStatusBlock() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
           {providerList.map((prov) => {
-            const isExpanded = expanded === prov.provider;
-            const provProfiles = profiles.filter(p => p.provider === prov.provider);
-            const hasAuth = prov.effective.kind !== 'none';
+            const isExpanded = expanded === prov.id;
+            const provProfiles = profiles.filter(p => p.provider === prov.id);
+            const busy = providerAction === prov.id;
             // If the provider has profiles and *all* of them are expired,
             // surface that as a warning (orange dot) instead of green.
-            // The backend may still report kind !== 'none' because the
-            // raw record exists; the dash should reflect actual usability.
             const now = Date.now();
             const allProfilesExpired = provProfiles.length > 0 &&
               provProfiles.every(p => typeof p.expires === 'number' && p.expires < now);
-            const dotColor = !hasAuth ? '#ef4444' : (allProfilesExpired ? '#f59e0b' : '#22c55e');
+            const dotColor = prov.has_credential
+              ? (allProfilesExpired ? '#f59e0b' : '#22c55e')
+              : prov.orphan_credentials
+                ? '#f59e0b'
+                : prov.declared_only
+                  ? 'var(--text-muted)'
+                  : '#ef4444';
+            const detail = prov.has_credential
+              ? (SOURCE_LABELS[prov.credential_source ?? ''] ?? prov.credential_source ?? 'credential')
+              : prov.declared_only
+                ? 'Declared in config — no credential'
+                : prov.orphan_credentials
+                  ? 'Orphan key (rescuable)'
+                  : 'No credential';
             const canExpand = provProfiles.length > 0;
 
             return (
-              <div key={prov.provider}>
+              <div key={prov.id}>
                 {/* Provider row */}
                 <div
-                  onClick={() => canExpand && setExpanded(isExpanded ? null : prov.provider)}
+                  onClick={() => canExpand && setExpanded(isExpanded ? null : prov.id)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '8px 12px',
@@ -165,7 +251,7 @@ export function ProviderStatusBlock() {
                 >
                   {/* Status dot */}
                   <span
-                    title={allProfilesExpired ? 'All profiles expired' : undefined}
+                    title={allProfilesExpired ? 'All profiles expired' : detail}
                     style={{
                       width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                       background: dotColor,
@@ -177,22 +263,61 @@ export function ProviderStatusBlock() {
                     flex: 1, fontSize: '0.8125rem', fontWeight: 500,
                     color: 'var(--text)', fontFamily: 'var(--font-mono)',
                     textTransform: 'capitalize',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
-                    {prov.provider}
+                    {prov.id}
                   </span>
 
-                  {/* Profile count */}
-                  <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                    {prov.profiles.count} profile{prov.profiles.count !== 1 ? 's' : ''}
-                  </span>
-
-                  {/* Token preview */}
+                  {/* Detail (source / declared / orphan) */}
                   <span style={{
-                    fontSize: '0.6875rem', color: 'var(--text-dim)',
-                    fontFamily: 'var(--font-mono)', minWidth: 70, textAlign: 'right',
+                    fontSize: '0.6875rem',
+                    color: prov.declared_only || prov.orphan_credentials ? '#f59e0b' : 'var(--text-dim)',
+                    whiteSpace: 'nowrap',
                   }}>
-                    {prov.effective.detail || '—'}
+                    {detail}
                   </span>
+
+                  {/* Profile count (solo si hay perfiles desplegables) */}
+                  {canExpand && (
+                    <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+                      {provProfiles.length} profile{provProfiles.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+
+                  {/* Actions */}
+                  {prov.declared_only && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void doLogoutProvider(prov.id, 'cleanup'); }}
+                      disabled={busy}
+                      title="Remove the declared entry (it has no credential material behind it)"
+                      style={{ ...smallButton({ color: '#f59e0b', border: '#f59e0b55' }), opacity: busy ? 0.6 : 1 }}
+                    >
+                      {busy ? <Loader2 size={11} className="spin" /> : <Eraser size={11} />} Clean up
+                    </button>
+                  )}
+                  {prov.orphan_credentials && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void doRescue(prov.id); }}
+                      disabled={busy}
+                      title="Promote the orphan key (pasted before the 2026.6.11 migration) so the runtime can use it"
+                      style={{ ...smallButton({ color: '#22c55e', border: '#22c55e55' }), opacity: busy ? 0.6 : 1 }}
+                    >
+                      {busy ? <Loader2 size={11} className="spin" /> : <LifeBuoy size={11} />} Rescue key
+                    </button>
+                  )}
+                  {prov.has_credential && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setConfirmLogout(prov.id); }}
+                      disabled={busy}
+                      title={`Remove ${prov.id} credential`}
+                      style={{
+                        background: 'transparent', border: 'none', cursor: busy ? 'wait' : 'pointer',
+                        color: 'var(--text-dim)', padding: 2, display: 'flex', opacity: busy ? 0.5 : 1,
+                      }}
+                    >
+                      {busy ? <Loader2 size={12} className="spin" /> : <Trash2 size={12} />}
+                    </button>
+                  )}
 
                   {/* Expand arrow */}
                   {canExpand && (
@@ -322,6 +447,15 @@ export function ProviderStatusBlock() {
         onConfirm={doRemoveProfile}
         title="Remove auth profile?"
         description={confirmTarget ? `Models that depend on "${confirmTarget}" will stop working until you reconfigure the provider.` : ''}
+        confirmLabel="Remove"
+        variant="danger"
+      />
+      <ConfirmDialog
+        open={confirmLogout !== null}
+        onClose={() => setConfirmLogout(null)}
+        onConfirm={() => { if (confirmLogout) void doLogoutProvider(confirmLogout, 'logout'); }}
+        title="Remove provider credential?"
+        description={confirmLogout ? `Models from "${confirmLogout}" will stop working until you add a new API key.` : ''}
         confirmLabel="Remove"
         variant="danger"
       />

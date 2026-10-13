@@ -44,17 +44,22 @@ export interface UpsStatus {
   input_voltage: number | null;
 }
 
-export interface ProxyRoute {
-  id: string;
-  path: string;
-  upstream: string;
-  description?: string;
-}
-
+// El modelo de `ProxyRoute {path, upstream}` MURIÓ: Core migró a hosts/ACL/certificados y
+// `/hal/network/proxy/routes` devuelve 404 (comprobado en vivo el 2026-08-06 contra :7200, con
+// `noexiste` → 404 como calibrado). La gestión vive en el módulo `/proxy` sobre
+// `/hal/network/proxy/hosts`. Aquí solo queda el estado del servicio.
+//
+// Estos campos son los que el endpoint devuelve DE VERDAD. Antes decía `routes_count`, que no
+// existe en la respuesta: era `undefined` en cada lectura y nadie se enteraba porque el único
+// consumidor pintaba `routes.length` de la lista muerta (siempre 0, con 21 hosts vivos).
 export interface ProxyStatus {
   running: boolean;
-  domain?: string;
-  routes_count: number;
+  domain: string | null;
+  ssl_status: string;
+  ssl_expiry: string | null;
+  ssl_provider: string;
+  hosts_total: number;
+  hosts_enabled: number;
 }
 
 export interface VpnStatus {
@@ -138,11 +143,6 @@ export async function getProxyStatus(): Promise<ProxyStatus> {
   return res.data;
 }
 
-export async function getProxyRoutes(): Promise<ProxyRoute[]> {
-  const res = await api.get<{ data: ProxyRoute[] }>('/hal/network/proxy/routes');
-  return res.data;
-}
-
 export async function controlProxy(
   action: 'start' | 'stop' | 'restart' | 'reload',
 ): Promise<{ action: string; logs: string[]; success: boolean }> {
@@ -150,14 +150,6 @@ export async function controlProxy(
     `/hal/network/proxy/${action}`,
   );
   return res.data;
-}
-
-export async function addProxyRoute(route: Omit<ProxyRoute, 'id'>): Promise<void> {
-  await api.post('/hal/network/proxy/routes', route);
-}
-
-export async function deleteProxyRoute(id: string): Promise<void> {
-  await api.delete(`/hal/network/proxy/routes/${id}`);
 }
 
 // ─── Network: Firewall ──────────────────────────────────────────────

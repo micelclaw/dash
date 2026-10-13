@@ -64,7 +64,7 @@ export function SharedFolderEditDialog({ folder, open, onOpenChange, onSaved, on
   const [description, setDescription] = useState(folder?.description ?? '');
   const [hidden, setHidden] = useState(folder?.hidden ?? false);
   const [readOnly, setReadOnly] = useState(folder?.read_only ?? false);
-  const [indexInDrive, setIndexInDrive] = useState(folder?.index_in_drive ?? true);
+  const [indexInDrive, setIndexInDrive] = useState(folder?.index_in_drive ?? false);
   const [recycle, setRecycle] = useState(folder?.recycle_bin ?? true);
   const [abe, setAbe] = useState(folder?.access_based_enum ?? false);
   const [savingGeneral, setSavingGeneral] = useState(false);
@@ -90,7 +90,7 @@ export function SharedFolderEditDialog({ folder, open, onOpenChange, onSaved, on
   // Re-sembrar el formulario al cambiar de carpeta (o al abrir en modo crear).
   useEffect(() => {
     setName(folder?.name ?? ''); setDescription(folder?.description ?? ''); setHidden(folder?.hidden ?? false);
-    setReadOnly(folder?.read_only ?? false); setIndexInDrive(folder?.index_in_drive ?? true); setRecycle(folder?.recycle_bin ?? true);
+    setReadOnly(folder?.read_only ?? false); setIndexInDrive(folder?.index_in_drive ?? false); setRecycle(folder?.recycle_bin ?? true);
     setAbe(folder?.access_based_enum ?? false);
     setBackend('managed'); setHostPath('');
     setQuotaGb(folder?.quota_bytes != null ? String(Math.round(folder.quota_bytes / 1e9 * 100) / 100) : '');
@@ -254,7 +254,7 @@ export function SharedFolderEditDialog({ folder, open, onOpenChange, onSaved, on
               <ToggleRow label="Ocultar subcarpetas y archivos sin permiso" desc="Cada usuario solo ve lo que puede abrir (Access-Based Enumeration)." checked={abe} onChange={setAbe} />
               <ToggleRow label="Solo lectura" desc="Nadie escribe en la carpeta, ni con permiso de Lectura-Escritura." checked={readOnly} onChange={setReadOnly} />
               <ToggleRow label="Papelera de reciclaje" desc="Conserva los archivos borrados para poder restaurarlos." checked={recycle} onChange={setRecycle} />
-              <ToggleRow label="Indexar en el Drive" desc="Los archivos aparecen y se buscan desde el módulo Drive." checked={indexInDrive} onChange={setIndexInDrive} />
+              <ToggleRow label="Mostrar en Drive" desc="Permite que los usuarios autorizados naveguen y busquen esta carpeta desde el módulo Drive." checked={indexInDrive} onChange={setIndexInDrive} />
 
               {!isCreate && (
                 <div className="flex justify-end"><Button onClick={() => void saveGeneral()} disabled={savingGeneral}>{savingGeneral ? 'Guardando…' : 'Guardar'}</Button></div>

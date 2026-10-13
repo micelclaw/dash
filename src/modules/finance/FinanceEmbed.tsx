@@ -266,8 +266,8 @@ export function FinanceEmbed({ serviceName, displayName, icon: Icon, color }: Fi
                   key={field}
                   type="button"
                   onClick={() => copyCred(field, value)}
-                  title={`Copiar ${field === 'email' ? 'email' : 'contraseña'}`}
-                  aria-label={`Copiar ${field === 'email' ? 'email' : 'contraseña'} al portapapeles`}
+                  title={`Copiar ${field === 'email' ? 'email' : 'password'}`}
+                  aria-label={`Copiar ${field === 'email' ? 'email' : 'password'} al portapapeles`}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 5, background: 'var(--bg)',
                     padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)',
@@ -306,7 +306,7 @@ export function FinanceEmbed({ serviceName, displayName, icon: Icon, color }: Fi
             padding: '4px 8px', cursor: 'pointer', color: 'var(--text-dim)',
             display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
           }}
-          title="Salir de pantalla completa (ESC)"
+          title="Exit full screen (ESC)"
         >
           <Minimize2 size={12} /> ESC
         </button>

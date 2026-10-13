@@ -119,7 +119,7 @@ export function FacturacionPagosTab() {
             Pendiente <span style={{ ...mono, color: 'var(--info)', fontWeight: 600 }}>{fmtMoney(totalPending)}</span>
           </span>
           <span style={{ color: 'var(--text-dim)' }}>
-            Cobrado <span style={{ ...mono, color: 'var(--mod-finance)', fontWeight: 600 }}>{fmtMoney(totalCollected)}</span>
+            Collected <span style={{ ...mono, color: 'var(--mod-finance)', fontWeight: 600 }}>{fmtMoney(totalCollected)}</span>
           </span>
         </span>
       </div>
@@ -129,19 +129,19 @@ export function FacturacionPagosTab() {
           <thead>
             <tr>
               <SortableTh label="Nº" col="numero" state={sort} />
-              <SortableTh label="Cliente" col="cliente" state={sort} />
-              <SortableTh label="Emitida" col="emitida" state={sort} />
-              <SortableTh label="Vence" col="vence" state={sort} />
+              <SortableTh label="Customer" col="customer" state={sort} />
+              <SortableTh label="Issued" col="emitida" state={sort} />
+              <SortableTh label="Due" col="due" state={sort} />
               <SortableTh label="Total" col="total" state={sort} align="right" />
-              <SortableTh label="Cobrado" col="cobrado" state={sort} align="right" />
-              <SortableTh label="Pendiente" col="pendiente" state={sort} align="right" />
-              <SortableTh label="Estado" col="estado" state={sort} />
+              <SortableTh label="Collected" col="cobrado" state={sort} align="right" />
+              <SortableTh label="Pending" col="pendiente" state={sort} align="right" />
+              <SortableTh label="Status" col="estado" state={sort} />
               <th style={{ ...th, textAlign: 'right' }}></th>
             </tr>
           </thead>
           <tbody>
             {invoices.length === 0 && (
-              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={9}>Sin facturas emitidas. Emite una factura para registrar cobros.</td></tr>
+              <tr><td style={{ ...td, color: 'var(--text-muted)', textAlign: 'center' }} colSpan={9}>No invoices issued. Issue one to record payments.</td></tr>
             )}
             {sort.sorted.map((d) => {
               const collected = collectedOf(d);
@@ -152,7 +152,7 @@ export function FacturacionPagosTab() {
                     <span
                       role="button"
                       tabIndex={0}
-                      title="Abrir la factura"
+                      title="Open the invoice"
                       onClick={() => openInvoice(d.id)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInvoice(d.id); } }}
                       style={{ color: 'var(--mod-finance)', cursor: 'pointer' }}
@@ -168,7 +168,7 @@ export function FacturacionPagosTab() {
                         <span
                           role="button"
                           tabIndex={0}
-                          title="Ver ficha del cliente"
+                          title="Open the customer record"
                           onClick={() => openContact(d.contact_id)}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openContact(d.contact_id); } }}
                           style={{ cursor: 'pointer' }}
@@ -195,7 +195,7 @@ export function FacturacionPagosTab() {
                             const r = await api.get<{ data: FinanceDocDetail }>(`/finance/documents/${d.id}`);
                             setPayFor(r.data);
                           } catch {
-                            toast.error('No se pudo cargar la factura');
+                            toast.error('Couldn\'t load the invoice');
                           }
                         }}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}
@@ -203,7 +203,7 @@ export function FacturacionPagosTab() {
                         <Banknote size={13} /> Registrar cobro
                       </button>
                     ) : (
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cobrada</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Paid</span>
                     )}
                   </td>
                 </tr>

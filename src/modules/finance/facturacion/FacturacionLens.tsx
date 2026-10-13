@@ -11,7 +11,7 @@
  */
 
 // Lente Facturación (F2b) — contenedor de sub-pestañas [Resumen][Clientes][Facturas][Pagos]
-// + acción primaria "+ Factura" (abre el editor) y "+ Cliente" (en la pestaña Clientes).
+// + acción primaria "+ Invoice" (abre el editor) y "+ Cliente" (en la pestaña Clientes).
 // Hermano de PersonalLens: mismo patrón Tabs + barra de acción.
 //
 // A4 — Deep-link + navegación intra-lente:
@@ -41,14 +41,14 @@ import { FacturacionNavProvider } from './navigation';
 import { PeriodControl } from '../period';
 
 const SECTIONS = [
-  { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
-  { id: 'rendimiento', label: 'Rendimiento', icon: TrendingUp },
-  { id: 'clientes', label: 'Contactos', icon: Users },
-  { id: 'facturas', label: 'Facturas', icon: FileText },
-  { id: 'presupuestos', label: 'Presupuestos', icon: ScrollText },
-  { id: 'recibidas', label: 'Recibidas', icon: FileDown },
-  { id: 'pagos', label: 'Cobros', icon: Banknote },
-  { id: 'ajustes', label: 'Ajustes', icon: Settings },
+  { id: 'resumen', label: 'Overview', icon: LayoutDashboard },
+  { id: 'rendimiento', label: 'Performance', icon: TrendingUp },
+  { id: 'clientes', label: 'Contacts', icon: Users },
+  { id: 'facturas', label: 'Invoices', icon: FileText },
+  { id: 'presupuestos', label: 'Quotes', icon: ScrollText },
+  { id: 'recibidas', label: 'Received', icon: FileDown },
+  { id: 'pagos', label: 'Payments in', icon: Banknote },
+  { id: 'ajustes', label: 'Settings', icon: Settings },
 ];
 
 export function FacturacionLens() {
@@ -64,7 +64,7 @@ export function FacturacionLens() {
   const contactParam = params.get('contact');    // null | <id>
   const dtypeParam = params.get('dtype');        // null | 'quote' | …
 
-  // ?doc presente (aunque vacío) ⇒ editor abierto. La acción "+ Factura" pone
+  // ?doc presente (aunque vacío) ⇒ editor abierto. La acción "+ Invoice" pone
   // ?doc='' (nuevo); "+ Presupuesto" pone ?doc='' + ?dtype='quote'. Una factura
   // concreta pone ?doc=<id> (al editar, el editor usa el tipo del doc cargado).
   const editorOpen = docParam !== null;
@@ -127,17 +127,17 @@ export function FacturacionLens() {
             {(section === 'resumen' || section === 'rendimiento') && <PeriodControl />}
             {section === 'clientes' && (
               <button onClick={openNewCustomer} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                <Plus size={15} /> Contacto
+                <Plus size={15} /> Contact
               </button>
             )}
             {section === 'recibidas' && (
               <button onClick={openNewSupplier} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                <Plus size={15} /> Proveedor
+                <Plus size={15} /> Supplier
               </button>
             )}
             {section === 'presupuestos' ? (
               <button onClick={openNewQuote} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                <Plus size={15} /> Presupuesto
+                <Plus size={15} /> Quote
               </button>
             ) : section === 'recibidas' ? (
               // Acción sobria (no el ámbar de "venta"): registrar una factura recibida.
@@ -146,7 +146,7 @@ export function FacturacionLens() {
               </button>
             ) : (
               <button onClick={openNewInvoice} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-                <Plus size={15} /> Factura
+                <Plus size={15} /> Invoice
               </button>
             )}
           </div>
@@ -173,7 +173,7 @@ export function FacturacionLens() {
         {contactParam && (
           <div onClick={closeContact} style={{ position: 'fixed', inset: 0, background: 'var(--glass-modal, rgba(0,0,0,0.6))', zIndex: 380, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '6vh' }}>
             <div onClick={(e) => e.stopPropagation()} style={{ width: 720, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg, 12px)', boxShadow: 'var(--shadow-lg)', position: 'relative' }}>
-              <button onClick={closeContact} aria-label="Cerrar" style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 1 }}><X size={18} /></button>
+              <button onClick={closeContact} aria-label="Close" style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', zIndex: 1 }}><X size={18} /></button>
               <ClienteDetalle contactId={contactParam} onOpenInvoice={openInvoice} />
             </div>
           </div>

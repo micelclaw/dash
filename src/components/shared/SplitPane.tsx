@@ -156,6 +156,29 @@ export function SplitPane({
         display: 'flex',
         flexDirection: isHorizontal ? 'row' : 'column',
         height: '100%',
+        /*
+          OCUPA TODO. Faltaba, y el efecto era el que reportó el usuario: «los
+          anchos cambian solos, se adaptan al contenido».
+
+          Los paneles miden `35%`/`65%` DEL CONTENEDOR, y este contenedor es un
+          hijo flex sin `flex`, o sea ancho `auto` = el que pida su contenido.
+          Un porcentaje no aporta nada al ancho intrínseco, así que el navegador
+          medía el contenido real de los paneles: la misma pantalla salía ancha
+          con asuntos largos y estrecha con una bandeja de «(sin asunto)» —
+          medido: 740 px de 1703 disponibles en esa cuenta.
+
+          Con esto el reparto lo manda SIEMPRE el divisor arrastrable, no el
+          texto que haya dentro. Las dos declaraciones son a propósito: `flex`
+          para un padre flex (los 8 módulos que lo usan) y `width` para un padre
+          en bloque (la demo de componentes).
+        */
+        flex: '1 1 0%',
+        width: '100%',
+        // Sin esto, el mínimo automático de un hijo flex es su contenido → el
+        // contenedor no puede encogerse por debajo de lo que mida el correo más
+        // ancho y el módulo desborda por la derecha.
+        minWidth: isHorizontal ? 0 : undefined,
+        minHeight: isHorizontal ? undefined : 0,
         overflow: 'hidden',
       }}
     >

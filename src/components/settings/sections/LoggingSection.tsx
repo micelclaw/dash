@@ -35,7 +35,7 @@ interface Preset {
   icon: typeof VolumeX;
   desc: string;
   warning?: string;
-  config: Required<Pick<LoggingConfig, 'level' | 'console_level' | 'console_style' | 'redact_sensitive'>> & {
+  config: Required<Pick<LoggingConfig, 'level' | 'console_level' | 'console_style'>> & {
     file: string;
   };
 }
@@ -45,15 +45,15 @@ const PRESETS: Preset[] = [
     id: 'quiet',
     name: 'Quiet',
     icon: VolumeX,
-    desc: 'warn level only, compact console. Ideal for production where you only want to know about real problems.',
-    config: { level: 'warn', console_level: 'warn', console_style: 'compact', file: '', redact_sensitive: 'tools' },
+    desc: 'warn level only, readable console. Ideal for production where you only want to know about real problems.',
+    config: { level: 'warn', console_level: 'warn', console_style: 'pretty', file: '' },
   },
   {
     id: 'normal',
     name: 'Normal',
     icon: Activity,
     desc: 'info level, pretty console. Good default for most users.',
-    config: { level: 'info', console_level: 'info', console_style: 'pretty', file: '', redact_sensitive: 'tools' },
+    config: { level: 'info', console_level: 'info', console_style: 'pretty', file: '' },
   },
   {
     id: 'debug',
@@ -61,12 +61,12 @@ const PRESETS: Preset[] = [
     icon: Bug,
     desc: 'debug level, pretty console, written to ~/.openclaw/openclaw-debug.log. Use temporarily when hunting a bug.',
     warning: 'Writes to disk. Remember to switch back to Normal when you finish debugging — debug logs grow fast.',
-    config: { level: 'debug', console_level: 'debug', console_style: 'pretty', file: '~/.openclaw/openclaw-debug.log', redact_sensitive: 'tools' },
+    config: { level: 'debug', console_level: 'debug', console_style: 'pretty', file: '~/.openclaw/openclaw-debug.log' },
   },
 ];
 
 const LEVELS = ['silent', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'];
-const CONSOLE_STYLES = ['pretty', 'compact', 'json'];
+const CONSOLE_STYLES = ['pretty', 'json'];
 
 // ─── Helper: validate a regex pattern ────────────────────────────────
 
@@ -92,7 +92,6 @@ export function LoggingSection() {
   const [consoleStyle, setConsoleStyle] = useState<string>('pretty');
   const [file, setFile] = useState<string>('');
   const [maxFileBytes, setMaxFileBytes] = useState<number>(10 * 1024 * 1024);
-  const [redactSensitive, setRedactSensitive] = useState<string>('tools');
   const [patterns, setPatterns] = useState<string[]>([]);
   const [patternErrors, setPatternErrors] = useState<(string | null)[]>([]);
 
@@ -102,10 +101,9 @@ export function LoggingSection() {
       const data = await gwService.getLoggingConfig();
       setLevel(data.level ?? 'info');
       setConsoleLevel(data.console_level ?? 'info');
-      setConsoleStyle(data.console_style ?? 'pretty');
+      setConsoleStyle(data.console_style === 'compact' ? 'pretty' : (data.console_style ?? 'pretty'));
       setFile(data.file ?? '');
       setMaxFileBytes(data.max_file_bytes ?? 10 * 1024 * 1024);
-      setRedactSensitive(data.redact_sensitive ?? 'tools');
       const initialPatterns = data.redact_patterns ?? [];
       setPatterns(initialPatterns);
       setPatternErrors(initialPatterns.map((p) => validateRegex(p)));
@@ -127,7 +125,6 @@ export function LoggingSection() {
     setConsoleLevel(c.console_level);
     setConsoleStyle(c.console_style);
     setFile(c.file);
-    setRedactSensitive(c.redact_sensitive);
     setDirty(true);
   };
 
@@ -162,9 +159,10 @@ export function LoggingSection() {
         level,
         console_level: consoleLevel,
         console_style: consoleStyle,
-        file: file || undefined,
+        // `null` is the config.patch delete marker. `undefined` would be
+        // omitted by JSON.stringify and leave the previous file active.
+        file: file || null,
         max_file_bytes: maxFileBytes,
-        redact_sensitive: redactSensitive,
         redact_patterns: patterns,
       });
       toast.success('Logging saved');
@@ -338,7 +336,7 @@ export function LoggingSection() {
       {/* console style */}
       <FieldRow
         label="Console style"
-        desc="pretty = colored & human-readable. compact = single-line. json = structured for log shippers."
+        desc="pretty = colored & human-readable. json = structured for log shippers."
       >
         <Select value={consoleStyle} onChange={(v) => { setConsoleStyle(v); setDirty(true); }} options={CONSOLE_STYLES} />
       </FieldRow>
@@ -379,13 +377,23 @@ export function LoggingSection() {
       {/* redact sensitive */}
       <FieldRow
         label="Redact sensitive data"
-        desc="`tools` (default): scrub known secret formats from tool input/output. `off`: log everything as-is."
+        desc="OpenClaw 2026.9.4 always scrubs sensitive values. This protection can no longer be disabled."
       >
-        <Select
-          value={redactSensitive}
-          onChange={(v) => { setRedactSensitive(v); setDirty(true); }}
-          options={['tools', 'off']}
-        />
+        <span
+          role="status"
+          style={{
+            padding: '4px 9px',
+            borderRadius: 999,
+            border: '1px solid #22c55e40',
+            background: '#22c55e12',
+            color: '#22c55e',
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Always active
+        </span>
       </FieldRow>
 
       {/* redact patterns (D2=B) */}

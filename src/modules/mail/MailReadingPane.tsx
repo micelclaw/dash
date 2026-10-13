@@ -10,7 +10,9 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { EntitySource } from '@/components/shared/SourceBadge';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ChevronLeft, Reply, ReplyAll, Forward, Pencil, Send, Undo2,
   MoreHorizontal, Star, BookOpen, FileText,
@@ -24,12 +26,13 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { formatDateLong, formatTime } from '@/lib/date-helpers';
 import { downloadAuthed } from '@/lib/file-download';
+import { prepararCuerpo, cargarRemitentesPermitidos, recordarRemitente, remitenteNormalizado } from './lib/mail-html';
+import { RemoteContentBanner } from './lib/RemoteContentBanner';
 import { useEmailLinks } from './hooks/use-email-links';
 import { RelatedItemsPanel } from '@/components/shared/RelatedItemsPanel';
 import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
-import { useWebSocket } from '@/hooks/use-websocket';
 import { MailThread } from './MailThread';
 import { MailComposer } from './MailComposer';
 import { MailAIActionsMenu, InventoryProposalsBanner } from './MailAIActionsMenu';
@@ -55,13 +58,6 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const DARK_MODE_STYLES = `<style>
-body { background: #111118; color: #e2e2e6; font-family: -apple-system, sans-serif; font-size: 14px; line-height: 1.6; margin: 0; padding: 8px; }
-a { color: #d4a017; }
-img { max-width: 100%; }
-blockquote { border-left: 3px solid #333; margin: 8px 0; padding-left: 12px; color: #999; }
-</style>`;
-
 function buildReplyData(email: Email, mode: 'reply' | 'reply_all' | 'forward'): Partial<ComposeData> {
   const prefix = mode === 'forward' ? 'Fwd' : 'Re';
   const subject = email.subject?.startsWith(`${prefix}: `) ? email.subject : `${prefix}: ${email.subject || ''}`;
@@ -76,7 +72,10 @@ function buildReplyData(email: Email, mode: 'reply' | 'reply_all' | 'forward'): 
     base.to = [{ address: email.from_address, name: email.from_name || undefined }];
   } else if (mode === 'reply_all') {
     base.to = [{ address: email.from_address, name: email.from_name || undefined }];
-    base.cc = [...email.to_addresses, ...email.cc_addresses];
+    // «Responder a todos» sobre un correo sin copia reventaba aquí (106 de los
+    // 1.940 correos del box tienen `cc_addresses` a nulo): esparcir un nulo no
+    // es una lista vacía.
+    base.cc = [...(email.to_addresses ?? []), ...(email.cc_addresses ?? [])];
   }
   return base;
 }
@@ -91,8 +90,20 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  // Contenido remoto: bloqueado por defecto (ver `lib/mail-html.ts`). `mostrar`
+  // es la decisión para ESTE correo; `permitidos` la lista de remitentes de
+  // confianza del usuario, que hace la decisión permanente.
+  const [mostrarRemotas, setMostrarRemotas] = useState(false);
+  const [permitidos, setPermitidos] = useState<Set<string> | null>(null);
+  const [bajando, setBajando] = useState<number | null>(null);
 
   const { linkedRecords, loading: linksLoading } = useEmailLinks(emailId);
+
+  useEffect(() => {
+    let cancelled = false;
+    cargarRemitentesPermitidos().then((s) => { if (!cancelled) setPermitidos(s); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch email
   useEffect(() => {
@@ -101,6 +112,9 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     setError(null);
     setEmail(null);
     setThreadEmails([]);
+    // Cambiar de correo NO hereda el «Mostrar» del anterior: la decisión es por
+    // correo (o permanente vía remitente).
+    setMostrarRemotas(false);
 
     api.get<ApiResponse<Email>>(`/emails/${emailId}`)
       .then(async (res) => {
@@ -134,14 +148,17 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     return () => { cancelled = true; };
   }, [emailId]);
 
-  // Re-fetch email after sync completes (body_html might have been backfilled)
-  const syncCompleted = useWebSocket('sync.completed');
-  useEffect(() => {
-    if (!syncCompleted || !emailId) return;
-    api.get<ApiResponse<Email>>(`/emails/${emailId}`)
-      .then(res => setEmail(res.data))
-      .catch(() => {});
-  }, [syncCompleted, emailId]);
+  const activeEmailId = useRef(emailId);
+  useEffect(() => { activeEmailId.current = emailId; }, [emailId]);
+  useOriginRefresh('emails', async () => {
+    const res = await api.get<ApiResponse<Email>>(`/emails/${emailId}`);
+    if (activeEmailId.current !== emailId) return;
+    setEmail(res.data);
+    if (res.data.thread_id) {
+      const thread = await api.get<ApiListResponse<Email>>('/emails', { thread_id: res.data.thread_id, sort: 'received_at', order: 'asc' });
+      if (activeEmailId.current === emailId) setThreadEmails(thread.data);
+    } else setThreadEmails([res.data]);
+  });
 
   // Auto mark-as-read
   useEffect(() => {
@@ -163,6 +180,25 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [moreOpen]);
+
+  const remitente = remitenteNormalizado(email?.from_address);
+  const remitenteRecordado = !!(permitidos && remitente && permitidos.has(remitente));
+  const mostrandoRemotas = mostrarRemotas || remitenteRecordado;
+  // El cuerpo se prepara una vez por (correo × decisión): el DOMParser de
+  // `prepararCuerpo` es inerte, no pide nada.
+  const cuerpo = useMemo(
+    () => (email?.body_html
+      ? prepararCuerpo(email.body_html, {
+          emailId: email.id,
+          bloquearRemotas: !mostrandoRemotas,
+          variante: 'panel',
+          // Con la lista de adjuntos se pueden pintar las imágenes `cid:` (partes
+          // del propio correo, sin implicación de privacidad).
+          adjuntos: email.attachments ?? [],
+        })
+      : null),
+    [email?.body_html, email?.id, email?.attachments, mostrandoRemotas],
+  );
 
   const handleReply = () => {
     if (!email) return;
@@ -232,6 +268,11 @@ export function MailReadingPane({ emailId, onBack, onReply, onForward, onNavigat
     setMoreOpen(false);
   };
 
+  // OJO: la ventana de impresión es un documento REAL (no un iframe con CSP), así
+  // que aquí NO puede ir `email.body_html` crudo — imprimir o abrir en ventana
+  // nueva volvería a cargar las imágenes del remitente por una puerta lateral.
+  // Se imprime lo que el usuario ESTÁ VIENDO: `cuerpo.cuerpoHtml`, que respeta su
+  // decisión de mostrar o no (y con las remotas ya apuntando al proxy).
   const handlePrint = () => {
     if (!email) return;
     const printWindow = window.open('', '_blank');
@@ -258,7 +299,7 @@ body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; marg
 ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong> ${(email.cc_addresses ?? []).map(c => c.address).join(', ')}</div>` : ''}
 <div class="meta"><strong>Date:</strong> ${new Date(email.received_at).toLocaleString()}</div>
 </div>
-<div class="body">${email.body_html || `<pre>${email.body_plain || ''}</pre>`}</div>
+<div class="body">${cuerpo?.cuerpoHtml ?? `<pre>${email.body_plain || ''}</pre>`}</div>
 </body></html>`;
     printWindow.document.write(content);
     printWindow.document.close();
@@ -336,6 +377,30 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
     // localStorage no existía → Bearer null → descarga fallaba).
     await downloadAuthed(`/api/v1/emails/${email.id}/download`, `email-${email.id}.eml`);
     setMoreOpen(false);
+  };
+
+  // El backend direcciona el adjunto por su POSICIÓN en la lista guardada, que es
+  // exactamente el índice que pinta esta lista.
+  const handleDescargarAdjunto = async (idx: number, filename: string) => {
+    if (!email) return;
+    setBajando(idx);
+    try {
+      // Ancla cruda NO: no lleva el token y guardaría un 401 como fichero.
+      await downloadAuthed(`/api/v1/emails/${email.id}/attachments/${idx}/download`, filename || `adjunto-${idx + 1}`);
+    } finally {
+      setBajando(null);
+    }
+  };
+
+  const handleSiempreRemitente = async () => {
+    if (!email?.from_address) return;
+    try {
+      setPermitidos(await recordarRemitente(email.from_address));
+      setMostrarRemotas(true);
+      toast.success(`Imágenes permitidas siempre para ${remitenteNormalizado(email.from_address)}`);
+    } catch {
+      toast.error('No se pudo guardar la preferencia');
+    }
   };
 
   // Loading skeleton
@@ -430,6 +495,9 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
             Back
           </button>
         )}
+        <div style={{ padding: '12px 16px 0' }}>
+          <EntitySource entity={{ origins: threadEmails.flatMap(message => message.origins ?? []) }} domain="mail" detail />
+        </div>
         <MailThread
           emails={threadEmails}
           onReply={handleReply}
@@ -495,6 +563,8 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
       )}
 
       <div style={{ padding: '12px 16px' }}>
+        <EntitySource entity={email} domain="mail" detail />
+
         {/* Subject */}
         <h2
           style={{
@@ -544,9 +614,18 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
           <span style={{ fontFamily: 'var(--font-mono)' }}>
             {formatDateLong(receivedDate)}, {formatTime(receivedDate)}
           </span>
+          {/*
+            OJO: `has_attachments` puede ser true con la lista a NULO — el correo
+            trae adjunto pero no guardamos sus nombres (así entraron 360 correos
+            de este box). Aquí se leía `attachments.length` a pelo y la pantalla
+            entera se caía con «Cannot read properties of null»: abrir ESE correo
+            era imposible. Se cuenta si se sabe, y si no se dice lo que se sabe.
+          */}
           {email.has_attachments && (
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              {email.attachments.length} attachment{email.attachments.length !== 1 ? 's' : ''}
+              {email.attachments
+                ? `${email.attachments.length} attachment${email.attachments.length !== 1 ? 's' : ''}`
+                : 'Has attachments'}
             </span>
           )}
         </div>
@@ -567,10 +646,25 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
         />
 
         {/* Body */}
-        {email.body_html ? (
+        {cuerpo && permitidos !== null && (
+          <RemoteContentBanner
+            remotas={cuerpo.remotas}
+            hosts={cuerpo.hosts}
+            cid={cuerpo.cid}
+            mostrando={mostrandoRemotas}
+            recordado={remitenteRecordado}
+            remitente={remitente}
+            onMostrar={() => setMostrarRemotas(true)}
+            onSiempre={handleSiempreRemitente}
+          />
+        )}
+        {cuerpo ? (
           <iframe
+            // La CSP de un documento YA cargado no se re-evalúa al cambiar el
+            // srcDoc: sin re-montar el iframe, «Mostrar» sería un botón muerto.
+            key={`${email.id}:${mostrandoRemotas ? 'show' : 'block'}`}
             title={email.subject || 'Email content'}
-            srcDoc={DARK_MODE_STYLES + email.body_html}
+            srcDoc={cuerpo.doc}
             sandbox="allow-same-origin"
             style={{ width: '100%', border: 'none', minHeight: 300, background: 'var(--bg)' }}
             onLoad={(e) => {
@@ -639,22 +733,38 @@ ${(email.cc_addresses ?? []).length > 0 ? `<div class="meta"><strong>CC:</strong
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}>
                   {formatFileSize(att.size)}
                 </span>
-                <button
-                  disabled
-                  style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)',
-                    background: 'transparent',
-                    color: 'var(--text-muted)',
-                    fontSize: '0.75rem',
-                    padding: '2px 8px',
-                    cursor: 'not-allowed',
-                    opacity: 0.5,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
-                  Download
-                </button>
+                {/*
+                  Un adjunto solo se puede bajar si sabemos DÓNDE pedirlo: los
+                  entrantes traen `source_id` (el id en el proveedor) y los que
+                  se compusieron aquí traen sus bytes en `content`. De los que
+                  entraron sin ninguno de los dos solo guardamos nombre y tamaño.
+                */}
+                {att.source_id || (att as { content?: string }).content ? (
+                  <button
+                    data-testid={`mail-att-download-${idx}`}
+                    onClick={() => handleDescargarAdjunto(idx, att.filename)}
+                    disabled={bajando === idx}
+                    style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'transparent',
+                      color: bajando === idx ? 'var(--text-muted)' : 'var(--text)',
+                      fontSize: '0.75rem',
+                      padding: '2px 8px',
+                      cursor: bajando === idx ? 'progress' : 'pointer',
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    {bajando === idx ? 'Bajando…' : 'Download'}
+                  </button>
+                ) : (
+                  <span
+                    title="De este adjunto solo se guardó el nombre y el tamaño. Vuelve a sincronizar la cuenta."
+                    style={{ color: 'var(--text-muted)', fontSize: '0.75rem', flexShrink: 0 }}
+                  >
+                    no disponible
+                  </span>
+                )}
               </div>
             ))}
           </div>

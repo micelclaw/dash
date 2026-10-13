@@ -41,6 +41,7 @@ import * as gwService from '@/services/gateway.service';
 import type { RawConfigBackup } from '@/services/gateway.service';
 import { describeError } from '@/lib/api-errors';
 import { TypeToConfirmModal } from '@/components/settings/shared/TypeToConfirmModal';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { RetryBanner } from '@/components/settings/shared/RetryBanner';
 import { clawEditorTheme, clawHighlightStyle } from '@/modules/micelhub/editor-theme';
 
@@ -103,6 +104,10 @@ export default function RawConfigPage() {
   const [schemaErrors, setSchemaErrors] = useState<ErrorObject[]>([]);
   const [showBackups, setShowBackups] = useState(false);
   const [backups, setBackups] = useState<RawConfigBackup[]>([]);
+  // Backup cuya restauración está pendiente de confirmar (solo se pregunta si
+  // hay cambios sin guardar, que es lo único que la carga puede destruir).
+  const [pendingRestore, setPendingRestore] = useState<RawConfigBackup | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const seedRef = useRef(false);
 
@@ -114,7 +119,6 @@ export default function RawConfigPage() {
       return ajv.compile(schema);
     } catch (err) {
       // Bad schema is a backend bug, not a user one — log and fail open.
-      // eslint-disable-next-line no-console
       console.warn('[raw-config] schema failed to compile:', err);
       return null;
     }
@@ -244,6 +248,31 @@ export default function RawConfigPage() {
     } catch {
       toast.error('Failed to list backups');
     }
+  };
+
+  // ─── Restore from backup ──────────────────────────────────────────
+  // Restaurar = cargar el backup EN EL EDITOR, no escribirlo a disco. El
+  // admin lo revisa y lo guarda con el botón de siempre, que valida el
+  // JSON contra el schema, comprueba el hash y hace backup del estado
+  // actual antes de escribir → la restauración es reversible.
+  const doRestore = async (backup: RawConfigBackup) => {
+    setRestoring(true);
+    try {
+      const { content: restored } = await gwService.getRawConfigBackup(backup.filename);
+      setContent(restored);
+      setShowBackups(false);
+      setPendingRestore(null);
+      toast.success('Backup loaded into the editor — review it and press Save to apply');
+    } catch (err) {
+      toast.error(describeError(err, 'Failed to read the backup'));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const requestRestore = (backup: RawConfigBackup) => {
+    if (dirty) { setPendingRestore(backup); return; }
+    void doRestore(backup);
   };
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -588,20 +617,43 @@ export default function RawConfigPage() {
                       color: 'var(--text-dim)',
                     }}
                   >
-                    <div style={{ color: 'var(--text)' }}>{new Date(b.created_at).toLocaleString()}</div>
-                    <div style={{ marginTop: 2, opacity: 0.7 }}>
-                      {b.filename} · {b.size_bytes} bytes
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: 'var(--text)' }}>{new Date(b.created_at).toLocaleString()}</div>
+                        <div style={{ marginTop: 2, opacity: 0.7, overflowWrap: 'anywhere' }}>
+                          {b.filename} · {b.size_bytes} bytes
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => requestRestore(b)}
+                        disabled={restoring}
+                        style={{ ...ghostButtonStyle(), flexShrink: 0 }}
+                        title="Load this backup into the editor"
+                      >
+                        Restore
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
             <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 12 }}>
-              Restore is not yet supported via the UI. Copy the file from {`~/.openclaw/backups/`} manually if needed.
+              Restore loads the backup into the editor — nothing is written until you press Save,
+              and saving keeps a backup of the current config first.
             </p>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!pendingRestore}
+        onClose={() => setPendingRestore(null)}
+        onConfirm={() => { if (pendingRestore) void doRestore(pendingRestore); }}
+        title="Discard your unsaved changes?"
+        description="Loading this backup replaces what is in the editor. Nothing is written to disk until you press Save."
+        confirmLabel="Load backup"
+        variant="warning"
+      />
     </div>
   );
 }

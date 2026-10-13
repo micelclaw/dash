@@ -60,10 +60,10 @@ export function ProfileSelector() {
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setCreateOpen(true)} style={{ gap: 8 }}>
-            <Plus size={14} /> Crear perfil
+            <Plus size={14} /> New profile
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setManageOpen(true)} style={{ gap: 8 }}>
-            <Settings2 size={14} /> Gestionar perfiles
+            <Settings2 size={14} /> Manage profiles
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

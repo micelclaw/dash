@@ -17,7 +17,11 @@ import type { ManagedAgent } from '../types';
 
 export function useAgentDetail(agentId: string | null) {
   const [agent, setAgent] = useState<ManagedAgent | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Arranca en `true` si ya hay un agente que pedir: el effect que hace el fetch
+  // corre DESPUÉS del primer paint, así que con `false` el consumidor pintaba un
+  // frame de "Agent not found" al montar el panel (ficha AB8, medido: 1 frame a
+  // los 52 ms del click). Con selección previa el hueco lo tapa el agente viejo.
+  const [loading, setLoading] = useState(agentId !== null);
 
   // `isCancelled` evita la race de StrictMode (doble-invoke): la carga del primer
   // effect (ya cancelado) NO debe pisar el agente que el segundo effect cargó.
@@ -31,7 +35,7 @@ export function useAgentDetail(agentId: string | null) {
   }, []);
 
   useEffect(() => {
-    if (!agentId) { setAgent(null); return; }
+    if (!agentId) { setAgent(null); setLoading(false); return; }
     let cancelled = false;
     void load(agentId, () => cancelled);
     return () => { cancelled = true; };

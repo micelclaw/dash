@@ -24,9 +24,20 @@ export interface CompanionDevice {
   created_at: string;
 }
 
+/** Destino de conexión que el SERVIDOR sabe que le alcanza (ordenados por preferencia). */
+export interface PairTarget {
+  url: string;
+  /** lan_ip = https://<ip> (fiable en la WiFi) · host_mdns = <host>.local · secure_domain = .claw */
+  kind: 'lan_ip' | 'host_mdns' | 'secure_domain';
+}
+
 export interface PairCodeResult {
   code: string;
   expires_in: number; // segundos
+  /** Los dicta el box, NO el origen del navegador (que suele ser un .claw irresoluble en el móvil). */
+  targets?: PairTarget[];
+  /** Huella sha256 del cert de la CA (hex) → la app verifica la CA que descarga. */
+  ca_sha256?: string | null;
 }
 
 /** El usuario (dash) genera un código de 6 dígitos que la app reclama. */

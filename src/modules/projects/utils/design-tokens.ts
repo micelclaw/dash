@@ -36,6 +36,14 @@ export const PRIORITY_ORDER: Record<string, number> = {
   none: 4,
 };
 
+// ─── Card colors ────────────────────────────────────
+
+/** Shared palette for the card accent shown on its left border. */
+export const CARD_COLORS = [
+  '#94a3b8', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#f97316', '#eab308', '#22c55e', '#14b8a6',
+] as const;
+
 // ─── Card aging ──────────────────────────────────────
 
 export function getCardAgeOpacity(updatedAt: string, daysToAge: number): number {

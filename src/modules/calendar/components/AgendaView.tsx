@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo } from 'react';
 import { addDays, formatDateLong, formatTime, isSameDay, isToday, startOfDay } from '@/lib/date-helpers';
 import { getCalendarColor } from '../types';
@@ -175,6 +176,8 @@ function AgendaEventRow({ event, onEventClick, calendarColorMap }: AgendaEventRo
       >
         {event.title}
       </span>
+
+      <EntitySource entity={event} domain="calendar" />
 
       {/* Calendar badge */}
       <span

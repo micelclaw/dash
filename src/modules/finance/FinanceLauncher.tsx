@@ -12,7 +12,7 @@
 
 // ─── Finance Launcher ────────────────────────────────────────────────
 // Módulo Finance con dos LENTES nativas: "Personal" (F1: cuentas,
-// movimientos, resumen) y "Facturación" (clientes, facturas, pagos). El
+// movimientos, resumen) y "Invoicing" (clientes, facturas, pagos). El
 // selector de lente es un control segmentado prominente (pills); cada lente
 // renderiza sus propias sub-pestañas (underline) debajo. Las apps embebidas
 // (Firefly III / SolidInvoice / Crypto) viven en el sidebar, no aquí.
@@ -31,8 +31,8 @@ type LensId = 'personal' | 'facturacion' | 'contabilidad';
 
 const LENSES: { id: LensId; label: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }[] = [
   { id: 'personal', label: 'Personal', icon: User },
-  { id: 'facturacion', label: 'Facturación', icon: Receipt },
-  { id: 'contabilidad', label: 'Contabilidad', icon: Scale },
+  { id: 'facturacion', label: 'Invoicing', icon: Receipt },
+  { id: 'contabilidad', label: 'Accounting', icon: Scale },
 ];
 
 export function Component() {

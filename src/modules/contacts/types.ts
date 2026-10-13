@@ -10,7 +10,8 @@
  * https://micelclaw.com
  */
 
-export interface Contact {
+import type { OriginEntity } from '@/types/origins';
+export interface Contact extends OriginEntity {
   id: string;
   display_name: string;
   first_name: string | null;

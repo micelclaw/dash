@@ -28,7 +28,6 @@ interface ContextBudgetBarsProps {
 
 const C_SYS = 'var(--amber)';   // system prompt (identity files)
 const C_APPS = '#34d399';        // apps (facade tools)
-const C_BASE = 'var(--text-muted)'; // base≈ (striped)
 
 /** Compact "≈Xk" style number. Mirrors BuildHeaderStrip.formatNum. */
 function fmtTok(n: number): string {

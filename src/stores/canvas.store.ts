@@ -14,15 +14,12 @@ import { create } from 'zustand';
 
 // ─── Canvas State ───────────────────────────────────────────────────
 //
-// Ola 7 (oc7-5.1g): dual-mode. Existing inline `html` / `a2ui` types
-// keep working unchanged. A new `url` type points the iframe at our
-// /canvas-host/* proxy (which talks to OpenClaw's native canvasHost).
-//
-// Backward compatibility: callers that produce inline html keep using
-// {type: 'html', content}. The chat-bridge auto-push and large
-// /canvas/push payloads now produce {type: 'url', url, path?}.
+// The agent-facing Canvas is OpenClaw 9.4's native board (`show_widget`),
+// managed in native-canvas-board.store. This store remains for browser and
+// explicit Workspace-file previews that share the side panel.
 
-export type CanvasContentType = 'html' | 'a2ui' | 'url';
+export type WorkspaceFilePreviewKind = 'markdown' | 'code' | 'text' | 'image' | 'pdf' | 'html';
+export type CanvasContentType = 'html' | 'a2ui' | 'url' | 'workspace_file';
 export type CanvasStatus = 'loading' | 'ready' | 'error';
 
 export interface CanvasHistoryItem {
@@ -55,6 +52,16 @@ export interface CanvasState {
   errorMessage?: string;
   /** Código de error (p.ej. CANVAS_FILE_NOT_FOUND, CANVAS_HOST_FALLBACK). */
   errorCode?: string;
+  /** Metadata for a user-owned workspace file opened from a chat link. */
+  workspaceFile?: {
+    title: string;
+    relativePath: string;
+    previewKind: WorkspaceFilePreviewKind;
+    mimeType: string;
+    contentUrl: string;
+    deepLink: string;
+    sizeBytes: number;
+  };
 }
 
 // ─── Browser Session State ──────────────────────────────────────────
@@ -98,6 +105,11 @@ interface CanvasStore {
   setCanvasUrl: (convId: string, url: string, path?: string) => void;
   /** Marcar el canvas como error con mensaje claro al usuario. */
   setCanvasError: (convId: string, message: string, code?: string) => void;
+  setWorkspaceFile: (
+    convId: string,
+    file: NonNullable<CanvasState['workspaceFile']>,
+    options?: { content?: string | null; status?: CanvasStatus },
+  ) => void;
   /** Ola 7: bump reloadKey on the active canvas to force iframe re-render. */
   reloadCanvas: (convId: string) => void;
   clearCanvas: (convId: string) => void;
@@ -192,6 +204,25 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
         status: 'error',
         errorMessage: message,
         errorCode: code,
+      });
+      return { canvasStates: updated, activeMode: 'canvas' };
+    });
+  },
+
+  setWorkspaceFile: (convId, file, options) => {
+    set((s) => {
+      const updated = new Map(s.canvasStates);
+      updated.set(convId, {
+        type: 'workspace_file',
+        content: options?.content ?? null,
+        url: file.contentUrl,
+        path: file.relativePath,
+        hasContent: true,
+        reloadKey: 0,
+        status: options?.status ?? 'ready',
+        errorMessage: undefined,
+        errorCode: undefined,
+        workspaceFile: file,
       });
       return { canvasStates: updated, activeMode: 'canvas' };
     });

@@ -179,12 +179,13 @@ const SortableCard = React.memo(function SortableCard({ card, boardSettings, dim
 
 // ─── Drag Overlay Renderers ─────────────────────────────
 
-function DragOverlayCard({ card, boardSettings }: { card: Card; boardSettings?: BoardSettings }) {
+function DragOverlayCard({ card, boardSettings, selectedCount = 1 }: { card: Card; boardSettings?: BoardSettings; selectedCount?: number }) {
   return (
     <div style={{
       transform: 'rotate(2deg)',
       boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
       width: COLUMN_WIDTH - 16,
+      position: 'relative',
       backdropFilter: 'blur(6px)',
       WebkitBackdropFilter: 'blur(6px)',
       borderRadius: 6,
@@ -193,6 +194,16 @@ function DragOverlayCard({ card, boardSettings }: { card: Card; boardSettings?: 
         card={card}
         showCardNumbers={boardSettings?.showCardNumbers ?? true}
       />
+      {selectedCount > 1 && (
+        <span style={{
+          position: 'absolute', top: -8, right: -8, minWidth: 22, height: 22, padding: '0 6px',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 999,
+          background: 'var(--primary)', color: '#fff', fontSize: 11, fontWeight: 700,
+          border: '2px solid var(--bg)',
+        }}>
+          {selectedCount}
+        </span>
+      )}
     </div>
   );
 }
@@ -238,6 +249,7 @@ export function KanbanBoard() {
   const cards = useProjectsStore((s) => s.cards);
   const boardColumnIds = useProjectsStore((s) => s.boardColumnIds);
   const columnCardIds = useProjectsStore((s) => s.columnCardIds);
+  const multiSelectedIds = useProjectsStore((s) => s.multiSelectedIds);
   const boards = useProjectsStore((s) => s.boards);
   const activeBoardSettings = useProjectsStore((s) => s.activeBoardSettings);
   const activeBoard = boards.find(b => b.id === activeBoardId);
@@ -360,7 +372,13 @@ export function KanbanBoard() {
       </SortableContext>
 
       <DragOverlay>
-        {activeCard && <DragOverlayCard card={activeCard} boardSettings={boardSettings} />}
+        {activeCard && (
+          <DragOverlayCard
+            card={activeCard}
+            boardSettings={boardSettings}
+            selectedCount={multiSelectedIds.has(activeCard.id) ? multiSelectedIds.size : 1}
+          />
+        )}
         {activeColumn && (
           <DragOverlayColumn
             column={activeColumn}

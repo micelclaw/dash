@@ -39,11 +39,17 @@ function reminderLabel(m: number): string {
 interface EventFormFieldsProps {
   form: EventFormState;
   onChange: (patch: Partial<EventFormState>) => void;
+  /** Calendarios reales del usuario; sin ellos el select cae a los defaults. */
+  calendarNames?: string[];
 }
 
 /** Campos del formulario de creación/edición de evento (modo edit/create del EventModal) */
-export function EventFormFields({ form, onChange }: EventFormFieldsProps) {
-  const calendarOptions = Object.keys(DEFAULT_CALENDAR_COLORS).filter((k) => k !== 'default');
+export function EventFormFields({ form, onChange, calendarNames }: EventFormFieldsProps) {
+  // Los calendarios REALES del usuario mandan; los defaults hardcodeados solo son el
+  // fallback sin datos (antes era imposible crear un evento en un calendario propio).
+  const calendarOptions = calendarNames?.length
+    ? calendarNames
+    : Object.keys(DEFAULT_CALENDAR_COLORS).filter((k) => k !== 'default');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

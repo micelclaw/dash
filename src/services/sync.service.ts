@@ -17,6 +17,7 @@
 // connector / observer / duplicate operations live in a single
 // service instead of being scattered across three sections.
 
+import { notifyOriginsChanged } from '@/lib/origin-refresh';
 import { api } from './api';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -34,8 +35,15 @@ export interface ConnectorInfo {
   push_failed_count?: number;
   /** La causa del más reciente de esos cambios, tal cual la dio el proveedor. */
   push_last_error?: string | null;
+  /** Capacidades separadas del driver, certificación del tipo y permiso efectivo de esta conexión. */
+  task_write_supported?: boolean;
+  task_write_certified?: boolean;
+  task_write_enabled?: boolean;
+  /** Cambios locales de tareas sin aceptar aún por el proveedor; null = conteo no disponible. */
+  task_pending_change_count?: number | null;
   id: string;
   connector_type: string;
+  direction?: 'pull' | 'push' | 'bidirectional';
   name: string;
   display_name: string | null;
   domains: string[];
@@ -78,19 +86,35 @@ export interface ObserverPrivacy {
 
 export interface DataProvider {
   slug: string;
+  connector_type?: string | null;
+  oauth_provider?: string | null;
+  oauth_scopes?: string[];
   label: string;
-  domains: ('mail' | 'calendar' | 'contacts')[];
+  domains: ('mail' | 'calendar' | 'contacts' | 'tasks' | 'notes')[];
   protocols: string[];
   auth_order: string[];
   discovery: string;
   mail_domains: string[];
   features: Record<string, boolean>;
+  task_capabilities?: Record<string, {
+    read: boolean; create: boolean; update: boolean; delete: boolean; limitation?: string;
+  }> | null;
   /** Fecha en que se probó contra un servidor REAL, o null si nunca. */
   verified: string | null;
   notes: string[];
+  credential_guide?: {
+    steps: string[];
+    url: string;
+    link_label: string;
+  } | null;
   /** ¿Se conecta con la aplicación que trae Micelclaw, o con una registrada aquí? */
   uses_shipped_oauth_client?: boolean;
+  /** Esta instalación necesita que la persona pegue su Client ID y Secret. */
+  requires_own_oauth_client?: boolean;
+  /** Dirección exacta que debe registrarse en la aplicación OAuth. */
+  oauth_redirect_uri?: string | null;
   preset_hint: string | null;
+  connection_fields?: Array<{ name: string; secret: boolean }>;
 }
 
 export interface DiscoveredEndpoint {
@@ -121,7 +145,7 @@ export interface DiscoveryResult {
 export interface ConnectorDataSummary {
   connector_id: string;
   connector_type: string;
-  domain: 'mail' | 'calendar' | 'contacts' | null;
+  domain: 'mail' | 'calendar' | 'contacts' | 'tasks' | null;
   /** Cuántos registros se llevaría por delante desconectar. */
   records: number;
   account: string | null;
@@ -141,6 +165,7 @@ export interface CollectionItem {
   id: string;
   name: string;
   count?: number;
+  parent_database_id?: string | null;
 }
 
 export interface ConnectorCollections {
@@ -152,6 +177,9 @@ export interface ConnectorCollections {
   noun: string;
   collections: CollectionItem[];
   selected: string[];
+  empty_reason?: 'notion_no_shared_content';
+  action_required?: string;
+  help_url?: string;
 }
 
 /**
@@ -163,7 +191,16 @@ export async function getConnectorCollections(connectorId: string): Promise<Conn
   return res.data;
 }
 
-/** Guarda lo elegido. Lista vacía = traérselo todo. */
+/** Convierte una URL/ID de Notion en data_source IDs validados. */
+export async function resolveConnectorCollection(connectorId: string, input: string): Promise<CollectionItem[]> {
+  const res = await api.post<{ data: CollectionItem[] }>(
+    `/sync/connectors/${connectorId}/collections/resolve`,
+    { input },
+  );
+  return res.data;
+}
+
+/** Guarda lo elegido. En tareas la selección vacía se rechaza; en dominios DAV heredados conserva su semántica. */
 export async function saveConnectorCollections(
   connectorId: string,
   selected: string[],
@@ -189,12 +226,14 @@ export interface ConnectorTypeMeta {
   domains: string[];
   provider_slug: string | null;
   oauth_provider: string | null;
+  oauth_scopes: string[];
   /**
    * Si no se crea por el camino genérico, POR DÓNDE sí (una cuenta de correo,
    * una autorización). La pantalla lo usa para mandar al sitio correcto en vez
    * de ofrecer un formulario que va a ser rechazado.
    */
   created_by: string | null;
+  create_fields?: Array<{ name: string; secret: boolean }>;
 }
 
 /**
@@ -202,7 +241,7 @@ export interface ConnectorTypeMeta {
  * ventana 2 sea distinta: Nextcloud sale en calendario y no en correo, porque no
  * aloja buzones.
  */
-export async function listDataProviders(domain?: 'mail' | 'calendar' | 'contacts'): Promise<DataProvider[]> {
+export async function listDataProviders(domain?: 'mail' | 'calendar' | 'contacts' | 'tasks' | 'notes'): Promise<DataProvider[]> {
   const q = domain ? `?domain=${encodeURIComponent(domain)}` : '';
   const res = await api.get<{ data: { providers: DataProvider[] } }>(`/sync/providers${q}`);
   return res.data?.providers ?? [];
@@ -214,7 +253,7 @@ export async function listDataProviders(domain?: 'mail' | 'calendar' | 'contacts
  * era uno de los mapas paralelos que este arco vino a matar, y repetirlo aquí
  * sería reabrirlo por la otra punta.
  */
-export async function listDataCatalog(domain?: 'mail' | 'calendar' | 'contacts'): Promise<{
+export async function listDataCatalog(domain?: 'mail' | 'calendar' | 'contacts' | 'tasks' | 'notes'): Promise<{
   providers: DataProvider[];
   connectorTypes: ConnectorTypeMeta[];
 }> {
@@ -242,6 +281,11 @@ export async function discoverProvider(address: string, catalogOnly = false): Pr
 
 // ─── Connectors ─────────────────────────────────────────────────────
 
+export async function discoverDiscordGuilds(botToken: string): Promise<{ guilds: Array<{ id: string; name: string }>; has_more: boolean }> {
+  const res = await api.post<{ data: { guilds: Array<{ id: string; name: string }>; has_more: boolean } }>('/sync/discord/guilds', { bot_token: botToken });
+  return res.data;
+}
+
 export async function listConnectors(): Promise<ConnectorInfo[]> {
   const res = await api.get<{ data: ConnectorInfo[] }>('/sync/connectors');
   return res.data ?? [];
@@ -252,8 +296,90 @@ export async function getConnector<T = Record<string, unknown>>(connectorId: str
   return res.data;
 }
 
-export async function createConnector(body: Record<string, unknown>): Promise<void> {
-  await api.post('/sync/connectors', body);
+/** Proyección para Mensajes: nunca conserva la configuración completa. */
+export interface ConnectorSyncSchedule {
+  status: string;
+  interval_minutes: number | null;
+  last_sync_at: string | null;
+}
+
+export async function getConnectorSyncSchedule(connectorId: string): Promise<ConnectorSyncSchedule | null> {
+  const connector = (await listConnectors()).find((c) => c.id === connectorId);
+  if (!connector) throw new Error('Conector no disponible');
+  if (connector.direction !== 'pull') return null;
+  const detail = await getConnector<{
+    status: string; last_sync_at: string | null;
+    config: { sync_interval_minutes?: unknown };
+  }>(connectorId);
+  const interval = detail.config?.sync_interval_minutes;
+  return {
+    status: detail.status,
+    last_sync_at: detail.last_sync_at,
+    interval_minutes: typeof interval === 'number' && Number.isFinite(interval) && interval > 0 ? interval : null,
+  };
+}
+
+export async function createConnector(body: Record<string, unknown>): Promise<{ id: string }> {
+  const res = await api.post<{ data: { id: string } }>('/sync/connectors', body);
+  notifyOriginsChanged();
+  return res.data;
+}
+
+/** Nextcloud Login Flow v2: the polling token and app password never reach Dash. */
+export async function startNextcloudNotesLogin(serverUrl: string): Promise<{ state: string; login_url: string; expires_in_seconds: number }> {
+  const res = await api.post<{ data: { state: string; login_url: string; expires_in_seconds: number } }>(
+    '/sync/nextcloud-notes/login/start', { server_url: serverUrl });
+  return res.data;
+}
+export async function pollNextcloudNotesLogin(state: string): Promise<{ status: 'pending' } | { status: 'connected'; connector_id: string }> {
+  const res = await api.post<{ data: { status: 'pending' } | { status: 'connected'; connector_id: string } }>(
+    '/sync/nextcloud-notes/login/poll', { state });
+  return res.data;
+}
+
+export interface NotionPropertySchema {
+  id: string;
+  name: string;
+  type: string;
+  options?: Array<{ id?: string; name: string; color?: string }>;
+}
+
+export interface NotionCollectionSchema {
+  id: string;
+  name: string;
+  properties: NotionPropertySchema[];
+  preview?: Array<{ id: string; title: string; values: Record<string, unknown> }>;
+  suggested_mapping: {
+    title_property?: string;
+    status_property?: string;
+    status_type?: 'status' | 'select';
+    description_property?: string;
+    start_property?: string;
+    due_property?: string;
+    priority_property?: string;
+    tags_property?: string;
+    people_property?: string;
+    files_property?: string;
+    subtasks_property?: string;
+  };
+}
+
+export interface TaskCollectionSchema {
+  id: string;
+  name?: string;
+  provider?: 'notion' | 'monday' | 'jira' | 'trello';
+  properties: Array<{ id: string; name: string; type: string; options?: Array<{ id?: string; name: string }> }>;
+  groups?: Array<{ id: string; name: string }>;
+  statuses?: Array<{ id: string; name: string; issue_type_id?: string }>;
+  preview?: Array<{ id: string; title: string; values: Record<string, unknown> }>;
+  suggested_mapping: Record<string, string | undefined>;
+}
+
+export async function getConnectorCollectionSchema(connectorId: string, collectionId: string): Promise<TaskCollectionSchema> {
+  const res = await api.get<{ data: TaskCollectionSchema }>(
+    `/sync/connectors/${connectorId}/collections/${encodeURIComponent(collectionId)}/schema`,
+  );
+  return res.data;
 }
 
 /** Qué hizo DE VERDAD el backend con el botón de la fila (el toast se deriva de esto). */
@@ -264,11 +390,15 @@ export type ConnectorRunAction =
   | 'refreshed'
   | 'noop';
 
-export async function runConnector(connectorId: string): Promise<ConnectorRunAction> {
+export async function runConnector(connectorId: string, options?: { requireAction: boolean }): Promise<ConnectorRunAction> {
   const res = await api.post<{ data: { action?: ConnectorRunAction } }>(
     `/sync/connectors/${connectorId}/run`,
   );
-  return res.data?.action ?? 'sync_started';
+  const action = res.data?.action;
+  if (options?.requireAction && !['sync_started', 'stream_reconnected', 'stream_already_live', 'refreshed', 'noop'].includes(action ?? '')) {
+    throw new Error('Respuesta de sincronización sin acción reconocida');
+  }
+  return action ?? 'sync_started';
 }
 
 export async function pauseConnector(connectorId: string): Promise<void> {
@@ -283,8 +413,10 @@ export async function resumeConnector(connectorId: string): Promise<void> {
  * Desconecta una integración. Se lleva por delante lo que trajo (criterio I8-2
  * del playbook) y devuelve cuántos registros retiró, para poder decirlo.
  */
-export async function deleteConnector(connectorId: string): Promise<{ records_removed: number }> {
-  const res = await api.delete<{ data?: { records_removed?: number } }>(`/sync/connectors/${connectorId}`);
+export async function deleteConnector(connectorId: string, options: import('./connector-delete-request').DeleteConnectorOptions = {}): Promise<{ records_removed: number }> {
+  const { connectorDeletePath } = await import('./connector-delete-request');
+  const res = await api.delete<{ data?: { records_removed?: number } }>(connectorDeletePath(connectorId, options));
+  notifyOriginsChanged();
   return { records_removed: res?.data?.records_removed ?? 0 };
 }
 
@@ -293,6 +425,29 @@ export async function updateConnectorConfig(
   config: Record<string, unknown>,
 ): Promise<void> {
   await api.patch(`/sync/connectors/${connectorId}/config`, config);
+  notifyOriginsChanged();
+}
+
+export interface DavAccessInfo {
+  caldav_url: string;
+  carddav_url: string;
+  username: string;
+  password_login_supported: boolean;
+  recommended_auth: 'device_token';
+}
+
+export async function getDavAccess(): Promise<DavAccessInfo> {
+  const res = await api.get<{ data: DavAccessInfo }>('/network/dav-access');
+  return res.data;
+}
+
+/** Credencial revocable para clientes DAV. El valor solo existe en esta respuesta. */
+export async function createDavCredential(deviceName: string): Promise<string> {
+  const res = await api.post<{ data: { device_token: string } }>('/devices/register', {
+    platform: 'desktop',
+    device_name: deviceName,
+  });
+  return res.data.device_token;
 }
 
 // ─── Test connection (used by IMAP / DAV forms) ───────────────────
@@ -313,9 +468,16 @@ export async function testConnection(body: Record<string, unknown>): Promise<Tes
 export async function getOAuthAuthorizeUrl(
   provider: string,
   scopes: string,
+  ownClient?: { client_id: string; client_secret: string },
+  connectorType?: string,
 ): Promise<{ authorize_url: string; state: string }> {
-  const res = await api.get<{ data: { authorize_url: string; state: string } }>(
-    `/sync/oauth/authorize/${provider}?scopes=${encodeURIComponent(scopes)}`,
+  const res = await api.post<{ data: { authorize_url: string; state: string } }>(
+    `/sync/oauth/authorize/${provider}`,
+    {
+      scopes: scopes.split(',').map((scope) => scope.trim()).filter(Boolean),
+      ...(ownClient ?? {}),
+      ...(connectorType ? { connector_type: connectorType } : {}),
+    },
   );
   return res.data;
 }

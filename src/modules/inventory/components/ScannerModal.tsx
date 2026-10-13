@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import type { InventoryItem, InventoryLocation } from '@/modules/inventory/types';
+import { recordCountWithOptionalEvidence } from './count-evidence';
 
 export type ScanIntent = 'locate' | 'count' | 'move' | 'checkinout';
 
@@ -70,6 +71,7 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
   const meta = SCAN_INTENTS.find(i => i.id === intent)!;
   const selectItem = useInventoryStore(s => s.selectItem);
   const recordMove = useInventoryStore(s => s.recordMove);
+  const uploadItemFile = useInventoryStore(s => s.uploadItemFile);
   const returnItem = useInventoryStore(s => s.returnItem);
   const locations = useInventoryStore(s => s.locations);
   const fetchLocations = useInventoryStore(s => s.fetchLocations);
@@ -81,6 +83,8 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
   // Flujo de 2 pasos (item → destino) para 'count'/'move'
   const [item, setItem] = useState<InventoryItem | null>(null);
   const [countValue, setCountValue] = useState('');
+  const [countPhoto, setCountPhoto] = useState<File | null>(null);
+  const [countPhotoFileId, setCountPhotoFileId] = useState<string | null>(null);
   const [destLocation, setDestLocation] = useState('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const handledRef = useRef(false);
@@ -183,7 +187,15 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
     if (delta === 0) { toast.info('Count matches — no change'); onClose(); return; }
     setBusy(true);
     try {
-      await recordMove({ item_id: item.id, type: 'count_fix', qty_delta: delta });
+      await recordCountWithOptionalEvidence({
+        item_id: item.id,
+        qty_delta: delta,
+        photo: countPhoto,
+        uploaded_file_id: countPhotoFileId,
+        upload: file => uploadItemFile(item.id, file, 'photo'),
+        remember_upload: setCountPhotoFileId,
+        record: recordMove,
+      });
       toast.success(`Count adjusted (${delta > 0 ? '+' : ''}${delta})`);
       onClose();
     } catch { toast.error('Could not adjust count'); }
@@ -245,6 +257,26 @@ export function ScannerModal({ intent, onClose }: { intent: ScanIntent; onClose:
               <ItemBadge item={item} />
               <label style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Counted quantity (was {String(item.quantity ?? 0)})</label>
               <input style={inputStyle} type="number" min="0" value={countValue} onChange={(e) => setCountValue(e.target.value)} autoFocus aria-label="Counted quantity" />
+              <label style={{ ...btnSecondary, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: busy ? 'default' : 'pointer' }}>
+                <Camera size={14} />
+                {countPhoto ? `Evidence: ${countPhoto.name}` : 'Add optional count photo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={busy}
+                  style={{ display: 'none' }}
+                  onChange={event => {
+                    setCountPhoto(event.target.files?.[0] ?? null);
+                    setCountPhotoFileId(null);
+                  }}
+                />
+              </label>
+              {countPhoto && (
+                <button type="button" style={{ ...btnSecondary, alignSelf: 'flex-start', padding: '4px 8px' }} disabled={busy} onClick={() => { setCountPhoto(null); setCountPhotoFileId(null); }}>
+                  Remove photo
+                </button>
+              )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button style={btnSecondary} onClick={onClose}>Cancel</button>
                 <button style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void doCount()}>Adjust count</button>

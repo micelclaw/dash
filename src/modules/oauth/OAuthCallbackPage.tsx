@@ -40,9 +40,23 @@ export function Component() {
       return;
     }
 
-    // Read provider from localStorage
-    const stored = localStorage.getItem('claw_oauth_pending');
-    const provider = stored ? JSON.parse(stored).provider : 'google';
+    // El proveedor NO se adivina aquí.
+    //
+    // Esta página se carga en la dirección de retorno registrada en el
+    // proveedor (`localhost:7100`), que es un ORIGEN DISTINTO del que sirve el
+    // dash — y el almacenamiento local no se comparte entre orígenes. Leerlo de
+    // ahí devolvía siempre vacío, y el valor por defecto era `'google'`: una
+    // autorización de Microsoft se canjeaba contra Google, con un error
+    // incomprensible («Malformed auth code»). Google parecía funcionar solo
+    // porque el valor equivocado acertaba por casualidad.
+    //
+    // Quién es lo dice el `state`, que va cifrado y lo abre el servidor. Esto se
+    // manda solo como pista y el servidor lo ignora.
+    let provider: string | null = null;
+    try {
+      const stored = localStorage.getItem('claw_oauth_pending');
+      if (stored) provider = JSON.parse(stored).provider ?? null;
+    } catch { /* pista opcional: si no está, el servidor lo resuelve igual */ }
 
     // Send code+state back to opener — the opener will do the API call
     if (window.opener) {

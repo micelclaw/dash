@@ -15,7 +15,6 @@ interface AdvancedConfigResponse {
       thinking_default: string;
       reasoning_default: string;
       verbose_default: string;
-      elevated_default: string;
     };
     context: {
       context_pruning: { mode: string; ttl: string };
@@ -57,13 +56,6 @@ const PRUNING_MODES = [
 const COMPACTION_MODES = [
   { value: 'default', label: 'Default', desc: 'Compactación estándar al llenarse el contexto' },
   { value: 'safeguard', label: 'Safeguard', desc: 'Recomendada: preserva el inicio de la tarea' },
-];
-
-const ELEVATED_OPTIONS = [
-  { value: 'off', label: 'Off', desc: 'Sin permisos elevados' },
-  { value: 'on', label: 'On', desc: 'Permisos elevados activos' },
-  { value: 'ask', label: 'Ask', desc: 'Pide confirmación en cada acción elevada' },
-  { value: 'full', label: 'Full', desc: 'Salta las aprobaciones de exec (peligroso)' },
 ];
 
 function FieldLabel({ label, hint }: { label: string; hint?: string }) {
@@ -158,7 +150,6 @@ export function AgentAdvancedConfig() {
 
   const [thinkingLevel, setThinkingLevel] = useState('adaptive');
   const [verbose, setVerbose] = useState('off');
-  const [elevated, setElevated] = useState('off');
 
   const [pruningMode, setPruningMode] = useState('cache-ttl');
   const [pruningTtl, setPruningTtl] = useState('1h');
@@ -183,7 +174,6 @@ export function AgentAdvancedConfig() {
       const d = res.data;
       setThinkingLevel(d.thinking.thinking_default);
       setVerbose(d.thinking.verbose_default);
-      setElevated(d.thinking.elevated_default);
       setPruningMode(d.context.context_pruning?.mode ?? 'cache-ttl');
       setPruningTtl(d.context.context_pruning?.ttl ?? '1h');
       setCompactionMode(d.context.compaction?.mode ?? 'safeguard');
@@ -212,7 +202,6 @@ export function AgentAdvancedConfig() {
         thinking: {
           thinkingDefault: thinkingLevel,
           verboseDefault: verbose,
-          elevatedDefault: elevated,
         },
         context: {
           contextPruning: { mode: pruningMode, ttl: pruningTtl },
@@ -267,9 +256,8 @@ export function AgentAdvancedConfig() {
       </div>
 
       <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-        Global defaults for all agents. Sandbox per-agent overrides
-        live in the block above; thinking/context/subagents are still
-        defaults-only here.
+        Global defaults for all agents. Execution policy and sandbox live in
+        Security; thinking, context and subagents remain defaults-only here.
       </span>
 
       {/* Thinking */}
@@ -278,8 +266,6 @@ export function AgentAdvancedConfig() {
           hint="Cuánto razona el modelo antes de responder. 'Adaptive' deja que el modelo decida según la complejidad." />
         <SelectField label="Verbose mode" value={verbose} options={VERBOSE_OPTIONS} onChange={markDirty(setVerbose)}
           hint="Cuánta salida de las herramientas se muestra en el chat." />
-        <SelectField label="Elevated mode" value={elevated} options={ELEVATED_OPTIONS} onChange={markDirty(setElevated)}
-          hint="Nivel de permisos elevados. 'Full' salta las aprobaciones de comandos (úsalo con cuidado)." />
       </Section>
 
       {/* Context */}

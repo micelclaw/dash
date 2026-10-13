@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { FolderOpen, FolderPlus, Upload, Search, X, Rows3, Rows4 } from 'lucide-react';
+import { FolderOpen, FolderPlus, Upload, Search, X, Rows3, Rows4, ExternalLink } from 'lucide-react';
 import { FileBreadcrumb } from '@/components/shared/FileBreadcrumb';
 import { ViewToggle } from '@/components/shared/ViewToggle';
 import { useDriveStore } from '@/stores/drive.store';
@@ -22,6 +22,7 @@ interface DriveToolbarProps {
   onNavigate: (path: string) => void;
   search: string;
   onSearchChange: (val: string) => void;
+  onSearchAllFiles: (query: string) => void;
   view: DriveView;
   onViewChange: (v: DriveView) => void;
   onNewFolder: () => void;
@@ -31,7 +32,7 @@ interface DriveToolbarProps {
 
 export function DriveToolbar({
   currentPath, onNavigate,
-  search, onSearchChange,
+  search, onSearchChange, onSearchAllFiles,
   view, onViewChange,
   onNewFolder, onUpload,
   isMobile,
@@ -149,6 +150,15 @@ export function DriveToolbar({
             <X size={14} />
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => onSearchAllFiles(localSearch)}
+          title="Search all files"
+          aria-label="Search all files"
+          style={{ display: 'flex', alignItems: 'center', border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', padding: 2, flexShrink: 0 }}
+        >
+          <ExternalLink size={14} />
+        </button>
       </div>
 
       {/* View toggle */}

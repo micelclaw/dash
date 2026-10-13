@@ -14,7 +14,7 @@
 // (de store.contacts + "+ Nuevo cliente"), tabla de líneas (descripción, cantidad,
 // precio, IVA por línea con su modo inc/exc visible, importe), "+ Línea", panel de
 // TOTALES en vivo (Base / Descuento / IVA / TOTAL desde el doc tras addLine→fetch),
-// y acciones [Guardar borrador] + [Emitir y enviar]. El nº es provisional.
+// y acciones [Save draft] + [Emitir y enviar]. El nº es provisional.
 // Molde = NuevoMovimientoDialog.tsx de la lente Personal.
 
 import { useEffect, useRef, useState } from 'react';
@@ -246,7 +246,7 @@ export function FacturaEditorDialog({
 
   // Tipo efectivo: al editar manda el tipo del doc cargado; al crear, la prop
   // docType (default 'invoice'). isQuote conmuta los textos y el flujo de
-  // "Convertir a factura" — el modelo de datos NO cambia (presupuesto guarda
+  // "Convert to invoice" — el modelo de datos NO cambia (presupuesto guarda
   // su validez en due_date, igual que el vencimiento de una factura).
   const effectiveType: DocType = savedDoc?.type ?? docType ?? 'invoice';
   const isQuote = effectiveType === 'quote';
@@ -298,8 +298,8 @@ export function FacturaEditorDialog({
   // Devuelve el doc detallado actualizado.
   const persist = async (): Promise<FinanceDocDetail> => {
     if (!contactId) throw new Error(isBill ? 'Elige un proveedor' : 'Elige un cliente');
-    if (isBill && !supplierNumber.trim()) throw new Error('Indica el número de la factura del proveedor');
-    if (validLines.length === 0) throw new Error('Añade al menos una línea');
+    if (isBill && !supplierNumber.trim()) throw new Error('Enter the supplier\'s invoice number');
+    if (validLines.length === 0) throw new Error('Add at least one line');
 
     if (!savedDoc) {
       const doc = await createDocument({
@@ -369,10 +369,10 @@ export function FacturaEditorDialog({
     setBusy('draft');
     try {
       await persist();
-      toast.success('Borrador guardado');
+      toast.success('Draft saved');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
     } finally {
       setBusy(null);
     }
@@ -389,7 +389,7 @@ export function FacturaEditorDialog({
       if (fresh && fresh.id === doc.id) setSavedDoc(fresh);
       toast.success(isBill ? 'Factura recibida registrada' : `${isQuote ? 'Presupuesto emitido' : 'Factura emitida'}${fresh?.number ? ` (${fresh.number})` : ''}`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo emitir');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t issue');
     } finally {
       setBusy(null);
     }
@@ -404,7 +404,7 @@ export function FacturaEditorDialog({
       toast.success('Presupuesto convertido a factura');
       openInvoice(inv.id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo convertir');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t convert');
     } finally {
       setBusy(null);
     }
@@ -416,7 +416,7 @@ export function FacturaEditorDialog({
     try {
       await openInvoicePdf(savedDoc.id);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo generar el PDF (¿Office arrancado?)');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t generate the PDF (is Office running?)');
     } finally {
       setBusy(null);
     }
@@ -449,16 +449,16 @@ export function FacturaEditorDialog({
     try {
       let docId = savedDoc?.id;
       if (!isEmitted) {
-        if (!contactId) { toast.error('Elige un cliente para previsualizar'); return; }
-        if (validLines.length === 0) { toast.error('Añade al menos una línea válida para previsualizar'); return; }
+        if (!contactId) { toast.error('Pick a customer to preview'); return; }
+        if (validLines.length === 0) { toast.error('Add at least one valid line to preview'); return; }
         const doc = await persist();
         docId = doc.id;
       }
-      if (!docId) { toast.error('Guarda el borrador antes de previsualizar'); return; }
+      if (!docId) { toast.error('Save the draft before previewing'); return; }
       const html = await fetchPreviewHtml(docId);
       setPreviewHtml(html);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo generar la vista previa');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t generate the preview');
     } finally {
       setBusy(null);
     }
@@ -485,7 +485,7 @@ export function FacturaEditorDialog({
       if (fresh && fresh.id === savedDoc.id) setSavedDoc(fresh);
       toast.success('Justificante adjuntado');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo adjuntar el justificante');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t attach the receipt');
     } finally {
       setBusy(null);
     }
@@ -501,7 +501,7 @@ export function FacturaEditorDialog({
       if (fresh && fresh.id === savedDoc.id) setSavedDoc(fresh);
       toast.success('Justificante quitado');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo quitar el justificante');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t remove the receipt');
     } finally {
       setBusy(null);
     }
@@ -523,13 +523,13 @@ export function FacturaEditorDialog({
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
               {isQuote
-                ? (documentId ? 'Editar presupuesto' : 'Nuevo presupuesto')
+                ? (documentId ? 'Editar presupuesto' : 'New quote')
                 : isBill
                   ? (documentId ? 'Editar factura recibida' : 'Nueva factura recibida')
                   : (documentId ? 'Editar factura' : 'Nueva factura')}
             </h2>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--font-mono, monospace)' }}>
-              {isBill ? (number ? `Nº proveedor ${number}` : 'Factura del proveedor') : (number ?? 'Nº provisional — se asignará al emitir')}
+              {isBill ? (number ? `Nº proveedor ${number}` : 'Factura del proveedor') : (number ?? 'Provisional no. — assigned on issue')}
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
@@ -541,14 +541,14 @@ export function FacturaEditorDialog({
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {/* Cliente (venta) / Proveedor (factura recibida) */}
             <div>
-              <label style={labelStyle}>{isBill ? 'Proveedor' : 'Cliente'}</label>
+              <label style={labelStyle}>{isBill ? 'Supplier' : 'Customer'}</label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <select ref={firstFieldRef} value={contactId} onChange={(e) => setContactId(e.target.value)} disabled={isEmitted} style={{ ...fieldStyle, flex: 1 }}>
                   <option value="">{isBill ? '— elige proveedor —' : '— elige cliente —'}</option>
                   {contacts.filter((c) => c.roles.includes(isBill ? 'supplier' : 'customer')).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
                 {!isEmitted && (
-                  <button onClick={() => setClienteOpen(true)} title={isBill ? 'Nuevo proveedor' : 'Nuevo cliente'} style={{ ...fieldStyle, width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button onClick={() => setClienteOpen(true)} title={isBill ? 'New supplier' : 'New customer'} style={{ ...fieldStyle, width: 'auto', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={14} /> Nuevo
                   </button>
                 )}
@@ -558,20 +558,20 @@ export function FacturaEditorDialog({
             {/* Nº de la factura del proveedor (solo facturas recibidas) */}
             {isBill && (
               <div>
-                <label style={labelStyle}>Nº de su factura</label>
-                <input value={supplierNumber ?? ''} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder="el que viene en el papel del proveedor" style={fieldStyle} />
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Lo pone el proveedor; no lo numeramos nosotros.</div>
+                <label style={labelStyle}>Their invoice no.</label>
+                <input value={supplierNumber ?? ''} onChange={(e) => setSupplierNumber(e.target.value)} disabled={isEmitted} placeholder="the one on the supplier's paperwork" style={fieldStyle} />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>The supplier sets it; we don't number it.</div>
               </div>
             )}
 
             {/* Fechas */}
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>{isBill ? 'Fecha de la factura' : 'Fecha de emisión'}</label>
+                <label style={labelStyle}>{isBill ? 'Fecha de la factura' : 'Issue date'}</label>
                 <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} disabled={isEmitted} style={fieldStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>{isQuote ? 'Válido hasta' : 'Vencimiento'}</label>
+                <label style={labelStyle}>{isQuote ? 'Valid until' : 'Due date'}</label>
                 <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={isEmitted} style={fieldStyle} />
               </div>
             </div>
@@ -579,7 +579,7 @@ export function FacturaEditorDialog({
             {/* Categoría de ingreso (solo ventas — la factura recibida usa categoría por línea) */}
             {!isBill && (
               <div>
-                <label style={labelStyle}>Categoría de ingreso</label>
+                <label style={labelStyle}>Income category</label>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
                   <option value="">— sin categoría —</option>
                   {categories.filter((c) => c.kind === 'income').map((c) => (
@@ -595,7 +595,7 @@ export function FacturaEditorDialog({
             {/* Proyecto (F4): imputa el documento a un proyecto → rentabilidad por proyecto. */}
             {projects.length > 0 && (
               <div>
-                <label style={labelStyle}>Proyecto</label>
+                <label style={labelStyle}>Project</label>
                 <select value={projectId} onChange={(e) => setProjectId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
                   <option value="">— sin proyecto —</option>
                   {projects.map((p) => (<option key={p.id} value={p.id}>{p.title}</option>))}
@@ -608,7 +608,7 @@ export function FacturaEditorDialog({
 
             {/* Descuento de documento */}
             <div>
-              <label style={labelStyle}>Descuento</label>
+              <label style={labelStyle}>Discount</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   value={discountValue}
@@ -625,7 +625,7 @@ export function FacturaEditorDialog({
                   style={{ ...fieldStyle, width: 150 }}
                 >
                   <option value="percent">% sobre la base</option>
-                  <option value="fixed">Importe fijo</option>
+                  <option value="fixed">Fixed amount</option>
                 </select>
               </div>
               {!isEmitted && (
@@ -638,7 +638,7 @@ export function FacturaEditorDialog({
             {/* Retención IRPF (a nivel documento, 0263): separada del IVA por línea. */}
             {retentionRates.length > 0 && (
               <div>
-                <label style={labelStyle}>Retención IRPF <Tip k="retencion" /></label>
+                <label style={labelStyle}>Income tax withholding <Tip k="retencion" /></label>
                 <select value={retentionRateId} onChange={(e) => setRetentionRateId(e.target.value)} disabled={isEmitted} style={fieldStyle}>
                   <option value="">— sin retención —</option>
                   {retentionRates.map((t) => (
@@ -655,19 +655,19 @@ export function FacturaEditorDialog({
 
             {/* Líneas */}
             <div>
-              <label style={labelStyle}>Líneas</label>
+              <label style={labelStyle}>Lines</label>
               <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 8 }}>
                 <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: isMobile ? 560 : undefined }}>
                   <thead>
                     <tr>
-                      <th style={{ ...th, width: '28%' }}>Descripción</th>
-                      <th style={{ ...th, width: '10%' }}>Cant.</th>
-                      <th style={{ ...th, width: '14%' }}>Precio</th>
-                      <th style={{ ...th, width: '17%' }}>Dto.</th>
+                      <th style={{ ...th, width: '28%' }}>Description</th>
+                      <th style={{ ...th, width: '10%' }}>Qty</th>
+                      <th style={{ ...th, width: '14%' }}>Price</th>
+                      <th style={{ ...th, width: '17%' }}>Disc.</th>
                       <th style={{ ...th, width: '18%' }}>IVA</th>
-                      {isBill && <th style={{ ...th, width: '16%' }}>Categoría</th>}
-                      <th style={{ ...th, width: '13%', textAlign: 'right' }}>Importe</th>
+                      {isBill && <th style={{ ...th, width: '16%' }}>Category</th>}
+                      <th style={{ ...th, width: '13%', textAlign: 'right' }}>Amount</th>
                       <th style={{ width: 28 }} />
                     </tr>
                   </thead>
@@ -676,7 +676,7 @@ export function FacturaEditorDialog({
                       <tr key={i}>
                         <td style={{ padding: '3px 4px' }}>
                           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} disabled={isEmitted} placeholder="Concepto" style={{ ...cellInput, flex: 1, minWidth: 0 }} />
+                            <input value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} disabled={isEmitted} placeholder="Description" style={{ ...cellInput, flex: 1, minWidth: 0 }} />
                             {showItemLink && (
                               <InventoryItemSelect
                                 value={l.inventory_item_id}
@@ -708,7 +708,7 @@ export function FacturaEditorDialog({
                         <td style={{ padding: '3px 4px' }}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <input value={l.discount_value} onChange={(e) => setLine(i, { discount_value: e.target.value })} disabled={isEmitted} inputMode="decimal" placeholder="0" style={{ ...cellInput, flex: 1, minWidth: 0, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
-                            <select value={l.discount_kind} onChange={(e) => setLine(i, { discount_kind: e.target.value as 'percent' | 'fixed' })} disabled={isEmitted} title="Tipo de descuento" style={{ ...cellInput, width: 'auto', padding: '6px 4px', flexShrink: 0 }}>
+                            <select value={l.discount_kind} onChange={(e) => setLine(i, { discount_kind: e.target.value as 'percent' | 'fixed' })} disabled={isEmitted} title="Discount type" style={{ ...cellInput, width: 'auto', padding: '6px 4px', flexShrink: 0 }}>
                               <option value="percent">%</option>
                               <option value="fixed">{currency === 'EUR' ? '€' : currency}</option>
                             </select>
@@ -716,7 +716,7 @@ export function FacturaEditorDialog({
                         </td>
                         <td style={{ padding: '3px 4px' }}>
                           <select value={l.tax_rate_id} onChange={(e) => setLine(i, { tax_rate_id: e.target.value })} disabled={isEmitted} style={cellInput}>
-                            <option value="">Sin IVA</option>
+                            <option value="">No VAT</option>
                             {taxRates.filter((t) => t.tax_type !== 'irpf_retention').map((t) => (
                               <option key={t.id} value={t.id}>
                                 {t.name} ({(Number(t.rate) * 100).toFixed(0)}% {t.mode === 'inclusive' ? 'inc' : 'exc'})
@@ -727,14 +727,14 @@ export function FacturaEditorDialog({
                         {isBill && (
                           <td style={{ padding: '3px 4px' }}>
                             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                              <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted || l.is_capital} title={l.is_capital ? 'Los bienes de inversión van a Inmovilizado, no a una categoría de gasto' : 'Categoría de gasto'} style={{ ...cellInput, flex: 1, minWidth: 0, opacity: l.is_capital ? 0.5 : 1 }}>
+                              <select value={l.category_id} onChange={(e) => setLine(i, { category_id: e.target.value })} disabled={isEmitted || l.is_capital} title={l.is_capital ? 'Capital assets go to Fixed assets, not to an expense category' : 'Expense category'} style={{ ...cellInput, flex: 1, minWidth: 0, opacity: l.is_capital ? 0.5 : 1 }}>
                                 <option value="">— sin categoría —</option>
                                 {categories.filter((c) => c.kind === 'expense').map((c) => (
                                   <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
                               </select>
                               <label title="Bien de inversión (inmovilizado): se capitaliza y luego se deprecia, en vez de imputarse como gasto" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 14, cursor: isEmitted ? 'default' : 'pointer', flexShrink: 0, color: l.is_capital ? 'var(--mod-inventory, var(--amber))' : 'var(--text-dim)' }}>
-                                <input type="checkbox" checked={l.is_capital} disabled={isEmitted} onChange={(e) => setLine(i, { is_capital: e.target.checked })} aria-label="Bien de inversión" style={{ cursor: isEmitted ? 'default' : 'pointer' }} />
+                                <input type="checkbox" checked={l.is_capital} disabled={isEmitted} onChange={(e) => setLine(i, { is_capital: e.target.checked })} aria-label="Capital asset" style={{ cursor: isEmitted ? 'default' : 'pointer' }} />
                                 <span aria-hidden>🏭</span>
                               </label>
                             </div>
@@ -744,7 +744,7 @@ export function FacturaEditorDialog({
                           {fmtMoney(lineImporte(l), currency)}
                         </td>
                         <td style={{ padding: '3px 0', textAlign: 'center' }}>
-                          <button onClick={() => removeDraftLine(i)} disabled={isEmitted || lines.length <= 1} title="Quitar línea" style={{ background: 'none', border: 'none', color: (isEmitted || lines.length <= 1) ? 'var(--text-muted)' : 'var(--text-dim)', cursor: (isEmitted || lines.length <= 1) ? 'default' : 'pointer', padding: 4 }}>
+                          <button onClick={() => removeDraftLine(i)} disabled={isEmitted || lines.length <= 1} title="Remove line" style={{ background: 'none', border: 'none', color: (isEmitted || lines.length <= 1) ? 'var(--text-muted)' : 'var(--text-dim)', cursor: (isEmitted || lines.length <= 1) ? 'default' : 'pointer', padding: 4 }}>
                             <Trash2 size={14} />
                           </button>
                         </td>
@@ -772,24 +772,24 @@ export function FacturaEditorDialog({
 
             {/* Condiciones de pago + notas */}
             <div>
-              <label style={labelStyle}>Condiciones de pago</label>
+              <label style={labelStyle}>Payment terms</label>
               <textarea
                 value={terms ?? ''}
                 onChange={(e) => setTerms(e.target.value)}
                 disabled={isEmitted}
                 rows={2}
-                placeholder="Ej. Pago a 30 días por transferencia a ES00 0000…"
+                placeholder="e.g. Net 30 by transfer to ES00 0000…"
                 style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
             <div>
-              <label style={labelStyle}>Notas</label>
+              <label style={labelStyle}>Notes</label>
               <textarea
                 value={notes ?? ''}
                 onChange={(e) => setNotes(e.target.value)}
                 disabled={isEmitted}
                 rows={2}
-                placeholder="Notas que verá el cliente en la factura (opcional)"
+                placeholder="Notes the customer will see on the invoice (optional)"
                 style={{ ...fieldStyle, resize: 'vertical', fontFamily: 'inherit' }}
               />
             </div>
@@ -797,10 +797,10 @@ export function FacturaEditorDialog({
             {/* Justificante adjunto (solo facturas recibidas) */}
             {isBill && (
               <div>
-                <label style={labelStyle}>Justificante</label>
+                <label style={labelStyle}>Receipt</label>
                 {!savedDoc ? (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 10px', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', background: 'var(--card)' }}>
-                    Guarda el borrador para adjuntar el justificante.
+                    Save the draft to attach a receipt.
                   </div>
                 ) : attachment ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', background: 'var(--card)' }}>
@@ -829,7 +829,7 @@ export function FacturaEditorDialog({
                     <input type="file" onChange={onAttachFile} disabled={busy !== null} style={{ display: 'none' }} />
                   </label>
                 )}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Se guarda en Drive (Documentos) y queda enlazado a esta factura.</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Saved to Drive (Documents) and linked to this invoice.</div>
               </div>
             )}
           </div>
@@ -837,11 +837,11 @@ export function FacturaEditorDialog({
           {/* Panel de totales */}
           <div style={{ width: isMobile ? '100%' : 220, flexShrink: 0 }}>
             <div style={{ position: 'sticky', top: 0, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 16, fontFamily: 'var(--font-mono, monospace)' }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontFamily: 'var(--font-sans, inherit)', fontWeight: 600 }}>Totales</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, fontFamily: 'var(--font-sans, inherit)', fontWeight: 600 }}>Totals</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Base</span><span>{fmtMoney(liveTotals.subtotal, currency)}</span></div>
               {savedDoc && Number(savedDoc.discount_value ?? 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--text-dim)' }}>
-                  <span>Descuento</span>
+                  <span>Discount</span>
                   <span>{savedDoc.discount_kind === 'percent' ? `${Number(savedDoc.discount_value)}%` : `−${fmtMoney(savedDoc.discount_value, currency)}`}</span>
                 </div>
               )}
@@ -850,11 +850,11 @@ export function FacturaEditorDialog({
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 13, color: 'var(--warning)' }}><span>− Retención IRPF</span><span>−{fmtMoney(liveTotals.retention, currency)}</span></div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', fontSize: 17, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 6 }}>
-                <span style={{ fontSize: liveTotals.retention > 0 ? 13 : 17 }}>{liveTotals.retention > 0 ? (isBill ? 'Total a pagar' : 'Total a cobrar') : 'TOTAL'}</span>
+                <span style={{ fontSize: liveTotals.retention > 0 ? 13 : 17 }}>{liveTotals.retention > 0 ? (isBill ? 'Total to pay' : 'Total to collect') : 'TOTAL'}</span>
                 <span>{fmtMoney(liveTotals.total, currency)}</span>
               </div>
               {!liveTotals.fromServer && (
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'var(--font-sans, inherit)' }}>Estimado. Se confirma al guardar.</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontFamily: 'var(--font-sans, inherit)' }}>Estimated. Confirmed on save.</div>
               )}
             </div>
           </div>
@@ -869,7 +869,7 @@ export function FacturaEditorDialog({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '16px 20px', borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
           {isEmitted ? (
             <>
-              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cerrar</button>
+              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Close</button>
               {isQuote && savedDoc?.status !== 'converted' && (
                 <button onClick={onConvertToInvoice} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {busy === 'convert' ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <FileText size={14} />}
@@ -896,7 +896,7 @@ export function FacturaEditorDialog({
             </>
           ) : (
             <>
-              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+              <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
               {/* La vista previa renderiza el documento como factura NUESTRA → no aplica a una factura recibida. */}
               {!isBill && (
                 <button onClick={onPreview} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -906,11 +906,11 @@ export function FacturaEditorDialog({
               )}
               <button onClick={onSaveDraft} disabled={busy !== null} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {busy === 'draft' && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                Guardar borrador
+                Save draft
               </button>
               <button onClick={onEmit} disabled={busy !== null} style={{ padding: '8px 18px', background: isBill ? 'var(--mod-finance)' : 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {busy === 'emit' && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                {isQuote ? 'Emitir presupuesto' : isBill ? 'Registrar' : 'Emitir factura'}
+                {isQuote ? 'Issue quote' : isBill ? 'Registrar' : 'Issue invoice'}
               </button>
             </>
           )}
@@ -937,7 +937,7 @@ export function FacturaEditorDialog({
                   {busy === 'pdf' ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <FileDown size={13} />}
                   Descargar PDF
                 </button>
-                <button onClick={() => setPreviewHtml(null)} title="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
+                <button onClick={() => setPreviewHtml(null)} title="Close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
               </div>
             </div>
             <iframe

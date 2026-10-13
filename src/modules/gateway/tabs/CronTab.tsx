@@ -315,7 +315,7 @@ function CronSettingsButton() {
       onClick={() => navigate('/settings/cron-config')}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title="Cron global settings (retry, alerts, concurrency)"
+      title="Cron global settings (scheduler, retention, alerts)"
       style={{
         background: hover ? 'var(--surface-hover)' : 'transparent',
         border: '1px solid var(--border)',

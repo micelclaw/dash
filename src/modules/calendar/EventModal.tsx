@@ -28,6 +28,7 @@ import type { CalendarEvent, EventCreateInput, EventUpdateInput } from './types'
 import type { LinkedRecord } from '@/types/links';
 
 interface EventModalProps {
+  calendarNames?: string[];
   event: CalendarEvent | null;
   open: boolean;
   onClose: () => void;
@@ -52,6 +53,7 @@ export function EventModal({
   linkedRecords,
   linkedRecordsLoading,
   defaultDate,
+  calendarNames,
 }: EventModalProps) {
   useCoNavigation('event', event?.id ?? '');
   const [mode, setMode] = useState<Mode>('view');
@@ -152,7 +154,7 @@ export function EventModal({
                 onNavigate={onClose}
               />
             ) : (
-              <EventFormFields form={form} onChange={patchForm} />
+              <EventFormFields form={form} onChange={patchForm} calendarNames={calendarNames} />
             )}
           </div>
 

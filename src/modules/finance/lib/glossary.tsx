@@ -19,9 +19,9 @@ export const GLOSSARY: Record<string, string> = {
   diario: 'La lista de todos los asientos en orden de fecha (el "diario de a bordo" de la contabilidad).',
   sumas_y_saldos: 'Un resumen con el total del Debe y del Haber de cada cuenta. El total del Debe debe ser igual al del Haber.',
   balance: 'Foto del patrimonio en una fecha: lo que tienes (Activo) frente a lo que debes y tu capital (Pasivo + Patrimonio).',
-  resultados: 'Ingresos menos gastos del periodo. Si sale positivo, hay beneficio.',
+  resultados: 'Income minus expenses for the period. Positive means profit.',
   cuadre: 'Que el Debe sea igual al Haber. Un asiento que no cuadra no se puede guardar.',
-  postable: 'Una cuenta "agrupadora" no admite apuntes directos; solo sirve para sumar sus subcuentas.',
+  postable: 'Una cuenta "grouping" no admite apuntes directos; solo sirve para sumar sus subcuentas.',
   retencion: 'Parte del importe que se adelanta a Hacienda a cuenta del IRPF (en facturas de profesionales o alquileres).',
   ejercicio: 'El año contable. Al cerrarlo se calcula el resultado y se bloquea para no tocarlo.',
   regularizacion: 'Asiento de cierre que lleva ingresos y gastos a la cuenta de Resultado del ejercicio (129).',
@@ -50,7 +50,7 @@ export function Tip({ k }: { k: keyof typeof GLOSSARY | string }) {
     <TooltipProvider delayDuration={150}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button type="button" tabIndex={-1} className="inline-flex align-middle text-[var(--text-dim)] hover:text-[var(--text)]" aria-label="¿Qué es esto?">
+          <button type="button" tabIndex={-1} className="inline-flex align-middle text-[var(--text-dim)] hover:text-[var(--text)]" aria-label="What is this?">
             <HelpCircle size={13} />
           </button>
         </TooltipTrigger>

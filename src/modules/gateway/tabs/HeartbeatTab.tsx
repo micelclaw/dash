@@ -1,41 +1,22 @@
-/**
- * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
- * All rights reserved.
- */
-
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Save, Heart, HeartOff } from 'lucide-react';
+/** Gateway → Heartbeat: native OpenClaw scheduling with Micelclaw projection. */
+import { useCallback, useEffect, useState } from 'react';
+import { ExternalLink, Heart, HeartOff, Save } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import * as gwService from '@/services/gateway.service';
-import { useGatewayStore } from '@/stores/gateway.store';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { api } from '@/services/api';
+import * as gateway from '@/services/gateway.service';
 
 const INTERVALS = [
-  { value: '0m', label: 'Disabled' },
-  { value: '5m', label: 'Every 5 min' },
-  { value: '15m', label: 'Every 15 min' },
-  { value: '30m', label: 'Every 30 min (default)' },
-  { value: '1h', label: 'Every 1 hour' },
-  { value: '2h', label: 'Every 2 hours' },
-  { value: '4h', label: 'Every 4 hours' },
-];
-
-const STATIC_TARGETS = [
-  { value: '', label: 'None (internal only)' },
-  { value: 'last', label: 'Last used channel' },
-];
-
-function labelFor(channelType: string): string {
-  return channelType.charAt(0).toUpperCase() + channelType.slice(1);
-}
-
-const THINKING_LEVELS = [
-  { value: '', label: 'Inherit (from agent)' },
-  { value: 'off', label: 'Off' },
-  { value: 'minimal', label: 'Minimal' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
+  { value: '0m', label: 'Desactivado' },
+  { value: '5m', label: 'Cada 5 min' },
+  { value: '15m', label: 'Cada 15 min' },
+  { value: '30m', label: 'Cada 30 min' },
+  { value: '1h', label: 'Cada hora' },
+  { value: '2h', label: 'Cada 2 horas' },
+  { value: '4h', label: 'Cada 4 horas' },
 ];
 
 interface AgentSummary {
@@ -45,214 +26,219 @@ interface AgentSummary {
   avatar: string | null;
 }
 
+const stateLabels: Record<string, string> = {
+  active: 'Activo', paused: 'Pausado', global_disabled: 'Configuración global desactivada',
+  missing_capabilities: 'Falta una app', requirements_unknown: 'Requisitos desconocidos',
+  active_without_chat: 'Activo, sin chat', invalid_heartbeat_file: 'Configuración inconsistente',
+  destination_unavailable: 'Destino desconectado', gateway_unavailable: 'Gateway no disponible',
+};
+
+function lastRunLabel(status?: gateway.HeartbeatAgentStatus): string {
+  if (!status?.last_run) return 'Sin ejecuciones registradas';
+  const when = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
+  const minutes = Math.round((new Date(status.last_run.at).getTime() - Date.now()) / 60_000);
+  const result = status.last_run.result === 'silent' ? 'silenciosa' : status.last_run.result === 'notice' ? 'con aviso' : 'registrada';
+  return `Última ejecución ${result} ${when.format(minutes, 'minute')}`;
+}
+
 export function HeartbeatTab() {
-  const channels = useGatewayStore(s => s.channels);
-  const fetchChannels = useGatewayStore(s => s.fetchChannels);
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-
-  // Global config
   const [every, setEvery] = useState('30m');
-  const [target, setTarget] = useState('');
-  const [to, setTo] = useState('');
   const [activeStart, setActiveStart] = useState('');
   const [activeEnd, setActiveEnd] = useState('');
   const [timezone, setTimezone] = useState('');
-  const [model, setModel] = useState('');
-  const [thinking, setThinking] = useState('');
   const [lightContext, setLightContext] = useState(false);
-  const [prompt, setPrompt] = useState('');
-
-  // Per-agent toggles
   const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [agentHeartbeats, setAgentHeartbeats] = useState<Record<string, Record<string, unknown>>>({});
-  const [agentIdMap, setAgentIdMap] = useState<Record<string, string>>({});
-  const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
+  const [config, setConfig] = useState<gateway.HeartbeatConfig | null>(null);
+  const [destinations, setDestinations] = useState<Record<string, gateway.HeartbeatDestination[]>>({});
+  const [busyAgent, setBusyAgent] = useState<string | null>(null);
+  const [pendingDestination, setPendingDestination] = useState<{
+    agent: AgentSummary; openclawId: string; destination: gateway.HeartbeatDestination;
+  } | null>(null);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const [hbData, agentsRes] = await Promise.all([
-        gwService.getHeartbeatConfig(),
+      const [heartbeat, agentsResponse] = await Promise.all([
+        gateway.getHeartbeatConfig(),
         api.get<{ data: AgentSummary[] }>('/managed-agents'),
       ]);
-      const g = hbData.global ?? {};
-      setEvery((g.every ?? '30m') as string);
-      setTarget((g.target ?? '') as string);
-      setTo((g.to ?? '') as string);
-      const ah = (g.active_hours ?? {}) as Record<string, unknown>;
-      setActiveStart((ah.start ?? '') as string);
-      setActiveEnd((ah.end ?? '') as string);
-      setTimezone((ah.timezone ?? '') as string);
-      setModel((g.model ?? '') as string);
-      setThinking((g.thinking ?? '') as string);
-      setLightContext((g.light_context ?? false) as boolean);
-      setPrompt((g.prompt ?? '') as string);
-      setAgentHeartbeats(hbData.per_agent ?? {});
-      setAgentIdMap((hbData as any).agent_id_map ?? {});
-      setAgents(agentsRes.data ?? []);
+      const global = heartbeat.global ?? {};
+      const hours = (global.active_hours ?? {}) as Record<string, unknown>;
+      setEvery(String(global.every ?? '30m'));
+      setActiveStart(String(hours.start ?? ''));
+      setActiveEnd(String(hours.end ?? ''));
+      setTimezone(String(hours.timezone ?? ''));
+      setLightContext(global.light_context === true);
+      setConfig(heartbeat);
+      const rows = agentsResponse.data ?? [];
+      setAgents(rows);
+      const destinationRows = await Promise.all(rows.map(async (agent) => [
+        agent.id, await gateway.getHeartbeatDestinations(agent.id),
+      ] as const));
+      setDestinations(Object.fromEntries(destinationRows));
       setDirty(false);
-    } catch { toast.error('Failed to load heartbeat config'); }
-    finally { setLoading(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo cargar la configuración de latidos');
+    } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchConfig(); }, [fetchConfig]);
-  useEffect(() => { if (channels.length === 0) fetchChannels(); }, [channels.length, fetchChannels]);
-  const d = <T,>(s: (v: T) => void) => (v: T) => { s(v); setDirty(true); };
+  useEffect(() => { void fetchConfig(); }, [fetchConfig]);
 
-  // Build the target dropdown from configured channels. Connected ones
-  // come first, then login_required (yellow). If the saved `target` is
-  // not in the list (e.g. channel was removed), include it with a
-  // "(not configured)" suffix so the user can see the dangling state.
-  const targetOptions = useMemo(() => {
-    const opts = [...STATIC_TARGETS];
-    const seen = new Set(opts.map(o => o.value));
-    const sorted = [...channels].sort((a, b) => {
-      if (a.status === b.status) return a.type.localeCompare(b.type);
-      return a.status === 'connected' ? -1 : 1;
-    });
-    for (const ch of sorted) {
-      const suffix = ch.status === 'connected' ? '' : ` (${ch.status})`;
-      opts.push({ value: ch.type, label: `${labelFor(ch.type)}${suffix}` });
-      seen.add(ch.type);
-    }
-    if (target && !seen.has(target)) {
-      opts.push({ value: target, label: `${labelFor(target)} (not configured)` });
-    }
-    return opts;
-  }, [channels, target]);
-
-  const handleSave = async () => {
+  const saveGlobal = async () => {
     setSaving(true);
     try {
-      await gwService.updateHeartbeatConfig({
+      await gateway.updateHeartbeatConfig({
         global: {
           every,
-          ...(target ? { target } : {}),
-          ...(to ? { to } : {}),
           ...(activeStart && activeEnd ? { activeHours: { start: activeStart, end: activeEnd, ...(timezone ? { timezone } : {}) } } : {}),
-          ...(model ? { model } : {}),
-          ...(thinking ? { thinking } : {}),
           lightContext,
-          ...(prompt ? { prompt } : {}),
         },
       });
-      toast.success('Heartbeat config updated');
+      toast.success('Configuración global actualizada');
       setDirty(false);
-    } catch { toast.error('Failed to update heartbeat config'); }
+      await fetchConfig();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo guardar'); }
     finally { setSaving(false); }
   };
 
-  const toggleAgentHeartbeat = async (agentId: string, openclawId: string, currentlyEnabled: boolean) => {
-    setTogglingAgent(agentId);
+  const toggleAgent = async (agent: AgentSummary, openclawId: string, enabled: boolean) => {
+    setBusyAgent(agent.id);
     try {
-      await gwService.updateHeartbeatConfig({
-        agentId: openclawId,
-        agentHeartbeat: currentlyEnabled ? { every: '0m' } : {},  // 0m = disabled, {} = inherit global
+      await gateway.updateHeartbeatConfig({ agentId: openclawId, agentHeartbeat: enabled ? { every: '0m' } : {} });
+      toast.success(enabled ? `Latido de ${agent.display_name} pausado` : `Latido de ${agent.display_name} activado`);
+      await fetchConfig();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el estado'); }
+    finally { setBusyAgent(null); }
+  };
+
+  const confirmDestination = async () => {
+    if (!pendingDestination) return;
+    setBusyAgent(pendingDestination.agent.id);
+    try {
+      await gateway.updateHeartbeatConfig({
+        agentId: pendingDestination.openclawId,
+        destination_id: pendingDestination.destination.id,
       });
-      toast.success(currentlyEnabled ? 'Heartbeat disabled for agent' : 'Heartbeat enabled for agent');
-      fetchConfig();
-    } catch { toast.error('Failed to toggle agent heartbeat'); }
-    finally { setTogglingAgent(null); }
+      toast.success(`Destino cambiado a ${pendingDestination.destination.label}`);
+      setPendingDestination(null);
+      await fetchConfig();
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el destino'); }
+    finally { setBusyAgent(null); }
   };
 
-  const isAgentHeartbeatEnabled = (openclawId: string): boolean => {
-    const override = agentHeartbeats[openclawId];
-    if (!override || Object.keys(override).length === 0) return every !== '0m'; // Inherit global
-    return (override.every ?? every) !== '0m';
-  };
-
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)', fontSize: '0.875rem' }}>Loading heartbeat config...</div>;
-
-  const Sel = ({ value, options, onChange }: { value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) => (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ padding: '4px 8px', fontSize: '0.75rem', minWidth: 180, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-
-  const Row = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0' }}>
-      <div style={{ flex: 1 }}><div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{label}</div>{desc && <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>}</div>
-      {children}
-    </div>
-  );
+  if (loading || !config) return <div className="flex h-full items-center justify-center text-sm text-[var(--text-dim)]">Cargando latidos…</div>;
 
   return (
-    <ScrollArea style={{ height: '100%' }}>
-      <div style={{ padding: 20, maxWidth: 800 }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
-            Global: {every === '0m' ? 'disabled' : `every ${every}`}
-            {activeStart && activeEnd ? ` (${activeStart}–${activeEnd})` : ''}
-          </span>
-          <button onClick={handleSave} disabled={!dirty || saving} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 14px', fontSize: '0.8125rem', fontWeight: 600, background: dirty ? 'var(--amber)' : 'var(--surface)', border: dirty ? 'none' : '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: dirty ? '#000' : 'var(--text-muted)', cursor: dirty ? 'pointer' : 'default', fontFamily: 'var(--font-sans)' }}>
-            <Save size={14} /> {saving ? 'Saving...' : dirty ? 'Save' : 'Saved'}
-          </button>
-        </div>
-
-        {/* Global config */}
-        <div style={{ marginBottom: 24, padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-          <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Global Defaults</h3>
-          <Row label="Interval" desc="How often agents wake up to check"><Sel value={every} options={INTERVALS} onChange={d(setEvery)} /></Row>
-          <Row label="Delivery target" desc="Channel to send alerts"><Sel value={target} options={targetOptions} onChange={d(setTarget)} /></Row>
-          {target && target !== 'last' && <Row label="Target ID" desc="Chat/user ID for delivery"><input type="text" value={to} onChange={e => d(setTo)(e.target.value)} placeholder="e.g. -1001234567890" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 160, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} /></Row>}
-          <Row label="Active hours start" desc="HH:MM (empty = 24/7)"><input type="text" value={activeStart} onChange={e => d(setActiveStart)(e.target.value)} placeholder="09:00" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 70, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', textAlign: 'center' }} /></Row>
-          <Row label="Active hours end"><input type="text" value={activeEnd} onChange={e => d(setActiveEnd)(e.target.value)} placeholder="22:00" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 70, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', textAlign: 'center' }} /></Row>
-          <Row label="Timezone" desc="IANA timezone (e.g. Europe/Madrid)"><input type="text" value={timezone} onChange={e => d(setTimezone)(e.target.value)} placeholder="Europe/Madrid" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 150, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)' }} /></Row>
-          <Row label="Model override" desc="Cheaper model for heartbeats (empty = inherit)"><input type="text" value={model} onChange={e => d(setModel)(e.target.value)} placeholder="anthropic/claude-haiku-4-5" style={{ padding: '4px 8px', fontSize: '0.75rem', width: 220, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)' }} /></Row>
-          <Row label="Thinking override"><Sel value={thinking} options={THINKING_LEVELS} onChange={d(setThinking)} /></Row>
-          <Row label="Light context" desc="Minimal bootstrap (only HEARTBEAT.md, cheaper)">
-            <div onClick={() => d(setLightContext)(!lightContext)} style={{ width: 36, height: 20, borderRadius: 10, cursor: 'pointer', background: lightContext ? 'var(--success, #22c55e)' : 'var(--text-muted)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
-              <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: lightContext ? 18 : 2, transition: 'left 0.2s' }} />
+    <ScrollArea className="h-full">
+      <div className="max-w-4xl space-y-6 p-5">
+        <section className="rounded-lg border border-[var(--border)] p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Global</h3>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Valores predeterminados; cada agente muestra debajo su estado efectivo.</p>
             </div>
-          </Row>
-          <Row label="Custom prompt" desc="Additional instructions (besides HEARTBEAT.md)">
-            <textarea value={prompt} onChange={e => d(setPrompt)(e.target.value)} placeholder="Check inbox for urgent emails..." rows={2} style={{ padding: '4px 8px', fontSize: '0.75rem', width: 300, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-sans)', resize: 'vertical' }} />
-          </Row>
-        </div>
+            <button onClick={saveGlobal} disabled={!dirty || saving} className="flex items-center gap-1 rounded-md border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">
+              <Save size={14} /> {saving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="space-y-1 text-xs text-[var(--text-dim)]">
+              <span>Intervalo predeterminado</span>
+              <Select value={every} onValueChange={(value) => { setEvery(value); setDirty(true); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{INTERVALS.map((row) => <SelectItem key={row.value} value={row.value}>{row.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            <label className="space-y-1 text-xs text-[var(--text-dim)]">
+              <span>Zona horaria</span>
+              <input value={timezone} onChange={(event) => { setTimezone(event.target.value); setDirty(true); }} placeholder="Europe/Madrid" className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-input,var(--bg))] px-3 text-sm text-[var(--text)]" />
+            </label>
+            <label className="space-y-1 text-xs text-[var(--text-dim)]"><span>Horario desde</span><input value={activeStart} onChange={(event) => { setActiveStart(event.target.value); setDirty(true); }} placeholder="08:00" className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-input,var(--bg))] px-3 text-sm" /></label>
+            <label className="space-y-1 text-xs text-[var(--text-dim)]"><span>Horario hasta</span><input value={activeEnd} onChange={(event) => { setActiveEnd(event.target.value); setDirty(true); }} placeholder="23:00" className="h-8 w-full rounded-md border border-[var(--border)] bg-[var(--bg-input,var(--bg))] px-3 text-sm" /></label>
+          </div>
+          <label className="mt-4 flex items-center gap-2 text-xs text-[var(--text-dim)]">
+            <input type="checkbox" checked={lightContext} onChange={(event) => { setLightContext(event.target.checked); setDirty(true); }} /> Contexto ligero
+          </label>
+        </section>
 
-        {/* Per-agent toggles */}
-        <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Per-Agent Heartbeat</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {agents.map(agent => {
-            // Use agentIdMap from backend (correct per-user ID)
-            const openclawId = agentIdMap[agent.name] ?? Object.keys(agentHeartbeats).find(k => k.includes(`--${agent.name}`)) ?? `unknown--${agent.name}`;
-            const enabled = isAgentHeartbeatEnabled(openclawId);
-            const effectiveEvery = (agentHeartbeats[openclawId]?.every as string) ?? every;
-            const isToggling = togglingAgent === agent.id;
-            return (
-              <div key={agent.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '1rem' }}>{agent.avatar ?? '🤖'}</span>
-                  <div>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{agent.display_name}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-                      {enabled ? `Active (${effectiveEvery})` : 'Paused'}
+        <section>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-dim)]">Por agente</h3>
+          <div className="space-y-3">
+            {agents.map((agent) => {
+              const openclawId = config.agent_id_map[agent.name];
+              if (!openclawId) return null;
+              const status = config.agent_statuses?.[openclawId];
+              const chat = config.heartbeat_chats?.[openclawId];
+              const options = destinations[agent.id] ?? [];
+              const selectedId = status?.destination.kind === 'channel'
+                ? `channel:${encodeURIComponent(status.destination.channel ?? '')}:${encodeURIComponent(status.destination.account_id ?? 'default')}`
+                : 'micelclaw:heartbeat-chat';
+              return (
+                <article key={agent.id} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex gap-3">
+                      <span className="text-lg">{agent.avatar ?? '🤖'}</span>
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text)]">{agent.display_name} · {stateLabels[status?.state ?? 'gateway_unavailable']}</div>
+                        <div className="mt-1 text-xs text-[var(--text-dim)]">
+                          {status?.task_count ?? 0} tareas · {status?.enabled ? `cada ${status.effective_every}` : 'sin ejecución periódica'}
+                        </div>
+                        <div className="text-xs text-[var(--text-muted)]">{lastRunLabel(status)}</div>
+                        {status?.parse_error && <div className="mt-1 text-xs text-amber-500">{status.parse_error}</div>}
+                      </div>
                     </div>
+                    <button onClick={() => toggleAgent(agent, openclawId, status?.enabled === true)} disabled={busyAgent === agent.id} className="flex items-center gap-1 rounded-md border border-[var(--border)] px-3 py-1.5 text-xs disabled:opacity-50">
+                      {status?.enabled ? <HeartOff size={14} /> : <Heart size={14} />} {status?.enabled ? 'Pausar' : 'Activar'}
+                    </button>
                   </div>
-                </div>
-                <button
-                  onClick={() => toggleAgentHeartbeat(agent.id, openclawId, enabled)}
-                  disabled={isToggling}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px',
-                    background: 'transparent', border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-sm)', cursor: isToggling ? 'wait' : 'pointer',
-                    color: enabled ? '#22c55e' : 'var(--text-muted)',
-                    fontSize: '0.75rem', fontFamily: 'var(--font-sans)',
-                    opacity: isToggling ? 0.5 : 1,
-                  }}
-                >
-                  {enabled ? <Heart size={12} /> : <HeartOff size={12} />}
-                  {enabled ? 'On' : 'Off'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  <div className="mt-4 grid items-end gap-2 md:grid-cols-[1fr_auto]">
+                    <label className="space-y-1 text-xs text-[var(--text-dim)]">
+                      <span>Destino de todas las tareas</span>
+                      <Select value={selectedId} onValueChange={(id) => {
+                        const destination = options.find((entry) => entry.id === id);
+                        if (destination) setPendingDestination({ agent, openclawId, destination });
+                      }} disabled={busyAgent === agent.id}>
+                        <SelectTrigger><SelectValue placeholder="Selecciona un destino" /></SelectTrigger>
+                        <SelectContent>{options.map((option) => (
+                          <SelectItem key={option.id} value={option.id} disabled={!option.available}>
+                            {option.label}{!option.available ? ` · ${option.unavailable_reason === 'binding_required'
+                              ? 'vinculación pendiente'
+                              : option.unavailable_reason === 'account_binding_required'
+                                ? 'vuelve a vincular indicando la cuenta'
+                                : 'desconectado'}` : ''}
+                          </SelectItem>
+                        ))}</SelectContent>
+                      </Select>
+                    </label>
+                    <button onClick={() => status?.destination.kind === 'micelclaw_chat' && chat ? navigate(chat.deep_link) : navigate('/gateway?tab=channels')} className="flex h-8 items-center gap-1 rounded-md border border-[var(--border)] px-3 text-xs">
+                      <ExternalLink size={13} /> Abrir destino
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
       </div>
+
+      <Dialog open={Boolean(pendingDestination)} onOpenChange={(open) => { if (!open) setPendingDestination(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cambiar destino del heartbeat de {pendingDestination?.agent.display_name}</DialogTitle>
+            <DialogDescription>
+              Las {pendingDestination ? config.agent_statuses[pendingDestination.openclawId]?.task_count ?? 0 : 0} tareas enviarán sus próximos avisos a {pendingDestination?.destination.label}. Las tareas y sus intervalos no cambiarán.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-5 gap-2">
+            <button onClick={() => setPendingDestination(null)} className="rounded-md border border-[var(--border)] px-4 py-2 text-sm">Cancelar</button>
+            <button onClick={confirmDestination} className="rounded-md bg-[var(--amber)] px-4 py-2 text-sm font-semibold text-black">Cambiar destino</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ScrollArea>
   );
 }

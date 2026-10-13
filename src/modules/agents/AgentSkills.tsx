@@ -15,6 +15,7 @@ import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { AssignAppsModal } from '@/components/shared/AssignAppsModal';
+import { AppIcon } from '@/components/shared/AppIcon';
 import { AppDetailModal } from './AppDetailModal';
 import type { AgentSkill } from './types';
 
@@ -113,7 +114,7 @@ export function AgentSkills({ skills, agentId, agentName, agentAvatar, skillMode
                 <X size={10} />
               </button>
             )}
-            <span style={{ fontSize: '1.25rem' }}>{skill.icon}</span>
+            <AppIcon icon={skill.icon} icon_kind={skill.icon_kind} color={skill.color} size={20} />
             <span style={{
               fontSize: '0.6875rem', color: 'var(--text-dim)', textAlign: 'center',
               lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis',

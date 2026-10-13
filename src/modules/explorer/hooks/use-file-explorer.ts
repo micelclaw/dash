@@ -27,7 +27,16 @@ function findSource(path: string): SourceRoot {
     }
     if (path.startsWith(s.basePath)) return s;
   }
-  return SOURCE_ROOTS[0]!; // drive fallback
+  // Paths del índice sin raíz propia (`/Documents/`, `/Audio/`, `/notes/`…). Antes caían al
+  // fallback "Drive" y eso no era solo una etiqueta equivocada: el breadcrumb usa
+  // `rootBasePath` para saber cuántos segmentos pertenecen a la raíz, así que con `/drive/`
+  // (1 segmento) `/Documents/Reports/` se pintaba «Drive > Reports» —se comía «Documents»— y
+  // pulsar la raíz llevaba a `/drive/`, otro sitio. Raíz sintética con el primer segmento real.
+  const seg = path.replace(/^\/+/, '').split('/')[0];
+  if (seg) {
+    return { id: `path-${seg}`, label: seg, icon: HardDrive, basePath: `/${seg}/`, writable: true };
+  }
+  return SOURCE_ROOTS[0]!; // drive fallback (path vacío)
 }
 
 /** Check if a path is a VFS mount path (prefixed with /vfs/) */
@@ -56,6 +65,7 @@ function vfsNodeToFileRecord(node: VFSNode, explorerParentPath: string): FileRec
     size_bytes: node.size ?? 0,
     checksum_sha256: null,
     source: 'vfs',
+    origins: node.origins,
     source_id: null,
     parent_folder: explorerParentPath,
     is_directory: node.type === 'directory',

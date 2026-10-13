@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { type ApiResponse } from '@/types/api';
 import { useState, useEffect, useCallback } from 'react';
 import { api, ApiError } from '@/services/api';
 import { useRealtimeList } from '@/hooks/use-realtime-list';
@@ -33,7 +34,9 @@ export function useEmails(filters: EmailFilters = {}) {
       let only_deleted = false;
 
       if (folder === 'STARRED') {
-        folder = undefined;
+        // Starred stopped being a folder — it is a filter now, combinable with any
+        // folder. Kept as a fallback for old links and stored state.
+        folder = 'INBOX';
         is_starred = true;
       } else if (folder === 'TRASH') {
         // Show both: emails in TRASH folder (IMAP) AND soft-deleted emails
@@ -45,8 +48,8 @@ export function useEmails(filters: EmailFilters = {}) {
       const res = await api.get<ApiListResponse<Email>>('/emails', {
         limit: filters.limit ?? 50,
         offset: filters.offset ?? 0,
-        sort: 'received_at',
-        order: 'desc',
+        sort: filters.sort ?? 'received_at',
+        order: filters.order ?? 'desc',
         folder,
         account_id: filters.account_id || undefined,
         search: filters.search || undefined,
@@ -69,11 +72,12 @@ export function useEmails(filters: EmailFilters = {}) {
     filters.limit, filters.offset, filters.folder, filters.account_id,
     filters.search, filters.is_read, filters.is_starred, filters.has_attachments,
     filters.label, filters.status, filters.thread_id,
+    filters.sort, filters.order,
   ]);
 
   useEffect(() => { fetchEmails(); }, [fetchEmails]);
 
-  useRealtimeList('email', emails, setEmails);
+  useRealtimeList('email', emails, setEmails, fetchEmails);
 
   const markRead = async (id: string) => {
     setEmails(prev => prev.map(e => e.id === id ? { ...e, is_read: true } : e));
@@ -143,8 +147,8 @@ export function useEmails(filters: EmailFilters = {}) {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.post(`/emails/${id}/restore`);
-              if (removed) setEmails(prev => [removed, ...prev]);
+              const restored = await api.post<ApiResponse<Email>>(`/emails/${id}/restore`);
+              setEmails(prev => [restored.data, ...prev]);
             } catch { toast.error('Failed to restore'); }
           },
         } : undefined,

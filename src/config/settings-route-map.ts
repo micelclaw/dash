@@ -39,6 +39,6 @@ export const SETTINGS_ROUTE_BY_MODULE: Record<string, string> = {
  */
 export function settingsRouteForPath(pathname: string): string {
   const mod = MODULES.find((m) => m.path && pathname.startsWith(m.path));
-  if (mod && SETTINGS_ROUTE_BY_MODULE[mod.id]) return SETTINGS_ROUTE_BY_MODULE[mod.id];
-  return '/settings';
+  const route = mod ? SETTINGS_ROUTE_BY_MODULE[mod.id] : undefined;
+  return route ?? '/settings';
 }

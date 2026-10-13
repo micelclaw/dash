@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { type OriginEntity } from '@/types/origins';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router';
 import { SplitPane } from '@/components/shared/SplitPane';
@@ -52,6 +54,7 @@ export function Component() {
   const [hiddenCalendars, setHiddenCalendars] = useState<Set<string>>(new Set());
   // Mobile calendars side panel (hamburger → Sheet), mirrors Mail (#5).
   const [mobileNav, setMobileNav] = useState(false);
+  const addCalendarFromDrawer = useRef(false);
 
   // Modal state
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -64,8 +67,8 @@ export function Component() {
   const navigate = useNavigate();
 
   // Fetch calendars from API
-  const [calendars, setCalendars] = useState<Array<{ id: string; name: string; color: string; source: string; connector_id: string | null; visible: boolean }>>([]);
-  const [connectors, setConnectors] = useState<Array<{ id: string; connector_type: string; display_name: string | null }>>([]);
+  const [calendars, setCalendars] = useState<Array<OriginEntity & { id: string; name: string; color: string; source: string; connector_id: string | null; visible: boolean }>>([]);
+  const [connectors, setConnectors] = useState<Array<{ id: string; connector_type: string; display_name: string | null; name?: string }>>([]);
 
   // Kanban boards as virtual calendars
   const [boardCalendars, setBoardCalendars] = useState<CalendarInfo[]>([]);
@@ -88,13 +91,14 @@ export function Component() {
   // Fetch boards for sidebar
   const fetchBoards = useCallback(async () => {
     try {
-      const res = await api.get<{ data: Array<{ id: string; title: string; color: string | null }> }>('/projects/boards', { archived: false });
+      const res = await api.get<{ data: Array<OriginEntity & { id: string; title: string; color: string | null }> }>('/projects/boards', { archived: false });
       setBoardCalendars(res.data.map(b => ({
         id: b.id,
         name: `kanban:${b.id}`,
         display_name: b.title,
         color: b.color || '#d4a017',
         source: 'kanban',
+        origins: b.origins,
         visible: true,
       })));
     } catch { /* ignore */ }
@@ -114,6 +118,8 @@ export function Component() {
 
   useEffect(() => { fetchCalendars(); fetchConnectors(); fetchBoards(); }, [fetchCalendars, fetchConnectors, fetchBoards]);
   useEffect(() => { fetchKanbanFeed(); }, [fetchKanbanFeed]);
+
+  useOriginRefresh('events,tasks', () => Promise.all([fetchCalendars(), fetchConnectors(), fetchBoards(), fetchKanbanFeed()]));
 
   // Merge API calendars with board calendars
   const mergedCalendars = useMemo<CalendarInfo[]>(() => [
@@ -141,6 +147,13 @@ export function Component() {
     () => [...regularEvents, ...kanbanEvents],
     [regularEvents, kanbanEvents],
   );
+
+  useEffect(() => {
+    setSelectedEvent(prev => {
+      const current = prev && events.find(event => event.id === prev.id);
+      return current && prev ? { ...prev, origins: current.origins } : prev;
+    });
+  }, [events]);
 
   // Linked records for the selected event
   const { linkedRecords, loading: linkedRecordsLoading } = useEventLinks(
@@ -259,8 +272,15 @@ export function Component() {
   // Back jerárquico en móvil: el botón atrás cierra el overlay actual (de más
   // interno a más externo) en vez de salir del módulo.
   useBackGuard(modalOpen, () => handleCloseModal(), isMobile);
-  useBackGuard(addCalendarOpen, () => setAddCalendarOpen(false), isMobile);
-  useBackGuard(mobileNav, () => setMobileNav(false), isMobile);
+  // Drawer y modal comparten una sola guardia para que el handoff no deje una
+  // entrada de history pendiente cuando se cierra el Sheet y se abre el modal.
+  useBackGuard(addCalendarOpen || mobileNav, () => {
+    if (addCalendarOpen) {
+      setAddCalendarOpen(false);
+    } else {
+      setMobileNav(false);
+    }
+  }, isMobile);
 
   // Toolbar + Grid combined as the main content area
   const mainContent = (
@@ -319,7 +339,11 @@ export function Component() {
       hiddenCalendars={hiddenCalendars}
       onToggleCalendar={handleToggleCalendar}
       events={events}
-      onAddCalendar={() => setAddCalendarOpen(true)}
+      onAddCalendar={() => {
+        addCalendarFromDrawer.current = isMobile && mobileNav;
+        setMobileNav(false);
+        setAddCalendarOpen(true);
+      }}
       onRefresh={fetchEvents}
       calendars={mergedCalendars}
       onCalendarsChange={fetchCalendars}
@@ -336,6 +360,14 @@ export function Component() {
           <Sheet open={mobileNav} onOpenChange={setMobileNav}>
             <SheetContent
               side="left"
+              onCloseAutoFocus={event => {
+                // El foco debe quedarse en el input autoFocus del modal de alta,
+                // no volver al botón que lo abrió dentro del drawer que se cierra.
+                if (addCalendarFromDrawer.current) {
+                  event.preventDefault();
+                  addCalendarFromDrawer.current = false;
+                }
+              }}
               style={{ width: 280, padding: 0, paddingTop: 'env(safe-area-inset-top, 0px)', overflow: 'auto' }}
               aria-describedby={undefined}
             >
@@ -365,6 +397,7 @@ export function Component() {
         defaultDate={createDate}
         linkedRecords={linkedRecords}
         linkedRecordsLoading={linkedRecordsLoading}
+        calendarNames={calendars.map((c) => c.name)}
       />
 
       {/* Add calendar modal */}

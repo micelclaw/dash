@@ -55,7 +55,7 @@ export const APP_CATALOG: AppCatalogEntry[] = [
   { key: 'solidinvoice', label: 'SolidInvoice', group: 'Finance', tier: 'opt_in' },
   { key: 'crypto', label: 'Crypto Stack', group: 'Finance', tier: 'opt_in' },
   { key: 'feeds', label: 'Feeds', group: 'Social', tier: 'opt_in' },
-  { key: 'flows', label: 'Flows', group: null, tier: 'opt_in' },
+  // `flows` (MicelFlow) retirado el 2026-06-30 (→ n8n): espejo de core/src/config/app-catalog.ts.
   { key: 'studio', label: 'Studio', group: null, tier: 'opt_in' },
   // ADMIN-ONLY
   { key: 'gateway', label: 'Gateway', group: null, tier: 'admin' },

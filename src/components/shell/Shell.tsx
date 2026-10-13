@@ -28,8 +28,9 @@ import { useNotificationStore } from '@/stores/notification.store';
 import type { Notification } from '@/types/notifications';
 import { useSecurityStore } from '@/stores/security.store';
 import { useSettingsStore } from '@/stores/settings.store';
+import { normalizeToolCallRecords } from '@/lib/tool-call-record';
 import { useChatStore } from '@/stores/chat.store';
-import { useClipboardStore } from '@/stores/clipboard.store';
+import { useClipboardStore, type ClipboardNewEvent } from '@/stores/clipboard.store';
 import { useFloatingPanelsStore } from '@/stores/floating-panels.store';
 import { useTheme } from '@/hooks/use-theme';
 import { useHeartbeat } from '@/hooks/use-heartbeat';
@@ -59,7 +60,9 @@ import { OnboardingBanner } from '@/components/onboarding/OnboardingBanner';
 import { useStudioGenerationStreamsSubscription } from '@/modules/studio/streams/studio-generation-streams';
 import { useChatStreamSubscription } from '@/hooks/use-chat-stream-subscription';
 import { useChatReconcile } from '@/hooks/use-chat-reconcile';
+import { useChatLedgerSubscription } from '@/hooks/use-chat-ledger-subscription';
 import { useDeepLinks } from '@/hooks/use-deep-links';
+import { useCoreWebSocket } from '@/hooks/use-core-websocket';
 
 export function Shell() {
   const { open: commandPaletteOpen, openPalette, closePalette } = useCommandPalette();
@@ -76,12 +79,8 @@ export function Shell() {
   const keyboardOpen = useKeyboardOpen();
   const isCompact = useIsCompact();
   const location = useLocation();
-  const connect = useWebSocketStore((s) => s.connect);
-  const disconnect = useWebSocketStore((s) => s.disconnect);
-  const wsStatus = useWebSocketStore((s) => s.status);
-  const tokens = useAuthStore((s) => s.tokens);
-  const refresh = useAuthStore((s) => s.refresh);
-  const logout = useAuthStore((s) => s.logout);
+  const userRole = useAuthStore((s) => s.user?.role);
+  const isAdmin = userRole === 'owner' || userRole === 'admin';
   const isChatPage = location.pathname === '/chat';
 
   // Rutas "inmersivas": interfaces ricas de dibujo (whiteboard/Excalidraw y editor de
@@ -121,7 +120,7 @@ export function Shell() {
   const refreshEntityTypes = useEntityTypesStore((s) => s.refresh);
 
   useEffect(() => {
-    fetchSnapshot();
+    if (isAdmin) fetchSnapshot();
     fetchSettings();
     // Rediseño NAS, Fase 1: cargar qué apps/módulos ve este usuario (gating del
     // Sidebar + router). Failures silenciosos → fail-open (ver app-access.store).
@@ -137,14 +136,15 @@ export function Shell() {
     void useServiceUrlsStore.getState().load();
     // Ola 7: load OpenClaw config schema once at boot. Used by the Raw JSON
     // editor (/settings/raw) for client-side validation. Failures are silent.
-    loadConfigSchema();
+    if (isAdmin) loadConfigSchema();
     // Poll Gateway health every 30s so the composite ConnectionStatus
     // and the chat input dot reflect the real Core↔Gateway state, not
     // just dash↔Core. /gateway/health is cheap (<50ms). fetchHealth
     // silently swallows errors (last-known value retained).
+    if (!isAdmin) return;
     const healthPoll = setInterval(() => { void fetchHealth(); }, 30_000);
     return () => clearInterval(healthPoll);
-  }, [fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess, refreshUiModules, refreshEntityTypes]);
+  }, [isAdmin, fetchSnapshot, fetchSettings, loadConfigSchema, fetchHealth, refreshAppAccess, refreshUiModules, refreshEntityTypes]);
 
   // G5: auto-resubscribe push idempotently. If permission is granted and
   // the browser still holds a sub but the backend has lost it (DB wipe,
@@ -173,13 +173,15 @@ export function Shell() {
 
   // Poll every 10s while unconfigured to detect onboarding completion
   useEffect(() => {
+    if (!isAdmin) return;
     if (gatewayConfigured !== false) return;
     const interval = setInterval(() => fetchSnapshot(), 10_000);
     return () => clearInterval(interval);
-  }, [gatewayConfigured, fetchSnapshot]);
+  }, [isAdmin, gatewayConfigured, fetchSnapshot]);
 
   // Detect transition: configured false → true → trigger provisioning
   useEffect(() => {
+    if (!isAdmin) return;
     const prev = prevConfiguredRef.current;
     prevConfiguredRef.current = gatewayConfigured;
 
@@ -201,7 +203,7 @@ export function Shell() {
           });
       });
     }
-  }, [gatewayConfigured]);
+  }, [isAdmin, gatewayConfigured]);
 
   // Apply user theme + accent from settings
   useTheme();
@@ -221,6 +223,7 @@ export function Shell() {
   // + reconciliación desde DB al reconectar/volver-a-pestaña. DB-authoritative.
   useChatStreamSubscription();
   useChatReconcile();
+  useChatLedgerSubscription();
 
   // Fetch services on mount
   const fetchServices = useServicesStore((s) => s.fetchServices);
@@ -245,40 +248,12 @@ export function Shell() {
     }
   }, [isCompact, isPhone, setCollapsed]);
 
-  // Connect WebSocket on mount — proactively refresh token first
-  useEffect(() => {
-    if (!tokens?.accessToken) return;
-    let cancelled = false;
-
-    refresh()
-      .catch(() => { /* ignore — will try with existing token */ })
-      .finally(() => {
-        if (cancelled) return;
-        const current = useAuthStore.getState().tokens;
-        if (current?.accessToken) connect(current.accessToken);
-      });
-
-    return () => { cancelled = true; disconnect(); };
-  }, [tokens?.accessToken, connect, disconnect, refresh]);
+  useCoreWebSocket();
 
   // Start extraction WS listeners once (persists across navigation)
   useEffect(() => {
     useExtractionStore.getState().startListening();
   }, []);
-
-  // Auto-reconnect on auth failure: refresh JWT and retry WS
-  useEffect(() => {
-    if (wsStatus !== 'auth_failed') return;
-
-    refresh()
-      .then(() => {
-        const fresh = useAuthStore.getState().tokens;
-        if (fresh?.accessToken) connect(fresh.accessToken);
-      })
-      .catch(() => {
-        logout();
-      });
-  }, [wsStatus, refresh, connect, logout]);
 
   // ─── Context heartbeat (every 30s) ──────────────────────
   const send = useWebSocketStore((s) => s.send);
@@ -315,6 +290,7 @@ export function Shell() {
 
   // Notification event listeners
   const addNotification = useNotificationStore((s) => s.addNotification);
+  const removeNotificationByRef = useNotificationStore((s) => s.removeByRef);
   const agentEvent = useWebSocket('agent.*');
   const digestEvent = useWebSocket('digest.*');
   const approvalEvent = useWebSocket('approval.*');
@@ -323,6 +299,7 @@ export function Shell() {
   const photoWorkerEvent = useWebSocket('photo.worker.*');
   const mediaEvent = useWebSocket('media.download.*');
   const notificationEvent = useWebSocket('notification.new');
+  const notificationDismissEvent = useWebSocket('notification.dismiss');
   const postYieldEvent = useWebSocket('chat.post_yield_message');
 
   // (A4) La síntesis de notificaciones de `sync.*` y `email.*` se ELIMINÓ: el servidor
@@ -437,6 +414,16 @@ export function Shell() {
       // Inject approval card into its ORIGIN conversation (addMessage routes by
       // conversation_id and bumps that conv's unread counter).
       if (originConvId) {
+        const source = approvalEvent.data.source as import('@/types/chat').MessageApproval['source'];
+        const allowedDecisions = approvalEvent.data.allowed_decisions as Array<'allow-once' | 'allow-always' | 'deny'> | undefined;
+        const reportedStatus = approvalEvent.data.status as import('@/types/chat').MessageApproval['status'] | undefined;
+        // Older Core frames do not carry `status`. A provider request with an
+        // explicitly empty decision set is terminal policy denial, not an
+        // actionable pending approval.
+        const status = reportedStatus
+          ?? (source !== 'core' && Array.isArray(allowedDecisions) && allowedDecisions.length === 0
+            ? 'blocked_by_policy'
+            : 'pending');
         useChatStore.getState().addMessage({
           id: `approval-${approvalEvent.data.id as string}`,
           conversation_id: originConvId,
@@ -449,7 +436,13 @@ export function Shell() {
             summary: approvalEvent.data.summary as string,
             level: approvalEvent.data.level as number,
             expires_at: approvalEvent.data.expires_at as string,
-            status: 'pending',
+            status,
+            source,
+            authority: approvalEvent.data.authority as import('@/types/chat').MessageApproval['authority'],
+            risk: approvalEvent.data.risk as import('@/types/chat').MessageApproval['risk'],
+            core_level: approvalEvent.data.core_level as number | null | undefined,
+            allowed_decisions: allowedDecisions,
+            presentation: approvalEvent.data.presentation as import('@/types/chat').MessageApproval['presentation'],
           },
         });
       }
@@ -457,7 +450,8 @@ export function Shell() {
       // Update inline approval card status (busca la tarjeta en cualquier conv).
       useChatStore.getState().updateApprovalStatus(
         approvalEvent.data.id as string,
-        approvalEvent.data.status as 'approved' | 'rejected' | 'expired',
+        approvalEvent.data.status as Exclude<import('@/types/chat').MessageApproval['status'], 'pending'>,
+        approvalEvent.data.resolution as import('@/types/chat').MessageApproval['resolution'],
       );
     } else if (approvalEvent.event === 'approval.executed') {
       // Auto-execute result: inject as a message in its origin conversation.
@@ -512,21 +506,7 @@ export function Shell() {
     // the tool pills immediately (sessions_spawn / sessions_yield etc.).
     // Without this, the bubble appears bare until a manual refresh because
     // the local store skips the next history fetch (see loadMessages dedup).
-    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
-      ? data.tool_calls.map((t) => ({
-          id: String(t.id ?? crypto.randomUUID()),
-          tool: String(t.tool ?? t.name ?? 'unknown'),
-          status: t.status as import('@/types/chat').ToolCallRecord['status'],
-          summary: typeof t.summary === 'string' ? t.summary : undefined,
-          input: (() => {
-            const raw = t.input ?? t.arguments;
-            if (typeof raw === 'string') return raw;
-            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-            return undefined;
-          })(),
-          output: typeof t.output === 'string' ? t.output : undefined,
-        }))
-      : undefined;
+    const toolCalls = normalizeToolCallRecords(data.tool_calls);
     store.addMessage({
       id: data.id,
       conversation_id: data.conversation_id,
@@ -541,60 +521,6 @@ export function Shell() {
       store.setStreamingMessage(null);
     }
   }, [postYieldEvent]);
-
-  // Webchat Session Ledger: mensajes assistant persistidos desde el JSONL de
-  // OpenClaw para turnos que el dash NO está streameando (resume de aprobación,
-  // inter-sesión, continuación tras reinicio de Core). Cada evento trae la fila
-  // REAL de DB (id + tool pills + thinking) → el chat queda completo EN VIVO.
-  // El Core suprime este push mientras chat-bridge streamea la conv (el done
-  // entrega `messages[]`), así que aquí no hay riesgo de doble burbuja.
-  const ledgerMsgEvent = useWebSocket('chat.ledger_message');
-  useEffect(() => {
-    if (!ledgerMsgEvent) return;
-    const data = ledgerMsgEvent.data as {
-      id: string;
-      conversation_id: string | null;
-      session_id: string;
-      from_agent: string;
-      text: string;
-      tool_calls?: Array<Record<string, unknown>> | null;
-      thinking?: string | null;
-      created_at: string;
-    };
-    if (!data.id || !data.conversation_id) return;
-    const store = useChatStore.getState();
-    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
-      ? data.tool_calls.map((t) => ({
-          id: String(t.id ?? crypto.randomUUID()),
-          tool: String(t.tool ?? t.name ?? 'unknown'),
-          status: t.status as import('@/types/chat').ToolCallRecord['status'],
-          summary: typeof t.summary === 'string' ? t.summary : undefined,
-          input: (() => {
-            const raw = t.input ?? t.arguments;
-            if (typeof raw === 'string') return raw;
-            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-            return undefined;
-          })(),
-          output: typeof t.output === 'string' ? t.output : undefined,
-          text_offset: typeof t.text_offset === 'number' ? t.text_offset : undefined,
-          entity_refs: Array.isArray(t.entity_refs) ? (t.entity_refs as Array<{ type: string; id: string; title: string | null }>) : undefined,
-        }))
-      : undefined;
-    store.addMessage({
-      id: data.id,
-      conversation_id: data.conversation_id,
-      role: 'assistant',
-      content: data.text,
-      agent: data.from_agent,
-      timestamp: data.created_at,
-      tool_calls: toolCalls,
-      thinking: data.thinking ?? undefined,
-    });
-    // Limpia el placeholder de yield/espera si era de esta conversación.
-    if (store.streamingMessage?.conversationId === data.conversation_id) {
-      store.setStreamingMessage(null);
-    }
-  }, [ledgerMsgEvent]);
 
   // Sub-agent messages (from the parent's delegation): the mirror
   // emits these as new sub-agent thread rows are persisted. The dash
@@ -617,21 +543,7 @@ export function Shell() {
     };
     if (!data.id || !data.conversation_id) return;
     const store = useChatStore.getState();
-    const toolCalls = Array.isArray(data.tool_calls) && data.tool_calls.length > 0
-      ? data.tool_calls.map((t) => ({
-          id: String(t.id ?? crypto.randomUUID()),
-          tool: String(t.tool ?? t.name ?? 'unknown'),
-          status: t.status as import('@/types/chat').ToolCallRecord['status'],
-          summary: typeof t.summary === 'string' ? t.summary : undefined,
-          input: (() => {
-            const raw = t.input ?? t.arguments;
-            if (typeof raw === 'string') return raw;
-            if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
-            return undefined;
-          })(),
-          output: typeof t.output === 'string' ? t.output : undefined,
-        }))
-      : undefined;
+    const toolCalls = normalizeToolCallRecords(data.tool_calls);
     // Append to messages map so the thread renders if opened.
     store.addMessage({
       id: data.id,
@@ -653,7 +565,7 @@ export function Shell() {
   useEffect(() => {
     if (!clipboardEvent) return;
     if (clipboardEvent.event === 'clipboard.new') {
-      addClipboardEntry(clipboardEvent.data as any);
+      addClipboardEntry(clipboardEvent.data as unknown as ClipboardNewEvent);
       toast('New clipboard entry', {
         description: (clipboardEvent.data.content as string)?.slice(0, 60),
         duration: 3000,
@@ -736,6 +648,7 @@ export function Shell() {
       body?: string;
       severity?: 'debug' | 'info' | 'warn' | 'error' | 'critical';
       action?: { label: string; route?: string };
+      ref?: Notification['ref'];
       timestamp?: string;
     };
     const title = d.title ?? d.template ?? 'Notificación';
@@ -757,9 +670,19 @@ export function Shell() {
       title,
       body: description,
       action: d.action,
+      ref: d.ref,
       timestamp: d.timestamp,
     });
   }, [notificationEvent, addNotification]);
+
+  // El servidor avisa de que una notificación dejó de ser cierta (la aprobación se
+  // resolvió —desde el chat, /approvals o la propia notificación— o caducó). Llega a
+  // TODAS las pestañas, así que el panel no se queda con avisos zombis en ninguna.
+  useEffect(() => {
+    if (!notificationDismissEvent) return;
+    const ref = (notificationDismissEvent.data as { ref?: { kind?: string; id?: string } }).ref;
+    if (ref?.kind && ref.id) removeNotificationByRef(ref.kind, ref.id);
+  }, [notificationDismissEvent, removeNotificationByRef]);
 
   // Notificaciones NATIVAS en el APK móvil: al cargar el dash autenticado, pide el
   // permiso (API 33+) y arranca el servicio self-hosted (WS a tu box → barra de

@@ -80,7 +80,7 @@ function DiagramEditorInner() {
       // Ctrl+Z / Ctrl+Shift+Z — undo/redo
       if (mod && e.key === 'z') {
         e.preventDefault();
-        e.shiftKey ? redo() : undo();
+        if (e.shiftKey) redo(); else undo();
         return;
       }
 
@@ -136,7 +136,7 @@ function DiagramEditorInner() {
         e.preventDefault();
         const { selectedElement } = useDiagramsStore.getState();
         if (selectedElement?.type === 'node') {
-          e.key === ']' ? bringToFront(selectedElement.id) : sendToBack(selectedElement.id);
+          if (e.key === ']') bringToFront(selectedElement.id); else sendToBack(selectedElement.id);
         }
         return;
       }

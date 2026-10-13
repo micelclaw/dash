@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { Disc3 } from 'lucide-react';
 import { MediaCard } from '@/components/media';
 import { coverUrl, type AlbumSummary } from '@/services/music.service';
@@ -27,6 +28,7 @@ export function AlbumCard({ album, width }: { album: AlbumSummary; width?: numbe
         image={album.cover_art ? coverUrl(album.cover_art) : null}
         fallbackIcon={Disc3}
         title={album.name}
+            badge={<EntitySource entity={album} domain="music" native />}
         subtitle={album.artist}
         onClick={() => void useMusicStore.getState().openAlbum(album.id)}
         onPlay={() => void playAlbumById(album.id)}

@@ -12,6 +12,7 @@
 
 import type { MouseEvent } from 'react';
 import { Download, Power, Scan } from 'lucide-react';
+import { AppIcon, resolveManifestIcon } from '@/components/shared/AppIcon';
 import type { InstalledApp } from '@/types/apps';
 import { useAppActions } from './useAppActions';
 
@@ -79,7 +80,7 @@ export function AppListRow({ app, origin, selected, onClick, onRefresh }: AppLis
       {/* App: punto + icono + nombre */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: dotColor }} title={app.status} />
-        <span style={{ fontSize: 16, flexShrink: 0 }}>{manifest?.icon || manifest?.ui?.module?.icon || '📦'}</span>
+        <span style={{ display: 'inline-flex', flexShrink: 0 }}><AppIcon {...resolveManifestIcon(manifest)} size={16} /></span>
         <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {manifest?.name || app.app_name}
         </span>

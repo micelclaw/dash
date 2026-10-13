@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
 import { useState, useEffect, useCallback } from 'react';
 import { api, ApiError } from '@/services/api';
 import { toast } from 'sonner';
@@ -37,6 +38,7 @@ export function useAlbums() {
   }, []);
 
   useEffect(() => { fetchAlbums(); }, [fetchAlbums]);
+  useOriginRefresh('files', fetchAlbums);
 
   const createAlbum = async (name: string, description?: string): Promise<Album> => {
     const res = await api.post<ApiResponse<Album>>('/albums', { name, description });

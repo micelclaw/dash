@@ -113,7 +113,7 @@ const SOURCE_COLORS = ['var(--mod-finance)', 'var(--info)', 'var(--amber)', 'var
 function IncomeSources({ rows }: { rows: Array<{ name: string; amount: string }> }) {
   const total = rows.reduce((s, r) => s + num(r.amount), 0);
   if (rows.length === 0 || total <= 0) {
-    return <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>Aún no hay ingresos operativos en este periodo.</div>;
+    return <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No operating income in this period yet.</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -173,10 +173,10 @@ export function FacturacionRendimientoTab() {
   }, [range.from, range.to]);
 
   if (loading) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Cargando rendimiento…</div>;
+    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Loading performance…</div>;
   }
   if (error || !data) {
-    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>No se pudo calcular el rendimiento del periodo.</div>;
+    return <div style={{ padding: 24, fontSize: 13, color: 'var(--text-muted)' }}>Couldn't work out the result for this period.</div>;
   }
 
   const ebitda = num(data.ebitda), ebit = num(data.ebit), net = num(data.net_result);
@@ -188,20 +188,20 @@ export function FacturacionRendimientoTab() {
   // (amortización) cuando hay ambas; si solo hay una, una línea "Amortizaciones".
   const daMat = num(data.depreciation_material), daInt = num(data.amortization_intangible);
   const cascade: CascadeRow[] = [
-    { label: 'Ingresos operativos', value: num(data.operating_income), sign: '', kind: 'in', color: C_IN },
-    { label: 'Gastos operativos', value: num(data.operating_expenses), sign: '−', kind: 'out', color: C_OUT },
+    { label: 'Operating income', value: num(data.operating_income), sign: '', kind: 'in', color: C_IN },
+    { label: 'Operating expenses', value: num(data.operating_expenses), sign: '−', kind: 'out', color: C_OUT },
     { label: 'EBITDA', value: ebitda, sign: '=', kind: 'subtotal', color: C_EBITDA },
   ];
   if (daMat > 0.005 && daInt > 0.005) {
-    cascade.push({ label: 'Amortización inmovilizado material', value: daMat, sign: '−', kind: 'out', color: 'var(--warning)' });
-    cascade.push({ label: 'Amortización inmovilizado intangible', value: daInt, sign: '−', kind: 'out', color: 'var(--warning)' });
+    cascade.push({ label: 'Depreciation of tangible assets', value: daMat, sign: '−', kind: 'out', color: 'var(--warning)' });
+    cascade.push({ label: 'Amortisation of intangible assets', value: daInt, sign: '−', kind: 'out', color: 'var(--warning)' });
   } else {
     cascade.push({ label: 'Amortizaciones', value: num(data.depreciation_amortization), sign: '−', kind: 'out', color: 'var(--warning)' });
   }
   cascade.push({ label: 'EBIT', value: ebit, sign: '=', kind: 'subtotal', color: C_EBIT });
   if (Math.abs(finRes) > 0.005) cascade.push({ label: 'Resultado financiero', value: finRes, sign: finRes >= 0 ? '+' : '−', kind: finRes >= 0 ? 'in' : 'out', color: finRes >= 0 ? C_IN : C_OUT });
   if (Math.abs(extraRes) > 0.005) cascade.push({ label: 'Resultado extraordinario', value: extraRes, sign: extraRes >= 0 ? '+' : '−', kind: extraRes >= 0 ? 'in' : 'out', color: extraRes >= 0 ? C_IN : C_OUT });
-  cascade.push({ label: 'Impuesto de sociedades', value: num(data.corporate_tax), sign: '−', kind: 'out', color: C_OUT });
+  cascade.push({ label: 'Corporate tax', value: num(data.corporate_tax), sign: '−', kind: 'out', color: C_OUT });
   cascade.push({ label: 'BENEFICIO NETO', value: net, sign: '=', kind: 'final', color: net >= 0 ? C_NET_POS : C_NET_NEG });
 
   const opt = data.optimization;
@@ -224,35 +224,35 @@ export function FacturacionRendimientoTab() {
       </div>
 
       {/* Cascada del resultado */}
-      <Card title="Cómo se forma tu beneficio" subtitle={title} flex="1 1 100%">
+      <Card title="How your profit is made up" subtitle={title} flex="1 1 100%">
         <CascadeChart rows={cascade} />
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>
-          La <strong>amortización</strong> (la "D&amp;A" de EBITDA) reparte el coste de tus activos: la
+          La <strong>depreciation</strong> (la "D&amp;A" de EBITDA) reparte el coste de tus activos: la
           <em> material</em> es el desgaste de equipos e inmovilizado (lo que en inglés se llama
           <em> depreciation</em>); la <em>intangible</em>, el de software/web/licencias
-          (<em>amortization</em>) — en el PGC español ambas son "amortización". La <strong>Seguridad
+          (<em>amortization</em>) — en el PGC español ambas son "depreciation". La <strong>Seguridad
           Social</strong> de la empresa NO es un impuesto: es coste de personal (junto a los sueldos)
-          y por eso va en los <em>gastos operativos</em>, dentro del EBITDA.
+          y por eso va en los <em>operating expenses</em>, dentro del EBITDA.
         </div>
       </Card>
 
       {/* Dos columnas: ¿Dónde gano? | Optimización */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <Card title="¿Dónde gano?" subtitle="ingreso operativo por categoría" flex="1 1 360px">
+        <Card title="Where do I make money?" subtitle="operating income by category" flex="1 1 360px">
           <IncomeSources rows={data.income_breakdown} />
         </Card>
 
-        <Card title="Optimización" subtitle="números honestos" flex="1 1 360px">
+        <Card title="Optimisation" subtitle="honest numbers" flex="1 1 360px">
           <OptimRow
-            label="Amortización del periodo"
+            label="Depreciation for the period"
             value={fmtMoney(opt.da_period)}
             note={`Escudo fiscal estimado ${fmtMoney(opt.tax_shield)} (al tipo general del IS, 25 %). Amortizar reparte el coste de tus activos y reduce la base imponible.`}
             accent="var(--warning)"
           />
           <OptimRow
-            label={vatToSettle >= 0 ? 'IVA a liquidar (303)' : 'IVA a tu favor (303)'}
+            label={vatToSettle >= 0 ? 'VAT to settle (303)' : 'VAT in your favour (303)'}
             value={fmtMoney(Math.abs(vatToSettle))}
-            note={vatToSettle >= 0 ? 'Lo que ingresarás a Hacienda este periodo: IVA repercutido − soportado.' : 'Saldo a compensar/devolver: has soportado más IVA del que has repercutido.'}
+            note={vatToSettle >= 0 ? 'What you\'ll pay the tax office this period: VAT charged − VAT paid.' : 'Refundable balance: you have paid more VAT than you have charged.'}
             accent={vatToSettle >= 0 ? 'var(--error)' : 'var(--mod-finance)'}
           />
           <OptimRow

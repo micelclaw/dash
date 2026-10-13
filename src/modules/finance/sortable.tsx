@@ -38,8 +38,10 @@ export interface SortState {
 export function useSortable<T>(rows: T[], accessors: Accessors<T>, initial?: { key: string; dir?: SortDir }) {
   const accRef = useRef(accessors);
   accRef.current = accessors;
-  const [sortKey, setSortKey] = useState<string | null>(initial?.key ?? null);
-  const [sortDir, setSortDir] = useState<SortDir>(initial?.dir ?? 'asc');
+  const [{ sortKey, sortDir }, setSort] = useState(() => ({
+    sortKey: initial?.key ?? null,
+    sortDir: initial?.dir ?? 'asc',
+  }));
 
   const sorted = useMemo(() => {
     const acc = sortKey ? accRef.current[sortKey] : undefined;
@@ -60,10 +62,11 @@ export function useSortable<T>(rows: T[], accessors: Accessors<T>, initial?: { k
   }, [rows, sortKey, sortDir]);
 
   const toggle = (key: string) => {
-    setSortKey((prev) => {
-      if (prev === key) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return prev; }
-      setSortDir('asc');
-      return key;
+    setSort((prev) => {
+      if (prev.sortKey === key) {
+        return { sortKey: key, sortDir: prev.sortDir === 'asc' ? 'desc' : 'asc' };
+      }
+      return { sortKey: key, sortDir: 'asc' };
     });
   };
 

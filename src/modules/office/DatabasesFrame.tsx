@@ -59,11 +59,17 @@ export function Component() {
   // bajo el subpath del iframe (/api/v1/databases/ui/) su router daría 404. Al cargar la
   // reencaminamos a su home "/" vía History API (los assets/API absolutos los sirven los
   // proxies de rutas-raíz de Core). El iframe es same-origin (proxy del dash) → accesible.
+  // MAT7: el proxy de Core ya inyecta en el <head> del shell un replaceState a "/"
+  // (así el SPA arranca en su home y no pinta el flash de "page doesn't exist"), así
+  // que al llegar aquí el path puede estar YA limpio. Este handler sigue siendo
+  // necesario para el deep-link ?db= — y como fallback si la inyección no ocurrió.
   const handleIframeLoad = useCallback(() => {
     try {
       const w = iframeRef.current?.contentWindow;
-      if (w && w.location.pathname.startsWith('/api/v1/databases/ui')) {
-        const target = dbParam ? `/db/${encodeURIComponent(dbParam)}/` : '/';
+      if (!w) return;
+      const target = dbParam ? `/db/${encodeURIComponent(dbParam)}/` : '/';
+      const pathname = w.location.pathname;
+      if (pathname.startsWith('/api/v1/databases/ui') || pathname !== target) {
         w.history.replaceState({}, '', target);
         w.dispatchEvent(new PopStateEvent('popstate'));
       }

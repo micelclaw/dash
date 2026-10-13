@@ -89,7 +89,7 @@ const ENTITY_LABELS: Record<string, string> = {
 };
 
 export function EntityShareModal({
-  open, entityType, entityId, entityIds, entityTitle, shareMeta, initialSection, onShared, onClose,
+  open, entityType, entityId, entityIds, entityTitle, shareMeta, onShared, onClose,
 }: EntityShareModalProps) {
   const addNotification = useNotificationStore(s => s.addNotification);
   const ids = entityIds && entityIds.length > 0 ? entityIds : [entityId];

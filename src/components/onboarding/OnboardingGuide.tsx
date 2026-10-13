@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2026 Micelclaw (Victor Garcia Valdunciel)
+ * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
  *
  * This file is part of Micelclaw OS and is proprietary software.
@@ -10,306 +10,131 @@
  * https://micelclaw.com
  */
 
-import {
-  ExternalLink, Terminal, Shield, Zap, Cpu, Key,
-  MessageCircle, Search, Package, Settings, Lock,
-  CheckCircle, Bot,
-} from 'lucide-react';
+import { Bot, CheckCircle2, Cpu, RefreshCw, Settings2 } from 'lucide-react';
 
 interface OnboardingGuideProps {
   open: boolean;
+  checking?: boolean;
+  onOpenGateway: () => void;
+  onRetry: () => void | Promise<void>;
 }
 
-export function OnboardingGuide({ open }: OnboardingGuideProps) {
+const steps = [
+  {
+    icon: Bot,
+    title: 'Runtime de OpenClaw',
+    description: 'Micelclaw administra una única instancia compartida y comprueba que esté disponible.',
+  },
+  {
+    icon: Cpu,
+    title: 'Proveedor y modelo',
+    description: 'Configura el proveedor y el modelo desde Gateway. No necesitas instalar otro daemon.',
+  },
+  {
+    icon: Settings2,
+    title: 'Agentes de Micelclaw',
+    description: 'Al completar la configuración, Micelclaw crea y sincroniza los agentes del grupo.',
+  },
+];
+
+export function OnboardingGuide({ open, checking = false, onOpenGateway, onRetry }: OnboardingGuideProps) {
   if (!open) return null;
 
   return (
-    <div style={{
-      width: 340,
-      display: 'flex',
-      flexDirection: 'column',
-      borderLeft: '1px solid var(--border)',
-      background: 'var(--surface)',
-      flexShrink: 0,
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
-      <div style={{
-        height: 36,
+    <section
+      aria-labelledby="openclaw-setup-title"
+      style={{
+        width: 'min(100%, 560px)',
         display: 'flex',
-        alignItems: 'center',
-        padding: '0 12px',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
-          Configuracion de OpenClaw
+        flexDirection: 'column',
+        gap: 16,
+        padding: 'clamp(16px, 4vw, 28px)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        background: 'var(--surface)',
+        boxShadow: 'var(--shadow-md)',
+      }}
+    >
+      <header style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <span aria-hidden="true" style={{ display: 'grid', placeItems: 'center', width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: 'color-mix(in srgb, var(--amber) 18%, transparent)', color: 'var(--amber)' }}>
+          <Bot size={18} />
         </span>
-      </div>
-
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 14px' }}>
-        <p style={introStyle}>
-          Sigue estos pasos en la terminal de la izquierda para configurar tu asistente IA.
-        </p>
-
-        <Step
-          number={1}
-          icon={<Terminal size={14} />}
-          title="Ejecuta el wizard"
-          command="openclaw onboard --install-daemon"
-          description="Inicia el asistente de configuracion interactivo. La flag --install-daemon registra el servicio systemd automaticamente al final."
-        />
-
-        <Step
-          number={2}
-          icon={<Shield size={14} />}
-          title="Aviso de seguridad"
-          description='Lee el aviso de seguridad y escribe "accept" para continuar.'
-        />
-
-        <Step
-          number={3}
-          icon={<Zap size={14} />}
-          title="Modo de configuracion"
-          description="Selecciona QuickStart (recomendado). Configura lo esencial: proveedor, modelo, canal y skills."
-        />
-
-        <Step
-          number={4}
-          icon={<Cpu size={14} />}
-          title="Proveedor de modelos"
-        >
-          <p style={descStyle}>Elige tu proveedor de IA:</p>
-          <ul style={listStyle}>
-            <li><strong>Anthropic</strong> — recomendado (Claude Sonnet 4.6)</li>
-            <li><strong>DeepSeek</strong> — alternativa economica</li>
-            <li>OpenAI, Google Gemini, Ollama (local)...</li>
-          </ul>
-          <p style={descStyle}>Introduce la API key del proveedor elegido. Se almacena localmente en ~/.openclaw/</p>
-        </Step>
-
-        <Step
-          number={5}
-          icon={<Key size={14} />}
-          title="Modelo por defecto"
-        >
-          <p style={descStyle}>Elige el modelo principal para el agente:</p>
-          <ul style={listStyle}>
-            <li><strong>claude-sonnet-4-6</strong> — mejor calidad (recomendado)</li>
-            <li><strong>deepseek-chat</strong> — mas barato</li>
-          </ul>
-        </Step>
-
-        <Step
-          number={6}
-          icon={<MessageCircle size={14} />}
-          title="Canal de comunicacion"
-        >
-          <p style={descStyle}>Selecciona <strong>Telegram</strong> (recomendado). Para crear el bot:</p>
-          <ol style={{ ...listStyle, listStyleType: 'decimal' }}>
-            <li>Abre Telegram y busca <strong>@BotFather</strong></li>
-            <li>Envia <code style={codeInline}>/newbot</code></li>
-            <li>Ponle un nombre (ej: "Francis")</li>
-            <li>Ponle un username (ej: "micelclaw_francis_bot")</li>
-            <li>Copia el token que te da BotFather</li>
-            <li>Pegalo en el wizard</li>
-          </ol>
-        </Step>
-
-        <Step
-          number={7}
-          icon={<Search size={14} />}
-          title="Proveedor de busqueda"
-        >
-          <p style={descStyle}>
-            Recomendado: <strong>Skip</strong> por ahora. Tavily es de pago.
-            Proximamente habra una opcion gratuita integrada.
+        <div>
+          <h2 id="openclaw-setup-title" style={{ margin: 0, color: 'var(--text)', fontSize: '1rem' }}>
+            Configuración de OpenClaw
+          </h2>
+          <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+            Micelclaw administra el Gateway. Completa la configuración desde el panel Gateway.
           </p>
-        </Step>
+        </div>
+      </header>
 
-        <Step
-          number={8}
-          icon={<Package size={14} />}
-          title="Skills"
-        >
-          <p style={descStyle}>Selecciona las skills a instalar:</p>
-          <ul style={listStyle}>
-            <li><strong>MicelHub</strong> — obligatorio (skills oficiales de Micelclaw)</li>
-            <li><strong>MCporter</strong> — solo si tienes Home Assistant</li>
-          </ul>
-        </Step>
-
-        <Step
-          number={9}
-          icon={<Settings size={14} />}
-          title="Node manager"
-          description="Selecciona pnpm (recomendado). Es el gestor de paquetes que usa Micelclaw."
-        />
-
-        <Step
-          number={10}
-          icon={<CheckCircle size={14} />}
-          title="Hooks"
-          description="Activa todos los hooks disponibles: boot-md, bootstrap-extra-files, command-logger y session-memory. Todos son utiles."
-        />
-
-        <Step
-          number={11}
-          icon={<Lock size={14} />}
-          title="Contrasena sudo"
-          description="Introduce la contrasena de administrador del sistema. Se necesita para instalar el daemon (servicio systemd) que mantiene al agente activo."
-        />
-
-        {/* Post-onboarding note */}
-        <div style={{
-          marginTop: 8,
-          padding: '10px 12px',
-          background: 'var(--bg)',
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--border)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <Bot size={14} style={{ color: 'var(--amber)' }} />
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)' }}>
-              Despues del wizard
+      <ol style={{ display: 'grid', gap: 10, margin: 0, padding: 0, listStyle: 'none' }}>
+        {steps.map(({ icon: Icon, title, description }, index) => (
+          <li key={title} style={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', gap: 10, padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--bg)' }}>
+            <span aria-hidden="true" style={{ display: 'grid', placeItems: 'center', width: 24, height: 24, borderRadius: '50%', background: 'var(--amber)', color: '#06060a', fontSize: '0.75rem', fontWeight: 700 }}>
+              {index + 1}
             </span>
-          </div>
-          <p style={{ ...descStyle, margin: 0 }}>
-            Ve a Telegram y habla con tu bot para configurar su personalidad.
-            Tambien puedes hacerlo desde el Chat de Micelclaw.
-          </p>
-        </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', fontSize: '0.8125rem', fontWeight: 600 }}>
+                <Icon size={14} aria-hidden="true" />
+                {title}
+              </div>
+              <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.45 }}>
+                {description}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
 
-        <div style={{
-          marginTop: 12,
-          padding: '10px 12px',
-          background: 'var(--bg)',
-          borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--border)',
-        }}>
-          <a
-            href="https://docs.openclaw.ai/start/wizard"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              color: 'var(--amber)',
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              textDecoration: 'none',
-            }}
-          >
-            <ExternalLink size={12} />
-            Guia completa en docs.openclaw.ai
-          </a>
-        </div>
-
-        <p style={{
-          ...introStyle,
-          marginTop: 14,
-          color: 'var(--text-muted)',
-          fontSize: '0.6875rem',
-        }}>
-          Una vez completado, recarga la pagina. El banner rojo desaparecera automaticamente.
-        </p>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <button type="button" onClick={onOpenGateway} style={primaryButtonStyle}>
+          <Settings2 size={16} aria-hidden="true" />
+          Abrir Gateway
+        </button>
+        <button type="button" onClick={() => void onRetry()} disabled={checking} style={{ ...secondaryButtonStyle, opacity: checking ? 0.7 : 1 }}>
+          <RefreshCw size={16} aria-hidden="true" className={checking ? 'animate-spin' : undefined} />
+          {checking ? 'Comprobando…' : 'Comprobar de nuevo'}
+        </button>
       </div>
-    </div>
+
+      <p style={{ display: 'flex', alignItems: 'flex-start', gap: 7, margin: 0, color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.45 }}>
+        <CheckCircle2 size={15} aria-hidden="true" style={{ color: 'var(--green)', flexShrink: 0, marginTop: 1 }} />
+        Los canales externos se configuran después y no forman parte de este paso.
+      </p>
+    </section>
   );
 }
 
-function Step({ number, icon, title, command, description, children }: {
-  number: number;
-  icon: React.ReactNode;
-  title: string;
-  command?: string;
-  description?: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div style={{
-      marginBottom: 12,
-      padding: '10px 12px',
-      background: 'var(--bg)',
-      borderRadius: 'var(--radius-sm)',
-      border: '1px solid var(--border)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          background: 'var(--amber)',
-          color: '#06060a',
-          fontSize: '0.6875rem',
-          fontWeight: 700,
-          flexShrink: 0,
-        }}>
-          {number}
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', flexShrink: 0 }}>
-          {icon}
-        </span>
-        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text)' }}>
-          {title}
-        </span>
-      </div>
-      {command && (
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.75rem',
-          padding: '5px 8px',
-          background: '#06060a',
-          borderRadius: 3,
-          color: 'var(--amber)',
-          marginBottom: 6,
-          userSelect: 'all',
-        }}>
-          $ {command}
-        </div>
-      )}
-      {description && (
-        <p style={descStyle}>
-          {description}
-        </p>
-      )}
-      {children}
-    </div>
-  );
-}
+const primaryButtonStyle: React.CSSProperties = {
+  minHeight: 44,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '0 14px',
+  border: '1px solid var(--amber)',
+  borderRadius: 'var(--radius-md)',
+  background: 'var(--amber)',
+  color: '#06060a',
+  fontSize: '0.8125rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
 
-const introStyle: React.CSSProperties = {
-  fontSize: '0.75rem',
+const secondaryButtonStyle: React.CSSProperties = {
+  minHeight: 44,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  padding: '0 14px',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius-md)',
+  background: 'var(--surface)',
   color: 'var(--text)',
-  lineHeight: 1.5,
-  margin: '0 0 14px',
-};
-
-const descStyle: React.CSSProperties = {
-  fontSize: '0.6875rem',
-  color: 'var(--text-muted)',
-  lineHeight: 1.5,
-  margin: '0 0 4px',
-};
-
-const listStyle: React.CSSProperties = {
-  fontSize: '0.6875rem',
-  color: 'var(--text-muted)',
-  lineHeight: 1.6,
-  margin: '2px 0 6px',
-  paddingLeft: 16,
-};
-
-const codeInline: React.CSSProperties = {
-  fontFamily: 'var(--font-mono)',
-  fontSize: '0.6875rem',
-  padding: '1px 4px',
-  background: '#06060a',
-  borderRadius: 2,
-  color: 'var(--amber)',
+  fontSize: '0.8125rem',
+  fontWeight: 600,
+  cursor: 'pointer',
 };

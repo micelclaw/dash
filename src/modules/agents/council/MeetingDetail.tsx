@@ -11,11 +11,13 @@
  */
 
 import { useState } from 'react';
-import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2, ArrowDown } from 'lucide-react';
+import { Play, Square, Trash2, Archive, ArchiveRestore, Pencil, RotateCcw, Loader2, ArrowDown, MessagesSquare } from 'lucide-react';
+import { ContinueMeetingModal } from './ContinueMeetingModal';
 import { MeetingMessage } from './MeetingMessage';
 import { ActionItems } from './ActionItems';
 import { NewMeetingModal } from './NewMeetingModal';
 import { useStickToBottom } from './hooks/use-stick-to-bottom';
+import type { EditMeetingPayload } from './hooks/use-meetings';
 import type { Meeting, ManagedAgent } from '../types';
 
 interface MeetingDetailProps {
@@ -29,6 +31,17 @@ interface MeetingDetailProps {
   onReset?: () => Promise<Meeting | null>;
   onDelete?: () => Promise<unknown>;
   onCycleItemStatus?: (itemId: string, newStatus: 'pending' | 'in_progress' | 'complete') => void;
+  /** Ventana de intervención humana abierta (el orquestador está esperando). */
+  awaitingUser?: boolean;
+  onSendUserMessage?: (content: string) => Promise<boolean>;
+  onSkipIntervention?: () => Promise<boolean>;
+  /** Continuar un council completado (debate/qa). */
+  onContinue?: (opts: { mode: 'debate' | 'qa'; directive: string; rounds?: number; participate?: boolean }) => Promise<boolean>;
+  /** Añadir UNA tarea al Workboard bajo demanda. */
+  onAddToWorkboard?: (itemId: string) => Promise<boolean>;
+  /** Editar un meeting programado (PATCH). Viene del owner (CouncilTab) que tiene la instancia de
+   *  useMeetings, para que el modal de edición no monte una instancia duplicada. */
+  onEditMeeting?: (id: string, payload: EditMeetingPayload) => Promise<Meeting | null>;
 }
 
 type ControlAction = 'start' | 'end' | 'archive' | 'unarchive' | 'reset' | 'delete';
@@ -50,12 +63,17 @@ function formatMeetingDate(dateStr: string): string {
 export function MeetingDetail({
   meeting, agents, onBack,
   onStart, onEnd, onArchive, onUnarchive, onReset, onDelete, onCycleItemStatus,
+  awaitingUser, onSendUserMessage, onSkipIntervention, onContinue, onAddToWorkboard, onEditMeeting,
 }: MeetingDetailProps) {
   const [backHover, setBackHover] = useState(false);
   const [busyAction, setBusyAction] = useState<ControlAction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [continueOpen, setContinueOpen] = useState(false);
+  // Intervención humana (user_participates): borrador + estado de envío.
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
 
   // Auto-scroll inteligente: pega al fondo en vivo si el usuario está abajo;
   // si lee arriba, muestra "N nuevos". Señal de streaming = longitud del último.
@@ -177,6 +195,7 @@ export function MeetingDetail({
             onUnarchive={() => runAction('unarchive', onUnarchive)}
             onRequestReset={() => setConfirmReset(true)}
             onRequestDelete={() => setConfirmDelete(true)}
+            onContinue={() => setContinueOpen(true)}
           />
 
           {/* Participant chips */}
@@ -243,7 +262,28 @@ export function MeetingDetail({
           </div>
         )}
 
-        {meeting.messages.length === 0 && (
+        {/* Council recién iniciado: feedback instantáneo mientras el orquestador conecta con el
+            Gateway y el modelo local arranca (cold-start). Se sustituye por el stream en cuanto
+            llega el primer mensaje del chief. */}
+        {meeting.messages.length === 0 && meeting.status === 'in_progress' && (
+          <div style={{
+            padding: 24,
+            textAlign: 'center',
+            color: 'var(--text-dim)',
+            fontSize: '0.875rem',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 10,
+          }}>
+            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', color: 'var(--amber)' }} />
+            <span role="img" aria-label="council" style={{ fontSize: '1.25rem' }}>🎙️</span>
+            <div style={{ fontWeight: 600, color: 'var(--text)' }}>Preparando el council…</div>
+            <div>Los agentes están arrancando. El primer turno puede tardar unos segundos.</div>
+          </div>
+        )}
+
+        {meeting.messages.length === 0 && meeting.status !== 'in_progress' && (
           <div style={{
             padding: 24,
             textAlign: 'center',
@@ -258,13 +298,74 @@ export function MeetingDetail({
         {meeting.action_items.length > 0 && (
           <ActionItems
             items={meeting.action_items}
+            meetingTitle={meeting.title}
             onCycleStatus={onCycleItemStatus}
+            onAddToWorkboard={onAddToWorkboard}
           />
         )}
 
         {/* Sentinel del auto-scroll (fin del contenido) */}
         <div ref={sentinelRef} />
       </div>
+
+      {/* Barra de intervención humana (user_participates + council en curso) */}
+      {meeting.user_participates && meeting.status === 'in_progress' && (
+        <div style={{
+          borderTop: `1px solid ${awaitingUser ? 'var(--amber)' : 'var(--border)'}`,
+          background: awaitingUser ? 'rgba(245, 166, 35, 0.06)' : 'var(--surface)',
+          padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 8,
+        }}>
+          {awaitingUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', color: 'var(--amber)', fontWeight: 600 }}>
+              🖐 El council espera tu intervención
+              <button
+                onClick={() => { if (onSkipIntervention) void onSkipIntervention(); }}
+                style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 400, color: 'var(--text-dim)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}
+              >
+                Continuar sin mí
+              </button>
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+              El council está deliberando — podrás intervenir en la próxima pausa. Puedes dejar escrito tu mensaje.
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              placeholder="Tu intervención en el council…"
+              rows={2}
+              style={{
+                flex: 1, resize: 'vertical', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)',
+                padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                background: 'var(--surface)', color: 'var(--text)',
+              }}
+            />
+            <button
+              onClick={() => {
+                const content = draft.trim();
+                if (!content || !onSendUserMessage) return;
+                setSending(true);
+                void onSendUserMessage(content).then(ok => {
+                  if (ok) setDraft('');
+                }).finally(() => setSending(false));
+              }}
+              disabled={!awaitingUser || sending || !draft.trim()}
+              title={awaitingUser ? 'Enviar tu intervención' : 'El council está deliberando; podrás intervenir en la próxima pausa'}
+              style={{
+                padding: '9px 16px', borderRadius: 8, border: 'none', fontSize: '0.8125rem', fontWeight: 600,
+                background: awaitingUser && draft.trim() ? 'var(--amber)' : 'var(--border)',
+                color: awaitingUser && draft.trim() ? '#1a1205' : 'var(--text-dim)',
+                cursor: awaitingUser && draft.trim() && !sending ? 'pointer' : 'default',
+                opacity: sending ? 0.6 : 1, flexShrink: 0,
+              }}
+            >
+              {sending ? 'Enviando…' : 'Intervenir'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Botón flotante "N nuevos mensajes" (solo cuando el usuario lee arriba) */}
       {!isAtBottom && (newCount > 0 || meeting.status === 'in_progress') && (
@@ -289,9 +390,18 @@ export function MeetingDetail({
           open
           agents={agents}
           existingMeeting={meeting}
+          editMeeting={onEditMeeting}
           onClose={() => setEditOpen(false)}
           onCreated={() => { /* not used in edit mode */ }}
           onUpdated={() => setEditOpen(false)}
+        />
+      )}
+
+      {continueOpen && onContinue && (
+        <ContinueMeetingModal
+          meeting={meeting}
+          onClose={() => setContinueOpen(false)}
+          onContinue={onContinue}
         />
       )}
 
@@ -413,7 +523,7 @@ export function MeetingDetail({
 
 function MeetingControls({
   status, busy,
-  onStart, onEnd, onEdit, onArchive, onUnarchive, onRequestReset, onRequestDelete,
+  onStart, onEnd, onEdit, onArchive, onUnarchive, onRequestReset, onRequestDelete, onContinue,
 }: {
   status: Meeting['status'];
   busy: ControlAction | null;
@@ -424,6 +534,7 @@ function MeetingControls({
   onUnarchive: () => void;
   onRequestReset: () => void;
   onRequestDelete: () => void;
+  onContinue: () => void;
 }) {
   const baseBtn: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -477,6 +588,15 @@ function MeetingControls({
       )}
       {status === 'completed' && (
         <>
+          <button
+            onClick={onContinue}
+            disabled={busy !== null}
+            title="Retomar el debate con más rondas o preguntar al council (conserva todo lo anterior)"
+            style={{ ...baseBtn, borderColor: 'var(--amber)', color: 'var(--amber)', cursor: busy ? 'wait' : 'pointer' }}
+          >
+            <MessagesSquare size={13} />
+            Continuar
+          </button>
           <button
             onClick={onRequestReset}
             disabled={busy !== null}

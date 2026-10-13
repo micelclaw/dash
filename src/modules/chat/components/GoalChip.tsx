@@ -12,6 +12,8 @@
  * (ChatMessage.tsx) para que no aparezcan como texto crudo. El estado se deriva
  * (read-only) de esos mensajes en el store del chat.
  */
+
+import { toast } from 'sonner';
 import { useMemo, useState } from 'react';
 import { Target, Pause, Play, AlertTriangle, CheckCircle2, Trash2, Plus } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -87,7 +89,11 @@ export function GoalChip() {
 
   // Despacha un comando /goal sin que el usuario lo escriba. ChatMessage.tsx
   // oculta estos mensajes del historial.
-  const run = (cmd: string) => { sendMessage(cmd); setOpen(false); setDraft(''); };
+  const run = (cmd: string) => {
+    const result = sendMessage(cmd);
+    if (!result.accepted) { toast.error('No se pudo enviar el objetivo.'); return; }
+    setOpen(false); setDraft('');
+  };
   const create = () => { const t = draft.trim(); if (t) run(`/goal start ${t}`); };
 
   const pres = goal ? PRESENTATION[goal.state] : null;

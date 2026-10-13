@@ -38,7 +38,7 @@ export function consumeMobileHandoff(): void {
   if (!m) return;
 
   try {
-    const payload = JSON.parse(b64urlDecode(m[1])) as HandoffPayload;
+    const payload = JSON.parse(b64urlDecode(m[1] ?? '')) as HandoffPayload;
     if (payload?.accessToken && payload?.user) {
       // Propaga la elección "recordar" del onboarding a la persistencia del dash
       // (claw-remember): true → localStorage (30d), false → sessionStorage. Debe

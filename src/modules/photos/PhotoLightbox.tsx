@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, Image, Users, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { toast } from 'sonner';
@@ -458,6 +459,7 @@ export function PhotoLightbox({
             }}
           >
             <InfoChip label={photo.filename} />
+            <EntitySource entity={photo} domain="photos" detail />
             {(aestheticStars > 0 || photo.metadata?.ai_processed_at) && (
               <StarRating
                 value={aestheticStars}

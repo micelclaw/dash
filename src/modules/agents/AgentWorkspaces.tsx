@@ -12,9 +12,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, X, Pencil, Eye, Save, Loader2, Plus, Trash2 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { toast } from 'sonner';
 import { api, ApiError } from '@/services/api';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -30,6 +28,7 @@ interface AgentWorkspacesProps {
   agents: ManagedAgent[];
   isMobile?: boolean;
   initialAgentId?: string | null;
+  initialFilePath?: string | null;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -64,7 +63,7 @@ function vfsToFileRecord(node: VfsNode, parentPath: string): FileRecord {
   } as unknown as FileRecord;
 }
 
-export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorkspacesProps) {
+export function AgentWorkspaces({ agents, isMobile, initialAgentId, initialFilePath }: AgentWorkspacesProps) {
   const [selectedId, setSelectedId] = useState<string>(initialAgentId ?? agents[0]?.id ?? '');
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
   const [hoveredFileId, setHoveredFileId] = useState<string | null>(null);
@@ -82,6 +81,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const deepLinkOpenedRef = useRef(false);
 
   // Resizable split state (percentage for the file-browser panel)
   const [splitPct, setSplitPct] = useState(50);
@@ -235,6 +235,26 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
       setFileContent('Failed to load file.');
     }
   }, [selectedAgent]);
+
+  // Deep links from chat resolve to an owned relative path. Navigate directly
+  // to its parent directory and open the file once that listing has loaded.
+  useEffect(() => {
+    if (!initialFilePath || deepLinkOpenedRef.current || selectedId !== initialAgentId) return;
+    const parts = initialFilePath.split('/').filter(Boolean);
+    const filename = parts.pop();
+    const parent = parts.join('/');
+    if (!filename) return;
+    if (currentPath !== parent) {
+      setCurrentPath(parent);
+      return;
+    }
+    if (filesLoading) return;
+    const match = files.find((file) => !file.is_directory && file.filepath === initialFilePath);
+    if (match) {
+      deepLinkOpenedRef.current = true;
+      void handleFileOpen(match);
+    }
+  }, [initialFilePath, initialAgentId, selectedId, currentPath, filesLoading, files, handleFileOpen]);
 
   // Handle file click: directory → navigate; file → editor (agente) o File Explorer (shared, read-only)
   const handleFileClick = useCallback((file: FileRecord) => {
@@ -926,9 +946,8 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                   maxWidth: 'none',
                 }}
               >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
+                <MarkdownRenderer
+                  content={fileContent}
                   components={{
                     h1: ({ children }) => <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '1.2em 0 0.6em', color: 'var(--text)', borderBottom: '1px solid var(--border)', paddingBottom: '0.3em' }}>{children}</h1>,
                     h2: ({ children }) => <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '1em 0 0.5em', color: 'var(--text)' }}>{children}</h2>,
@@ -957,9 +976,7 @@ export function AgentWorkspaces({ agents, isMobile, initialAgentId }: AgentWorks
                     th: ({ children }) => <th style={{ border: '1px solid var(--border)', padding: '6px 10px', textAlign: 'left', fontWeight: 600, background: 'var(--surface)' }}>{children}</th>,
                     td: ({ children }) => <td style={{ border: '1px solid var(--border)', padding: '6px 10px' }}>{children}</td>,
                   }}
-                >
-                  {fileContent}
-                </ReactMarkdown>
+                />
               </div>
             ) : (
               <pre style={{

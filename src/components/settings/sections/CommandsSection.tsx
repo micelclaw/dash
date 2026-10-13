@@ -114,8 +114,8 @@ export function CommandsSection() {
 
   return (
     <SectionShell
-      title="Commands"
-      description="Configure slash commands, shell access, and platform-native command menus."
+      title="Channel commands"
+      description="Configure human chat shortcuts and platform-native command menus. Host execution remains governed by Security."
       loading={loading}
       dirty={dirty}
       saving={saving}
@@ -131,7 +131,7 @@ export function CommandsSection() {
         <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
           <strong style={{ color: 'var(--text)' }}>How commands work:</strong> When you type <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>/help</code> in Telegram or Discord, the bot responds.
           With <strong>native commands</strong> enabled, slash commands appear as a menu in the chat app (like Discord's slash command picker).
-          With <strong>bash mode</strong>, you can run shell commands directly: <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>! docker ps</code>
+          With <strong>bash mode</strong>, an authorized sender can request a host command with <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>! docker ps</code>. The effective agent policy and approvals still apply.
         </div>
       </div>
 
@@ -195,7 +195,7 @@ export function CommandsSection() {
       </div>
 
       <Toggle label="Native skill commands" desc="Register skills as platform-native slash commands (e.g. /github, /weather)" value={nativeSkills === true || nativeSkills === 'auto'} onChange={v => { setNativeSkills(v ? 'auto' : false); setDirty(true); }} />
-      <Toggle label="Shell access (! command)" desc="Enable ! <command> syntax to run shell commands from chat. Example: ! docker ps" value={bash} onChange={v => { setBash(v); setDirty(true); }} />
+      <Toggle label="Shell shortcut (! command)" desc="Enable the ! <command> request syntax. Security still decides whether the command is denied, approved, or executed." value={bash} onChange={v => { setBash(v); setDirty(true); }} />
       <Toggle label="/config command" desc="Allow editing openclaw.json from chat via /config set/get/unset. Owner-only." value={configCmd} onChange={v => { setConfigCmd(v); setDirty(true); }} />
       <Toggle label="/debug command" desc="Allow runtime overrides from chat via /debug set/unset. Memory-only, not persisted." value={debug} onChange={v => { setDebug(v); setDirty(true); }} />
       <Toggle label="/restart command" desc="Allow restarting the Gateway from chat. Useful for remote administration." value={restart} onChange={v => { setRestart(v); setDirty(true); }} />
@@ -207,7 +207,7 @@ export function CommandsSection() {
         }}>
           <Terminal size={14} style={{ color: '#ef4444', flexShrink: 0, marginTop: 2 }} />
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            <strong style={{ color: '#ef4444' }}>Shell access is powerful.</strong> Anyone in your allowlist can execute arbitrary commands on the host. Use with caution. Commands running &gt;2s are backgrounded automatically — use <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>!poll</code> to check status, <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>!stop</code> to kill.
+            <strong style={{ color: '#ef4444' }}>The shell shortcut is powerful.</strong> Enabling it exposes a host-command entry point to authorized channel senders; it does not grant Full access or bypass Security. Each request still passes through the effective exec policy and may be denied or require approval. Commands running &gt;2s are backgrounded automatically — use <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>!poll</code> to check status, <code style={{ background: 'var(--surface)', padding: '1px 4px', borderRadius: 3 }}>!stop</code> to kill.
           </div>
         </div>
       )}

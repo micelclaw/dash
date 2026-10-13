@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState } from 'react';
 import { EntityContextMenu } from '@/components/shared/EntityContextMenu';
 import { HeatBadge } from '@/components/shared/HeatBadge';
@@ -45,8 +46,12 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
   const subtitle = getSubtitle(contact);
   const [avatarErr, setAvatarErr] = useState(false);
   const token = useAuthStore(s => s.tokens?.accessToken);
+  // Un avatar_path de almacenamiento ('/attachments/…') no es una URL que el navegador
+  // pueda pedir: solo lo sirve GET /contacts/:id/avatar (mismo fallback que ContactDetail).
   const avatarSrc = contact.avatar_path && !avatarErr
-    ? (contact.avatar_path.startsWith('/api/') ? `${contact.avatar_path}${contact.avatar_path.includes('?') ? '&' : '?'}token=${token}` : contact.avatar_path)
+    ? (contact.avatar_path.startsWith('/api/')
+      ? `${contact.avatar_path}${contact.avatar_path.includes('?') ? '&' : '?'}token=${token}`
+      : `/api/v1/contacts/${contact.id}/avatar?token=${token}`)
     : null;
 
   return (
@@ -141,6 +146,7 @@ export function ContactsListItem({ contact, selected, onClick, onDelete }: Conta
               </div>
             )}
           </div>
+          <EntitySource entity={contact} domain="contacts" />
         </div>
       }
     />

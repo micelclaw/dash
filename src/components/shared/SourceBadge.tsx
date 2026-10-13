@@ -10,98 +10,63 @@
  * https://micelclaw.com
  */
 
-import { Globe, Mail, FileText, StickyNote, Diamond } from 'lucide-react';
+import { Globe } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DataProviderIcon, DataServiceIcon, type DataServiceDomain } from '@/config/data-provider-icons';
+import type { DataTypeId } from '@/config/data-types';
+import { distinctOriginProviders, originDescription, type EntityOrigin, type OriginEntity } from '@/types/origins';
 
 interface SourceBadgeProps {
-  source: 'local' | 'google' | 'apple' | 'synology' | 'imap' | string;
-  size?: 'sm' | 'md';
+  origins?: EntityOrigin[];
+  /** Compatibility with old Core: only explicit local/scan sources identify Micelclaw. */
+  source?: string | null;
+  domain?: DataTypeId;
+  size?: 'sm' | 'md' | 'xs';
+  detail?: boolean;
+}
+const SERVICE_DOMAINS = new Set<DataTypeId>(['mail', 'calendar', 'contacts', 'tasks']);
+
+function OriginIcon({ origin, domain, size }: { origin: EntityOrigin; domain?: DataTypeId; size: number }) {
+  if (origin.provider_slug === 'micelclaw') return <img src="/logo.svg" alt="" width={size} height={size} style={{ objectFit: 'contain' }} />;
+  if (!origin.provider_slug) return <Globe size={size} />;
+  return domain && SERVICE_DOMAINS.has(domain)
+    ? <DataServiceIcon providerSlug={origin.provider_slug} domain={domain as DataServiceDomain} size={size} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+    : <DataProviderIcon slug={origin.provider_slug} size={size} style={{ maxWidth: '100%', maxHeight: '100%' }} />;
 }
 
-const SOURCE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
-  local: { label: 'Local', color: 'var(--amber)', icon: 'paw' },
-  google: { label: 'Google', color: '#4285f4', icon: 'google' },
-  apple: { label: 'Apple', color: '#a2aaad', icon: 'apple' },
-  synology: { label: 'Synology', color: '#e87e04', icon: 'synology' },
-  imap: { label: 'IMAP', color: 'var(--mod-mail)', icon: 'mail' },
-  notion: { label: 'Notion', color: '#999999', icon: 'notion' },
-  evernote: { label: 'Evernote', color: '#00a82d', icon: 'evernote' },
-  obsidian: { label: 'Obsidian', color: '#7c3aed', icon: 'obsidian' },
-};
-
-function SourceIcon({ type, size }: { type: string; size: number }) {
-  switch (type) {
-    case 'paw':
-      return <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>&#x1F43E;</span>;
-    case 'google':
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-      );
-    case 'apple':
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="#a2aaad">
-          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83"/>
-        </svg>
-      );
-    case 'synology':
-      return (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="#e87e04">
-          <circle cx="12" cy="12" r="10" fill="none" stroke="#e87e04" strokeWidth="2"/>
-          <text x="12" y="16" textAnchor="middle" fill="#e87e04" fontSize="10" fontWeight="bold">S</text>
-        </svg>
-      );
-    case 'mail':
-      return <Mail size={size} />;
-    case 'notion':
-      return <FileText size={size} />;
-    case 'evernote':
-      return <StickyNote size={size} />;
-    case 'obsidian':
-      return <Diamond size={size} />;
-    default:
-      return <Globe size={size} />;
-  }
-}
-
-export function SourceBadge({ source, size = 'md' }: SourceBadgeProps) {
-  const config = SOURCE_CONFIG[source] ?? { label: source, color: 'var(--text-dim)', icon: 'globe' as const };
-  const iconSize = size === 'sm' ? 14 : 16;
-
-  if (size === 'sm') {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span style={{ display: 'inline-flex', alignItems: 'center', color: config.color, cursor: 'default' }}>
-            <SourceIcon type={config.icon} size={iconSize} />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{config.label}</TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '2px 8px',
-        borderRadius: 'var(--radius-full)',
-        background: `color-mix(in srgb, ${config.color} 15%, transparent)`,
-        color: config.color,
-        fontSize: '0.6875rem',
-        fontFamily: 'var(--font-sans)',
-        lineHeight: 1,
-      }}
-    >
-      <SourceIcon type={config.icon} size={iconSize} />
-      {config.label}
+export function SourceBadge({ origins, source, domain, size = 'sm', detail = false }: SourceBadgeProps) {
+  const known = origins?.length ? origins : source === 'local' || (domain === 'photos' && source === 'scan')
+    ? [{ provider_slug: 'micelclaw', label: 'Micelclaw' }]
+    : [{ provider_slug: null, label: source || 'Fuente desconocida' }];
+  const groups = distinctOriginProviders(known);
+  const description = known.map(originDescription).join(' / ');
+  const iconSize = size === 'xs' ? 12 : 14;
+  const full = detail || size === 'md';
+  const content = (
+    <span role={full ? 'group' : 'img'} aria-label={`Fuente: ${description}`} title={description}
+      data-source-badge data-source-provider={known[0]?.provider_slug ?? 'unknown'}
+      style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, gap: 4,
+        color: 'var(--text-dim)', fontSize: '0.6875rem', fontFamily: 'var(--font-sans)', lineHeight: 1.3 }}>
+      <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: iconSize, height: iconSize, flexShrink: 0 }}>
+        <OriginIcon origin={known[0]!} domain={domain} size={iconSize} />
+      </span>
+      {full ? <span>{description}</span> : groups.length > 1 ? <span>+{groups.length - 1}</span> : null}
     </span>
   );
+  return <Tooltip><TooltipTrigger asChild>{content}</TooltipTrigger><TooltipContent>{description}</TooltipContent></Tooltip>;
+}
+
+/** Shared adapter for every domain; no requests or mutable state in the badge. */
+export function EntitySource({ entity, native = false, ...props }: Omit<SourceBadgeProps, 'origins' | 'source'> & {
+  entity?: OriginEntity & { source?: string | null }; native?: boolean;
+}) {
+  return <SourceBadge {...props} origins={entity?.origins} source={entity?.source ?? (native ? 'local' : undefined)} />;
+}
+
+/** Consistent permanent overlay, away from photo selection/favorite controls. */
+export function PhotoSource({ entity }: { entity?: OriginEntity & { source?: string | null } }) {
+  return <span style={{ position: 'absolute', bottom: 4, right: 4, display: 'inline-flex',
+    padding: '3px 4px', borderRadius: 'var(--radius-sm)', background: 'rgba(0,0,0,0.65)', zIndex: 2 }}>
+    <EntitySource entity={entity} domain="photos" />
+  </span>;
 }

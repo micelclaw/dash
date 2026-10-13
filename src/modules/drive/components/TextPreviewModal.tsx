@@ -11,9 +11,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { X, Download, FileText, AlertCircle, Code, BookOpen } from 'lucide-react';
 import { downloadFile } from '@/lib/file-download';
 import { api } from '@/services/api';
@@ -275,9 +273,7 @@ export function TextPreviewModal({ file, onClose }: TextPreviewModalProps) {
           {content && !loading && !error && (
             isMd && !rawView ? (
               <div className="app-detail-md" style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text)' }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
-                  {content.content_text}
-                </ReactMarkdown>
+                <MarkdownRenderer content={content.content_text} components={mdComponents} />
               </div>
             ) : (
               <pre style={{

@@ -12,10 +12,12 @@ import { AppListRow, AppListHeader } from './AppListRow';
 import { AppDetail } from './AppDetail';
 import { AppEditor } from './AppEditor';
 import { AssignAppsModal as SharedAssignAppsModal } from '@/components/shared/AssignAppsModal';
+import { AppIcon } from '@/components/shared/AppIcon';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { RegistryBrowser } from './RegistryBrowser';
 import { PluginsBrowser } from './PluginsBrowser';
+import { WorkshopTab } from './WorkshopTab';
 import { useAuthStore } from '@/stores/auth.store';
 import { useSearchParams } from 'react-router';
 import { api } from '@/services/api';
@@ -26,7 +28,7 @@ import type { InstalledApp } from '@/types/apps';
 // Claves internas (se conservan por compat). Etiquetas: 'available'→"Instaladas"
 // (apps activas), 'disponibles'→"Disponibles" (en el sistema, no activas), 'installed'
 // →"Asignadas" (a agentes), 'adapted'→"Adapted", 'registry'→"Registro".
-type Tab = 'available' | 'disponibles' | 'installed' | 'adapted' | 'registry' | 'plugins';
+type Tab = 'available' | 'disponibles' | 'installed' | 'adapted' | 'registry' | 'plugins' | 'workshop';
 
 // Origin tag colors (quién hizo la app). Micelclaw = cian (oficial), OpenClaw = granate
 // (de serie), Tuya = ámbar (creada por ti en Claw Studio), Community = slate (de un tercero).
@@ -98,6 +100,7 @@ export function Component() {
   // Deep-link support: /micelhub?tab=plugins&focus=acpx (from Studio Engines).
   useEffect(() => {
     if (searchParams.get('tab') === 'plugins' && isAdmin) setTab('plugins');
+    if (searchParams.get('tab') === 'workshop') setTab('workshop');
   }, [searchParams, isAdmin]);
   const [search, setSearch] = useState('');
   const [selectedApp, setSelectedApp] = useState<InstalledApp | null>(null);
@@ -133,7 +136,7 @@ export function Component() {
   // Installed tab: agents with their skills
   const [agentsWithSkills, setAgentsWithSkills] = useState<Array<{
     id: string; name: string; display_name: string; avatar: string | null;
-    skills: Array<{ id: string; name: string; icon: string }>;
+    skills: Array<{ id: string; name: string; icon: string; icon_kind?: 'emoji' | 'lucide'; color?: string }>;
   }>>([]);
   const [installedLoading, setInstalledLoading] = useState(false);
 
@@ -157,7 +160,7 @@ export function Component() {
         .catch(() => new Set<string>());
 
       // Las apps con backend (L2/L3) viven en installed_apps con su nivel/autor/estado REALES
-      // (p.ej. el acortador: L3, author='studio', status active/available). skills.status solo ve la
+      // (p.ej. una app salida de Studio: L3, author='studio', status active/available). skills.status solo ve la
       // SKILL.md materializada y sintetiza un nivel/origen heurístico (L1·Micelclaw) que MIENTE.
       // Indexamos TODAS las filas de DB por nombre (cualquier source: studio/local/registry/adapted)
       // para corregir nivel+autor+estado de la tarjeta (cero tarjetas nuevas: solo enriquece).
@@ -177,6 +180,13 @@ export function Component() {
         const synthSource = s.source === 'openclaw-extra' ? 'micelhub' as const
           : s.source === 'openclaw-bundled' ? 'openclaw' as const
           : 'local' as const;
+
+        // DISPLAY unificado (Fase E): el backend resuelve nombre/icono en `s.display`;
+        // ES la fuente correcta (por encima de los crudos `s.name`/`s.emoji`).
+        const displayName = s.display?.name ?? s.name;
+        const displayIcon = s.display?.icon ?? s.emoji ?? '🔧';
+        const displayIconKind = s.display?.icon_kind ?? 'emoji';
+        const displayColor = s.display?.color;
 
         // Determine app state for UI
         const hasOsIssue = (s.missing?.os?.length ?? 0) > 0;
@@ -211,14 +221,16 @@ export function Component() {
           source,
           install_path: null,
           manifest: {
-            name: s.name,
+            name: displayName,
             version: '0.0.0',
             app_level: appLevel as 1 | 2 | 3,
             min_core_version: '0.0.0',
             skill: '',
             description: s.description || '',
             author,
-            icon: s.emoji || '🔧',
+            icon: displayIcon,
+            icon_kind: displayIconKind,
+            color: displayColor,
             tier_required: 'free' as const,
             permissions: [],
             tags: [
@@ -266,23 +278,17 @@ export function Component() {
       // archive reaparecería como tarjeta zombi). Tras el fix de purge en S9 no debería haber, pero
       // blindamos por si quedan filas legacy.
       setRegistryApps((res.data ?? []).filter((a) => a.status !== 'archived').map((a) => {
-        // El manifest del .claw lleva el icono en ui.module.icon como NOMBRE Lucide
-        // (p.ej. "Waypoints"). AppCard/AppDetail esperan emoji → emoji de conector y
-        // SOBREESCRIBIMOS ui.module.icon para que no se pinte el nombre Lucide en crudo.
+        // El icono lo resuelve ahora <AppIcon>/resolveManifestIcon desde el manifest
+        // (soporta ui.module.icon como nombre Lucide) → sin override de emoji.
         const m = (a.manifest ?? {}) as unknown as Record<string, unknown>;
-        const icon = (typeof m.icon === 'string' && m.icon) ? m.icon : '🔌';
-        const mUi = m.ui as Record<string, unknown> | undefined;
-        const mMod = mUi?.module as Record<string, unknown> | undefined;
         return {
           ...a,
           manifest: {
             ...m,
             name: a.app_name,
-            icon,
             tier_required: (m.tier_required as string) ?? 'free',
             // Registry apps are third-party/community — NOT auto-verified.
             tags: Array.from(new Set([...(((m.tags as string[]) ?? [])), 'free'])),
-            ...(mMod ? { ui: { ...mUi, module: { ...mMod, icon } } } : {}),
           },
         } as unknown as InstalledApp;
       }));
@@ -470,7 +476,7 @@ export function Component() {
 
           {/* Tabs + toggle de vista (cuadrícula/lista) */}
           <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            {([...(['available', 'disponibles', 'installed', 'adapted', 'registry'] as Tab[]), ...(isAdmin ? (['plugins'] as Tab[]) : [])]).map((t) => (
+            {([...(['available', 'disponibles', 'installed', 'adapted', 'registry', 'workshop'] as Tab[]), ...(isAdmin ? (['plugins'] as Tab[]) : [])]).map((t) => (
               <button key={t} onClick={() => { setTab(t); setSelectedApp(null); }} style={{
                 padding: '6px 12px',
                 background: tab === t ? 'var(--surface-hover)' : 'transparent',
@@ -487,6 +493,7 @@ export function Component() {
                 {t === 'installed' && `Asignadas${agentsWithSkills.length > 0 ? ` (${agentsWithSkills.filter(a => a.skills.length > 0).length})` : ''}`}
                 {t === 'adapted' && `Adapted${adaptedCount > 0 ? ` (${adaptedCount})` : ''}`}
                 {t === 'registry' && 'Registro'}
+                {t === 'workshop' && 'Workshop'}
                 {t === 'plugins' && 'Plugins'}
               </button>
             ))}
@@ -544,7 +551,9 @@ export function Component() {
 
         {/* Content */}
         <ScrollArea className="flex-1">
-          {tab === 'plugins' ? (
+          {tab === 'workshop' ? (
+            <WorkshopTab />
+          ) : tab === 'plugins' ? (
             <PluginsBrowser focusId={focusPlugin} />
           ) : tab === 'registry' ? (
             <RegistryBrowser
@@ -579,7 +588,7 @@ export function Component() {
                           background: '#06b6d412', border: '1px solid #06b6d430',
                           borderRadius: 'var(--radius-sm)', color: '#06b6d4',
                         }}>
-                          {s.icon ?? '📦'} {s.name}
+                          <AppIcon icon={s.icon ?? '📦'} icon_kind={s.icon_kind} color={s.color} size={13} /> {s.name}
                           <button onClick={(e) => { e.stopPropagation(); handleUnassignSkill(agent.id, ((s as Record<string, unknown>).skill_id as string) ?? s.id); }}
                             title={`Remove ${s.name}`}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex', marginLeft: 2 }}>
@@ -680,4 +689,3 @@ export function Component() {
     </div>
   );
 }
-

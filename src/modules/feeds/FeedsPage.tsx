@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useFeedsStore } from '@/stores/feeds.store';
@@ -67,6 +68,12 @@ export function Component() {
       setMobileView('reader');
     }
   }, [activeArticleId, isMobile]);
+
+  useOriginRefresh('feeds', async () => {
+    const store = useFeedsStore.getState();
+    await Promise.all([store.fetchFeeds(), store.fetchArticles()]);
+    if (store.activeArticleId) await store.openArticleById(store.activeArticleId);
+  });
 
   // Keyboard shortcuts
   useEffect(() => {

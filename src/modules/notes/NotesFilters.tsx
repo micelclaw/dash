@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, ChevronDown, X } from 'lucide-react';
+import { ConnectButton } from '@/components/shared/ConnectButton';
 
 interface NotesFiltersProps {
   search: string;
@@ -120,6 +121,7 @@ export function NotesFilters({
           }} />
         </div>
       </div>
+      <ConnectButton dataType="notes" />
     </div>
   );
 }

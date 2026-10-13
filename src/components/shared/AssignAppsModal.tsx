@@ -15,11 +15,16 @@ import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { Check, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { AppIcon } from '@/components/shared/AppIcon';
 
 interface AvailableSkill {
   id: string;
   name: string;
   icon: string;
+  /** Display SSOT (Fase E): 'emoji' → `icon` crudo · 'lucide' → nombre Lucide. */
+  icon_kind?: 'emoji' | 'lucide';
+  /** Display SSOT (Fase E): tinte opcional del icono (solo Lucide). */
+  color?: string;
   description: string;
 }
 
@@ -70,7 +75,7 @@ export function AssignAppsModal({
   const toggleSkill = useCallback((id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   }, []);
@@ -168,7 +173,7 @@ export function AssignAppsModal({
                     {isSelected && (
                       <Check size={12} style={{ position: 'absolute', top: 4, right: 4, color: 'var(--amber)' }} />
                     )}
-                    <span style={{ fontSize: '1.25rem' }}>{skill.icon}</span>
+                    <AppIcon icon={skill.icon} icon_kind={skill.icon_kind} color={skill.color} size={20} />
                     <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>{skill.name}</span>
                   </button>
                 );

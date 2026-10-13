@@ -13,23 +13,28 @@
 import { useAuthStore } from '@/stores/auth.store';
 import { SettingSection } from '../SettingSection';
 
+const TIER_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', plus: 'Plus' };
+
 export function LicenseSection() {
   const tier = useAuthStore((s) => s.user?.tier ?? 'free');
+  const isFree = tier === 'free';
 
   return (
     <SettingSection title="License">
-      {tier === 'free' ? (
-        <div style={{ padding: '16px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Current Tier</span>
-            <span style={{
-              fontSize: '0.8125rem', padding: '2px 10px',
-              background: 'var(--surface)', borderRadius: 'var(--radius-sm)',
-              color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', fontWeight: 500,
-            }}>
-              Free
-            </span>
-          </div>
+      <div style={{ padding: '16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: isFree ? 16 : 8 }}>
+          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Current Tier</span>
+          <span style={{
+            fontSize: '0.8125rem', padding: '2px 10px',
+            background: isFree ? 'var(--surface)' : 'rgba(212, 160, 23, 0.15)',
+            borderRadius: 'var(--radius-sm)',
+            color: isFree ? 'var(--text-dim)' : 'var(--amber)',
+            fontFamily: 'var(--font-sans)', fontWeight: isFree ? 500 : 600,
+          }}>
+            {TIER_LABEL[tier] ?? tier}
+          </span>
+        </div>
+        {isFree ? (
           <button
             onClick={() => window.open('https://micelclaw.com/pro', '_blank')}
             style={{
@@ -42,37 +47,15 @@ export function LicenseSection() {
           >
             Upgrade to Pro →
           </button>
-        </div>
-      ) : (
-        <div style={{ padding: '16px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Current Tier</span>
-            <span style={{
-              fontSize: '0.8125rem', padding: '2px 10px',
-              background: 'rgba(212, 160, 23, 0.15)', borderRadius: 'var(--radius-sm)',
-              color: 'var(--amber)', fontFamily: 'var(--font-sans)', fontWeight: 600,
-            }}>
-              Pro
-            </span>
+        ) : (
+          /* El dash NO consulta hoy al servidor de licencias (no hay ruta en Core que
+             exponga /v1/licenses/info), así que no hay clave ni fecha de caducidad que
+             mostrar: antes se pintaban literales inventados. Decimos la verdad. */
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', lineHeight: 1.5 }}>
+            Managed outside the dashboard. License key and expiry are not available here.
           </div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginBottom: 4 }}>
-            Valid Until: February 2027
-          </div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)', marginBottom: 16 }}>
-            License Key: CLAW-XXXX-XXXX-XXXX
-          </div>
-          <button
-            style={{
-              height: 30, padding: '0 14px',
-              background: 'transparent', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)',
-              fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer',
-            }}
-          >
-            Deactivate License
-          </button>
-        </div>
-      )}
+        )}
+      </div>
     </SettingSection>
   );
 }

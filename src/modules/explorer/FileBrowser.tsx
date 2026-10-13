@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useRef, useEffect } from 'react';
 import { Loader2, FolderOpen } from 'lucide-react';
 import { FileIcon } from '@/components/shared/FileIcon';
@@ -187,7 +188,7 @@ export function FileBrowser({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '32px 1fr 90px 120px 100px',
+          gridTemplateColumns: isMobile ? '32px minmax(0, 1fr)' : '32px minmax(0, 1fr) 90px 120px 100px',
           gap: 8,
           padding: '0 12px',
           height: 32,
@@ -212,9 +213,9 @@ export function FileBrowser({
           style={{ width: 16, height: 16, accentColor: 'var(--amber)', cursor: 'pointer' }}
         />
         <span>Name</span>
-        <span>Size</span>
-        <span>Modified</span>
-        <span>Type</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>Size</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>Modified</span>
+        <span style={{ display: isMobile ? 'none' : undefined }}>Type</span>
       </div>
       {/* Rows */}
       {files.map(file => (
@@ -299,6 +300,7 @@ function GridItem({ file, compact, isMobile, isSelected, checked, showCheckbox, 
         fontFamily: 'var(--font-sans)',
       }}
     >
+      <span style={{ position: "absolute", top: 6, right: 6 }}><EntitySource entity={file} domain="files" /></span>
       {showCb && (
         <input
           type="checkbox"
@@ -418,7 +420,7 @@ function ListRow({ file, compact, isMobile, isSelected, checked, hasSelection, i
       style={{
         position: 'relative',
         display: 'grid',
-        gridTemplateColumns: '32px 1fr 90px 120px 100px',
+        gridTemplateColumns: isMobile ? '32px minmax(0, 1fr)' : '32px minmax(0, 1fr) 90px 120px 100px',
         gap: 8,
         padding: '0 12px',
         height: compact ? 30 : 36,
@@ -479,17 +481,18 @@ function ListRow({ file, compact, isMobile, isSelected, checked, hasSelection, i
             {file.filename}
           </span>
         )}
+        <span style={{ marginLeft: "auto", display: "inline-flex" }}><EntitySource entity={file} domain="files" /></span>
       </div>
       {/* Size */}
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+      <span style={{ display: isMobile ? 'none' : undefined, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {file.is_directory ? '--' : formatFileSize(file.size_bytes)}
       </span>
       {/* Modified */}
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+      <span style={{ display: isMobile ? 'none' : undefined, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {formatRelative(new Date(file.updated_at))}
       </span>
       {/* Type */}
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+      <span style={{ display: isMobile ? 'none' : undefined, fontSize: '0.75rem', color: 'var(--text-dim)' }}>
         {getMimeLabel(file.mime_type)}
       </span>
     </div>

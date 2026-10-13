@@ -592,7 +592,7 @@ function PerAgentSandboxTable() {
               <div style={{ color, fontStyle }}>{r?.effective_scope ?? '…'}</div>
               <div style={{ color, fontStyle }}>{r?.effective_workspace_access ?? '…'}</div>
               <a
-                href={`/agents?selected=${a.id}&tab=advanced`}
+                href={`/agents?selected=${a.id}&tab=security`}
                 title="Edit in Advanced tab"
                 style={{
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

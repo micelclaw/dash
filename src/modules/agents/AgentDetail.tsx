@@ -22,19 +22,17 @@ import { useContextBudget } from './hooks/use-context-budget';
 import { AgentIdentity } from './AgentIdentity';
 import { AgentSkills } from './AgentSkills';
 import { ContextBudgetBars } from './ContextBudgetBars';
-import { PendingSkillProposals } from './PendingSkillProposals';
-import { LearnedSkills } from './LearnedSkills';
 import { AgentActivity } from './AgentActivity';
 import { AgentToolAccess } from './AgentToolAccess';
 import { EmojiAvatarPicker } from '@/components/shared/EmojiAvatarPicker';
 import { useChatStore } from '@/stores/chat.store';
 import { AgentAdvancedConfig } from './AgentAdvancedConfig';
-import { AgentSandboxConfig } from './AgentSandboxConfig';
+import { AgentSecurity } from './AgentSecurity';
 import { AgentBootstrapConfig } from './AgentBootstrapConfig';
 import { AgentDoctor } from './AgentDoctor';
 import { AgentActivityCenter } from './AgentActivityCenter';
-import { AgentMemory } from './AgentMemory';
 import { AgentSharedFolderAccess } from './AgentSharedFolderAccess';
+import { AgentDecisionModel } from './AgentDecisionModel';
 import { getAgentColor, AGENT_PALETTE, AGENT_COLOR_NAMES } from './agent-colors';
 import type { ManagedAgent, AgentDetailTab } from './types';
 
@@ -77,11 +75,11 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
   const [browseHover, setBrowseHover] = useState(false);
   const [hoveredChildId, setHoveredChildId] = useState<string | null>(null);
   // Read ?tab= from the URL on first render so deep-links from
-  // Settings → Sandbox land on the Advanced tab directly.
+  // Deep links may open a specific agent detail area directly.
   const [activeTab, setActiveTab] = useState<AgentDetailTab>(() => {
     if (typeof window === 'undefined') return 'overview';
     const t = new URLSearchParams(window.location.search).get('tab');
-    if (t === 'tools' || t === 'memory' || t === 'advanced' || t === 'activity' || t === 'health') return t;
+    if (t === 'tools' || t === 'memory' || t === 'security' || t === 'advanced' || t === 'activity' || t === 'health') return t;
     return 'overview';
   });
 
@@ -355,12 +353,13 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--border)', overflowX: 'auto', flexShrink: 0 }}>
         {([
           { key: 'overview' as const, label: 'Overview' },
           { key: 'activity' as const, label: 'Actividad' },
           { key: 'tools' as const, label: 'Tools' },
           { key: 'memory' as const, label: 'Memory' },
+          { key: 'security' as const, label: 'Security' },
           { key: 'advanced' as const, label: 'Advanced' },
           { key: 'health' as const, label: 'Salud' },
         ]).map(tab => (
@@ -378,6 +377,7 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
               cursor: 'pointer',
               fontFamily: 'var(--font-sans)',
               transition: 'var(--transition-fast)',
+              whiteSpace: 'nowrap',
             }}
           >
             {tab.label}
@@ -391,16 +391,13 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
           {/* Identity */}
           <AgentIdentity agentId={agentId} />
 
+          <AgentDecisionModel agentId={agent.id} />
+
           {/* Context budget bar (sits between Identity and Apps, replacing the divider) */}
           <ContextBudgetBars budget={contextBudget} loading={budgetLoading} />
 
           {/* Skills (apps) */}
           <AgentSkills skills={agent.skills} agentId={agent.id} agentName={agent.display_name} agentAvatar={agent.avatar ?? undefined} skillModes={agent.skill_modes} appTokens={appTokens} onSkillsChanged={refetch} />
-
-          {/* Skill Workshop: propuestas pendientes + skills aprendidas (concepto separado de las apps).
-              Ambos se auto-ocultan si no hay nada → no ensucian el Overview. */}
-          <PendingSkillProposals agentId={agent.id} agentName={agent.name} onGraduated={refetch} />
-          <LearnedSkills learnedSkills={agent.learned_skills ?? []} agentId={agent.id} onChanged={refetch} />
 
           <div style={{ height: 1, background: 'var(--border)' }} />
 
@@ -492,18 +489,33 @@ export function AgentDetail({ agentId, agents, onSelect, onAgentChanged, onBrows
       )}
 
       {activeTab === 'memory' && (
-        <AgentMemory agentId={agent.id} agentName={agent.display_name || agent.name} agentBareName={agent.name} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: 16, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)' }}>
+          <strong style={{ fontSize: '0.82rem', color: 'var(--text)' }}>Memory se gestiona desde la vista unificada</strong>
+          <span style={{ fontSize: '0.76rem', color: 'var(--text-dim)' }}>Resumen, Recuerdos, Sueños y Configuración viven ahora en la sección Memory de Agents.</span>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('claw:agents-tab', { detail: 'memory' }))}
+            style={{ border: '1px solid var(--amber)', borderRadius: 7, padding: '7px 11px', background: 'var(--amber-dim)', color: 'var(--amber)', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 600 }}
+          >Abrir Memory</button>
+        </div>
+      )}
+
+      {activeTab === 'security' && (
+        <AgentSecurity
+          agentId={agent.id}
+          agentName={agent.display_name || agent.name}
+          showSandbox
+          onChanged={onAgentChanged}
+        />
       )}
 
       {activeTab === 'advanced' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Per-agent overrides (sandbox + bootstrap; more sections
-              can land here as they're implemented). */}
+          {/* Non-security per-agent overrides. Execution policy and sandbox
+              now live together in the dedicated Security tab. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 -8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Per-agent overrides
             </h3>
-            <AgentSandboxConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
             <AgentBootstrapConfig agentId={agent.id} agentName={agent.display_name || agent.name} />
             <AgentSharedFolderAccess agentId={agent.id} agentName={agent.display_name || agent.name} />
           </div>

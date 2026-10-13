@@ -1,0 +1,49 @@
+/**
+ * Keyframes de la escena de Sueños (los estilos inline no pueden declarar
+ * @keyframes). Prefijo .drm- para no colisionar. El módulo agents es un chunk
+ * lazy → este css no entra en el bundle de arranque.
+ */
+
+@keyframes drm-twinkle {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@keyframes drm-glow {
+  0%, 100% { filter: drop-shadow(0 0 14px rgba(240, 235, 200, 0.30)); }
+  50% { filter: drop-shadow(0 0 26px rgba(240, 235, 200, 0.50)); }
+}
+
+@keyframes drm-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes drm-zfloat {
+  0% { transform: translateY(0) scale(0.9); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: translateY(-38px) scale(1.45); opacity: 0; }
+}
+
+@keyframes drm-bubble-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes drm-sunray {
+  0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.85; }
+  50% { transform: rotate(12deg) scale(1.06); opacity: 1; }
+}
+
+.drm-star { animation: drm-twinkle 3.2s ease-in-out infinite; }
+.drm-moon { animation: drm-glow 8s ease-in-out infinite; }
+.drm-sun { animation: drm-sunray 7s ease-in-out infinite; transform-origin: center; }
+.drm-sleeper { animation: drm-breathe 4s ease-in-out infinite; transform-origin: center bottom; }
+.drm-z { animation: drm-zfloat 4s ease-out infinite; }
+.drm-bubble-text { animation: drm-bubble-in 0.35s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .drm-star, .drm-moon, .drm-sun, .drm-sleeper, .drm-z, .drm-bubble-text {
+    animation: none;
+  }
+}

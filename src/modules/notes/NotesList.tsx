@@ -27,6 +27,7 @@ interface NotesListProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onCreateNote: () => void;
+  onConnectedNoteCreated?:(note:Note)=>void;
   onPinNote: (id: string) => void;
   onArchiveNote: (id: string) => void;
   onDeleteNote: (id: string) => void;
@@ -45,7 +46,7 @@ function SkeletonItem() {
 
 export function NotesList({
   notes, loading, error, filters, onFiltersChange,
-  selectedId, onSelect, onCreateNote, onPinNote, onArchiveNote, onDeleteNote, onRetry,
+  selectedId, onSelect, onCreateNote,onConnectedNoteCreated, onPinNote, onArchiveNote, onDeleteNote, onRetry,
 }: NotesListProps) {
   const availableTags = useMemo(
     () => [...new Set(notes.flatMap(n => n.tags))].sort(),
@@ -67,7 +68,7 @@ export function NotesList({
         availableTags={availableTags}
       />
 
-      <NoteCreateButton onClick={onCreateNote} />
+      <NoteCreateButton onClick={onCreateNote} onCreated={onConnectedNoteCreated}/>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {/* Loading */}

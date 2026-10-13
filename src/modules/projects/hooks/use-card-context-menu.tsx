@@ -14,14 +14,16 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Pencil, Trash2, ArrowRightLeft, Copy, Archive,
-  CalendarDays, Flag, CheckSquare, ArchiveRestore,
+  CalendarDays, Flag, Palette, ArchiveRestore,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProjectsStore } from '@/stores/projects.store';
+import { CARD_COLORS } from '../utils/design-tokens';
 import type { Card } from '../types';
 
 interface MenuState {
   card: Card;
+  cardIds: string[];
   x: number;
   y: number;
 }
@@ -47,17 +49,22 @@ export function useCardContextMenu() {
   const moveCard = useProjectsStore((s) => s.moveCard);
   const archiveCard = useProjectsStore((s) => s.archiveCard);
   const unarchiveCard = useProjectsStore((s) => s.unarchiveCard);
+  const multiSelectedIds = useProjectsStore((s) => s.multiSelectedIds);
+  const clearMultiSelect = useProjectsStore((s) => s.clearMultiSelect);
 
   const onCardContextMenu = useCallback((e: React.MouseEvent, card: Card) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu({ card, x: e.clientX, y: e.clientY });
+    const cardIds = multiSelectedIds.has(card.id)
+      ? Array.from(multiSelectedIds)
+      : [card.id];
+    setMenu({ card, cardIds, x: e.clientX, y: e.clientY });
     setSubMenu(null);
     setDateValues({
       start: card.start_date?.split('T')[0] ?? '',
       due: card.due_date?.split('T')[0] ?? '',
     });
-  }, []);
+  }, [multiSelectedIds]);
 
   const close = useCallback(() => {
     setMenu(null);
@@ -101,6 +108,15 @@ export function useCardContextMenu() {
     ? (boardColumnIds[activeBoardId] ?? []).map(id => columns[id]).filter(Boolean)
     : [];
 
+  const updateSelected = useCallback(async (updates: Record<string, unknown>, finish = true) => {
+    if (!menu || !activeBoardId) return;
+    await Promise.all(menu.cardIds.map((cardId) => updateCard(activeBoardId, cardId, updates)));
+    if (finish) {
+      clearMultiSelect();
+      close();
+    }
+  }, [menu, activeBoardId, updateCard, clearMultiSelect, close]);
+
   const contextMenuPortal = menu ? createPortal(
     <>
       {/* Backdrop */}
@@ -129,8 +145,11 @@ export function useCardContextMenu() {
           animation: 'fadeIn 100ms ease',
         }}
       >
-        {/* Rename */}
-        <MenuItem icon={Pencil} label="Rename" shortcut="F2" onClick={() => { selectCard(menu.card.id); close(); }} />
+        {/* Rename is intentionally single-card only; every command shown for a
+            multi-selection must apply to the entire selection. */}
+        {menu.cardIds.length === 1 && (
+          <MenuItem icon={Pencil} label="Rename" shortcut="F2" onClick={() => { selectCard(menu.card.id); close(); }} />
+        )}
 
         {/* Move to column */}
         <div
@@ -143,14 +162,21 @@ export function useCardContextMenu() {
             <SubMenuPanel>
               {sortedColumns.map(col => {
                 if (!col) return null;
-                const isCurrent = col.id === menu.card.column_id;
+                const cards = useProjectsStore.getState().cards;
+                const isCurrent = menu.cardIds.every((cardId) => cards[cardId]?.column_id === col.id);
                 return (
                   <button
                     key={col.id}
                     disabled={isCurrent}
-                    onClick={() => {
+                    onClick={async () => {
                       if (!isCurrent && activeBoardId) {
-                        moveCard(activeBoardId, menu.card.id, col.id, 0);
+                        const targetCards = useProjectsStore.getState().columnCardIds[col.id] ?? [];
+                        const lastPosition = targetCards.reduce((max, cardId) =>
+                          Math.max(max, useProjectsStore.getState().cards[cardId]?.position ?? 0), 0);
+                        await Promise.all(menu.cardIds.map((cardId, index) =>
+                          moveCard(activeBoardId, cardId, col.id, lastPosition + ((index + 1) * 1000)),
+                        ));
+                        clearMultiSelect();
                         close();
                       }
                     }}
@@ -186,12 +212,7 @@ export function useCardContextMenu() {
                 return (
                   <button
                     key={p}
-                    onClick={() => {
-                      if (activeBoardId) {
-                        updateCard(activeBoardId, menu.card.id, { priority: p === 'none' ? null : p });
-                        close();
-                      }
-                    }}
+                    onClick={() => updateSelected({ priority: p === 'none' ? null : p })}
                     style={{
                       ...subItemStyle,
                       color: isCurrent ? 'var(--amber)' : 'var(--text)',
@@ -208,6 +229,48 @@ export function useCardContextMenu() {
                   </button>
                 );
               })}
+            </SubMenuPanel>
+          )}
+        </div>
+
+        {/* Card accent color */}
+        <div
+          style={{ position: 'relative' }}
+          onMouseEnter={() => setSubMenu('color')}
+          onMouseLeave={() => setSubMenu(null)}
+        >
+          <MenuItem icon={Palette} label="Set color" hasSubmenu onClick={() => {}} />
+          {subMenu === 'color' && (
+            <SubMenuPanel>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 24px)', gap: 7, padding: 9 }}>
+                <button
+                  aria-label="No color"
+                  title="No color"
+                  onClick={() => updateSelected({ color: null })}
+                  style={{ width: 22, height: 22, borderRadius: '50%', background: 'transparent', border: '1px dashed var(--text-muted)', cursor: 'pointer' }}
+                />
+                {CARD_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    aria-label={`Color ${color}`}
+                    title={color}
+                    onClick={() => updateSelected({ color })}
+                    style={{
+                      width: 22, height: 22, borderRadius: '50%', background: color, cursor: 'pointer',
+                      border: menu.card.color === color ? '2px solid var(--text)' : '1px solid var(--border)',
+                    }}
+                  />
+                ))}
+                <label title="Custom color" style={{ width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                  <input
+                    aria-label="Custom card color"
+                    type="color"
+                    value={menu.card.color ?? '#3b82f6'}
+                    onChange={(e) => updateSelected({ color: e.target.value })}
+                    style={{ width: 32, height: 32, margin: -5, cursor: 'pointer' }}
+                  />
+                </label>
+              </div>
             </SubMenuPanel>
           )}
         </div>
@@ -232,7 +295,7 @@ export function useCardContextMenu() {
                     const val = e.target.value;
                     setDateValues(prev => ({ ...prev, start: val }));
                     if (activeBoardId) {
-                      updateCard(activeBoardId, menu.card.id, { start_date: val || null });
+                      void updateSelected({ start_date: val || null }, false);
                     }
                   }}
                   style={dateInputStyle}
@@ -245,7 +308,7 @@ export function useCardContextMenu() {
                     const val = e.target.value;
                     setDateValues(prev => ({ ...prev, due: val }));
                     if (activeBoardId) {
-                      updateCard(activeBoardId, menu.card.id, { due_date: val || null });
+                      void updateSelected({ due_date: val || null }, false);
                     }
                   }}
                   style={dateInputStyle}
@@ -258,46 +321,41 @@ export function useCardContextMenu() {
         {/* Duplicate */}
         <MenuItem icon={Copy} label="Duplicate" onClick={async () => {
           if (!activeBoardId) return;
-          const c = menu.card;
-          await createCard(activeBoardId, {
-            column_id: c.column_id,
-            title: `${c.title} (copy)`,
-            description: c.description,
-            priority: c.priority ?? undefined,
-            color: c.color,
-            due_date: c.due_date?.split('T')[0] ?? null,
-            start_date: c.start_date?.split('T')[0] ?? null,
-            estimated_hours: c.estimated_hours,
-            tags: c.tags,
-            checklist: c.checklist,
-          });
-          toast.success('Card duplicated');
+          const cards = useProjectsStore.getState().cards;
+          await Promise.all(menu.cardIds.map(async (cardId) => {
+            const c = cards[cardId];
+            if (!c) return;
+            await createCard(activeBoardId, {
+              column_id: c.column_id,
+              title: `${c.title} (copy)`,
+              description: c.description,
+              priority: c.priority ?? undefined,
+              color: c.color,
+              due_date: c.due_date?.split('T')[0] ?? null,
+              start_date: c.start_date?.split('T')[0] ?? null,
+              estimated_hours: c.estimated_hours,
+              tags: c.tags,
+              checklist: c.checklist,
+            });
+          }));
+          clearMultiSelect();
+          toast.success(menu.cardIds.length > 1 ? `${menu.cardIds.length} cards duplicated` : 'Card duplicated');
           close();
         }} />
-
-        {/* Mark complete / incomplete — toggles completed_at, never moves the card */}
-        <MenuItem
-          icon={CheckSquare}
-          label={menu.card.completed_at ? 'Mark incomplete' : 'Mark complete'}
-          onClick={() => {
-            if (activeBoardId) {
-              updateCard(activeBoardId, menu.card.id, {
-                completed_at: menu.card.completed_at ? null : new Date().toISOString(),
-              });
-              toast.success(menu.card.completed_at ? 'Marked incomplete' : 'Marked complete');
-              close();
-            }
-          }}
-        />
 
         {/* Archive */}
         <MenuItem
           icon={menu.card.archived ? ArchiveRestore : Archive}
           label={menu.card.archived ? 'Unarchive' : 'Archive'}
-          onClick={() => {
+          onClick={async () => {
             if (activeBoardId) {
-              if (menu.card.archived) unarchiveCard(activeBoardId, menu.card.id);
-              else archiveCard(activeBoardId, menu.card.id);
+              await Promise.all(menu.cardIds.map((cardId) => {
+                const card = useProjectsStore.getState().cards[cardId];
+                return card?.archived
+                  ? unarchiveCard(activeBoardId, cardId)
+                  : archiveCard(activeBoardId, cardId);
+              }));
+              clearMultiSelect();
               close();
             }
           }}
@@ -306,10 +364,11 @@ export function useCardContextMenu() {
         <Separator />
 
         {/* Delete */}
-        <MenuItem icon={Trash2} label="Delete" variant="danger" onClick={() => {
+        <MenuItem icon={Trash2} label="Delete" variant="danger" onClick={async () => {
           if (activeBoardId) {
-            deleteCard(activeBoardId, menu.card.id);
-            toast.success('Card deleted');
+            await Promise.all(menu.cardIds.map((cardId) => deleteCard(activeBoardId, cardId)));
+            clearMultiSelect();
+            toast.success(menu.cardIds.length > 1 ? `${menu.cardIds.length} cards deleted` : 'Card deleted');
             close();
           }
         }} />

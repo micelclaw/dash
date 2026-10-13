@@ -14,9 +14,20 @@
 // Hold-to-talk: records audio in segments (2-5s, cut on silence),
 // sends each to server for STT, and plays TTS audio responses.
 
+import { toast } from 'sonner';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useWebSocketStore } from '@/stores/websocket.store';
 import type { WsEvent } from '@/types/websocket';
+
+interface RecorderSegment {
+  recorder: MediaRecorder;
+  generation: number;
+  chunks: Blob[];
+  stopped: Promise<void>;
+  resolveStopped: () => void;
+  stopRequested: boolean;
+  restartOnStop: boolean;
+}
 
 export type VoiceStreamState = 'idle' | 'listening' | 'processing' | 'speaking';
 
@@ -47,6 +58,9 @@ export function useVoiceStream() {
   const [duration, setDuration] = useState(0);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const generationRef = useRef(0);
+  const activeRef = useRef(false);
+  const endingRef = useRef(false);
   const sessionIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const seqRef = useRef(0);
@@ -63,7 +77,11 @@ export function useVoiceStream() {
 
   // MediaRecorder for capturing speech segments
   const recorderRef = useRef<MediaRecorder | null>(null);
+  // Pre-confirmation audio only; recorder chunks belong to their own segment.
   const chunksRef = useRef<Blob[]>([]);
+  const segmentsRef = useRef(new Map<MediaRecorder, RecorderSegment>());
+  // Ordered conversion work, never a retry/replay queue for WS frames.
+  const pendingAudioRef = useRef<Promise<void>>(Promise.resolve());
   const segmentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // TTS playback
@@ -74,12 +92,50 @@ export function useVoiceStream() {
   // Cleanup refs
   const cleanupRef = useRef<Array<() => void>>([]);
   const sendSegmentRef = useRef<() => void>(() => {});
+  const endSessionRef = useRef<() => void>(() => {});
 
   // ─── WS helpers ─────────────────────────────────────────────────
 
   const send = useCallback((action: string, data?: Record<string, unknown>) => {
-    useWebSocketStore.getState().send(action, data);
+    return useWebSocketStore.getState().send(action, data);
   }, []);
+
+  const releaseLocal = useCallback(() => {
+    generationRef.current++;
+    activeRef.current = false;
+    endingRef.current = false;
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    if (vadTimerRef.current) clearInterval(vadTimerRef.current);
+    if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
+    durationTimerRef.current = vadTimerRef.current = segmentTimerRef.current = null;
+    recorderRef.current = null;
+    for (const segment of segmentsRef.current.values()) {
+      segment.recorder.ondataavailable = null;
+      segment.recorder.onstop = null;
+      segment.recorder.onerror = null;
+      if (segment.recorder.state !== 'inactive') segment.recorder.stop();
+      segment.resolveStopped();
+    }
+    segmentsRef.current.clear();
+    pendingAudioRef.current = Promise.resolve();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    void audioCtxRef.current?.close();
+    void playbackCtxRef.current?.close();
+    audioCtxRef.current = playbackCtxRef.current = null;
+    analyserRef.current = null;
+    chunksRef.current = [];
+    playbackQueueRef.current = [];
+    isPlayingRef.current = false;
+    sessionIdRef.current = null;
+    setSessionActive(false);
+    setState('idle');
+  }, []);
+
+  const rejectSend = useCallback(() => {
+    releaseLocal();
+    toast.error('No se pudo enviar la voz. Comprueba la conexión antes de iniciar otra sesión.');
+  }, [releaseLocal]);
 
   // ─── AudioContext TTS Playback ──────────────────────────────────
 
@@ -97,16 +153,19 @@ export function useVoiceStream() {
 
     isPlayingRef.current = true;
     const buffer = queue.shift()!;
+    const generation = generationRef.current;
 
     ctx.decodeAudioData(buffer.slice(0))
       .then((audioBuffer) => {
+        if (generation !== generationRef.current || !activeRef.current) return;
         const source = ctx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(ctx.destination);
-        source.onended = () => playNext();
+        source.onended = () => { if (generation === generationRef.current) playNext(); };
         source.start();
       })
       .catch((err) => {
+        if (generation !== generationRef.current) return;
         console.warn('TTS decode error:', err);
         playNext(); // Skip bad chunk
       });
@@ -130,45 +189,43 @@ export function useVoiceStream() {
 
   // ─── Speech Segment Handling ────────────────────────────────────
 
-  const sendSegment = useCallback(async () => {
-    const chunks = chunksRef.current;
-
-    if (chunks.length === 0) return;
-
-    // If server hasn't confirmed session yet, keep chunks buffered
-    if (!sessionIdRef.current) {
-      vdbg('SEND', `Waiting for session ID, buffering ${chunks.length} chunks`);
+  const sendSegment = useCallback((chunks: Blob[], generation: number) => {
+    if (generation !== generationRef.current || !activeRef.current || !chunks.length) return;
+    const sid = sessionIdRef.current;
+    if (!sid) {
+      chunksRef.current.push(...chunks);
       return;
     }
-
-    chunksRef.current = [];
-
     const blob = new Blob(chunks, { type: 'audio/webm' });
-    if (blob.size === 0) return;
-
-    const arrayBuf = await blob.arrayBuffer();
-    const base64 = btoa(
-      new Uint8Array(arrayBuf).reduce((s, b) => s + String.fromCharCode(b), ''),
-    );
-
-    const seq = seqRef.current++;
-    vdbg('SEND', `Blob ${blob.size}B, b64 ${base64.length}, seq=${seq}`);
-
-    send('voice.audio', {
-      session_id: sessionIdRef.current,
-      audio_b64: base64,
-      seq,
+    if (!blob.size) return;
+    pendingAudioRef.current = pendingAudioRef.current.then(async () => {
+      if (generation !== generationRef.current || !activeRef.current) return;
+      try {
+        const buffer = await blob.arrayBuffer();
+        // Normal ending drains valid work; only retirement cancels it.
+        if (generation !== generationRef.current || !activeRef.current) return;
+        const audio_b64 = btoa(new Uint8Array(buffer).reduce((s, b) => s + String.fromCharCode(b), ''));
+        const result = send('voice.audio', { session_id: sid, audio_b64, seq: seqRef.current });
+        if (!result.accepted) { rejectSend(); return; }
+        seqRef.current++;
+      } catch {
+        if (generation === generationRef.current && activeRef.current) rejectSend();
+      }
     });
-  }, [send]);
+  }, [send, rejectSend]);
 
-  sendSegmentRef.current = sendSegment;
+  sendSegmentRef.current = () => {
+    const chunks = chunksRef.current;
+    chunksRef.current = [];
+    sendSegment(chunks, generationRef.current);
+  };
 
   // Use a ref to allow the VAD/timer to call rotateSegment without circular deps
   const rotateSegmentRef = useRef<() => void>(() => {});
 
   const startRecorderSegment = useCallback(() => {
     const stream = streamRef.current;
-    if (!stream) return;
+    if (!stream || !activeRef.current || endingRef.current) return;
 
     // Clear any existing max-segment timer
     if (segmentTimerRef.current) {
@@ -176,32 +233,59 @@ export function useVoiceStream() {
       segmentTimerRef.current = null;
     }
 
-    chunksRef.current = [];
     segmentStartRef.current = Date.now();
     silenceStartRef.current = null;
 
     try {
+      const generation = generationRef.current;
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-          vdbg('REC', `Chunk ${chunksRef.current.length}: ${e.data.size}B`);
+      let resolveStopped!: () => void;
+      const stopped = new Promise<void>((resolve) => { resolveStopped = resolve; });
+      const segment: RecorderSegment = { recorder, generation, chunks: [], stopped, resolveStopped, stopRequested: false, restartOnStop: false };
+      segmentsRef.current.set(recorder, segment);
+      recorder.ondataavailable = (event) => {
+        if (generation === generationRef.current && activeRef.current
+          && segmentsRef.current.get(recorder) === segment && event.data.size > 0) {
+          segment.chunks.push(event.data);
         }
       };
-      recorder.start(100);
+      // Final events can also come from natural track termination or errors.
+      // Install once at creation: inactive alone does not mean data is delivered.
+      recorder.onerror = () => {
+        if (generation !== generationRef.current || !activeRef.current
+          || segmentsRef.current.get(recorder) !== segment) return;
+        rejectSend();
+      };
+      recorder.onstop = () => {
+        if (generation !== generationRef.current || !activeRef.current
+          || segmentsRef.current.get(recorder) !== segment) return;
+        const chunks = segment.chunks;
+        segment.chunks = [];
+        sendSegment(chunks, generation);
+        recorder.ondataavailable = recorder.onstop = recorder.onerror = null;
+        segmentsRef.current.delete(recorder);
+        if (recorderRef.current === recorder) recorderRef.current = null;
+        segment.resolveStopped();
+        if (segment.restartOnStop && !endingRef.current) startRecorderSegment();
+        else if (!segment.stopRequested && !endingRef.current) endSessionRef.current();
+      };
       recorderRef.current = recorder;
+      recorder.start(100);
       vdbg('REC', 'MediaRecorder started');
 
       // Hard limit: force rotation at MAX_SEGMENT_MS regardless of silence
       segmentTimerRef.current = setTimeout(() => {
+        if (generation !== generationRef.current || !activeRef.current || endingRef.current
+          || recorderRef.current !== recorder || segmentsRef.current.get(recorder) !== segment) return;
         segmentTimerRef.current = null;
         vdbg('REC', `MAX_SEGMENT_MS (${MAX_SEGMENT_MS}ms) reached — rotating segment`);
         rotateSegmentRef.current();
       }, MAX_SEGMENT_MS);
     } catch {
-      console.error('MediaRecorder start failed');
+      releaseLocal();
+      toast.error('No se pudo iniciar la grabación de voz.');
     }
-  }, []);
+  }, [releaseLocal, rejectSend, sendSegment]);
 
   const stopRecorderSegment = useCallback((andRestart = false) => {
     if (segmentTimerRef.current) {
@@ -210,19 +294,13 @@ export function useVoiceStream() {
     }
 
     const recorder = recorderRef.current;
-    if (!recorder || recorder.state !== 'recording') return;
-
-    const durationMs = Date.now() - segmentStartRef.current;
-    vdbg('REC', `MediaRecorder stopped, chunks=${chunksRef.current.length}, duration=${durationMs}ms, restart=${andRestart}`);
-    recorder.onstop = () => {
-      sendSegment();
-      if (andRestart) {
-        startRecorderSegment();
-      }
-    };
-    recorder.stop();
-    recorderRef.current = null;
-  }, [sendSegment, startRecorderSegment]);
+    const segment = recorder ? segmentsRef.current.get(recorder) : undefined;
+    if (!recorder || !segment || segment.stopRequested || recorder.state === 'inactive') return;
+    segment.stopRequested = true;
+    segment.restartOnStop = andRestart;
+    try { recorder.stop(); }
+    catch { rejectSend(); }
+  }, [rejectSend]);
 
   // Keep the ref in sync so VAD and timer can call rotate
   rotateSegmentRef.current = () => stopRecorderSegment(true);
@@ -233,10 +311,13 @@ export function useVoiceStream() {
     const analyser = analyserRef.current;
     if (!analyser) return;
 
+    const generation = generationRef.current;
     const dataArray = new Float32Array(analyser.fftSize);
     let vadTick = 0;
 
     vadTimerRef.current = setInterval(() => {
+      if (generation !== generationRef.current || !activeRef.current || endingRef.current
+        || analyserRef.current !== analyser) return;
       analyser.getFloatTimeDomainData(dataArray);
       const rms = Math.sqrt(
         dataArray.reduce((sum, v) => sum + v * v, 0) / dataArray.length,
@@ -290,6 +371,7 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.session.started', (e: WsEvent) => {
+        if (!activeRef.current) return;
         sessionIdRef.current = e.data.session_id as string;
         setSessionActive(true);
         // Flush any chunks that were buffered while waiting for session ID
@@ -302,6 +384,7 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.stt.result', (e: WsEvent) => {
+        if (!activeRef.current) return;
         const text = e.data.text as string;
         vdbg('STT', `seq=${e.data.seq}: "${text}"`);
         if (text) {
@@ -315,12 +398,14 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.agent.start', () => {
+        if (!activeRef.current) return;
         setState('processing');
       }),
     );
 
     unsubs.push(
       client.on('voice.tts.chunk', (e: WsEvent) => {
+        if (!activeRef.current) return;
         vdbg('TTS', `chunk idx=${e.data.index}, b64Len=${(e.data.audio_b64 as string).length}, isLast=${e.data.is_last}`);
         setState('speaking');
         enqueueAudio(e.data.audio_b64 as string);
@@ -329,6 +414,7 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.agent.done', () => {
+        if (!activeRef.current) return;
         if (!isPlayingRef.current && playbackQueueRef.current.length === 0) {
           setState((s) => (s !== 'idle' ? 'listening' : s));
         }
@@ -337,13 +423,16 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.session.error', (e: WsEvent) => {
+        if (!activeRef.current) return;
         vdbg('ERR', e.data.error);
         console.error('Voice session error:', e.data.error);
+        releaseLocal();
       }),
     );
 
     unsubs.push(
       client.on('voice.transcript.final', (e: WsEvent) => {
+        if (!activeRef.current) return;
         const text = e.data.text as string;
         vdbg('TRANSCRIPT_FINAL', `"${text}"`);
         if (text) {
@@ -354,15 +443,9 @@ export function useVoiceStream() {
 
     unsubs.push(
       client.on('voice.session.ended', () => {
+        if (!activeRef.current) return;
         vdbg('SESSION', 'ended');
-        sessionIdRef.current = null;
-        setSessionActive(false);
-        setState('idle');
-        // Cleanup TTS playback
-        playbackQueueRef.current = [];
-        isPlayingRef.current = false;
-        playbackCtxRef.current?.close();
-        playbackCtxRef.current = null;
+        releaseLocal();
       }),
     );
 
@@ -379,18 +462,24 @@ export function useVoiceStream() {
     return () => {
       for (const unsub of unsubs) unsub();
     };
-  }, [enqueueAudio, wsClient]);
+  }, [enqueueAudio, wsClient, releaseLocal]);
 
   // ─── Start Session ──────────────────────────────────────────────
 
   const startSession = useCallback(async (conversationId: string) => {
-    if (sessionActive) return;
-
+    if (activeRef.current) return;
+    if (useWebSocketStore.getState().status !== 'connected') { rejectSend(); return; }
+    const generation = ++generationRef.current;
+    pendingAudioRef.current = Promise.resolve();
+    chunksRef.current = [];
+    activeRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (generation !== generationRef.current || !activeRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
-
-      // AudioContext + analyser for VAD silence detection
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
@@ -398,80 +487,56 @@ export function useVoiceStream() {
       analyser.fftSize = 2048;
       source.connect(analyser);
       analyserRef.current = analyser;
-
       conversationIdRef.current = conversationId;
       seqRef.current = 0;
       setTranscript('');
-
-      send('voice.session.start', {
-        conversation_id: conversationId,
-      });
-
+      const result = send('voice.session.start', { conversation_id: conversationId });
+      if (!result.accepted) { rejectSend(); return; }
       setSessionActive(true);
       setState('listening');
       setDuration(0);
-      durationTimerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
-
-      // Start recording + VAD monitor immediately
+      durationTimerRef.current = setInterval(() => {
+        if (generation === generationRef.current && activeRef.current && !endingRef.current) setDuration((d) => d + 1);
+      }, 1000);
       startRecorderSegment();
       startVadMonitor();
     } catch (err) {
-      console.error('Microphone access denied:', err);
+      if (generation !== generationRef.current) return;
+      releaseLocal();
+      console.error('Microphone access failed:', err);
+      toast.error('No se pudo acceder al micrófono.');
     }
-  }, [send, startRecorderSegment, startVadMonitor, sessionActive]);
-
-  // ─── End Session ────────────────────────────────────────────────
+  }, [send, startRecorderSegment, startVadMonitor, releaseLocal, rejectSend]);
 
   const endSession = useCallback(() => {
-    // Stop duration timer
-    if (durationTimerRef.current) { clearInterval(durationTimerRef.current); durationTimerRef.current = null; }
-
-    // Stop VAD monitor
+    if (!activeRef.current || endingRef.current) return;
+    endingRef.current = true;
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    durationTimerRef.current = null;
     stopVadMonitor();
-
-    // Clear segment rotation timer
-    if (segmentTimerRef.current) {
-      clearTimeout(segmentTimerRef.current);
-      segmentTimerRef.current = null;
-    }
-
-    // Stop recorder — use onstop to capture ALL chunks (including flush from stop())
-    const recorder = recorderRef.current;
+    if (segmentTimerRef.current) clearTimeout(segmentTimerRef.current);
+    segmentTimerRef.current = null;
     const sid = sessionIdRef.current;
-    recorderRef.current = null;
-
-    if (recorder?.state === 'recording' && sid) {
-      recorder.onstop = () => {
-        const chunks = chunksRef.current;
-        chunksRef.current = [];
-        if (chunks.length > 0) {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          blob.arrayBuffer().then((buf) => {
-            const base64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ''));
-            const seq = seqRef.current++;
-            vdbg('SEND', `Blob ${blob.size}B, b64 ${base64.length}, seq=${seq} (final)`);
-            send('voice.audio', { session_id: sid, audio_b64: base64, seq });
-            send('voice.session.end', { session_id: sid });
-          }).catch(() => {
-            send('voice.session.end', { session_id: sid });
-          });
-        } else {
-          send('voice.session.end', { session_id: sid });
-        }
-      };
-      recorder.stop();
-    } else {
-      if (sid) send('voice.session.end', { session_id: sid });
-    }
-
-    // Cleanup media resources
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const generation = generationRef.current;
+    const segments = [...segmentsRef.current.values()];
+    // stop may be asynchronous, or a rotation may already be stopping. Its
+    // callback submits conversion work before resolving stopped.
+    stopRecorderSegment(false);
+    void Promise.all(segments.map((segment) => segment.stopped)).then(async () => {
+      if (generation !== generationRef.current || !activeRef.current) return;
+      await pendingAudioRef.current;
+      if (generation !== generationRef.current || !activeRef.current) return;
+      if (!sid) { releaseLocal(); return; }
+      if (!send('voice.session.end', { session_id: sid }).accepted) { rejectSend(); return; }
+      setState('processing');
+    });
+    streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    audioCtxRef.current?.close();
+    void audioCtxRef.current?.close();
     audioCtxRef.current = null;
+  }, [send, stopVadMonitor, stopRecorderSegment, rejectSend, releaseLocal]);
 
-    setState('processing');
-  }, [send, stopVadMonitor]);
+  endSessionRef.current = endSession;
 
   // ─── Stop TTS ───────────────────────────────────────────────────
 
@@ -480,20 +545,22 @@ export function useVoiceStream() {
     isPlayingRef.current = false;
 
     if (sessionIdRef.current) {
-      send('voice.tts.stop', { session_id: sessionIdRef.current });
+      if (!send('voice.tts.stop', { session_id: sessionIdRef.current }).accepted) { rejectSend(); return; }
     }
     setState((s) => (s === 'speaking' ? 'listening' : s));
-  }, [send]);
+  }, [send, rejectSend]);
+
+  // A dropped transport ends local capture; reconnect never replays voice frames.
+  useEffect(() => useWebSocketStore.subscribe((next) => {
+    if (activeRef.current && next.status !== 'connected') rejectSend();
+  }), [rejectSend]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (sessionIdRef.current) {
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        endSession();
-      }
+      releaseLocal();
     };
-  }, [endSession]);
+  }, [releaseLocal]);
 
   return {
     state,

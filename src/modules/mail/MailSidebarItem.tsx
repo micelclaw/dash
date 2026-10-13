@@ -16,7 +16,22 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 interface MailSidebarItemProps {
   icon: ReactNode;
   label: string;
+  /**
+   * Los NO LEÍDOS: el número de la pastilla ámbar.
+   *
+   * Se llama `count` por historia; lo que lleva son los no leídos (el servidor
+   * manda los dos: `unread` y `total`).
+   */
   count?: number;
+  /**
+   * El TOTAL de la carpeta, en gris y sin pastilla.
+   *
+   * Existe porque con un solo número no se distinguía: en Archivo los no leídos
+   * eran 463 de 467 y en Spam 219 de 219, así que la pastilla parecía el total; y
+   * en una carpeta con todo leído (0 no leídos) no salía NINGÚN número, así que no
+   * había forma de ver que tenía seis correos dentro.
+   */
+  total?: number;
   active?: boolean;
   collapsed?: boolean;
   onClick: () => void;
@@ -27,6 +42,7 @@ export function MailSidebarItem({
   icon,
   label,
   count,
+  total,
   active = false,
   collapsed = false,
   onClick,
@@ -94,8 +110,27 @@ export function MailSidebarItem({
           >
             {label}
           </span>
+          {/* El total, en gris y sin pastilla: cuántos correos hay. Se omite si
+              coincide con los no leídos, porque entonces repetir el número no
+              informa de nada (y en Spam pasa: 219 de 219). */}
+          {total != null && total > 0 && total !== (count ?? 0) && (
+            <span
+              title={`${total} en total`}
+              style={{
+                fontSize: '0.625rem',
+                fontFamily: 'var(--font-mono)',
+                color: 'var(--text-muted)',
+                lineHeight: 1.4,
+                flexShrink: 0,
+              }}
+            >
+              {total}
+            </span>
+          )}
+          {/* Y los no leídos, con la pastilla ámbar: lo que pide atención. */}
           {count != null && count > 0 && (
             <span
+              title={`${count} sin leer`}
               style={{
                 fontSize: '0.625rem',
                 fontFamily: 'var(--font-mono)',
@@ -122,7 +157,10 @@ export function MailSidebarItem({
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="right">
           {label}
-          {count != null && count > 0 ? ` (${count})` : ''}
+          {/* Plegado no se ven los números, así que el tooltip los dice — y dice
+              QUÉ es cada uno, que era justo la confusión. */}
+          {count != null && count > 0 ? ` · ${count} sin leer` : ''}
+          {total != null && total > 0 ? ` · ${total} en total` : ''}
         </TooltipContent>
       </Tooltip>
     );

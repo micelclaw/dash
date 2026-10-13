@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, HardDrive, Cloud, ChevronRight, ChevronDown,
@@ -265,6 +266,7 @@ function MountTreeItem({ mount, currentPath, onNavigate, onDelete, icon }: {
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {mount.name}
           </span>
+          <EntitySource entity={mount} domain="files" />
         </button>
         {/* Acciones a nivel de FILA — HERMANAS del botón de navegar, no dentro.
             Un <button> (borrar) anidado en otro <button> (navegar) es HTML inválido

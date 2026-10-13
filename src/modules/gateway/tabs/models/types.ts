@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-export type View = 'configured' | 'catalog' | 'advanced';
+export type View = 'configured' | 'decision' | 'catalog' | 'advanced';
 export type CatalogSubView = 'providers' | 'models';
 
 export interface ProviderEntry {
@@ -20,4 +20,10 @@ export interface ProviderEntry {
   modelCount: number;
   configuredCount: number;
   hasAuth: boolean;
+  description: string;
+  version: string | null;
+  authMethodCount: number;
+  legacyConfigured: boolean;
+  migrationTarget: string | null;
+  enabled: boolean;
 }

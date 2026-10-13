@@ -66,6 +66,12 @@ export function AddOllamaModelModal({ onClose, onAdded }: { onClose: () => void;
     setDone(null);
     try {
       const token = useAuthStore.getState().tokens?.accessToken;
+      // EXENCIÓN documentada de la regla "todo por services/api.ts": este
+      // endpoint emite el progreso del pull como stream SSE/NDJSON y hay que
+      // consumirlo incrementalmente vía res.body.getReader(). El cliente api
+      // no expone streaming del body (get/getText hacen buffer completo y
+      // AbortSignal.timeout de 15s mataría descargas de varios GB). Si api.ts
+      // gana un método stream(), migrar esto.
       const res = await fetch(`${BASE_URL}/api/v1/gateway/models/ollama-pull?id=${encodeURIComponent(ref)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

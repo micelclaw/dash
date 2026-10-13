@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useState, useEffect, useCallback } from 'react';
 import { Eye, ChevronDown, ChevronRight } from 'lucide-react';
 import { api } from '@/services/api';
@@ -42,6 +44,8 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
     if (isPro) fetchCollections();
     else setLoading(false);
   }, [isPro, fetchCollections]);
+
+  useOriginRefresh('files', () => isPro ? fetchCollections() : undefined);
 
   if (!isPro) {
     return (
@@ -144,6 +148,7 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
                   key={photoId}
                   onClick={() => onViewPhoto?.(photoId)}
                   style={{
+                    position: 'relative',
                     width: isExpanded ? 100 : 80,
                     height: isExpanded ? 100 : 80,
                     flexShrink: 0,
@@ -153,6 +158,7 @@ export function PhotosDejaVu({ onViewPhoto }: PhotosDejaVuProps) {
                     border: '1px solid var(--border)',
                   }}
                 >
+                  <PhotoSource entity={col.origin_photos?.find(p => p.id === photoId)} />
                   <img
                     src={getPreviewUrl(photoId, 120)}
                     alt=""

@@ -21,6 +21,7 @@ export type DriveTab =
   | 'recent'
   | 'starred'
   | 'shared'
+  | 'network-folders'
   | 'trash'
   | 'duplicates';
 
@@ -29,6 +30,7 @@ export const DRIVE_TABS: DriveTab[] = [
   'recent',
   'starred',
   'shared',
+  'network-folders',
   'trash',
   'duplicates',
 ];

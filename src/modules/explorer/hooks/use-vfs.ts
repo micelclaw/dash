@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
+import { type OriginEntity } from '@/types/origins';
 import { useState, useCallback } from 'react';
 import { api } from '@/services/api';
 
-export interface VFSNode {
+export interface VFSNode extends OriginEntity {
   name: string;
   path: string;
   type: 'file' | 'directory';
@@ -26,7 +27,7 @@ export interface VFSNode {
   metadata?: Record<string, unknown> | null;
 }
 
-export interface VFSMount {
+export interface VFSMount extends OriginEntity {
   id: string;
   name: string;
   provider_type: string;

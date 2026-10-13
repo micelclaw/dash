@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { X, Trash2 } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
 
@@ -80,6 +81,7 @@ export function QueuePanel() {
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {i === queueIndex && <span style={{ color: 'var(--accent)' }}>&#9654; </span>}
               {item.title}
+              <EntitySource entity={{ origins: item.origins }} domain="music" native={item.source === 'navidrome'} />
               {item.artist && <span style={{ color: 'var(--text-muted)' }}> — {item.artist}</span>}
             </span>
             <button

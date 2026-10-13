@@ -31,7 +31,7 @@ export interface ServiceDef {
 export const SERVICES: ServiceDef[] = [
   // Email
   { id: 'gmail', category: 'Email', name: 'Gmail', icon: 'google', color: '#4285f4',
-    flow: 'oauth', provider: 'google', scopes: 'https://mail.google.com/' },
+    flow: 'oauth', provider: 'google' },
   { id: 'synology-mail', category: 'Email', name: 'Synology Mail', icon: 'synology', color: '#e87e04',
     flow: 'imap', preset: { imap_port: 993, smtp_port: 587, imap_encryption: 'ssl', smtp_encryption: 'tls' } },
   { id: 'imap', category: 'Email', name: 'IMAP', icon: 'mail', color: 'var(--text-dim)',
@@ -39,7 +39,7 @@ export const SERVICES: ServiceDef[] = [
 
   // Calendar
   { id: 'google-calendar', category: 'Calendar', name: 'Google Calendar', icon: 'google', color: '#4285f4',
-    flow: 'oauth', provider: 'google', scopes: 'https://www.googleapis.com/auth/calendar' },
+    flow: 'oauth', provider: 'google' },
   { id: 'synology-calendar', category: 'Calendar', name: 'Synology Calendar', icon: 'synology', color: '#e87e04',
     flow: 'caldav', preset: { path_hint: '/caldav/' } },
   { id: 'caldav', category: 'Calendar', name: 'CalDAV', icon: 'calendar', color: 'var(--text-dim)',
@@ -47,7 +47,7 @@ export const SERVICES: ServiceDef[] = [
 
   // Contacts
   { id: 'google-contacts', category: 'Contacts', name: 'Google Contacts', icon: 'google', color: '#4285f4',
-    flow: 'oauth', provider: 'google', scopes: 'https://www.googleapis.com/auth/contacts.readonly' },
+    flow: 'oauth', provider: 'google' },
   { id: 'synology-contacts', category: 'Contacts', name: 'Synology Contacts', icon: 'synology', color: '#e87e04',
     flow: 'carddav', preset: { path_hint: '/carddav/' } },
   { id: 'carddav', category: 'Contacts', name: 'CardDAV', icon: 'contacts', color: 'var(--text-dim)',
@@ -68,6 +68,7 @@ export const SERVICES: ServiceDef[] = [
       'channels:history', 'groups:history', 'im:history', 'mpim:history', // conversations.history
       'chat:write',                                                       // chat.postMessage
       'users:read',                                                       // nombres de remitente
+      'files:read',                                                       // adjuntos privados (SLK3)
     ].join(','),
   },
   { id: 'discord-observer', category: 'Messaging', name: 'Discord', icon: 'discord', color: '#5865F2',
@@ -81,8 +82,34 @@ export const SERVICES: ServiceDef[] = [
   // mautrix-whatsapp. Sin credenciales: código de emparejamiento o QR.
   { id: 'whatsapp-matrix', category: 'Messaging', name: 'WhatsApp', icon: 'whatsapp', color: '#25D366',
     flow: 'bot_token' },
+  // Messenger = TU CUENTA REAL vía el hub Matrix + mautrix-meta (modo messenger).
+  // Sin credenciales de app: se reusa la sesión web pegando sus cookies.
+  { id: 'messenger-matrix', category: 'Messaging', name: 'Messenger', icon: 'fb_messenger', color: '#0084FF',
+    flow: 'bot_token' },
+  // Google Messages = los SMS/RCS de TU móvil vía el hub Matrix + mautrix-gmessages.
+  { id: 'gmessages-matrix', category: 'Messaging', name: 'Google Messages', icon: 'google_messages', color: '#1B72E8',
+    flow: 'bot_token' },
+  // IRC = tu nick REAL vía el hub Matrix + mautrix-irc. Sale del Gateway (§A.0).
+  { id: 'irc-matrix', category: 'Messaging', name: 'IRC', icon: 'irc', color: '#7A7A7A',
+    flow: 'bot_token' },
+  // Teams: los permisos incluyen ESCRITURA desde 2026-08-05, cuando se cableó el
+  // sender. Con los de solo lectura anteriores (Chat.Read, ChannelMessage.Read.All)
+  // el envío devolvía 403 y el usuario no tenía forma de saber por qué: hay que
+  // volver a consentir para que el token nuevo los traiga.
+  // `offline_access` es obligatorio o Microsoft no emite refresh token y la
+  // sesión muere en una hora.
+  // Viber = modelo BOT. Necesita URL pública (su API solo entrega por webhook).
+  { id: 'viber-observer', category: 'Messaging', name: 'Viber', icon: 'viber', color: '#7360F2',
+    flow: 'bot_token' },
+  // Google Chat = tu CUENTA REAL vía el hub Matrix + mautrix-googlechat (§A.0).
+  { id: 'googlechat-matrix', category: 'Messaging', name: 'Google Chat', icon: 'googlechat', color: '#00AC47',
+    flow: 'bot_token' },
+  // QQ = tu CUENTA REAL vía el hub Matrix + matrix-qq (§A.0).
+  { id: 'qq-matrix', category: 'Messaging', name: 'QQ', icon: 'qq', color: '#12B7F5',
+    flow: 'bot_token' },
   { id: 'teams-observer', category: 'Messaging', name: 'Teams', icon: 'teams', color: '#6264a7',
-    flow: 'oauth', provider: 'microsoft', scopes: 'Chat.Read,ChannelMessage.Read.All' },
+    flow: 'oauth', provider: 'microsoft',
+    scopes: 'offline_access,Chat.Read,Chat.ReadWrite,ChannelMessage.Read.All,ChannelMessage.Send' },
   { id: 'signal-observer', category: 'Messaging', name: 'Signal', icon: 'signal', color: '#3a76f0',
     flow: 'bot_token' },
   { id: 'simplex-observer', category: 'Messaging', name: 'SimpleX · identidad propia', icon: 'simplex', color: '#3DB548',

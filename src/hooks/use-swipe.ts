@@ -38,6 +38,7 @@ export function useSwipe({ onSwipeLeft, onSwipeRight, threshold = 60, disabled }
     onTouchStart: (e) => {
       if (disabled || e.touches.length !== 1) { start.current = null; return; }
       const t = e.touches[0];
+      if (!t) { start.current = null; return; }
       start.current = { x: t.clientX, y: t.clientY };
     },
     onTouchEnd: (e) => {

@@ -11,7 +11,7 @@
  */
 
 import { create } from 'zustand';
-import type { WsEvent, WsStatus } from '@/types/websocket';
+import type { WsEvent, WsStatus, WsSendResult } from '@/types/websocket';
 import { ClawWebSocket } from '@/services/websocket';
 
 interface WebSocketStore {
@@ -20,7 +20,7 @@ interface WebSocketStore {
   client: ClawWebSocket | null;
   connect: (token: string) => void;
   disconnect: () => void;
-  send: (action: string, data?: Record<string, unknown>) => void;
+  send: (action: string, data?: Record<string, unknown>) => WsSendResult;
   setStatus: (status: WsStatus) => void;
   setLastEvent: (event: WsEvent) => void;
 }
@@ -48,7 +48,8 @@ export const useWebSocketStore = create<WebSocketStore>()((set, get) => ({
   },
 
   send: (action: string, data?: Record<string, unknown>) => {
-    get().client?.send(action, data);
+    const { client, status } = get();
+    return status === 'connected' && client ? client.send(action, data) : { accepted: false, reason: 'not_connected' };
   },
 
   setStatus: (status: WsStatus) => set({ status }),

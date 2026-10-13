@@ -29,7 +29,7 @@ export interface LandingGroup {
   label: string;
   icon: LucideIcon;
   description: string;
-  firstSectionId: string;
+  firstSectionPath: string;
   sectionCount: number;
   /** Per-group accent color, must match the sidebar group icon. */
   color: string;
@@ -90,7 +90,7 @@ export function SettingsLanding({ groups }: SettingsLandingProps) {
             <button
               key={g.id}
               type="button"
-              onClick={() => navigate(`/settings/${g.firstSectionId}`)}
+              onClick={() => navigate(g.firstSectionPath)}
               style={{
                 display: 'flex',
                 flexDirection: 'column',

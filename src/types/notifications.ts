@@ -22,6 +22,17 @@ export interface Notification {
     route?: string;
     callback?: string;
   };
+  /**
+   * A qué registro se refiere (lo pone el SERVIDOR). Permite que la notificación
+   * desaparezca cuando el hecho deja de ser cierto (`notification.dismiss`) y que se
+   * pueda actuar sobre ella. `actionable` lo decide el servidor, que es el dueño de la
+   * política (una aprobación L3 pide PIN → no se resuelve de un clic): aquí NO se deduce.
+   */
+  ref?: {
+    kind: string;
+    id: string;
+    actionable?: boolean;
+  };
   icon?: string;
   color?: string;
 }

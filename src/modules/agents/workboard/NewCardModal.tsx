@@ -13,6 +13,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-media-query';
 import { TagInput } from '@/components/shared/TagInput';
 import { workboardApi } from './workboard.service';
 import { PRIORITY_LABEL } from './lanes';
@@ -29,6 +31,7 @@ interface Props {
 const PRIORITIES: WorkboardPriority[] = ['low', 'normal', 'high', 'urgent'];
 
 export function NewCardModal({ agents, open, onClose, onCreated }: Props) {
+  const isMobile = useIsMobile();
   const [title, setTitle] = useState('');
   const [priority, setPriority] = useState<WorkboardPriority>('normal');
   const [notes, setNotes] = useState('');
@@ -56,13 +59,12 @@ export function NewCardModal({ agents, open, onClose, onCreated }: Props) {
 
   const inputStyle = { width: '100%', fontSize: '0.8125rem', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)' } as const;
 
-  return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
-      <DialogContent style={{ maxWidth: 480, width: '92vw' }}>
+  const content = (
+    <>
         <DialogHeader><DialogTitle>Nueva tarea</DialogTitle></DialogHeader>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título de la tarea" style={inputStyle} />
-          <div style={{ display: 'flex', gap: 8 }}>
+          <input autoFocus={!isMobile} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título de la tarea" style={inputStyle} />
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 8 }}>
             <select value={priority} onChange={(e) => setPriority(e.target.value as WorkboardPriority)} style={{ ...inputStyle, flex: 1 }}>
               {PRIORITIES.map((p) => <option key={p} value={p}>Prioridad: {PRIORITY_LABEL[p]}</option>)}
             </select>
@@ -77,12 +79,25 @@ export function NewCardModal({ agents, open, onClose, onCreated }: Props) {
             <TagInput tags={labels} onChange={setLabels} placeholder="etiqueta" />
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
-            <button onClick={close} disabled={busy} style={{ padding: '7px 14px', borderRadius: 8, fontSize: '0.8125rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={create} disabled={busy} style={{ padding: '7px 14px', borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, border: 'none', background: 'var(--amber)', color: '#1a1205', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+            <button onClick={close} disabled={busy} style={{ padding: '9px 16px', minHeight: isMobile ? 44 : undefined, borderRadius: 8, fontSize: '0.8125rem', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer' }}>Cancelar</button>
+            <button onClick={create} disabled={busy} style={{ padding: '9px 16px', minHeight: isMobile ? 44 : undefined, borderRadius: 8, fontSize: '0.8125rem', fontWeight: 600, border: 'none', background: 'var(--amber)', color: '#1a1205', cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
               {busy ? 'Creando…' : 'Crear'}
             </button>
           </div>
         </div>
+    </>
+  );
+
+  return isMobile ? (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) close(); }}>
+      <SheetContent side="bottom" style={{ maxHeight: '90dvh', overflowY: 'auto', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+        {content}
+      </SheetContent>
+    </Sheet>
+  ) : (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
+      <DialogContent style={{ maxWidth: 480, width: '92vw' }}>
+        {content}
       </DialogContent>
     </Dialog>
   );

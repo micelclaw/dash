@@ -76,7 +76,9 @@ export function CheckpointsPanel({ conversationId, conversationTitle, onClose }:
       // Reload messages of the active conv from server
       const { loadMessages } = useChatStore.getState();
       if (typeof loadMessages === 'function') {
-        await loadMessages(conversationId);
+        // A rewind removes future history. Ordinary reconciliation preserves
+        // optimistic rows; here the durable restored transcript must replace it.
+        await loadMessages(conversationId, { replace: true });
       }
       onClose();
     } catch (err) {

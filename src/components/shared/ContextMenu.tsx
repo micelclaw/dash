@@ -94,9 +94,18 @@ export interface ContextMenuItem {
 interface ContextMenuProps {
   trigger: ReactNode;
   items: ContextMenuItem[];
+  /**
+   * Abrirlo también con un clic NORMAL, no solo con el botón derecho.
+   *
+   * Lo necesita un botón que quiere ofrecer ESTE menú (el ⋮ de la barra del
+   * correo, el «Mover a…» de la selección múltiple): así el usuario ve la misma
+   * lista de acciones se llegue por donde se llegue, que era justo el problema —
+   * había cuatro juegos distintos de acciones para lo mismo.
+   */
+  openOnLeftClick?: boolean;
 }
 
-export function ContextMenu({ trigger, items }: ContextMenuProps) {
+export function ContextMenu({ trigger, items, openOnLeftClick }: ContextMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const rawPos = useRef({ x: 0, y: 0 });
@@ -135,7 +144,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
     if (y < 8) y = 8;
     if (x < 8) x = 8;
     setPosition({ x, y });
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Reposiciona el submenú activo para que no se salga del viewport. Corre antes
   // del paint (useLayoutEffect) → sin parpadeo. Deps: el submenú abierto.
@@ -185,6 +194,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
       <div
         ref={triggerRef}
         onContextMenu={handleContextMenu}
+        {...(openOnLeftClick ? { onClick: handleContextMenu } : {})}
         style={{
           display: 'contents',
           userSelect: 'none',
@@ -210,6 +220,10 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
         />
         <div
           ref={menuRef}
+          // Marca invisible para poder aseverar SOBRE EL MENÚ: leer el texto de
+          // toda la página daba falsos positivos, porque la barra lateral del
+          // correo lista las mismas carpetas y etiquetas que el submenú.
+          data-testid="context-menu"
           onClick={(e) => e.stopPropagation()}
           style={{
             position: 'fixed',
@@ -281,6 +295,7 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
                 {hasSub && activeSubIdx === i && (
                   <div
                     ref={submenuRef}
+                    data-testid="context-submenu"
                     style={{
                       position: 'absolute',
                       left: subPos.openLeft ? 'auto' : '100%',
@@ -298,6 +313,31 @@ export function ContextMenu({ trigger, items }: ContextMenuProps) {
                     }}
                   >
                     {item.subItems!.map((sub, j) => {
+                      // Un submenú largo necesita agruparse igual que el menú de
+                      // arriba: sin esto un `separator` se pintaba como un botón
+                      // pulsable con la etiqueta vacía. Con etiqueta hace de
+                      // cabecera de grupo (p. ej. la cuenta de correo).
+                      if (sub.separator) {
+                        return (
+                          <div key={j}>
+                            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+                            {sub.label && (
+                              <div style={{
+                                padding: '2px 12px 4px',
+                                fontSize: '0.6875rem',
+                                color: 'var(--text-muted)',
+                                fontFamily: 'var(--font-sans)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: 240,
+                              }}>
+                                {sub.label}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
                       const SubIcon = sub.icon;
                       return (
                         <button

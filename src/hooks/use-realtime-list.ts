@@ -10,7 +10,10 @@
  * https://micelclaw.com
  */
 
-import { useEffect } from 'react';
+import { originIdentityChanged, mergeOriginUpdate } from '@/lib/origin-state';
+import { notifyOriginsChanged } from '@/lib/origin-refresh';
+import { useOriginRefresh } from './use-origin-refresh';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useWebSocket } from './use-websocket';
 
 /**
@@ -21,7 +24,12 @@ export function useRealtimeList<T extends { id: string }>(
   domain: string,
   items: T[],
   setItems: React.Dispatch<React.SetStateAction<T[]>>,
+  refresh?: () => unknown,
 ) {
+  const originDomain = ({ note: 'notes', contact: 'contacts', event: 'events', email: 'emails' } as Record<string, string>)[domain] ?? domain;
+  useOriginRefresh(originDomain, refresh ?? (() => {}));
+  const current = useRef({ items, refresh });
+  useLayoutEffect(() => { current.current = { items, refresh }; }, [items, refresh]);
   const wsCreated = useWebSocket(`${domain}.created`);
   const wsUpdated = useWebSocket(`${domain}.updated`);
   const wsDeleted = useWebSocket(`${domain}.deleted`);
@@ -29,20 +37,24 @@ export function useRealtimeList<T extends { id: string }>(
 
   useEffect(() => {
     if (!wsCreated) return;
+    if (current.current.refresh && !wsCreated.data.origins) { notifyOriginsChanged({ domains: [originDomain] }); return; }
     setItems(prev => {
       if (prev.some(item => item.id === wsCreated.data.id)) return prev;
       return [wsCreated.data as T, ...prev];
     });
-  }, [wsCreated, setItems]);
+  }, [wsCreated, setItems, originDomain]);
 
   useEffect(() => {
     if (!wsUpdated) return;
+    if (current.current.refresh && !wsUpdated.data.origins && current.current.items.some(item => item.id === wsUpdated.data.id && originIdentityChanged(item, wsUpdated.data))) {
+      notifyOriginsChanged({ domains: [originDomain] });
+    }
     setItems(prev =>
       prev.map(item =>
-        item.id === wsUpdated.data.id ? { ...item, ...wsUpdated.data } as T : item,
+        item.id === wsUpdated.data.id ? mergeOriginUpdate(item, wsUpdated.data) : item,
       ),
     );
-  }, [wsUpdated, setItems]);
+  }, [wsUpdated, setItems, originDomain]);
 
   useEffect(() => {
     if (!wsDeleted) return;
@@ -51,11 +63,12 @@ export function useRealtimeList<T extends { id: string }>(
 
   useEffect(() => {
     if (!wsRestored) return;
+    if (current.current.refresh && !wsRestored.data.origins) { notifyOriginsChanged({ domains: [originDomain] }); return; }
     setItems(prev => {
       if (prev.some(item => item.id === wsRestored.data.id)) return prev;
       return [wsRestored.data as T, ...prev];
     });
-  }, [wsRestored, setItems]);
+  }, [wsRestored, setItems, originDomain]);
 
   // Return the items array for chaining (identity — no transform)
   return items;

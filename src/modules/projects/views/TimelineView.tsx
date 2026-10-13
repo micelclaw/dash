@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown, ZoomIn, ZoomOut, ArrowUp, ArrowDown } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
@@ -720,7 +721,7 @@ export function TimelineView() {
                 <PriorityDot priority={card.priority ?? 'none'} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                   {card.card_number != null && <span style={{ color: 'var(--text-muted)', marginRight: 4 }}>#{card.card_number}</span>}
-                  {card.title}
+                  <EntitySource entity={card} domain="tasks" size="xs" /> {card.title}
                 </span>
               </div>
             );
@@ -922,7 +923,7 @@ export function TimelineView() {
                           textOverflow: 'ellipsis',
                           whiteSpace: 'nowrap',
                         }}>
-                          {card.title}
+                          <EntitySource entity={card} domain="tasks" size="xs" /> {card.title}
                         </span>
                       )}
                     </div>
@@ -981,7 +982,7 @@ export function TimelineView() {
                   }}
                 >
                   <PriorityDot priority={card.priority ?? 'none'} />
-                  {card.title}
+                  <EntitySource entity={card} domain="tasks" size="xs" /> {card.title}
                 </button>
               ))}
             </div>

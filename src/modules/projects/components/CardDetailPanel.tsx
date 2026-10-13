@@ -10,8 +10,10 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { X, Trash2, Plus, Check, MessageSquare, GitBranch, Archive, ArchiveRestore, Link, FileText, Calendar, Mail, User, File, Bookmark, ExternalLink, BookOpen, Package, Receipt, ArrowLeftRight, Paperclip, Download, Image as ImageIcon, HardDrive } from 'lucide-react';
 import { TagInput } from '@/components/shared/TagInput';
 import { DropZone } from '@/components/shared/DropZone';
@@ -20,12 +22,14 @@ import { useProjectsStore } from '@/stores/projects.store';
 import { useEscapeToClose } from '@/hooks/use-escape-to-close';
 import { api } from '@/services/api';
 import { getPreviewUrl } from '@/lib/file-utils';
+import { etiquetaSemantica, colorSemantica } from '../utils/status-semantic';
 import { PriorityBadge } from './PriorityDot';
 import { EntityLinkPicker } from './EntityLinkPicker';
 import { RelationIntelligence } from '@/components/shared/RelationIntelligence';
 import { useCardLinks } from '../hooks/use-card-links';
-import { getChecklistProgressColor } from '../utils/design-tokens';
-import type { ChecklistItem, Comment, Dependency, CustomFieldDef, Column } from '../types';
+import { CARD_COLORS, getChecklistProgressColor } from '../utils/design-tokens';
+import { DataProviderIcon } from '@/config/data-provider-icons';
+import type { Card, ChecklistItem, Comment, Dependency, CustomFieldDef, Column } from '../types';
 
 const PRIORITIES = ['urgent', 'high', 'medium', 'low', 'none'];
 
@@ -350,8 +354,23 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {leadingAction}
+          {/* El nombre de la columna es tuyo; lo de al lado es lo que entiende el
+              mundo exterior. Antes solo se veía el nombre y parecía un estado. */}
           <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
             {columns[card.column_id]?.title ?? 'Column'}
+            {(() => {
+              const sem = columns[card.column_id]?.status_semantic;
+              const et = etiquetaSemantica(sem);
+              return et ? (
+                <span title={`Fuera equivale a «${et}»`} style={{ color: colorSemantica(sem) }}>
+                  {' · '}{et.toLowerCase()}
+                </span>
+              ) : columns[card.column_id] ? (
+                <span title="Esta columna no dice a qué estado equivale. Al sincronizar, sus tareas se verán como «por hacer»." style={{ opacity: 0.6 }}>
+                  {' · '}sin definir
+                </span>
+              ) : null;
+            })()}
           </span>
           {card.card_number && (
             <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>#{card.card_number}</span>
@@ -363,6 +382,10 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <EntitySource entity={card} domain="tasks" detail />
+          {card.remote_url && <a href={card.remote_url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)', display: 'flex' }} title="Abrir en el proveedor"><ExternalLink size={13} /></a>}
+        </div>
         {/* Title */}
         <input
           value={title}
@@ -399,6 +422,43 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                 <PriorityBadge priority={p} />
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Accent color shown on the card's left border. */}
+        <div>
+          <label style={labelStyle}>Color</label>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7 }}>
+            <button
+              aria-label="No color"
+              title="No color"
+              onClick={() => handleSaveField('color', null)}
+              style={{
+                width: 22, height: 22, borderRadius: '50%', background: 'transparent', cursor: 'pointer',
+                border: card.color == null ? '2px solid var(--text)' : '1px dashed var(--text-muted)',
+              }}
+            />
+            {CARD_COLORS.map((color) => (
+              <button
+                key={color}
+                aria-label={`Color ${color}`}
+                title={color}
+                onClick={() => handleSaveField('color', color)}
+                style={{
+                  width: 22, height: 22, borderRadius: '50%', background: color, cursor: 'pointer',
+                  border: card.color === color ? '2px solid var(--text)' : '1px solid var(--border)',
+                }}
+              />
+            ))}
+            <label title="Custom color" style={{ width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              <input
+                aria-label="Custom card color"
+                type="color"
+                value={card.color ?? '#3b82f6'}
+                onChange={(e) => handleSaveField('color', e.target.value)}
+                style={{ width: 32, height: 32, margin: -5, cursor: 'pointer' }}
+              />
+            </label>
           </div>
         </div>
 
@@ -524,6 +584,19 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
               })}
             </div>
           )}
+          {(card.external_assignees ?? []).length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+              {(card.external_assignees ?? []).map((person) => (
+                <span key={`${person.provider_slug ?? person.providerSlug}:${person.provider_id ?? person.providerId}`} title={person.email ?? 'Responsable externo'} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999,
+                  border: '1px dashed var(--border)', color: 'var(--text-dim)', fontSize: 12,
+                }}>
+                  <DataProviderIcon slug={person.provider_slug ?? person.providerSlug ?? 'generic'} size={13} />
+                  {person.display_name ?? person.displayName ?? 'Usuario externo'} · externo
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Portada y adjuntos. Los dos campos existían en la tabla desde siempre
@@ -600,6 +673,13 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                   >
                     <X size={12} />
                   </button>
+                </div>
+              ))}
+              {externalFiles(card).map((file) => (
+                <div key={file.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', border: '1px dashed var(--border)', borderRadius: 6, fontSize: 12 }}>
+                  <ExternalLink size={12} style={{ color: 'var(--text-dim)' }} />
+                  <span style={{ flex: 1, color: 'var(--text-dim)' }}>{file.name} · enlace externo</span>
+                  {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: 'var(--text-dim)' }}>Abrir</a>}
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'flex-start' }}>
@@ -833,7 +913,8 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
                     <span>{c.content}</span>
                   )}
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {new Date(c.created_at).toLocaleString()}
+                    {(c.remote_author?.display_name ?? c.remote_author?.displayName) && <>{c.remote_author?.display_name ?? c.remote_author?.displayName} · {providerLabel(c.source ?? '')} · </>}
+                    {new Date(c.remote_created_at ?? c.created_at).toLocaleString()}
                   </div>
                 </div>
               ))}
@@ -908,9 +989,10 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
           titulo={drivePara === 'portada' ? 'Elegir portada del Drive' : 'Adjuntar del Drive'}
           onClose={() => setDrivePara(null)}
           onPick={(files) => {
-            if (files.length === 0) { setDrivePara(null); return; }
+            const firstFile = files[0];
+            if (!firstFile) { setDrivePara(null); return; }
             if (drivePara === 'portada') {
-              handleSaveField('cover_image_id', files[0].id);
+              handleSaveField('cover_image_id', firstFile.id);
             } else {
               // Sin duplicar: adjuntar dos veces el mismo fichero no aporta nada.
               const yaEstan = new Set(card.attachment_ids ?? []);
@@ -957,6 +1039,27 @@ export function CardDetailPanel({ boardId, cardId, isMobile, variant = 'panel', 
       )}
     </div>
   );
+}
+
+function providerLabel(source: string): string {
+  return ({
+    todoist: 'Todoist', notion: 'Notion', microsoft: 'Microsoft To Do', trello: 'Trello',
+    ticktick: 'TickTick', asana: 'Asana', clickup: 'ClickUp',
+    monday: 'Monday.com', jira: 'Jira', caldav: 'CalDAV', google: 'Google Tasks',
+  } as Record<string, string>)[source] ?? source;
+}
+
+function externalFiles(card: Card): Array<{ key: string; name: string; url: string | null }> {
+  if (!card.connector_id || !card.external_payload) return [];
+  const own = card.external_payload[card.connector_id] as Record<string, unknown> | undefined;
+  const files = own?.files ?? own?.dav_attachments;
+  if (!files || typeof files !== 'object') return [];
+  return Object.entries(files as Record<string, Record<string, unknown>>)
+    .filter(([, file]) => !file.fileId && !file.file_id)
+    .map(([key, file]) => ({
+      key, name: String(file.name ?? 'Archivo externo'),
+      url: typeof (file.externalUrl ?? file.external_url) === 'string' ? String(file.externalUrl ?? file.external_url) : null,
+    }));
 }
 
 const dateInputStyle: React.CSSProperties = {

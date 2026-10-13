@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Search, X } from 'lucide-react';
+import { ConnectButton } from '@/components/shared/ConnectButton';
 
 interface ContactsFiltersProps {
   search: string;
@@ -109,6 +110,7 @@ export function ContactsFilters({
           </button>
         ))}
       </div>
+      <ConnectButton dataType="contacts" />
     </div>
   );
 }

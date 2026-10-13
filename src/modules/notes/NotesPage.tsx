@@ -21,7 +21,7 @@ import { useBackGuard } from '@/hooks/use-back-guard';
 import { useNotes } from './hooks/use-notes';
 import { NotesList } from './NotesList';
 import { NoteEditor } from './NoteEditor';
-import type { NoteFilters } from '@/types/notes';
+import type { NoteFilters,Note } from '@/types/notes';
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,6 +35,8 @@ export function Component() {
     archived: false,
   });
   const [deleteDialogId, setDeleteDialogId] = useState<string | null>(null);
+  const [deletePending,setDeletePending]=useState(false);
+  const [deleteConnected,setDeleteConnected]=useState(false);
 
   // Móvil: el botón atrás cierra el editor (sub-vista) antes de salir del módulo.
   useBackGuard(!!selectedNoteId, () => setSelectedNoteId(null), isMobile);
@@ -76,16 +78,20 @@ export function Component() {
   const handleFiltersChange = useCallback((partial: Partial<NoteFilters>) => {
     setFilters(prev => ({ ...prev, ...partial }));
   }, []);
+  const handleConnectedNoteCreated=useCallback((note:Note)=>{void fetchNotes();handleSelect(note.id);},[fetchNotes,handleSelect]);
 
   const handleDelete = useCallback(async () => {
-    if (!deleteDialogId) return;
-    await deleteNote(deleteDialogId);
+    if (!deleteDialogId||deletePending) return;
+    setDeletePending(true);
+    let accepted=false;
+    try{accepted=await deleteNote(deleteDialogId);}finally{setDeletePending(false);}
+    if(!accepted)return;
     if (selectedNoteId === deleteDialogId) {
       setSelectedNoteId(null);
       setSearchParams({}, { replace: true });
     }
     setDeleteDialogId(null);
-  }, [deleteDialogId, deleteNote, selectedNoteId, setSearchParams]);
+  }, [deleteDialogId, deletePending, deleteNote, selectedNoteId, setSearchParams]);
 
   // Keyboard shortcut: Cmd+N / Ctrl+N to create
   useEffect(() => {
@@ -109,9 +115,10 @@ export function Component() {
       selectedId={selectedNoteId}
       onSelect={handleSelect}
       onCreateNote={handleCreateNote}
+      onConnectedNoteCreated={handleConnectedNoteCreated}
       onPinNote={togglePin}
       onArchiveNote={archiveNote}
-      onDeleteNote={setDeleteDialogId}
+      onDeleteNote={id=>{setDeleteConnected(Boolean(notes.find(note=>note.id===id)?.sync));setDeleteDialogId(id);}}
       onRetry={fetchNotes}
     />
   );
@@ -130,26 +137,24 @@ export function Component() {
   // Móvil: navegación push (lista a pantalla completa → tap abre el editor con "atrás").
   // Evitamos el SplitPane, que en móvil pinta una tab bar "Panel 1 / Panel 2" sin sentido:
   // aquí ambas vistas ya son accesibles por navegación.
-  if (isMobile) {
-    return selectedNoteId
-      ? <NoteEditor noteId={selectedNoteId} onBack={() => setSelectedNoteId(null)} onSaved={patchLocalNote} />
-      : listPanel;
-  }
-
   return (
     <>
-      <SplitPane defaultSizes={[35, 65]} minSizes={[260, 400]} id="notes-split">
+      {isMobile ? (selectedNoteId
+        ? <NoteEditor noteId={selectedNoteId} onBack={()=>setSelectedNoteId(null)} onSaved={patchLocalNote}/>
+        : listPanel) : <SplitPane defaultSizes={[35, 65]} minSizes={[260, 400]} id="notes-split">
         {listPanel}
         {editorPanel}
-      </SplitPane>
+      </SplitPane>}
 
       <ConfirmDialog
+        closeOnConfirm={false}
+        pending={deletePending}
         open={deleteDialogId !== null}
         onClose={() => setDeleteDialogId(null)}
         onConfirm={handleDelete}
-        title="Delete note?"
-        description="This note will be moved to trash. You can restore it from there."
-        confirmLabel="Delete"
+        title={deleteConnected ? '¿Enviar nota a la papelera?' : 'Delete note?'}
+        description={deleteConnected ? 'Se retirará de Micelclaw y se enviará a la papelera del proveedor. No se restaurará automáticamente desde aquí.' : 'This note will be moved to trash. You can restore it from there.'}
+        confirmLabel={deleteConnected ? 'Enviar a papelera' : 'Delete'}
         variant="danger"
       />
     </>

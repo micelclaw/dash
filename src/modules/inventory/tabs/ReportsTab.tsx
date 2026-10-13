@@ -17,6 +17,7 @@ import { api } from '@/services/api';
 import { useInventoryStore } from '@/stores/inventory.store';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { AccountingSettingsCard } from '@/modules/inventory/components/AccountingSettingsCard';
+import { CalendarProjectionCard } from '@/modules/inventory/components/CalendarProjectionCard';
 import { DepreciationReport } from '@/modules/inventory/components/DepreciationReport';
 import { fmtMoney } from '@/modules/inventory/types';
 
@@ -142,6 +143,9 @@ export function ReportsTab() {
     <div style={{ maxWidth: 1100, padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* 0. Accounting toggle (C-N2: post depreciación/baja/capitalización a Finance) */}
       <AccountingSettingsCard />
+
+      {/* 0b. Qué se proyecta al calendario "Inventory" (INV2: el backend ya lo lee) */}
+      <CalendarProjectionCard />
 
       {/* 1. Valuation card */}
       <div style={{ ...cardStyle, borderLeft: '3px solid var(--mod-inventory)' }}>

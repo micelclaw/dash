@@ -16,10 +16,12 @@
 // con ↑↓/Enter (el suggestion plugin de TipTap reenvía el teclado vía
 // useImperativeHandle, patrón estándar de @tiptap/extension-mention).
 
+import { type OriginEntity } from '@/types/origins';
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { ENTITY_REF_MAP } from '@/config/entity-refs';
 
-export interface MentionItem {
+export interface MentionItem extends OriginEntity {
   domain: string;
   id: string;
   label: string;
@@ -92,6 +94,7 @@ export const MentionDropdown = forwardRef<MentionDropdownHandle, MentionDropdown
                 fontFamily: 'var(--font-sans)',
               }}
             >
+              {item.origins && <EntitySource entity={item} />}
               {Icon && <Icon size={13} style={{ color, flexShrink: 0 }} />}
               <span style={{ fontSize: '0.8125rem', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
                 {item.label}

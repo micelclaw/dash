@@ -21,7 +21,6 @@ import { InlineLoading } from '../shared/InlineLoading';
 // ─── Types ──────────────────────────────────────────────
 
 // Types are now centralised in hal.service.ts. Re-import for local use.
-type ProxyRoute = hal.ProxyRoute;
 type ProxyStatus = hal.ProxyStatus;
 type VpnStatus = hal.VpnStatus;
 type FirewallStatus = hal.FirewallStatus;
@@ -38,19 +37,19 @@ interface ProcessLogData {
 function ProxySubSection() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<ProxyStatus | null>(null);
-  const [routes, setRoutes] = useState<ProxyRoute[]>([]);
   const [loadState, setLoadState] = useState<'loading' | 'ok' | 'error'>('loading');
   const [acting, setActing] = useState<'start' | 'stop' | null>(null);
   const [processLog, setProcessLog] = useState<ProcessLogData | null>(null);
-  const [newRoute, setNewRoute] = useState({ path: '', upstream: '', description: '' });
-  const [showAddForm, setShowAddForm] = useState(false);
 
+  // Antes se pedían DOS cosas: el estado y una lista de `routes` que ya no existe (Core migró a
+  // hosts/ACL/certificados y `/hal/network/proxy/routes` responde 404). Esa llamada muerta se
+  // retira entera, con su formulario de alta y su botón de borrar, que posteaban contra el 404 y
+  // solo podían fallar. El recuento de hosts lo trae el propio `/status` (`hosts_total` /
+  // `hosts_enabled`), y la gestión completa vive en el módulo `/proxy`, ya enlazado aquí arriba.
   const fetchData = useCallback(async () => {
     setLoadState('loading');
     try {
-      const [status, routes] = await Promise.all([hal.getProxyStatus(), hal.getProxyRoutes()]);
-      setStatus(status);
-      setRoutes(routes);
+      setStatus(await hal.getProxyStatus());
       setLoadState('ok');
     } catch {
       setLoadState('error');
@@ -74,29 +73,6 @@ function ProxySubSection() {
       toast.error(`Failed to ${action} Caddy`);
     }
     setActing(null);
-  };
-
-  const addRoute = async () => {
-    if (!newRoute.path || !newRoute.upstream) return;
-    try {
-      await hal.addProxyRoute(newRoute);
-      toast.success('Proxy route added');
-      setNewRoute({ path: '', upstream: '', description: '' });
-      setShowAddForm(false);
-      fetchData();
-    } catch {
-      toast.error('Failed to add proxy route');
-    }
-  };
-
-  const removeRoute = async (id: string) => {
-    try {
-      await hal.deleteProxyRoute(id);
-      toast.success('Route removed');
-      fetchData();
-    } catch {
-      toast.error('Failed to remove route');
-    }
   };
 
   if (loadState === 'loading') {
@@ -202,83 +178,29 @@ function ProxySubSection() {
         </div>
       )}
 
-      {/* Routes */}
-      <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>
-            Routes ({routes.length})
-          </span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            <button
-              onClick={fetchData}
-              style={{ height: 26, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              <RefreshCw size={12} />
-            </button>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              style={{ height: 26, padding: '0 8px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              <Plus size={12} /> Add
-            </button>
+      {/* Hosts */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>Hosts</div>
+          <div style={{ marginTop: 2, fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+            {status ? `${status.hosts_enabled} of ${status.hosts_total} enabled` : '—'}
           </div>
         </div>
-
-        {showAddForm && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-            <input
-              placeholder="Path (e.g. /api)"
-              value={newRoute.path}
-              onChange={(e) => setNewRoute((p) => ({ ...p, path: e.target.value }))}
-              style={{ flex: 1, minWidth: 100, height: 30, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
-              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-            />
-            <input
-              placeholder="Upstream (e.g. http://localhost:3000)"
-              value={newRoute.upstream}
-              onChange={(e) => setNewRoute((p) => ({ ...p, upstream: e.target.value }))}
-              style={{ flex: 2, minWidth: 160, height: 30, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.8125rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--amber)')}
-              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
-            />
-            <button
-              onClick={addRoute}
-              disabled={!newRoute.path || !newRoute.upstream}
-              style={{ height: 30, padding: '0 12px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', opacity: !newRoute.path || !newRoute.upstream ? 0.5 : 1 }}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-
-        {routes.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem' }}>No routes configured</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {routes.map((r) => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem' }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0, flex: 1 }}>
-                  <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--amber)' }}>{r.path}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>&rarr;</span>
-                  <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.upstream}</span>
-                </div>
-                <button
-                  onClick={() => removeRoute(r.id)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'flex', flexShrink: 0 }}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={fetchData}
+            title="Refresh"
+            style={{ height: 26, padding: '0 8px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <RefreshCw size={12} />
+          </button>
+          <button
+            onClick={() => navigate('/proxy')}
+            style={{ height: 26, padding: '0 10px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}
+          >
+            Manage
+          </button>
+        </div>
       </div>
     </SettingSection>
   );

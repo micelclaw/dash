@@ -25,6 +25,8 @@ import { BulkActionsBar } from './catalog/BulkActionsBar';
 import { ItemsTable } from './catalog/ItemsTable';
 import { ItemsGrid } from './catalog/ItemsGrid';
 import { sortItems, type SortDir, type SortKey } from './catalog/sorting';
+import { SavedViewsControl } from './catalog/SavedViewsControl';
+import type { CatalogSavedView } from './catalog/saved-views';
 
 const VIEW_STORAGE_KEY = 'inventory-view';
 
@@ -174,6 +176,17 @@ export function CatalogTab() {
     void fetchItems(cleared);
   };
 
+  const applySavedView = (saved: CatalogSavedView) => {
+    setSearch(saved.filters.search ?? '');
+    setFilters(saved.filters);
+    setView(saved.view);
+    localStorage.setItem(VIEW_STORAGE_KEY, saved.view);
+    setSortKey(saved.sort_key);
+    setSortDir(saved.sort_dir);
+    setAssetsOnly(saved.assets_only);
+    void fetchItems(saved.filters);
+  };
+
   const onSearchChange = (value: string) => {
     setSearch(value);
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -205,6 +218,11 @@ export function CatalogTab() {
         }}
       >
         <ViewToggle view={view} onChange={changeView} />
+
+        <SavedViewsControl
+          snapshot={{ filters, view, sort_key: sortKey, sort_dir: sortDir, assets_only: assetsOnly }}
+          onApply={applySavedView}
+        />
 
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <Search size={13} style={{ position: 'absolute', left: 8, color: 'var(--text-dim)', pointerEvents: 'none' }} />

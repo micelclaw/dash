@@ -11,33 +11,46 @@
  */
 
 import { useMemo, useEffect, useRef, useState } from 'react';
-import { X, Layout, Globe, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { X, Layout, Globe, FileText, ExternalLink, Loader2, AlertTriangle } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
 import { useCanvasStore } from '@/stores/canvas.store';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { BrowserSessionView } from './components/BrowserSessionView';
 import { SaveResultsMenu } from './components/SaveResultsMenu';
 import { usePersistedScreenshots } from '@/hooks/use-persisted-screenshots';
-import { useCanvasHistory } from '@/hooks/use-canvas-history';
-import { RetryBanner } from '@/components/settings/shared/RetryBanner';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { useNativeCanvasBoardStore } from '@/stores/native-canvas-board.store';
+import { NativeCanvasBoardPanel, NativeCanvasHub } from './NativeCanvasBoardPanel';
+import { nativeCanvasService } from '@/services/native-canvas.service';
 
 interface CanvasPanelProps {
   onClose: () => void;
 }
 
 export function CanvasPanel({ onClose }: CanvasPanelProps) {
+  const navigate = useNavigate();
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const canvasStates = useCanvasStore((s) => s.canvasStates);
   const activeMode = useCanvasStore((s) => s.activeMode);
   const browserSessions = useCanvasStore((s) => s.browserSessions);
+  const nativePreviews = useNativeCanvasBoardStore((s) => activeConvId ? s.previews.get(activeConvId) : undefined);
+  const nativeBoard = useNativeCanvasBoardStore((s) => activeConvId ? s.byConversation.get(activeConvId) : undefined);
+  const [nativeCanvasStatus, setNativeCanvasStatus] = useState<'loading' | 'enabled' | 'disabled' | 'error'>('loading');
+  const [nativeCanvasConversationId, setNativeCanvasConversationId] = useState<string | null>(activeConvId);
+
+  // A gallery selection changes only this pane. A shared Canvas must never
+  // select its source chat: Canvas collaboration does not disclose a transcript.
+  useEffect(() => { setNativeCanvasConversationId(activeConvId); }, [activeConvId]);
+
+  // A board belongs to a durable OpenClaw session and may predate this browser
+  // tab. Do not depend on a live canvas.preview event to discover it.
+  useEffect(() => {
+    let active = true;
+    void nativeCanvasService.status()
+      .then((status) => { if (active) setNativeCanvasStatus(status.native_canvas_enabled ? 'enabled' : 'disabled'); })
+      .catch(() => { if (active) setNativeCanvasStatus('error'); });
+    return () => { active = false; };
+  }, []);
 
   // Canvas content is scoped per conversation. Never fall back to
   // __standalone__ for a real chat — that leaked the last global push
@@ -77,31 +90,29 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
 
   const hasPersisted = persistedScreenshots.length > 0;
   const isBrowserMode = (activeMode === 'browser' && browserSession) || hasPersisted;
-  const isCanvasError = activeMode === 'canvas' && canvas?.status === 'error';
-  const isCanvasMode = activeMode === 'canvas' && canvas?.hasContent && canvas.status !== 'error';
+  const workspaceFile = canvas?.type === 'workspace_file' ? canvas.workspaceFile : undefined;
+  const isWorkspaceFile = Boolean(workspaceFile);
+  const displayedNativeConversationId = nativeCanvasConversationId ?? activeConvId;
+  const isNativeCanvasMode = nativeCanvasStatus === 'enabled' || Boolean(nativePreviews?.length || nativeBoard);
+  // Canvas visual de agentes: sólo el Dashboard nativo de OpenClaw 9.4.
+  // Browser y previsualizaciones explícitas de Workspaces no son Canvas.
+  const showNativeCanvas = isNativeCanvasMode && !isBrowserMode && !isWorkspaceFile;
 
-  // Historial de canvases por conversación (barra ← X → con título en medio)
-  const {
-    history: canvasHistory,
-    currentIndex: canvasIndex,
-    current: canvasCurrent,
-    navigate: navigateCanvas,
-    removeCurrent: removeCurrentCanvas,
-    canPrev: canPrevCanvas,
-    canNext: canNextCanvas,
-  } = useCanvasHistory(activeConvId);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const showCanvasNav = isCanvasMode && canvasHistory.length > 1;
+  // Header label. La URL efectiva sigue la MISMA precedencia que el cuerpo
+  // (`BrowserSessionView`: `currentScreenshot?.url ?? session.currentUrl`): manda
+  // la captura que se está viendo y la sesión viva es el respaldo. Sin esto, al
+  // abrir capturas persistidas sin sesión viva la cabecera se quedaba en un
+  // "Browsing" pelado y no cambiaba al navegar entre capturas.
+  const headerUrl = persistedScreenshots[currentIndex]?.url ?? browserSession?.currentUrl ?? null;
+  const headerLabel = showNativeCanvas ? 'Dashboard' : isBrowserMode
+    ? `Browsing${headerUrl ? ': ' + extractDomain(headerUrl) : ''}`
+    : isWorkspaceFile ? workspaceFile!.title : 'Canvas';
 
-  // Header label
-  const headerLabel = isBrowserMode
-    ? `Browsing${browserSession?.currentUrl ? ': ' + extractDomain(browserSession.currentUrl) : ''}`
-    : 'Canvas';
-
-  const HeaderIcon = isBrowserMode ? Globe : Layout;
+  const HeaderIcon = showNativeCanvas ? Layout : isBrowserMode ? Globe : isWorkspaceFile ? FileText : Layout;
 
   return (
     <div
+      data-testid="canvas-panel"
       style={{
         flex: 1,
         display: 'flex',
@@ -134,12 +145,28 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
         }}>
           {headerLabel}
         </span>
-        <SaveResultsMenu
-          activeMode={activeMode}
-          canvas={canvas}
-          browserSession={browserSession}
-          conversationId={activeConvId}
-        />
+        {!isWorkspaceFile && (
+          <SaveResultsMenu
+            activeMode={activeMode}
+            canvas={canvas}
+            browserSession={browserSession}
+            conversationId={activeConvId}
+          />
+        )}
+        {isWorkspaceFile && workspaceFile!.deepLink && (
+          <button
+            onClick={() => navigate(workspaceFile!.deepLink)}
+            title="Abrir en Workspaces"
+            aria-label="Abrir archivo en Workspaces"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', padding: 4, display: 'flex',
+              borderRadius: 'var(--radius-sm)', flexShrink: 0,
+            }}
+          >
+            <ExternalLink size={14} />
+          </button>
+        )}
         <button
           onClick={onClose}
           style={{
@@ -157,125 +184,15 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
         </button>
       </div>
 
-      {/* Canvas history nav bar (← title → X) — visible cuando hay 2+ canvases en la conv */}
-      {showCanvasNav && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 8,
-            padding: '6px 12px',
-            borderBottom: '1px solid var(--border)',
-            background: 'var(--surface)',
-            fontSize: '0.75rem',
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={() => navigateCanvas(canvasIndex - 1)}
-            disabled={!canPrevCanvas}
-            title="Canvas anterior"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: canPrevCanvas ? 'pointer' : 'default',
-              color: canPrevCanvas ? 'var(--text-dim)' : 'var(--text-muted)',
-              padding: 4,
-              display: 'flex',
-              opacity: canPrevCanvas ? 1 : 0.4,
-            }}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span
-            style={{
-              color: 'var(--text-dim)',
-              fontFamily: 'var(--font-mono, monospace)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: 320,
-            }}
-            title={canvasCurrent?.path ?? canvasCurrent?.title}
-          >
-            {canvasCurrent?.title ?? canvasCurrent?.path ?? '—'}
-          </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
-            ({canvasIndex + 1}/{canvasHistory.length})
-          </span>
-          <button
-            onClick={() => navigateCanvas(canvasIndex + 1)}
-            disabled={!canNextCanvas}
-            title="Canvas siguiente"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: canNextCanvas ? 'pointer' : 'default',
-              color: canNextCanvas ? 'var(--text-dim)' : 'var(--text-muted)',
-              padding: 4,
-              display: 'flex',
-              opacity: canNextCanvas ? 1 : 0.4,
-            }}
-          >
-            <ChevronRight size={14} />
-          </button>
-          <button
-            onClick={() => setDeleteDialogOpen(true)}
-            title="Borrar este canvas"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              padding: 4,
-              marginLeft: 4,
-              display: 'flex',
-            }}
-          >
-            <X size={12} />
-          </button>
-        </div>
-      )}
-
-      {/* Delete confirm dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Eliminar canvas</DialogTitle>
-            <DialogDescription>
-              ¿Cómo quieres eliminar <code>{canvasCurrent?.title ?? canvasCurrent?.path ?? ''}</code>?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter style={{ gap: 8, flexWrap: 'wrap' }}>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                setDeleteDialogOpen(false);
-                await removeCurrentCanvas({ deleteFile: false });
-              }}
-            >
-              Solo del historial
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                setDeleteDialogOpen(false);
-                await removeCurrentCanvas({ deleteFile: true });
-              }}
-            >
-              También del disco
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Content */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-        {isBrowserMode ? (
+        {nativeCanvasStatus === 'error' && !nativePreviews?.length && !nativeBoard ? (
+          <div style={{ minHeight: 220, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 10, padding: 24, color: 'var(--text-muted)', textAlign: 'center' }}>
+            <AlertTriangle size={20} style={{ color: 'var(--amber)' }} />
+            <strong style={{ color: 'var(--text)' }}>No se pudo comprobar Canvas nativo</strong>
+            <span>El resto del chat sigue disponible. Cierra y vuelve a abrir Canvas para reintentar.</span>
+          </div>
+        ) : showNativeCanvas ? (displayedNativeConversationId ? <NativeCanvasBoardPanel conversationId={displayedNativeConversationId} onSelectConversation={setNativeCanvasConversationId} /> : <NativeCanvasHub onSelectConversation={setNativeCanvasConversationId} />) : isBrowserMode ? (
           <BrowserSessionView
             session={browserSession ?? {
               sessionId: 'persisted',
@@ -292,13 +209,8 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
             onDelete={deleteScreenshot}
             onDownload={downloadScreenshot}
           />
-        ) : isCanvasError ? (
-          <CanvasErrorState
-            message={canvas!.errorMessage ?? 'Error desconocido'}
-            code={canvas!.errorCode}
-          />
-        ) : isCanvasMode ? (
-          <CanvasIframe canvas={canvas!} convId={activeConvId} />
+        ) : isWorkspaceFile ? (
+          <WorkspaceFilePreview canvas={canvas!} convId={activeConvId} />
         ) : (
           <EmptyState />
         )}
@@ -317,108 +229,83 @@ export function CanvasPanel({ onClose }: CanvasPanelProps) {
 
 import type { CanvasState } from '@/stores/canvas.store';
 
-function CanvasIframe({ canvas, convId }: { canvas: CanvasState; convId: string | null }) {
+function WorkspaceFilePreview({ canvas, convId }: { canvas: CanvasState; convId: string | null }) {
   const setCanvasError = useCanvasStore((s) => s.setCanvasError);
+  const file = canvas.workspaceFile!;
 
-  if (canvas.type === 'url' && canvas.url) {
-    // Cache-bust via reloadKey query param. The iframe re-fetches whenever
-    // OpenClaw's chokidar fires a `reload` and we bump reloadKey in the store.
-    const sep = canvas.url.includes('?') ? '&' : '?';
-    const src = `${canvas.url}${sep}_r=${canvas.reloadKey ?? 0}`;
-
-    const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
-      // Tercera línea de defensa: si por cualquier motivo el backend deja pasar
-      // la Control UI del Gateway, la atrapamos aquí leyendo el <title> del
-      // documento cargado (mismo origen, lectura permitida).
-      try {
-        const title = e.currentTarget.contentDocument?.title;
-        if (title === 'OpenClaw Control' && convId) {
-          setCanvasError(
-            convId,
-            'El archivo del canvas no se sirvió correctamente. Pide al agente que regenere el HTML.',
-            'IFRAME_SPA_DETECTED',
-          );
-        }
-      } catch {
-        // Cross-origin: ignorar. En deploys con dash y canvas-host en
-        // dominios distintos no podemos leer el title — backend cubre esto.
-      }
-    };
-
-    const handleError = () => {
-      if (convId) {
-        setCanvasError(convId, 'No se pudo cargar el canvas (error de red).', 'IFRAME_NETWORK_ERROR');
-      }
-    };
-
+  if (canvas.status === 'loading') {
     return (
-      <iframe
-        src={src}
-        title="Canvas"
-        sandbox="allow-scripts allow-same-origin"
-        onLoad={handleLoad}
-        onError={handleError}
-        style={{ flex: 1, border: 'none', background: '#fff' }}
-      />
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)' }}>
+        <Loader2 size={18} className="animate-spin" />
+        <span style={{ fontSize: '0.8125rem' }}>Cargando {file.title}…</span>
+      </div>
     );
   }
 
-  if (canvas.type === 'a2ui' && canvas.content) {
-    // A2UI: iframe pointing to Gateway renderer, postMessage JSONL
-    // Fallback: render raw content as HTML for now
+  if (file.previewKind === 'markdown') {
     return (
-      <iframe
-        srcDoc={wrapHtml('<pre style="padding:16px;color:#ccc;font-size:12px">' + escapeHtml(canvas.content) + '</pre>')}
-        title="A2UI Canvas"
-        sandbox="allow-scripts"
-        style={{ flex: 1, border: 'none', background: '#fff' }}
-      />
+      <div className="app-detail-md" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 20, color: 'var(--text)', fontSize: '0.875rem', lineHeight: 1.65 }}>
+        <MarkdownRenderer content={canvas.content ?? ''} />
+      </div>
     );
   }
 
-  // HTML canvas (inline) — sandboxed iframe with srcDoc
+  if (file.previewKind === 'code') {
+    return (
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 16 }}>
+        <MarkdownRenderer content={asFencedCode(canvas.content ?? '', file.relativePath)} />
+      </div>
+    );
+  }
+
+  if (file.previewKind === 'text') {
+    return (
+      <pre style={{ flex: 1, minHeight: 0, overflow: 'auto', margin: 0, padding: 20, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', lineHeight: 1.6, color: 'var(--text)' }}>
+        {canvas.content ?? ''}
+      </pre>
+    );
+  }
+
+  if (file.previewKind === 'image') {
+    return (
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'var(--bg)' }}>
+        <img
+          src={file.contentUrl}
+          alt={file.title}
+          onError={() => convId && setCanvasError(convId, 'No se pudo cargar la imagen del workspace.', 'WORKSPACE_IMAGE_FAILED')}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
+      </div>
+    );
+  }
+
+  if (file.previewKind === 'pdf') {
+    return <iframe src={file.contentUrl} title={file.title} style={{ flex: 1, border: 0, background: '#fff' }} />;
+  }
+
   return (
     <iframe
-      srcDoc={canvas.content ?? ''}
-      title="Canvas"
+      src={file.contentUrl}
+      title={file.title}
       sandbox="allow-scripts"
-      style={{ flex: 1, border: 'none', background: '#fff' }}
+      onError={() => convId && setCanvasError(convId, 'No se pudo cargar el HTML del workspace.', 'WORKSPACE_HTML_FAILED')}
+      style={{ flex: 1, border: 0, background: '#fff' }}
     />
   );
 }
 
-// ─── Error State ────────────────────────────────────────────────────
-
-function CanvasErrorState({ message, code }: { message: string; code?: string }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
-      <div style={{ maxWidth: 420, width: '100%' }}>
-        <RetryBanner
-          severity="error"
-          title="Canvas no disponible"
-          message={code ? `${message} (${code})` : message}
-        />
-        <p
-          style={{
-            marginTop: 12,
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-            textAlign: 'center',
-          }}
-        >
-          Pide al agente que vuelva a generar el HTML.
-        </p>
-      </div>
-    </div>
-  );
+function asFencedCode(content: string, path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  const language = ({
+    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx', mjs: 'javascript', cjs: 'javascript',
+    py: 'python', rb: 'ruby', sh: 'bash', bash: 'bash', zsh: 'bash', ps1: 'powershell',
+    yml: 'yaml', yaml: 'yaml', json: 'json', jsonl: 'json', css: 'css', scss: 'scss',
+    html: 'html', xml: 'xml', sql: 'sql', go: 'go', rs: 'rust', java: 'java',
+    kt: 'kotlin', cs: 'csharp', cpp: 'cpp', c: 'c', php: 'php', swift: 'swift',
+  } as Record<string, string>)[ext] ?? '';
+  const longestRun = Math.max(0, ...(content.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
 }
 
 // ─── Empty State ────────────────────────────────────────────────────
@@ -446,8 +333,13 @@ function EmptyState() {
           lineHeight: 1.5,
         }}
       >
-        Canvas will appear here when the agent sends visual content
+        Canvas aparecerá aquí cuando el agente envíe contenido visual
       </p>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('micelclaw:chat-draft', { detail: 'Crea un dashboard Canvas con un resumen visual de esta conversación.' }))}>Crear un dashboard</button>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('micelclaw:chat-draft', { detail: 'Genera un diagrama Mermaid que explique esta conversación.' }))}>Generar un diagrama</button>
+      </div>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', textAlign: 'center', margin: 0 }}>La propuesta se prepara en el cuadro de mensaje; tú decides si la envías.</p>
     </div>
   );
 }
@@ -456,12 +348,4 @@ function EmptyState() {
 
 function extractDomain(url: string): string {
   try { return new URL(url).hostname; } catch { return url; }
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function wrapHtml(body: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;background:#1a1a2e;}</style></head><body>${body}</body></html>`;
 }

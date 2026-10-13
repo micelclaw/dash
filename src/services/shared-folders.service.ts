@@ -39,6 +39,15 @@ export interface SharedFolder {
   deny_download: boolean;
 }
 
+export interface MySharedFolder {
+  id: string;
+  name: string;
+  slug: string;
+  permission: Exclude<FolderPermission, 'none'>;
+  status: 'pending' | 'indexing' | 'active' | 'error';
+  last_error: string | null;
+}
+
 export interface UserFolderPerm {
   id: string;
   name: string;
@@ -48,6 +57,11 @@ export interface UserFolderPerm {
 
 export async function listSharedFolders(): Promise<SharedFolder[]> {
   const res = await api.get<{ data: SharedFolder[] }>('/shared-folders');
+  return res.data;
+}
+
+export async function listMyDriveSharedFolders(): Promise<MySharedFolder[]> {
+  const res = await api.get<{ data: MySharedFolder[] }>('/shared-folders/mine');
   return res.data;
 }
 

@@ -275,7 +275,7 @@ export function AgentSandboxConfig({ agentId, agentName }: AgentSandboxConfigPro
 
       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', paddingTop: 4, borderTop: '1px dashed var(--border)' }}>
         Applied at next gateway restart. To edit defaults for all agents:{' '}
-        <a href="/settings/sandbox" style={{ color: 'var(--amber)' }}>Settings → Sandbox</a>.
+        <a href="/settings/security?security_tab=isolation" style={{ color: 'var(--amber)' }}>Settings → Security → Isolation</a>.
       </div>
     </div>
   );

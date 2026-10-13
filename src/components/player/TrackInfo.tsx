@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { Music } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
 import { coverSrc } from './cover-src';
@@ -73,6 +74,7 @@ export function TrackInfo() {
           </div>
         )}
       </div>
+      <EntitySource entity={{ origins: currentItem.origins }} domain="music" native={currentItem.source === 'navidrome'} />
     </div>
   );
 }

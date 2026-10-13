@@ -11,7 +11,7 @@
  */
 
 export type UserRole = 'owner' | 'admin' | 'user';
-export type Tier = 'free' | 'pro';
+export type Tier = 'free' | 'pro' | 'plus';
 
 export interface User {
   id: string;

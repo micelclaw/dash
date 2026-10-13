@@ -87,7 +87,7 @@ export function useMoneroRpc() {
     } catch (err: any) {
       const msg = err?.message || 'Confirmation failed';
       setError(msg);
-      throw new Error(msg);
+      throw new Error(msg, { cause: err });
     } finally {
       setIsLoading(false);
     }

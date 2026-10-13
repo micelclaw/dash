@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useFeedsStore, type RssArticle } from '@/stores/feeds.store';
 import { Star, Loader2 } from 'lucide-react';
 
@@ -107,6 +108,7 @@ function ArticleRow({ article, feedTitle, active, onClick }: {
           {/* Meta */}
           <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-[var(--text-muted)]">
             <span className="truncate max-w-[120px]">{feedTitle}</span>
+        <EntitySource entity={article} domain="feeds" native />
             <span>·</span>
             <span>{timeAgo}</span>
             {article.is_favorite && <Star size={10} className="text-[var(--amber)] fill-[var(--amber)]" />}

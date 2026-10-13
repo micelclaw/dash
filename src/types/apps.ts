@@ -25,6 +25,10 @@ export interface AppManifest {
   description?: string;
   author?: string;
   icon?: string;
+  /** Display SSOT (Fase E): 'emoji' → `icon` crudo · 'lucide' → `icon` es nombre Lucide. */
+  icon_kind?: 'emoji' | 'lucide';
+  /** Display SSOT (Fase E): tinte opcional del icono (solo aplica a iconos Lucide). */
+  color?: string;
   tier_required: 'free' | 'plus' | 'pro';
   permissions: string[];
   tags?: string[];

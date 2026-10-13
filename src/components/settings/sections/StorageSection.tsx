@@ -12,7 +12,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { AlertTriangle } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settings.store';
 import { SettingSection } from '../SettingSection';
 import { SettingToggle } from '../SettingToggle';
@@ -22,27 +21,6 @@ import { SaveBar } from '../SaveBar';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { ProLockBanner, useIsPro } from '../shared/ProLockBanner';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
-
-// Ports that we know Micelclaw uses by default. Used to flag conflicts
-// in the canvas-host port input. This is a "warn, don't block" list —
-// the user can still save (they may have moved the conflicting service
-// to a different port already).
-const KNOWN_PORTS: Record<number, string> = {
-  22: 'SSH',
-  80: 'HTTP',
-  443: 'HTTPS',
-  3000: 'Vite/dev frontend',
-  5432: 'PostgreSQL',
-  6379: 'Redis',
-  7200: 'Core API',
-  8080: 'common HTTP alt',
-  8123: 'Home Assistant',
-  11434: 'Ollama',
-};
-
-function describeKnownPort(port: number): string | null {
-  return KNOWN_PORTS[port] ?? null;
-}
 
 const ROTATION_OPTIONS = [
   { value: 'smart', label: 'Smart' },
@@ -251,16 +229,10 @@ export function StorageSection() {
   );
 }
 
-// ─── Canvas Host Config block (Ola 7, oc7-5.1h) ────────────────────
-//
-// Exposes `canvasHost.*` (enabled, root, port, liveReload). Lives
-// inside StorageSection because `root` is a filesystem path. Saves
-// independently from the rest of Storage (different endpoint).
-//
-// When enabled, OpenClaw spins up an HTTP server that serves files
-// from `root`. The dash consumes this via the /canvas-host/* proxy
-// in Core (which adds the capability token transparently). Files
-// auto-reload in the iframe when chokidar detects changes.
+// ─── Canvas Host Config block ───────────────────────────────────────
+// OpenClaw 2026.9.4 hosts Canvas on the current Gateway. Root, port and
+// liveReload are no longer configurable. Core keeps its capability-scoped
+// proxy, so the Dash only controls the canonical host.enabled switch.
 
 import * as gwService from '@/services/gateway.service';
 import type { CanvasHostConfig } from '@/services/gateway.service';
@@ -271,19 +243,13 @@ function CanvasHostBlock() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  const [enabled, setEnabled] = useState(false);
-  const [root, setRoot] = useState('');
-  const [port, setPort] = useState(18793);
-  const [liveReload, setLiveReload] = useState(true);
+  const [enabled, setEnabled] = useState(true);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
       const data = await gwService.getCanvasConfig();
-      setEnabled(data.enabled ?? false);
-      setRoot(data.root ?? '');
-      setPort(data.port ?? 18793);
-      setLiveReload(data.live_reload ?? true);
+      setEnabled(data.enabled ?? true);
       setDirty(false);
     } catch {
       // Silent
@@ -297,38 +263,10 @@ function CanvasHostBlock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded]);
 
-  // Root validation: must be an absolute path (Unix /... or Windows
-  // C:\...) or start with "~/" so OpenClaw can expand it. Empty is OK
-  // because the backend falls back to ~/.openclaw/canvas/.
-  const rootTrimmed = root.trim();
-  const rootInvalid =
-    rootTrimmed.length > 0 &&
-    !rootTrimmed.startsWith('/') &&
-    !rootTrimmed.startsWith('~/') &&
-    !/^[A-Za-z]:[\\/]/.test(rootTrimmed);
-
-  // Port range + known-port collision warning. Out-of-range is hard
-  // (block save); known-port collision is soft (warn, allow save).
-  const portOutOfRange = port < 1 || port > 65535;
-  const portWarn = describeKnownPort(port);
-
   const handleSave = async () => {
-    if (rootInvalid) {
-      toast.error('Root must be an absolute path (e.g. /home/me/canvas) or start with ~/');
-      return;
-    }
-    if (portOutOfRange) {
-      toast.error('Port must be between 1 and 65535');
-      return;
-    }
     setSaving(true);
     try {
-      const config: CanvasHostConfig = {
-        enabled,
-        root: rootTrimmed || undefined,
-        port,
-        live_reload: liveReload,
-      };
+      const config: CanvasHostConfig = { enabled };
       await gwService.updateCanvasConfig(config);
       toast.success('Canvas Host saved');
       setDirty(false);
@@ -339,35 +277,16 @@ function CanvasHostBlock() {
     }
   };
 
-  const openCanvasUrl = `http://localhost:${port}/__openclaw__/canvas/`;
-  const saveBlocked = rootInvalid || portOutOfRange;
-
   return (
     <SettingsBlock
       title="OpenClaw Canvas Host"
-      description="Static HTTP server for canvas files"
+      description="Canvas hosting managed by the current Gateway"
       expanded={expanded}
       onToggle={() => setExpanded((e) => !e)}
-      dirty={dirty && !saveBlocked}
+      dirty={dirty}
       saving={saving}
       onSave={handleSave}
       saveLabel="Save canvas host"
-      footerExtra={
-        enabled ? (
-          <a
-            href={openCanvasUrl}
-            target="_blank"
-            rel="noopener"
-            style={{
-              fontSize: '0.6875rem',
-              color: 'var(--amber)',
-              textDecoration: 'none',
-            }}
-          >
-            Open: {openCanvasUrl} ↗
-          </a>
-        ) : null
-      }
     >
       <p
         style={{
@@ -377,9 +296,8 @@ function CanvasHostBlock() {
           lineHeight: 1.5,
         }}
       >
-        OpenClaw can serve HTML files from a directory over HTTP, with chokidar live-reload. The dash uses this
-        for canvas iframes via a server-side proxy. Agents that generate visual content (charts, reports) write
-        to <code>{root || '~/.openclaw/canvas/'}</code> and the iframe loads them automatically.
+        OpenClaw 2026.9.4 serves Canvas through this Gateway. Its documents directory, network route and reload
+        lifecycle are managed automatically. The Dash continues to load Canvas through Core&apos;s protected proxy.
       </p>
 
       {/* enabled */}
@@ -396,7 +314,7 @@ function CanvasHostBlock() {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Enable canvas host</div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Spin up the HTTP server. Required for the dash canvas to load files via URL (the recommended path).
+            Allow this Gateway to host Canvas content for the Dash and compatible clients.
           </div>
         </div>
         <ToggleSwitch
@@ -406,114 +324,6 @@ function CanvasHostBlock() {
         />
       </div>
 
-      {/* root */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 0',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Root directory</div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Absolute path of the directory served. Default: <code>~/.openclaw/canvas/</code>.
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-          <input
-            type="text"
-            value={root}
-            onChange={(e) => {
-              setRoot(e.target.value);
-              setDirty(true);
-            }}
-            placeholder="~/.openclaw/canvas/"
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.75rem',
-              width: 280,
-              background: 'var(--surface)',
-              border: `1px solid ${rootInvalid ? '#ef4444' : 'var(--border)'}`,
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text)',
-              fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-          {rootInvalid && (
-            <div style={{
-              fontSize: '0.6875rem', color: '#ef4444',
-              fontFamily: 'var(--font-sans)',
-              maxWidth: 280, textAlign: 'right',
-            }}>
-              ! Use an absolute path (/...) or ~/...
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* port */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 0',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>HTTP port</div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Default: <code>18793</code>. Make sure no other service uses this port.
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-          <input
-            type="number"
-            value={port}
-            onChange={(e) => {
-              setPort(parseInt(e.target.value, 10) || 18793);
-              setDirty(true);
-            }}
-            min={1}
-            max={65535}
-            style={{
-              padding: '6px 10px',
-              fontSize: '0.75rem',
-              width: 100,
-              background: 'var(--surface)',
-              border: `1px solid ${portOutOfRange ? '#ef4444' : portWarn ? 'var(--amber)' : 'var(--border)'}`,
-              borderRadius: 'var(--radius-sm)',
-              color: 'var(--text)',
-              fontFamily: 'var(--font-mono)',
-              outline: 'none',
-            }}
-          />
-          {portOutOfRange ? (
-            <div style={{ fontSize: '0.6875rem', color: '#ef4444', fontFamily: 'var(--font-sans)' }}>
-              ! Out of range
-            </div>
-          ) : portWarn ? (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: '0.6875rem', color: 'var(--amber)',
-              fontFamily: 'var(--font-sans)',
-              maxWidth: 200, textAlign: 'right',
-            }}>
-              <AlertTriangle size={11} />
-              <span>Conflicts with {portWarn}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      {/* liveReload */}
       <div
         style={{
           display: 'flex',
@@ -525,16 +335,12 @@ function CanvasHostBlock() {
         }}
       >
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Live reload</div>
+          <div style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>Hosting</div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>
-            Watch the root directory and notify clients when files change (chokidar, 75ms debounce).
+            Directory, port and reload behavior are managed by OpenClaw 2026.9.4.
           </div>
         </div>
-        <ToggleSwitch
-          checked={liveReload}
-          onChange={(v) => { setLiveReload(v); setDirty(true); }}
-          ariaLabel="Live reload"
-        />
+        <span style={{ fontSize: '0.6875rem', color: 'var(--text-dim)', fontWeight: 600 }}>Managed</span>
       </div>
     </SettingsBlock>
   );

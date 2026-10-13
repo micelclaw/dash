@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { type OriginEntity } from '@/types/origins';
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Users, ArrowLeft, Pencil, Trash2, Image, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -122,6 +124,7 @@ function ClusterCard({
           }}
         >
           {/* Circular face thumbnail */}
+          <div style={{ position: 'relative', width: 96, height: 96 }}>
           <div
             style={{
               width: 96,
@@ -168,7 +171,7 @@ function ClusterCard({
                 style={{
                   position: 'absolute',
                   bottom: 2,
-                  right: 2,
+                  left: 2,
                   width: 26,
                   height: 26,
                   borderRadius: '50%',
@@ -192,7 +195,7 @@ function ClusterCard({
                 style={{
                   position: 'absolute',
                   bottom: 4,
-                  right: 4,
+                  left: 4,
                   width: 12,
                   height: 12,
                   borderRadius: '50%',
@@ -202,6 +205,8 @@ function ClusterCard({
                 }}
               />
             )}
+          </div>
+          <PhotoSource entity={cluster.origin_photos?.find(p => p.id === cluster.representative_file_id)} />
           </div>
 
           {/* Name */}
@@ -528,7 +533,7 @@ function ClusterDetail({
   );
 }
 
-function ClusterPhotoThumb({ photo, onClick }: { photo: { id: string; filename: string }; onClick: () => void }) {
+function ClusterPhotoThumb({ photo, onClick }: { photo: OriginEntity & { id: string; filename: string }; onClick: () => void }) {
   const [hovered, setHovered] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -552,6 +557,7 @@ function ClusterPhotoThumb({ photo, onClick }: { photo: { id: string; filename: 
         justifyContent: 'center',
       }}
     >
+      <PhotoSource entity={photo} />
       {!imgError ? (
         <>
           <img

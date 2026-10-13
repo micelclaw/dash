@@ -1,3 +1,4 @@
+import type { ToolCallRecord, ToolPresentationPayload } from '@/types/chat';
 /**
  * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
  * All rights reserved.
@@ -84,9 +85,11 @@ for (const def of TOOL_DEFS) BY_NAME.set(def.name.toLowerCase(), def);
  * renderer (visible only when "verbose" or explicitly enabled).
  */
 export function classify(toolName: string): ToolDef {
-  const lower = toolName.toLowerCase();
-  const direct = BY_NAME.get(lower);
+  const lower = toolName.toLowerCase().replace(/^(?:claw-os__|openclaw_direct\.|openclaw\.)/, '');
+  const alias = { sandbox_exec: 'exec', sandbox_process: 'process', gateway_exec: 'exec', gateway_process: 'process', node_exec: 'exec', 'apply-patch': 'apply_patch' } as Record<string, string>;
+  const direct = BY_NAME.get(alias[lower] ?? lower);
   if (direct) return direct;
+  if (lower === 'skill_workshop') return { name: lower, tier: 2, icon: '🧩', label: 'Skill Workshop', renderer: 'generic' };
   // Tools MCP de Micelclaw OS: `<server>__<tool>` (p.ej. `claw-os__claw_notes`) o
   // `claw_<dominio>`. Son acciones de primer orden del agente sobre los datos del
   // usuario → tier 2 (visibles bajo el preset por defecto, como bash/read/edit).
@@ -123,11 +126,20 @@ export const DEFAULT_VISIBILITY: ToolVisibility = { preset: 'default' };
  * Decide whether a given tool call should render in the chat history.
  * Hierarchy: explicit override > preset rule.
  */
-export function shouldRenderTool(toolName: string, visibility: ToolVisibility): boolean {
+export function shouldRenderTool(toolName: string, visibility: ToolVisibility, presentation?: Pick<ToolPresentationPayload, 'visibility' | 'origin' | 'canonical_name'>): boolean {
   const lower = toolName.toLowerCase();
   if (visibility.disabledOverrides?.includes(lower)) return false;
   if (visibility.enabledOverrides?.includes(lower)) return true;
   const def = classify(toolName);
+  const canonical = presentation?.canonical_name?.toLowerCase() ?? (def.name !== lower && BY_NAME.has(def.name) ? def.name : lower);
+  const equivalents = [canonical, ...(['micelclaw_app', 'micelclaw_system'].includes(presentation?.origin ?? '') ? [`claw-os__${canonical.replace(/^claw-os__/, '')}`] : [])];
+  if (equivalents.some(name => visibility.disabledOverrides?.includes(name))) return false;
+  if (equivalents.some(name => visibility.enabledOverrides?.includes(name))) return true;
+  if (presentation?.visibility === 'technical_only' || lower.startsWith('plugin:') || lower.replace(/^claw-os__/, '') === 'workboard_heartbeat') return visibility.preset === 'verbose';
+  const knownNativeTier = BY_NAME.has(def.name) && (!presentation?.origin || presentation.origin === 'openclaw_native');
+  if (presentation && presentation.origin !== 'unknown' && !knownNativeTier) {
+    return visibility.preset === 'minimal' ? def.tier === 1 : true;
+  }
   switch (visibility.preset) {
     case 'minimal': return def.tier === 1;
     case 'default': return def.tier === 1 || def.tier === 2;
@@ -135,4 +147,8 @@ export function shouldRenderTool(toolName: string, visibility: ToolVisibility): 
     case 'custom':  return def.tier <= 2; // custom uses tier ≤ 2 as base
     default:        return def.tier === 1 || def.tier === 2;
   }
+}
+
+export function shouldRenderPresentedTool(tool: ToolCallRecord, visibility: ToolVisibility): boolean {
+  return shouldRenderTool(tool.tool, visibility, tool.presentation);
 }

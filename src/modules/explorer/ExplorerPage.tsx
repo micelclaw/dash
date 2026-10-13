@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { FolderTree, X, Trash2, Download } from 'lucide-react';
@@ -308,6 +309,14 @@ export function Component() {
 
   // ⋮ único de la batch bar — el MISMO menú del builder aplicado a toda la
   // selección (single completo con 1, batch con N).
+  useOriginRefresh('files', async () => { await fetchFiles(); setMountRefreshKey(key => key + 1); });
+  useEffect(() => {
+    setSelectedFile(prev => {
+      const current = prev && files.find(file => file.id === prev.id);
+      return current && prev ? { ...prev, origins: current.origins } : prev;
+    });
+  }, [files, setSelectedFile]);
+
   const selectedFiles = useMemo(
     () => files.filter(f => selectedIds.has(f.id)),
     [files, selectedIds],

@@ -13,6 +13,14 @@
 // ─── Gateway API service — wraps /api/v1/gateway/* endpoints ────────
 
 import { api } from './api';
+import {
+  sanitizeCanvasConfigPayload,
+  sanitizeLoggingConfigPayload,
+  sanitizeMemoryConfigPayload,
+  sanitizeMessagesConfigPayload,
+  sanitizeSessionConfigPayload,
+  sanitizeUiConfigPayload,
+} from './openclaw-94-config';
 import type {
   GatewayStatus,
   GatewayHealth,
@@ -20,7 +28,6 @@ import type {
   GatewayModel,
   GatewaySession,
   GatewayUsage,
-  CatalogModel,
   ConfigHealthReport,
   AutoFixResult,
   SandboxImageStatus,
@@ -31,6 +38,8 @@ import type {
   ModelTestResult,
   AuthProfileEntry,
   ProvidersOverviewResponse,
+  UnifiedModelCatalog,
+  ProviderAuthFlow,
 } from '@/modules/gateway/types';
 
 // ─── Snapshot (single request for all data) ─────────────────────────
@@ -173,15 +182,32 @@ export interface MessagesConfig {
   };
 }
 
+export interface MessagesConfigUpdate {
+  queue?: Record<string, unknown>;
+  inbound?: Record<string, unknown>;
+  statusReactions?: Record<string, unknown>;
+  ackReaction?: string | null;
+  ackReactionScope?: string;
+  tts?: Record<string, unknown>;
+  streaming?: Record<string, unknown>;
+  groupChat?: {
+    unmentionedInbound?: 'user_request' | 'room_event' | null;
+    visibleReplies?: 'automatic' | 'message_tool' | null;
+  };
+}
+
 export async function getMessagesConfig(): Promise<MessagesConfig> {
   const res = await api.get<{ data: MessagesConfig }>('/gateway/messages-config');
   return res.data;
 }
 
 export async function updateMessagesConfig(
-  config: Partial<MessagesConfig>,
+  config: MessagesConfigUpdate,
 ): Promise<void> {
-  await api.patch('/gateway/messages-config', config);
+  await api.patch(
+    '/gateway/messages-config',
+    sanitizeMessagesConfigPayload(config as Record<string, unknown>),
+  );
 }
 
 // ─── Models ─────────────────────────────────────────────────────────
@@ -200,9 +226,8 @@ export async function setDefaultModel(model: string): Promise<void> {
 
 /**
  * Audit orphan references in openclaw.json. Pass `checkAgentAuth: true`
- * to also read per-agent `auth-profiles.json` files and surface agents
- * whose assigned model's provider isn't authed at the agent level (the
- * Gateway will fail spawn with "No API key found for provider X").
+ * to query OpenClaw's effective per-agent auth and surface agents whose
+ * assigned model provider is not usable for that concrete agent.
  */
 export async function getConfigHealth(opts?: { checkAgentAuth?: boolean }): Promise<ConfigHealthReport> {
   const res = await api.get<{ data: ConfigHealthReport }>(
@@ -246,16 +271,80 @@ export async function buildSandboxImage(): Promise<{ ok: boolean; build_id: stri
   return res.data;
 }
 
-export async function getModelCatalog(): Promise<{ count: number; models: CatalogModel[] }> {
+export async function getModelCatalog(refresh = false): Promise<UnifiedModelCatalog> {
   // 45s timeout: the underlying CLI call (`openclaw models list --all --json`)
   // takes ~20s for a full catalog on a cold Core. Core pre-warms in boot, so
   // most user-visible calls hit the 5min cache and return in <50ms. The 45s
   // ceiling is a safety net for the very first request after boot or after
   // mutation-driven cache invalidations.
-  const res = await api.get<{ data: { count: number; models: CatalogModel[] } }>('/gateway/models/catalog', undefined, { timeout: 45_000 });
+  const res = await api.get<{ data: UnifiedModelCatalog }>(
+    '/gateway/models/catalog',
+    refresh ? { refresh: 1 } : undefined,
+    { timeout: 60_000 },
+  );
   const d = res.data;
-  if (d && typeof d === 'object' && 'models' in d) return d as { count: number; models: CatalogModel[] };
-  return { count: 0, models: [] };
+  if (d && typeof d === 'object' && 'models' in d) return d;
+  return {
+    count: 0, models: [], providers: [], available_providers: [], source: 'openclaw',
+    openclaw_version: null, degraded: true, generated_at: new Date(0).toISOString(),
+  };
+}
+
+export async function installOfficialProvider(providerId: string): Promise<{ op_id: string; provider_id: string }> {
+  const res = await api.post<{ data: { op_id: string; provider_id: string } }>(
+    `/gateway/plugins/providers/${encodeURIComponent(providerId)}/install`, {},
+  );
+  return res.data;
+}
+
+export async function startProviderAuthFlow(provider: string, method: string): Promise<ProviderAuthFlow> {
+  const res = await api.post<{ data: ProviderAuthFlow }>(
+    `/gateway/models/providers/${encodeURIComponent(provider)}/auth/flows`,
+    { method },
+    { timeout: 30_000 },
+  );
+  return res.data;
+}
+
+export async function getProviderAuthFlow(provider: string, flowId: string): Promise<ProviderAuthFlow> {
+  const res = await api.get<{ data: ProviderAuthFlow }>(
+    `/gateway/models/providers/${encodeURIComponent(provider)}/auth/flows/${encodeURIComponent(flowId)}`,
+  );
+  return res.data;
+}
+
+export async function answerProviderAuthFlow(
+  provider: string,
+  flowId: string,
+  promptId: string,
+  value: unknown,
+): Promise<ProviderAuthFlow> {
+  const res = await api.post<{ data: ProviderAuthFlow }>(
+    `/gateway/models/providers/${encodeURIComponent(provider)}/auth/flows/${encodeURIComponent(flowId)}/answers`,
+    { prompt_id: promptId, value },
+  );
+  return res.data;
+}
+
+export async function cancelProviderAuthFlow(provider: string, flowId: string): Promise<void> {
+  await api.delete(
+    `/gateway/models/providers/${encodeURIComponent(provider)}/auth/flows/${encodeURIComponent(flowId)}`,
+  );
+}
+
+export async function migrateLegacyProvider(provider: string): Promise<{
+  provider: string;
+  target: string;
+  migrated_refs: string[];
+  changed: boolean;
+}> {
+  const res = await api.post<{ data: {
+    provider: string;
+    target: string;
+    migrated_refs: string[];
+    changed: boolean;
+  } }>(`/gateway/models/providers/${encodeURIComponent(provider)}/migrate-legacy`, {});
+  return res.data;
 }
 
 export async function addModel(model: string): Promise<void> {
@@ -896,21 +985,26 @@ export async function revokeDeviceToken(deviceId: string, role: string): Promise
 
 // ─── Approvals Forwarding Config ───────────────────────────────────
 
-export interface ApprovalsConfig {
+export interface LegacyApprovalsConfigStatus {
   enabled: boolean;
   mode: string;
-  agent_filter: string[] | null;
-  session_filter: string[] | null;
-  targets: Array<{ channel: string; to: string; account_id?: string }>;
+  targets: Array<{ channel: string }>;
 }
 
-export async function getApprovalsConfig(): Promise<ApprovalsConfig> {
-  const res = await api.get<{ data: ApprovalsConfig }>('/gateway/approvals-config');
-  return res.data;
-}
-
-export async function updateApprovalsConfig(config: Record<string, unknown>): Promise<void> {
-  await api.patch('/gateway/approvals-config', config);
+/** Transitional read-only projection. Raw legacy recipients are discarded. */
+export async function getLegacyApprovalsConfigStatus(): Promise<LegacyApprovalsConfigStatus> {
+  const res = await api.get<{ data: {
+    enabled?: boolean;
+    mode?: string;
+    targets?: Array<{ channel?: unknown }>;
+  } }>('/gateway/approvals-config');
+  return {
+    enabled: res.data.enabled === true,
+    mode: typeof res.data.mode === 'string' ? res.data.mode : 'unknown',
+    targets: (res.data.targets ?? []).map((target) => ({
+      channel: typeof target.channel === 'string' ? target.channel : 'unknown',
+    })),
+  };
 }
 
 // ─── Memory Config ─────────────────────────────────────────────────
@@ -929,7 +1023,10 @@ export async function updateMemoryConfig(config: {
   memory?: Record<string, unknown>;
   memoryLancedb?: Record<string, unknown>;
 }): Promise<void> {
-  await api.patch('/gateway/memory-config', config);
+  await api.patch(
+    '/gateway/memory-config',
+    sanitizeMemoryConfigPayload(config as Record<string, unknown>),
+  );
 }
 
 // ─── G7: LanceDB S3-compatible storage ─────────────────────────────
@@ -982,7 +1079,7 @@ export async function getSessionConfig(): Promise<Record<string, unknown>> {
 }
 
 export async function updateSessionConfig(config: Record<string, unknown>): Promise<void> {
-  await api.patch('/gateway/session-config', config);
+  await api.patch('/gateway/session-config', sanitizeSessionConfigPayload(config));
 }
 
 // ─── Cron Config (advanced) ────────────────────────────────────────
@@ -1023,6 +1120,30 @@ export async function getAvailableHooks(): Promise<AvailableHook[]> {
 export interface HeartbeatConfig {
   global: Record<string, unknown>;
   per_agent: Record<string, Record<string, unknown>>;
+  agent_id_map: Record<string, string>;
+  heartbeat_chats: Record<string, { conversation_id: string; deep_link: string; read_only: true } | null>;
+  agent_statuses: Record<string, HeartbeatAgentStatus>;
+}
+
+export interface HeartbeatDestination {
+  id: string;
+  kind: 'micelclaw_chat' | 'channel';
+  label: string;
+  available: boolean;
+  channel?: string;
+  account_id?: string;
+  unavailable_reason?: 'binding_required' | 'account_binding_required' | 'channel_disconnected';
+}
+
+export interface HeartbeatAgentStatus {
+  state: 'active' | 'paused' | 'global_disabled' | 'missing_capabilities' | 'requirements_unknown' | 'active_without_chat' | 'invalid_heartbeat_file' | 'destination_unavailable' | 'gateway_unavailable';
+  enabled: boolean;
+  effective_every: string;
+  task_count: number;
+  tasks: Array<{ name: string; interval: string; requires: string[] | null; missing_domains?: string[]; suggested_skills?: string[] }>;
+  destination: { kind: 'micelclaw_chat' | 'channel'; label: string; channel?: string; account_id?: string; available: boolean };
+  last_run: { at: string; result: 'silent' | 'notice' | 'unknown'; task_runs: Record<string, string> } | null;
+  parse_error?: string | null;
 }
 
 export async function getHeartbeatConfig(): Promise<HeartbeatConfig> {
@@ -1034,8 +1155,14 @@ export async function updateHeartbeatConfig(config: {
   global?: Record<string, unknown>;
   agentId?: string;
   agentHeartbeat?: Record<string, unknown>;
+  destination_id?: string;
 }): Promise<void> {
   await api.patch('/gateway/heartbeat-config', config);
+}
+
+export async function getHeartbeatDestinations(agentId: string): Promise<HeartbeatDestination[]> {
+  const res = await api.get<{ data: HeartbeatDestination[] }>('/gateway/heartbeat-destinations', { agent_id: agentId });
+  return res.data;
 }
 
 // ─── Bundled Skills ────────────────────────────────────────────────
@@ -1191,6 +1318,18 @@ export async function listRawConfigBackups(): Promise<RawConfigBackup[]> {
   return res.data;
 }
 
+/**
+ * Contenido de un backup concreto. Restaurar = cargarlo en el editor y
+ * guardarlo con el flujo normal (validación + hash + backup del estado
+ * actual), no una escritura directa a disco.
+ */
+export async function getRawConfigBackup(filename: string): Promise<{ filename: string; content: string }> {
+  const res = await api.get<{ data: { filename: string; content: string } }>(
+    `/gateway/raw-config/backups/${encodeURIComponent(filename)}`,
+  );
+  return res.data;
+}
+
 // ─── Secrets Config (Ola 7, oc7-6.2) — admin-only ──────────────────
 
 export interface EnvProvider {
@@ -1274,9 +1413,6 @@ export async function updateEnvConfig(config: EnvConfig): Promise<void> {
 
 export interface CanvasHostConfig {
   enabled?: boolean;
-  root?: string;
-  port?: number;
-  live_reload?: boolean;
 }
 
 export async function getCanvasConfig(): Promise<CanvasHostConfig> {
@@ -1285,7 +1421,10 @@ export async function getCanvasConfig(): Promise<CanvasHostConfig> {
 }
 
 export async function updateCanvasConfig(config: CanvasHostConfig): Promise<void> {
-  await api.patch('/gateway/canvas-config', config);
+  await api.patch(
+    '/gateway/canvas-config',
+    sanitizeCanvasConfigPayload(config as Record<string, unknown>),
+  );
 }
 
 // ─── Discovery Config (Ola 7) ──────────────────────────────────────
@@ -1313,10 +1452,6 @@ export async function updateDiscoveryConfig(config: DiscoveryConfig): Promise<vo
 
 export interface UiConfig {
   seam_color?: string;
-  assistant?: {
-    name?: string;
-    avatar?: string;
-  };
 }
 
 export async function getUiConfig(): Promise<UiConfig> {
@@ -1325,7 +1460,7 @@ export async function getUiConfig(): Promise<UiConfig> {
 }
 
 export async function updateUiConfig(config: UiConfig): Promise<void> {
-  await api.patch('/gateway/ui-config', config);
+  await api.patch('/gateway/ui-config', sanitizeUiConfigPayload(config as Record<string, unknown>));
 }
 
 // ─── Telemetry / OTel Config (Ola 7) ───────────────────────────────
@@ -1367,9 +1502,8 @@ export interface LoggingConfig {
   level?: string;
   console_level?: string;
   console_style?: string;
-  file?: string;
+  file?: string | null;
   max_file_bytes?: number;
-  redact_sensitive?: string;
   redact_patterns?: string[];
 }
 
@@ -1379,7 +1513,10 @@ export async function getLoggingConfig(): Promise<LoggingConfig> {
 }
 
 export async function updateLoggingConfig(config: LoggingConfig): Promise<void> {
-  await api.patch('/gateway/logging-config', config);
+  await api.patch(
+    '/gateway/logging-config',
+    sanitizeLoggingConfigPayload(config as Record<string, unknown>),
+  );
 }
 
 // ─── Skills Status (single source for all apps) ───────────────────

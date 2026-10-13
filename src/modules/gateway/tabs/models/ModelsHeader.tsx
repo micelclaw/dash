@@ -23,7 +23,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
       borderRadius: 'var(--radius-sm)',
       overflow: 'hidden',
     }}>
-      {(['configured', 'catalog', 'advanced'] as const).map((v) => (
+      {(['configured', 'decision', 'catalog', 'advanced'] as const).map((v) => (
         <button
           key={v}
           onClick={() => onChange(v)}
@@ -39,7 +39,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
             color: view === v ? 'var(--text)' : 'var(--text-dim)',
           }}
         >
-          {v === 'configured' ? 'Configured' : v === 'catalog' ? 'Catalog' : 'Advanced'}
+          {v === 'configured' ? 'Conversación' : v === 'decision' ? 'Decisión' : v === 'catalog' ? 'Catálogo' : 'Avanzado'}
         </button>
       ))}
     </div>

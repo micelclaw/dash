@@ -123,11 +123,18 @@ export const useMetricsStore = create<MetricsState>()((set, get) => ({
       }
 
       const period = get().period;
+      const now = new Date();
+      const from = new Date(now);
+      if (period === 'hour') from.setHours(from.getHours() - 24);
+      else if (period === 'day') from.setDate(from.getDate() - 7);
+      else if (period === 'week') from.setDate(from.getDate() - 30);
+      else from.setFullYear(from.getFullYear() - 1);
+      const params = new URLSearchParams({ from: from.toISOString(), to: now.toISOString(), source: 'core' }).toString();
       const [summaryRes, byAppRes, byModelRes, bySourceRes] = await Promise.all([
-        api.get<TokenSummary>(`/metrics/tokens?period=${period}`),
-        api.get<AppBreakdown[]>('/metrics/tokens/by-app'),
-        api.get<ModelBreakdown[]>('/metrics/tokens/by-model'),
-        api.get<SourceBreakdown>('/metrics/tokens/by-source'),
+        api.get<TokenSummary>(`/metrics/tokens?period=${period}&${params}`),
+        api.get<AppBreakdown[]>(`/metrics/tokens/by-app?${params}`),
+        api.get<ModelBreakdown[]>(`/metrics/tokens/by-model?${params}`),
+        api.get<SourceBreakdown>(`/metrics/tokens/by-source?${params}`),
       ]);
 
       // Unwrap API envelope: { data: <payload>, tier } → <payload>

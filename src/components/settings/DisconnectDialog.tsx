@@ -35,15 +35,18 @@ interface DisconnectDialogProps {
   open: boolean;
   onClose: () => void;
   onDisconnected: () => void;
+  /** Explicit connector domain, never inferred from its display name. */
+  preserveNotes?: boolean;
 }
 
 const DOMINIO_ES: Record<string, string> = {
   mail: 'correos',
   calendar: 'eventos de calendario',
   contacts: 'contactos',
+  tasks: 'tareas',
 };
 
-export function DisconnectDialog({ connectorId, label, open, onClose, onDisconnected }: DisconnectDialogProps) {
+export function DisconnectDialog({ connectorId, label, open, onClose, onDisconnected,preserveNotes=false }: DisconnectDialogProps) {
   const [resumen, setResumen] = useState<syncSvc.ConnectorDataSummary | null>(null);
   const [cargando, setCargando] = useState(true);
   const [descargando, setDescargando] = useState(false);
@@ -78,12 +81,12 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
   const desconectar = useCallback(async () => {
     setDesconectando(true);
     try {
-      // Primero los datos, luego el connector: si fallara el segundo paso, lo
-      // que queda es una integración conectada sin datos —recuperable
-      // resincronizando— y no datos huérfanos sin nada que los explique.
-      const { removed } = await syncSvc.purgeConnectorData(connectorId);
-      await syncSvc.deleteConnector(connectorId);
-      toast.success(removed > 0 ? `Desconectado · ${removed} registros retirados` : 'Desconectado');
+      // Una sola llamada: el borrado de la integración se lleva sus datos por
+      // dentro. Antes eran dos pasos y la purga vivía SOLO aquí, así que
+      // desconectar por cualquier otro camino dejaba los datos huérfanos —el
+      // fallo que el usuario cazó con su Synology.
+      const { records_removed: removed } = await syncSvc.deleteConnector(connectorId);
+      toast.success(preserveNotes?'Desconectado · notas conservadas como copias locales':removed > 0 ? `Desconectado · ${removed} registros retirados` : 'Desconectado');
       onDisconnected();
       onClose();
     } catch (err: unknown) {
@@ -91,7 +94,7 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
     } finally {
       setDesconectando(false);
     }
-  }, [connectorId, onDisconnected, onClose]);
+  }, [connectorId, onDisconnected, onClose,preserveNotes]);
 
   if (!open) return null;
 
@@ -124,7 +127,10 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
         ) : (
           <>
             <div style={{ fontSize: '0.8125rem', color: 'var(--text)', lineHeight: 1.6 }}>
-              {registros > 0 ? (
+              {preserveNotes ? (
+                <>Las notas y sus adjuntos quedan como copias locales en Micelclaw.
+                  Las páginas originales no se borran. Se detiene la sincronización.</>
+              ) : registros > 0 ? (
                 <>
                   Esto borrará <strong>{registros.toLocaleString('es')} {queSon}</strong>
                   {resumen?.account ? <> de <strong>{resumen.account}</strong></> : null} de Micelclaw,
@@ -136,9 +142,10 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
             </div>
 
             {resumen?.shared_scope && registros > 0 && (
-              // No se disimula: para calendario y contactos la pertenencia se
-              // decide por ORIGEN, no por connector, así que con dos del mismo
-              // tipo el recuento incluye lo del otro.
+              // Solo para CORREO sin cuenta asociada: ahí la pertenencia se
+              // sigue decidiendo por ORIGEN. En calendario y contactos el
+              // recuento es exacto desde que la purga dejó de reclamar lo
+              // huérfano, así que este aviso ya no aparece por ellos.
               <div style={{ display: 'flex', gap: 8, fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                 <TriangleAlert size={14} style={{ color: 'var(--warning, #f59e0b)', flexShrink: 0, marginTop: 2 }} />
                 <span>
@@ -148,7 +155,19 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
               </div>
             )}
 
-            {registros > 0 && (
+            {(resumen?.orphans ?? 0) > 0 && (
+              // La otra mitad de la verdad: lo que NO se va. Antes esto se
+              // borraba con el resto (y así desaparecieron 97 eventos), ahora se
+              // queda y se dice — un registro de más es recuperable; el
+              // calendario de alguien, no.
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Se conservan {resumen!.orphans} registro{resumen!.orphans === 1 ? '' : 's'} de este
+                mismo origen que no se pueden atribuir a ninguna integración
+                {' '}(son anteriores a que se empezara a marcar quién los trajo).
+              </div>
+            )}
+
+            {registros > 0 && !preserveNotes && (
               <Button variant="secondary" onClick={() => void descargar()} disabled={descargando}>
                 {descargando
                   ? <><Loader2 size={14} className="animate-spin" /> Preparando la copia…</>
@@ -168,7 +187,7 @@ export function DisconnectDialog({ connectorId, label, open, onClose, onDisconne
           <Button variant="destructive" onClick={() => void desconectar()} disabled={desconectando || cargando}>
             {desconectando
               ? <><Loader2 size={14} className="animate-spin" /> Desconectando…</>
-              : registros > 0 ? 'Desconectar y borrar' : 'Desconectar'}
+              : preserveNotes?'Desconectar y conservar':registros > 0 ? 'Desconectar y borrar' : 'Desconectar'}
           </Button>
         </div>
       </div>

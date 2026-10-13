@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { Plus, Search, Pencil, Trash2, PanelLeftClose, PanelLeftOpen, Info, Copy, Check } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, PanelLeftClose, PanelLeftOpen, Info, Copy, Check, GitBranch, Clock3, CircleCheck, CircleX, Paperclip, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat.store';
 import { getMockConversations, getMockMessages } from '@/services/mock';
@@ -20,7 +20,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ContextMenu } from '@/components/shared/ContextMenu';
 import type { ContextMenuItem } from '@/components/shared/ContextMenu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import type { Conversation } from '@/types/chat';
+import type { ChatAttachment, Conversation } from '@/types/chat';
+import { api } from '@/services/api';
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -92,6 +93,9 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
   const setConversations = useChatStore((s) => s.setConversations);
   const addMessage = useChatStore((s) => s.addMessage);
   const unreadByConv = useChatStore((s) => s.unreadByConv);
+  const backgroundRuns = useChatStore((s) => s.backgroundRuns);
+  const startBackgroundConversation = useChatStore((s) => s.startBackgroundConversation);
+  const cancelBackgroundConversation = useChatStore((s) => s.cancelBackgroundConversation);
   const agents = useChatStore((s) => s.agents);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,6 +103,32 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
   const editInputRef = useRef<HTMLInputElement>(null);
   // Details modal — set to the conversation whose IDs the user wants to inspect.
   const [detailsConv, setDetailsConv] = useState<Conversation | null>(null);
+  const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
+  const [backgroundAgent, setBackgroundAgent] = useState('francis');
+  const [backgroundPrompt, setBackgroundPrompt] = useState('');
+  const [backgroundAttachments, setBackgroundAttachments] = useState<ChatAttachment[]>([]);
+  const [backgroundUploading, setBackgroundUploading] = useState(false);
+  const backgroundFileRef = useRef<HTMLInputElement>(null);
+
+  const uploadBackgroundFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setBackgroundUploading(true);
+    const uploaded: ChatAttachment[] = [];
+    for (const file of Array.from(files)) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('parent_folder', '/chat-attachments/');
+        const response = await api.upload<{ data: ChatAttachment }>('/files/upload', formData);
+        uploaded.push(response.data);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : `No se pudo adjuntar ${file.name}`);
+      }
+    }
+    setBackgroundAttachments((current) => [...current, ...uploaded]);
+    setBackgroundUploading(false);
+    if (backgroundFileRef.current) backgroundFileRef.current.value = '';
+  };
 
   // Build agent color/name lookup
   const agentLookup = useMemo(() => {
@@ -141,7 +171,29 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
     return conversations.filter((c) => c.first_message.toLowerCase().includes(q));
   }, [conversations, searchQuery]);
 
-  const groups = useMemo(() => groupByDate(filtered), [filtered]);
+  // Los hilos delegados son transcripciones hijas, no chats principales.
+  // Conservamos los huérfanos (por ejemplo, si el padre ya no está en la
+  // página actual) para que un filtro o una paginación no los oculte.
+  const childrenByParent = useMemo(() => {
+    const visibleIds = new Set(filtered.map((conversation) => conversation.id));
+    const next = new Map<string, Conversation[]>();
+    for (const conversation of filtered) {
+      if (!conversation.is_delegated || !conversation.parent_conversation_id || !visibleIds.has(conversation.parent_conversation_id)) continue;
+      const current = next.get(conversation.parent_conversation_id) ?? [];
+      current.push(conversation);
+      next.set(conversation.parent_conversation_id, current);
+    }
+    for (const children of next.values()) children.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+    return next;
+  }, [filtered]);
+  const groups = useMemo(() => {
+    const childIds = new Set(Array.from(childrenByParent.values()).flatMap((children) => children.map((child) => child.id)));
+    return groupByDate(filtered.filter((conversation) => !childIds.has(conversation.id) && !conversation.is_background));
+  }, [filtered, childrenByParent]);
+  const backgroundConversations = useMemo(
+    () => filtered.filter((conversation) => conversation.is_background).sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+    [filtered],
+  );
 
   // Collapsed state — show only toggle button
   if (collapsed) {
@@ -246,6 +298,26 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
       {/* Conversation list */}
       <ScrollArea className="flex-1">
         <div style={{ padding: '0 8px' }}>
+          {backgroundConversations.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ padding: '12px 8px 4px', fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>CHATS EN SEGUNDO PLANO</div>
+              {backgroundConversations.map((conversation) => {
+                const status = backgroundRuns.get(conversation.id) ?? 'completed';
+                const Icon = status === 'completed' ? CircleCheck : status === 'failed' || status === 'cancelled' ? CircleX : Clock3;
+                const label = status === 'queued' ? 'En cola' : status === 'running' ? 'En curso' : status === 'completed' ? 'Terminado' : status === 'cancelled' ? 'Cancelado' : 'Fallido';
+                return (
+                  <button key={conversation.id} onClick={() => { selectConversation(conversation.id); void loadMessages(conversation.id); }} style={{ width: '100%', display: 'flex', gap: 8, alignItems: 'center', padding: 8, border: '1px solid transparent', borderRadius: 'var(--radius-md)', background: conversation.id === activeConversationId ? 'var(--surface-hover)' : 'transparent', color: 'var(--text)', textAlign: 'left', cursor: 'pointer' }}>
+                    <Icon size={14} style={{ color: status === 'completed' ? 'var(--success, #22c55e)' : status === 'failed' ? 'var(--error, #ef4444)' : 'var(--amber)', flexShrink: 0 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{conversation.first_message}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{conversation.agent} · {label}</div>
+                    </div>
+                    {(status === 'running' || status === 'queued') && <button type="button" title="Detener" onClick={(event) => { event.stopPropagation(); cancelBackgroundConversation(conversation.id); }} style={{ border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.65rem' }}>Detener</button>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {groups.map((group) => (
             <div key={group.label}>
               <div
@@ -260,7 +332,7 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
               >
                 {group.label}
               </div>
-              {group.items.map((conv) => {
+              {group.items.flatMap((conversation) => [conversation, ...(childrenByParent.get(conversation.id) ?? [])]).map((conv) => {
                 const agentInfo = agentLookup[conv.agent];
                 const agentColor = agentInfo?.color ?? 'var(--text-muted)';
                 const agentName = agentInfo?.display_name ?? conv.agent;
@@ -303,8 +375,9 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                         display: 'flex',
                         alignItems: 'flex-start',
                         gap: 8,
-                        width: '100%',
                         padding: '8px 8px',
+                        marginLeft: conv.is_delegated ? 12 : 0,
+                        width: conv.is_delegated ? 'calc(100% - 12px)' : '100%',
                         background: isActive ? 'var(--surface-hover)' : 'transparent',
                         border: isActive ? `1px solid ${agentColor}33` : '1px solid transparent',
                         borderLeft: `3px solid ${isActive ? agentColor : 'transparent'}`,
@@ -339,6 +412,7 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
                             {agentInfo?.avatar ?? '🤖'}
                           </span>
                           <span>{agentName}</span>
+                          {conv.is_delegated && <span title="Conversación de trabajo delegada" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--amber)' }}><GitBranch size={11} /></span>}
                         </div>
                         {editingId === conv.id ? (
                           <input
@@ -440,8 +514,8 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
         </div>
       </ScrollArea>
 
-      {/* New chat button */}
-      <div style={{ padding: 8, borderTop: '1px solid var(--border)' }}>
+      {/* New chat actions */}
+      <div style={{ padding: 8, borderTop: '1px solid var(--border)', display: 'flex', gap: 6 }}>
         <button
           onClick={startNewConversation}
           style={{
@@ -449,7 +523,7 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            width: '100%',
+            flex: 1,
             height: 32,
             background: 'transparent',
             border: '1px solid var(--border)',
@@ -472,9 +546,43 @@ export function ConversationsSidebar({ collapsed, onToggleCollapse }: Conversati
           <Plus size={14} />
           New chat
         </button>
+        <button onClick={() => { setBackgroundAgent(useChatStore.getState().selectedAgent); setBackgroundDialogOpen(true); }} title="Nueva conversación en segundo plano" style={{ width: 36, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+          <Clock3 size={14} />
+        </button>
       </div>
 
       <DetailsModal conv={detailsConv} onClose={() => setDetailsConv(null)} />
+      <Dialog open={backgroundDialogOpen} onOpenChange={setBackgroundDialogOpen}>
+        <DialogContent className="max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Nueva conversación en segundo plano</DialogTitle>
+            <DialogDescription>Se abrirá un chat independiente con este encargo. Podrás seguir usando el chat actual; el nuevo aparecerá en «Chats en segundo plano» de la lista izquierda.</DialogDescription>
+            <DialogDescription>Se iniciará una conversación independiente sin abandonar el chat actual.</DialogDescription>
+          </DialogHeader>
+          <div style={{ display: 'grid', gap: 14, marginTop: 12 }}>
+            <label style={{ display: 'grid', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>Agente
+              <select value={backgroundAgent} onChange={(event) => setBackgroundAgent(event.target.value)} style={{ height: 36, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', padding: '0 10px' }}>
+                {agents.map((agent) => <option key={agent.name} value={agent.name}>{agent.display_name}</option>)}
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>Modelo
+              <input disabled value="Heredar del agente" style={{ height: 36, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-muted)', padding: '0 10px' }} />
+            </label>
+            <label style={{ display: 'grid', gap: 6, fontSize: '0.75rem', color: 'var(--text-dim)' }}>Encargo
+              <textarea value={backgroundPrompt} onChange={(event) => setBackgroundPrompt(event.target.value)} rows={6} placeholder="Prepara un resumen de estos documentos…" style={{ resize: 'vertical', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', padding: 10 }} />
+            </label>
+            <div style={{ display: 'grid', gap: 7 }}>
+              <input ref={backgroundFileRef} type="file" multiple style={{ display: 'none' }} onChange={(event) => void uploadBackgroundFiles(event.target.files)} accept="image/*,.pdf,.txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.py,.sh,.sql,.log,.zip,.tar,.gz" />
+              <button type="button" disabled={backgroundUploading} onClick={() => backgroundFileRef.current?.click()} style={{ justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-dim)', cursor: backgroundUploading ? 'wait' : 'pointer' }}>{backgroundUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />} Añadir adjuntos</button>
+              {backgroundAttachments.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{backgroundAttachments.map((attachment) => <span key={attachment.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: 240, padding: '4px 7px', borderRadius: 6, background: 'var(--surface-hover)', color: 'var(--text-dim)', fontSize: '0.7rem' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachment.filename}</span><button type="button" aria-label={`Quitar ${attachment.filename}`} onClick={() => setBackgroundAttachments((current) => current.filter((item) => item.id !== attachment.id))} style={{ border: 0, padding: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', display: 'flex' }}><X size={12} /></button></span>)}</div>}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setBackgroundDialogOpen(false)} style={{ padding: '8px 14px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text)', cursor: 'pointer' }}>Cancelar</button>
+              <button disabled={!backgroundPrompt.trim() || backgroundUploading} onClick={() => { const result = startBackgroundConversation(backgroundPrompt.trim(), backgroundAgent, backgroundAttachments); if (!result.accepted) { toast.error('No se pudo iniciar la conversación. La entrada se conserva.'); return; } setBackgroundPrompt(''); setBackgroundAttachments([]); setBackgroundDialogOpen(false); toast.success('Conversación iniciada en segundo plano'); }} style={{ padding: '8px 14px', border: 0, borderRadius: 'var(--radius-sm)', background: 'var(--amber)', color: '#111', fontWeight: 600, cursor: backgroundPrompt.trim() && !backgroundUploading ? 'pointer' : 'not-allowed', opacity: backgroundPrompt.trim() && !backgroundUploading ? 1 : 0.5 }}>Iniciar</button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

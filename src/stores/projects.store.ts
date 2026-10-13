@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { originIdentityChanged, mergeOriginUpdate } from '@/lib/origin-state';
+import { notifyOriginsChanged } from '@/lib/origin-refresh';
 import { create } from 'zustand';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
@@ -17,6 +19,7 @@ import type {
   Board, Card, Column, FullBoard, CardFilters, ViewMode, Automation,
   CustomFieldDef,
 } from '@/modules/projects/types';
+import { detachTaskBoard } from '@/services/projects.service';
 
 interface ApiEnvelope<T> { data: T }
 interface ApiList<T> { data: T[]; total: number; limit: number; offset: number }
@@ -75,13 +78,12 @@ interface ProjectsState {
   /** Apuntar una tarea sin decir tablero (cae en el "Personal"). `extra` trae
    *  lo que el mini-lenguaje de la captura haya entendido (prioridad, fecha…). */
   quickAddTask: (title: string, extra?: Record<string, unknown>) => Promise<Card | null>;
-  /** Marcar hecha / reabrir. La fecha la deriva el servidor. */
-  toggleTaskComplete: (cardId: string, completed: boolean) => Promise<void>;
   /** Arrastrar de la bandeja a una baldosa: entra por la columna de posición 0. */
   sendTaskToBoard: (cardId: string, boardId: string) => Promise<string | null>;
   createBoard: (data: { title: string; description?: string; color?: string; icon?: string; default_view?: string; tags?: string[] }) => Promise<Board | null>;
   updateBoard: (id: string, data: Record<string, unknown>) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
+  detachBoardSync: (id: string) => Promise<void>;
   archiveBoard: (id: string) => Promise<void>;
   unarchiveBoard: (id: string) => Promise<void>;
 
@@ -215,23 +217,6 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     }
   },
 
-  toggleTaskComplete: async (cardId, completed) => {
-    // Optimista: la casilla responde al instante y se revierte si el POST falla.
-    const prev = get().inboxCards;
-    set((s) => ({
-      inboxCards: s.inboxCards.map((c) =>
-        c.id === cardId ? { ...c, completed_at: completed ? new Date().toISOString() : null } : c),
-    }));
-    try {
-      const res = await api.post<ApiEnvelope<Card>>(`/projects/cards/${cardId}/complete`, { completed });
-      // También en `cards`: si la ficha está abierta, debe reflejar el cambio.
-      set((s) => aplicarTarjeta(s, res.data));
-    } catch {
-      set({ inboxCards: prev });
-      toast.error('No se pudo actualizar la tarea');
-    }
-  },
-
   sendTaskToBoard: async (cardId, boardId) => {
     const prev = get().inboxCards;
     set((s) => ({ inboxCards: s.inboxCards.filter((c) => c.id !== cardId), inboxTotal: Math.max(0, s.inboxTotal - 1) }));
@@ -341,6 +326,16 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       set((s) => ({ boards: s.boards.filter((b) => b.id !== id) }));
     } catch {
       toast.error('Error deleting board');
+    }
+  },
+
+  detachBoardSync: async (id) => {
+    try {
+      await detachTaskBoard(id);
+      set((s) => ({ boards: s.boards.filter((b) => b.id !== id) }));
+      toast.success('Tablero desincronizado; la aplicación original no se ha modificado');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo desincronizar el tablero');
     }
   },
 
@@ -726,6 +721,7 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
     switch (event) {
       case 'kanban.card.created': {
         const card = data.card as Card;
+        if (!card.origins) { notifyOriginsChanged({ domains: ['tasks'] }); break; }
         set((s) => {
           // The originating client already added it via the HTTP response.
           if (s.cards[card.id]) return s;
@@ -743,11 +739,12 @@ export const useProjectsStore = create<ProjectsState>()((set, get) => ({
       case 'kanban.card.updated': {
         const cardId = data.card_id as string;
         const updates = data.updates as Record<string, unknown>;
+        if (!updates.origins && state.cards[cardId] && originIdentityChanged(state.cards[cardId]!, updates)) notifyOriginsChanged({ domains: ['tasks'] });
         set((s) => {
           const existing = s.cards[cardId];
           if (!existing) return s;
           return {
-            cards: { ...s.cards, [cardId]: { ...existing, ...updates } as Card },
+            cards: { ...s.cards, [cardId]: mergeOriginUpdate(existing, updates) },
           };
         });
         break;

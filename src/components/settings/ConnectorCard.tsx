@@ -16,26 +16,52 @@ import * as syncSvc from '@/services/sync.service';
 import { DisconnectDialog } from './DisconnectDialog';
 import { toast } from 'sonner';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { avisosDeConector } from './connector-avisos';
+import { DataServiceIcon, type DataServiceDomain } from '@/config/data-provider-icons';
+import { taskWritePresentation } from './connector-task-write-state';
 
-// ─── Connector icons (inline SVG) ────────────────────────
+// ─── Connector icons ──────────────────────────────────────
 
-function ConnectorIcon({ type, size = 20 }: { type: string; size?: number }) {
-  if (type.startsWith('google') || type === 'gmail') {
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-      </svg>
-    );
+/**
+ * `sync_connectors.domains` usa el vocabulario interno de dominios de registro
+ * (`emails`/`events`/`contacts`, el mismo que `ConnectorDataDomain` en el core),
+ * no el de `DataServiceIcon` (`mail`/`calendar`/`contacts`). Mismo mapeo que
+ * `ConnectWizard.tsx` (el contador de integraciones por tipo de la ventana 1).
+ */
+function connectorDomainToServiceDomain(domains: string[]): DataServiceDomain | undefined {
+  for (const d of domains) {
+    if (d === 'emails') return 'mail';
+    if (d === 'events') return 'calendar';
+    if (d === 'contacts') return 'contacts';
+    if (d === 'tasks') return 'tasks';
   }
-  if (type === 'caldav' || type === 'carddav' || type.includes('synology')) {
+  return undefined;
+}
+
+function ConnectorIcon({
+  type,
+  providerSlug,
+  domains,
+  size = 20,
+}: {
+  type: string;
+  providerSlug?: string | null;
+  domains?: string[];
+  size?: number;
+}) {
+  // Connectores de DATOS (todo lo que no es un observer de mensajería): el
+  // logo real del proveedor + el glifo del dominio, en vez de las ramas
+  // hardcodeadas de google/synology y del RefreshCw genérico de antes — esas
+  // adivinaban el proveedor por el nombre del tipo (el bug que INT35 mató del
+  // lado del servidor) y una "S" naranja para CUALQUIER CalDAV/CardDAV, fuera
+  // de Synology o no.
+  if (!type.endsWith('-observer')) {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" fill="none" stroke="#e87e04" strokeWidth="2"/>
-        <text x="12" y="16" textAnchor="middle" fill="#e87e04" fontSize="10" fontWeight="bold">S</text>
-      </svg>
+      <DataServiceIcon
+        providerSlug={providerSlug ?? 'generic'}
+        domain={connectorDomainToServiceDomain(domains ?? [])}
+        size={size}
+      />
     );
   }
   if (type === 'slack-observer') {
@@ -81,25 +107,50 @@ function ConnectorIcon({ type, size = 20 }: { type: string; size?: number }) {
       </svg>
     );
   }
-  // IMAP generic
+  // Observer de mensajería sin rama propia (p.ej. gateway-observer, los de
+  // SimpleX/Session): esto ya no debería ocurrir para tipos de DATOS, que
+  // arriba siempre resuelven a un logo o una inicial vía DataServiceIcon.
   return <RefreshCw size={size} style={{ color: 'var(--info)' }} />;
 }
 
 // ─── Connector display labels ────────────────────────────
 
-const TYPE_LABELS: Record<string, string> = {
-  gmail: 'Gmail',
-  'google-calendar': 'Google Calendar',
-  'google-contacts': 'Google Contacts',
-  'imap-generic': 'IMAP Email',
-  caldav: 'CalDAV',
-  carddav: 'CardDAV',
+/**
+ * Etiquetas de los observers de MENSAJERÍA. Las de DATOS ya no viven aquí: se
+ * piden al catálogo (ver `useConnectorLabels`).
+ *
+ * Este mapa era el QUINTO sitio paralelo del arco — los otros cuatro
+ * (`CONNECTOR_META`, `CONNECTOR_LABELS`, la inferencia del proveedor y las ramas
+ * de colecciones) se colapsaron en el catálogo del servidor, y éste seguía
+ * declarando `imap-generic: 'IMAP Email'` por su cuenta. Se vio porque la tarjeta
+ * mostraba una etiqueta distinta de la que dice el catálogo.
+ */
+const MESSAGING_LABELS: Record<string, string> = {
   'slack-observer': 'Slack',
   'discord-observer': 'Discord',
   'telegram-observer': 'Telegram',
   'teams-observer': 'Teams',
   'signal-observer': 'Signal',
 };
+
+/** Las etiquetas de los tipos de DATOS, del catálogo del servidor. */
+function useConnectorLabels(): Record<string, string> {
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let vivo = true;
+    syncSvc
+      .listDataCatalog()
+      .then((c) => {
+        if (!vivo) return;
+        const m: Record<string, string> = {};
+        for (const t of c.connectorTypes) m[t.type] = t.label;
+        setLabels(m);
+      })
+      .catch(() => { /* sin catálogo se cae al nombre de la fila */ });
+    return () => { vivo = false; };
+  }, []);
+  return labels;
+}
 
 const STATUS_COLORS: Record<string, string> = {
   connected: '#22c55e',
@@ -120,6 +171,7 @@ function timeAgo(ts: string | null): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+
 // ─── Component ───────────────────────────────────────────
 
 interface ConnectorCardProps {
@@ -133,6 +185,25 @@ interface ConnectorCardProps {
     last_sync_at: string | null;
     last_error?: string | null;
     errors_count: number;
+    task_write_supported?: boolean;
+    task_write_certified?: boolean;
+    task_write_enabled?: boolean;
+    task_pending_change_count?: number | null;
+    /** Cambios que agotaron los reintentos de subida (0 = todo al día). */
+    push_failed_count?: number;
+    push_last_error?: string | null;
+    /**
+     * Quién autoriza la integración, DICHO por el catálogo del servidor
+     * (`GET /sync/connectors`). Nulo en las que no van por OAuth y en filas
+     * antiguas guardadas antes de que el campo existiera.
+     */
+    oauth_provider?: string | null;
+    /**
+     * El proveedor de MARCA (Synology/Nextcloud/Google/…), DICHO por el
+     * servidor. `null`/`undefined` si no hay proveedor determinable — el
+     * icono cae entonces a `'generic'` (motor puro, sin marca).
+     */
+    provider_slug?: string | null;
   };
   onRefresh: () => void;
   onConfigure?: (id: string) => void;
@@ -141,6 +212,7 @@ interface ConnectorCardProps {
 export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCardProps) {
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState<{ processed: number; total?: number; folder?: string; phase?: string } | null>(null);
+  const catalogLabels = useConnectorLabels();
 
   const fallbackRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -181,7 +253,11 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     return () => clearTimeout(fallbackRef.current);
   }, []);
 
-  const label = connector.display_name || TYPE_LABELS[connector.connector_type] || connector.name;
+  const label =
+    connector.display_name
+    || catalogLabels[connector.connector_type]
+    || MESSAGING_LABELS[connector.connector_type]
+    || connector.name;
   const statusColor = STATUS_COLORS[connector.status] ?? 'var(--text-muted)';
 
   const handleSync = async () => {
@@ -228,11 +304,18 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
   // que era verdad a medias: ni contaba los datos ni los retiraba.
   const [disconnectOpen, setDisconnectOpen] = useState(false);
 
-  const oauthProvider = connector.connector_type.startsWith('google-') || connector.connector_type === 'gmail'
-    ? 'google'
-    : connector.connector_type.startsWith('microsoft-') || connector.connector_type === 'teams-observer'
-      ? 'microsoft'
-      : null;
+  // Quién autoriza esta integración lo DICE el catálogo (`oauth_provider` viaja
+  // en el payload), no se adivina del nombre del tipo. La adivinanza era
+  // exactamente el patrón frágil que INT61 mató del lado del servidor, reabierto
+  // por esta punta: fallaba justo en `gmail` (no contiene «google») y obligaba a
+  // tocar este fichero cada vez que se añadía un proveedor. La rama por prefijo
+  // se conserva SOLO como respaldo de filas antiguas guardadas sin ese campo.
+  const oauthProvider = connector.oauth_provider
+    ?? (connector.connector_type.startsWith('google-') || connector.connector_type === 'gmail'
+      ? 'google'
+      : connector.connector_type.startsWith('microsoft-') || connector.connector_type === 'teams-observer'
+        ? 'microsoft'
+        : null);
 
   const handleRevokeOAuth = async () => {
     if (!oauthProvider) return;
@@ -252,18 +335,29 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     padding: 4, display: 'flex', borderRadius: 'var(--radius-sm)',
   };
 
+  const avisos = avisosDeConector(connector);
+  const estadoEscrituraTareas = taskWritePresentation(connector);
+
   return (
-    <div style={{
+    <div
+      data-connector-id={connector.id}
+      data-provider={connector.provider_slug ?? undefined}
+      style={{
       background: 'var(--surface)',
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-md)',
       padding: '12px 14px',
       display: 'flex', flexDirection: 'column', gap: 8,
       transition: 'border-color var(--transition-fast)',
-    }}>
+      }}
+    >
       {/* Top: icon + name + status */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <ConnectorIcon type={connector.connector_type} />
+        <ConnectorIcon
+          type={connector.connector_type}
+          providerSlug={connector.provider_slug}
+          domains={connector.domains}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)',
@@ -306,19 +400,51 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
 
       {/* La causa del fallo, en el sitio donde el usuario ve el rojo. Antes la
           tarjeta se ponía en error y no decía nada: había que ir a la base de
-          datos para saber si era la contraseña, el certificado o la red. */}
-      {connector.status === 'error' && connector.last_error && (
+          datos para saber si era la contraseña, el certificado o la red.
+
+          Se enseñan DOS cosas distintas, y por eso la banda no cuelga solo del
+          estado: (a) el `runSync` falló, y (b) el runSync fue bien pero un cambio
+          TUYO no llegó al proveedor (INT78) — un correo que destacaste aquí y
+          allí sigue sin marcar. El segundo caso deja la tarjeta en verde, así que
+          condicionar la banda a `status==='error'` lo escondía por completo. */}
+      {avisos.length > 0 && (
         <div style={{
-          display: 'flex', gap: 6, alignItems: 'flex-start',
+          display: 'flex', flexDirection: 'column', gap: 6,
           padding: '8px 10px', marginBottom: 8,
           background: 'rgba(239, 68, 68, 0.08)',
           border: '1px solid rgba(239, 68, 68, 0.25)',
           borderRadius: 'var(--radius-md)',
           fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.5,
         }}>
-          <TriangleAlert size={13} style={{ color: 'var(--error)', flexShrink: 0, marginTop: 1 }} />
-          {/* El prefijo `[causa]` es para el log, no para el usuario. */}
-          <span>{connector.last_error.replace(/^\[[a-z_]+\]\s*/i, '')}</span>
+          {avisos.map((aviso, i) => (
+            <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <TriangleAlert size={13} style={{ color: 'var(--error)', flexShrink: 0, marginTop: 1 }} />
+              <span>{aviso}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {estadoEscrituraTareas && (
+        <div
+          role="status"
+          data-testid="task-write-status"
+          style={{
+            display: 'flex', flexDirection: 'column', gap: 3,
+            padding: '7px 9px',
+            background: 'var(--surface-raised, rgba(148, 163, 184, 0.08))',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: '0.6875rem', color: 'var(--text-dim)', lineHeight: 1.45,
+          }}
+        >
+          <span style={{ fontWeight: 600, color: estadoEscrituraTareas.color }}>
+            {estadoEscrituraTareas.title}
+          </span>
+          <span>{estadoEscrituraTareas.pendingText}</span>
+          {estadoEscrituraTareas.blocked && estadoEscrituraTareas.pendingCount > 0 && (
+            <span>These changes will not be uploaded while writing is blocked.</span>
+          )}
         </div>
       )}
 
@@ -373,6 +499,7 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
       </div>
 
       <DisconnectDialog
+        preserveNotes={connector.domains.includes('notes')}
         connectorId={connector.id}
         label={label}
         open={disconnectOpen}
@@ -382,3 +509,6 @@ export function ConnectorCard({ connector, onRefresh, onConfigure }: ConnectorCa
     </div>
   );
 }
+
+// Se re-exporta desde aquí porque había quien la importaba del componente.
+export { avisosDeConector };

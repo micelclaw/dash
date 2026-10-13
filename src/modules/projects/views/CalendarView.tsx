@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
@@ -458,7 +459,7 @@ export function CalendarView() {
                   }}
                 >
                   <PriorityDot priority={card.priority ?? 'none'} />
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{card.title}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><EntitySource entity={card} domain="tasks" size="xs" /> {card.title}</span>
                 </div>
               ))}
               {dayCards.length > MAX_VISIBLE && (

@@ -17,12 +17,12 @@ import { useEscapeClose } from './use-escape-close';
 export type ImportType = 'bank-statement' | 'journal-entries' | 'accounts' | 'contacts';
 
 const TYPES: { id: ImportType; label: string; desc: string }[] = [
-  { id: 'bank-statement', label: 'Extracto bancario', desc: 'CSV u OFX del banco → líneas para conciliar' },
-  { id: 'journal-entries', label: 'Movimientos', desc: 'Ingresos/gastos a una cuenta' },
-  { id: 'accounts', label: 'Plan de cuentas', desc: 'Cuentas contables (código, nombre, tipo)' },
-  { id: 'contacts', label: 'Contactos', desc: 'Clientes y proveedores' },
+  { id: 'bank-statement', label: 'Extracto bancario', desc: 'Bank CSV or OFX → lines to reconcile' },
+  { id: 'journal-entries', label: 'Movements', desc: 'Income/expenses to an account' },
+  { id: 'accounts', label: 'Chart of accounts', desc: 'Ledger accounts (code, name, type)' },
+  { id: 'contacts', label: 'Contacts', desc: 'Customers and suppliers' },
 ];
-const FIELD_LABELS: Record<string, string> = { date: 'Fecha', amount: 'Importe', description: 'Concepto', code: 'Código', name: 'Nombre', type: 'Tipo', tax_id: 'NIF/CIF' };
+const FIELD_LABELS: Record<string, string> = { date: 'Date', amount: 'Amount', description: 'Description', code: 'Code', name: 'Name', type: 'Type', tax_id: 'Tax ID' };
 const TYPE_FIELDS: Record<ImportType, string[]> = {
   'bank-statement': ['date', 'amount', 'description'], 'journal-entries': ['date', 'amount', 'description'],
   'accounts': ['code', 'name', 'type'], 'contacts': ['name', 'tax_id'],
@@ -53,19 +53,19 @@ export function ImportWizard({ open, onClose, fixedType, fixedAccountId, onDone 
   if (!open) return null;
 
   const doPreview = async () => {
-    if (!text.trim()) { toast.error('Pega o sube un fichero'); return; }
+    if (!text.trim()) { toast.error('Paste or upload a file'); return; }
     setBusy(true);
     try {
       const r = (await api.post<{ data: PreviewData }>(`/finance/import/csv/${type}/preview`, { text, has_header: hasHeader })).data;
       setPreview(r); setMapping(r.suggested_mapping ?? {}); setStep(2);
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'No se pudo leer el fichero'); } finally { setBusy(false); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Couldn\'t read the file'); } finally { setBusy(false); }
   };
   const doCommit = async () => {
     setBusy(true);
     try {
       const r = (await api.post<{ data: CommitData }>(`/finance/import/csv/${type}/commit`, { text, has_header: hasHeader, mapping, account_id: NEEDS_ACCOUNT.has(type) ? accountId : undefined })).data;
       setResult(r); setStep(3); onDone?.();
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'La importación falló'); } finally { setBusy(false); }
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'The import failed'); } finally { setBusy(false); }
   };
 
   const fields = TYPE_FIELDS[type];
@@ -82,7 +82,7 @@ export function ImportWizard({ open, onClose, fixedType, fixedAccountId, onDone 
         </div>
         {/* Pasos */}
         <div className="flex items-center gap-2 mb-4 text-xs">
-          {['Origen', 'Mapear', 'Confirmar'].map((s, i) => (
+          {['Source', 'Mapear', 'Confirmar'].map((s, i) => (
             <div key={s} className="flex items-center gap-2">
               <span className={`px-2 py-0.5 rounded-full font-semibold ${step === i + 1 ? 'bg-[var(--mod-finance)] text-white' : step > i + 1 ? 'bg-[var(--surface)] text-[var(--green)]' : 'bg-[var(--surface)] text-[var(--text-dim)]'}`}>{i + 1}. {s}</span>
               {i < 2 && <ArrowRight size={12} className="text-[var(--text-dim)]" />}
@@ -112,7 +112,7 @@ export function ImportWizard({ open, onClose, fixedType, fixedAccountId, onDone 
 
         {step === 2 && preview && (
           <div className="flex flex-col gap-3">
-            <div className="text-xs text-[var(--text-dim)]">Detectadas <b className="text-[var(--text)]">{preview.total_rows}</b> filas ({preview.format.toUpperCase()}). {preview.format === 'ofx' ? 'OFX se mapea automáticamente.' : 'Asocia cada campo a su columna.'}</div>
+            <div className="text-xs text-[var(--text-dim)]">Detectadas <b className="text-[var(--text)]">{preview.total_rows}</b> filas ({preview.format.toUpperCase()}). {preview.format === 'ofx' ? 'OFX is mapped automatically.' : 'Asocia cada campo a su columna.'}</div>
             {preview.format === 'csv' && (
               <div className="grid grid-cols-3 gap-2">
                 {fields.map((f) => (
@@ -151,10 +151,10 @@ export function ImportWizard({ open, onClose, fixedType, fixedAccountId, onDone 
         )}
 
         <div className="flex justify-between gap-2 mt-5">
-          <button onClick={step === 2 ? () => setStep(1) : onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] text-[var(--text-dim)] inline-flex items-center gap-1.5">{step === 2 ? <><ArrowLeft size={13} /> Atrás</> : 'Cancelar'}</button>
+          <button onClick={step === 2 ? () => setStep(1) : onClose} className="px-3 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border border-[var(--border)] text-[var(--text-dim)] inline-flex items-center gap-1.5">{step === 2 ? <><ArrowLeft size={13} /> Atrás</> : 'Cancel'}</button>
           {step === 1 && <button onClick={() => void doPreview()} disabled={busy || !text.trim()} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white disabled:opacity-50 inline-flex items-center gap-1.5">{busy ? <Loader2 size={13} className="animate-spin" /> : <>Leer <ArrowRight size={13} /></>}</button>}
           {step === 2 && <button onClick={() => void doCommit()} disabled={busy || !mappingOk || !accountOk} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white disabled:opacity-50 inline-flex items-center gap-1.5">{busy ? <Loader2 size={13} className="animate-spin" /> : 'Importar'}</button>}
-          {step === 3 && <button onClick={onClose} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white">Cerrar</button>}
+          {step === 3 && <button onClick={onClose} className="px-4 py-1.5 text-xs font-semibold rounded-[var(--radius-sm,4px)] border-none bg-[var(--mod-finance)] text-white">Close</button>}
         </div>
       </div>
     </div>

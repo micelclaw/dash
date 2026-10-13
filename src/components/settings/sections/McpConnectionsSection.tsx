@@ -18,7 +18,7 @@
 // servers is in the Activity Center.
 
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import {
   Plug, Plus, LayoutGrid, Check, TriangleAlert, X, Loader2, Trash2, Pencil,
@@ -30,6 +30,32 @@ import { describeError } from '@/lib/api-errors';
 import { SectionShell } from '../shared/SectionShell';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { MCP_PRESETS, type McpPreset } from './mcp-presets';
+import { api } from '@/services/api';
+import * as agentsAdmin from '@/services/agents-admin.service';
+
+interface ManagedMcpConnection {
+  id: string;
+  display_name: string;
+  owner_type: 'personal' | 'shared';
+  status: string;
+  enabled: boolean;
+  tool_count: number;
+  tools: Array<{ name: string; description?: string }>;
+  provider: string | null;
+  domains: string[];
+  last_probe_at: string | null;
+  last_error: string | null;
+}
+
+interface ManagedMcpTemplate {
+  id: string;
+  provider_slug: string;
+  name: string;
+  official: boolean;
+  maturity: string;
+  domains: string[];
+  auth_mode: string;
+}
 
 const PRESET_ICON: Record<McpPreset['icon'], typeof Plug> = {
   github: Github, folder: Folder, browser: Globe, book: BookOpen, slack: MessageSquare, database: Database,
@@ -102,6 +128,9 @@ type Health = { status: 'idle' | 'testing' | 'ok' | 'auth' | 'error'; result?: M
 
 export function McpConnectionsSection() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnAgentId = searchParams.get('agent');
+  const [surface, setSurface] = useState<'managed' | 'system'>(returnAgentId ? 'managed' : 'managed');
   const [pendingDelete, setPendingDelete] = useState<McpServerView | null>(null);
   const [loading, setLoading] = useState(true);
   const [servers, setServers] = useState<McpServerView[]>([]);
@@ -221,14 +250,19 @@ export function McpConnectionsSection() {
   return (
     <SectionShell
       title="MCP Connections"
-      description="Connect any MCP server (local or public) so your agents can use its tools. Admin only — this config is shared across all agents."
-      loading={loading}
+      description="Conexiones personales o compartidas con grants explícitos por agente. Los adaptadores globales anteriores permanecen en System adapters durante la migración."
+      loading={surface === 'system' && loading}
       dirty={false}
       saving={false}
       onSave={() => {}}
       appliesAt="gateway-restart"
     >
-      {view === 'list' && (
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        <button onClick={() => setSurface('managed')} style={surface === 'managed' ? btnPrimary : btnGhost}>My & shared connections</button>
+        <button onClick={() => setSurface('system')} style={surface === 'system' ? btnPrimary : btnGhost}>System adapters</button>
+      </div>
+      {surface === 'managed' && <ManagedConnectionsPanel returnAgentId={returnAgentId} />}
+      {surface === 'system' && view === 'list' && (
         <ListView
           servers={servers} health={health}
           onAdd={openNew} onCatalog={() => setView('catalog')}
@@ -236,13 +270,13 @@ export function McpConnectionsSection() {
           onOpenActivity={() => navigate('/activity?tab=events')}
         />
       )}
-      {view === 'form' && (
+      {surface === 'system' && view === 'form' && (
         <FormView
           form={form} setForm={setForm} saving={saving} test={formTest}
           onBack={() => setView('list')} onTest={runFormTest} onSave={saveForm}
         />
       )}
-      {view === 'catalog' && (
+      {surface === 'system' && view === 'catalog' && (
         <CatalogView
           query={catalogQuery} setQuery={setCatalogQuery}
           onPick={applyPreset} onBlank={openNew} onBack={() => setView('list')}
@@ -259,6 +293,139 @@ export function McpConnectionsSection() {
         onClose={() => setPendingDelete(null)}
       />
     </SectionShell>
+  );
+}
+
+function ManagedConnectionsPanel({ returnAgentId }: { returnAgentId: string | null }) {
+  const navigate = useNavigate();
+  const [rows, setRows] = useState<ManagedMcpConnection[]>([]);
+  const [templates, setTemplates] = useState<ManagedMcpTemplate[]>([]);
+  const [agents, setAgents] = useState<Array<{ id: string; label: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [token, setToken] = useState('');
+  const [ownerType, setOwnerType] = useState<'personal' | 'shared'>('personal');
+  const [grantAgent, setGrantAgent] = useState(returnAgentId ?? '');
+
+  const loadManaged = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [connections, templateRows, agentRows] = await Promise.all([
+        api.get<{ data: ManagedMcpConnection[] }>('/mcp-connections'),
+        api.get<{ data: ManagedMcpTemplate[] }>('/mcp-connections/templates'),
+        agentsAdmin.listManagedAgents(),
+      ]);
+      setRows(connections.data ?? []);
+      setTemplates(templateRows.data ?? []);
+      setAgents(agentRows.map((agent) => ({ id: agent.id, label: String(agent.display_name ?? agent.name ?? agent.id) })));
+    } catch (error) {
+      toast.error(describeError(error, 'No se pudieron cargar las conexiones MCP'));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadManaged(); }, [loadManaged]);
+
+  const create = async () => {
+    if (!name.trim() || (!templateId && !url.trim())) { toast.error('Nombre y plantilla o URL son obligatorios'); return; }
+    try {
+      const response = await api.post<{ data: ManagedMcpConnection }>('/mcp-connections', {
+        display_name: name.trim(),
+        template_id: templateId || undefined,
+        url: templateId ? undefined : url.trim(),
+        bearer_token: token.trim() || undefined,
+        owner_type: ownerType,
+      });
+      if (grantAgent) {
+        if (ownerType === 'shared') await api.post(`/mcp-connections/${response.data.id}/user-grant`, {});
+        await api.post(`/mcp-connections/${response.data.id}/grants`, { agent_id: grantAgent, tool_filter: [] });
+      }
+      toast.success(grantAgent ? 'Conexión creada y concedida; la sesión del agente necesita /reset.' : 'Conexión creada');
+      setName(''); setUrl(''); setTemplateId(''); setToken(''); setCreating(false);
+      await loadManaged();
+    } catch (error) {
+      toast.error(describeError(error, 'No se pudo crear la conexión'));
+    }
+  };
+
+  const test = async (id: string) => {
+    try {
+      const response = await api.post<{ data: McpProbeResult }>(`/mcp-connections/${id}/test`, {});
+      if (response.data.ok) toast.success(`Conectada · ${response.data.tool_count ?? 0} tools`);
+      else toast.error(response.data.error ?? 'La conexión falló');
+      await loadManaged();
+    } catch (error) { toast.error(describeError(error, 'No se pudo probar la conexión')); }
+  };
+
+  const grant = async (id: string, agentId: string, ownerType: 'personal' | 'shared') => {
+    if (!agentId) return;
+    try {
+      if (ownerType === 'shared') await api.post(`/mcp-connections/${id}/user-grant`, {});
+      await api.post(`/mcp-connections/${id}/grants`, { agent_id: agentId, tool_filter: [] });
+      toast.success('Grant creado · usa /reset para cargar mcp_call en una sesión nueva');
+    } catch (error) { toast.error(describeError(error, 'No se pudo conceder la conexión')); }
+  };
+
+  if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Loading connections…</div>;
+  return (
+    <div>
+      {returnAgentId && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', marginBottom: 12, border: '1px solid var(--amber-dim)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>Configurando grants para el agente seleccionado.</span>
+          <button onClick={() => navigate(`/agents?selected=${encodeURIComponent(returnAgentId)}&tab=tools`)} style={linkBtn}>Volver al agente</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button onClick={() => setCreating((value) => !value)} style={btnPrimary}><Plus size={14} /> Connect MCP server</button>
+      </div>
+      {creating && (
+        <div style={{ padding: 12, marginBottom: 12, border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', background: 'var(--surface)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, .7fr) minmax(260px, 1.5fr)', gap: 8 }}>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Gmail Direct" style={input} />
+            <select value={templateId} onChange={(e) => {
+              const selected = templates.find((item) => item.id === e.target.value);
+              setTemplateId(e.target.value);
+              if (selected && !name.trim()) setName(selected.name);
+            }} style={input}>
+              <option value="">Custom HTTPS endpoint</option>
+              {templates.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.maturity}</option>)}
+            </select>
+            {!templateId && <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://provider.example/mcp" style={input} />}
+            <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Bearer token (optional)" type="password" autoComplete="off" style={input} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={ownerType} onChange={(e) => setOwnerType(e.target.value as 'personal' | 'shared')} style={{ ...input, flex: 1 }}><option value="personal">Personal</option><option value="shared">Shared</option></select>
+              <select value={grantAgent} onChange={(e) => setGrantAgent(e.target.value)} style={{ ...input, flex: 1 }}><option value="">No agent grant yet</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select>
+            </div>
+          </div>
+          {templateId && <div style={{ marginTop: 8, fontSize: '0.69rem', color: 'var(--text-muted)' }}>
+            Plantilla oficial · la autorización del proveedor es independiente de la integración sincronizada y nunca concede acceso al agente por sí sola.
+          </div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}><button onClick={() => setCreating(false)} style={btnGhost}>Cancel</button><button onClick={() => void create()} style={btnPrimary}>Connect</button></div>
+        </div>
+      )}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+        {rows.length === 0 && <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: '0.8rem' }}>No personal or shared MCP connections.</div>}
+        {rows.map((row, index) => (
+          <div key={row.id} style={{ padding: '12px 14px', borderBottom: index < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Plug size={14} style={{ color: row.status === 'connected' ? 'var(--success)' : 'var(--text-muted)' }} />
+              <strong style={{ fontSize: '0.82rem' }}>{row.display_name}</strong>
+              <span style={chip(row.status === 'connected' ? 'var(--success)' : 'var(--text-muted)')}>{row.status} · {row.tool_count} tools · {row.owner_type}</span>
+              <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}><button onClick={() => void test(row.id)} style={rowBtn}><Zap size={12} /> Test</button></span>
+            </div>
+            <div style={{ margin: '8px 0 0 22px', display: 'flex', gap: 6, alignItems: 'center' }}>
+              <select defaultValue={returnAgentId ?? ''} onChange={(e) => void grant(row.id, e.target.value, row.owner_type)} style={{ ...input, maxWidth: 240 }}><option value="">Grant to agent…</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select>
+              <span style={{ fontSize: '0.67rem', color: 'var(--text-muted)' }}>El grant es opt-in y no depende de las Apps asignadas.</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...securityNote, marginTop: 12 }}><ShieldAlert size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} /><span>Las llamadas pasan por el broker de Core. Tools sin clasificación requieren approval L2; ninguna conexión personal puede ejecutar stdio.</span></div>
+    </div>
   );
 }
 

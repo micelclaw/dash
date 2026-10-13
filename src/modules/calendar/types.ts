@@ -10,7 +10,8 @@
  * https://micelclaw.com
  */
 
-export interface CalendarEvent {
+import type { OriginEntity } from '@/types/origins';
+export interface CalendarEvent extends OriginEntity {
   id: string;
   title: string;
   description: string | null;
@@ -68,7 +69,7 @@ export interface EventUpdateInput {
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
-export interface CalendarConfig {
+export interface CalendarConfig extends OriginEntity {
   name: string;
   color: string;
   visible: boolean;

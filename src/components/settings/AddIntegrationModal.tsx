@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,12 @@ import { DiscordBotForm } from './add-integration/DiscordBotForm';
 import { SignalForm } from './add-integration/SignalForm';
 import { TelegramMatrixForm } from './add-integration/TelegramMatrixForm';
 import { WhatsAppMatrixForm } from './add-integration/WhatsAppMatrixForm';
+import { MessengerMatrixForm } from './add-integration/MessengerMatrixForm';
+import { GoogleMessagesMatrixForm } from './add-integration/GoogleMessagesMatrixForm';
+import { IrcMatrixForm } from './add-integration/IrcMatrixForm';
+import { ViberForm } from './add-integration/ViberForm';
+import { GoogleChatMatrixForm } from './add-integration/GoogleChatMatrixForm';
+import { QqMatrixForm } from './add-integration/QqMatrixForm';
 import { SimplexOwnForm } from './add-integration/SimplexOwnForm';
 import { SimplexXrcpForm } from './add-integration/SimplexXrcpForm';
 import { SessionForm } from './add-integration/SessionForm';
@@ -35,31 +41,48 @@ interface AddIntegrationModalProps {
 }
 
 export function AddIntegrationModal({ open, onClose, onConnected, prefilterService }: AddIntegrationModalProps) {
+  const oauthPending = useRef<{ state: string; popup: Window; origin: string } | null>(null);
+  useEffect(() => { if (!open) oauthPending.current = null; }, [open]);
   const [step, setStep] = useState<'pick' | 'oauth-pending' | 'form'>('pick');
   const [selectedService, setSelectedService] = useState<ServiceDef | null>(null);
 
   // Reset state when modal opens — auto-select if prefiltered
+  //
+  // BUG que esto arregla (medido el 2026-07-29): un servicio prefiltrado con
+  // flujo OAuth caía en el paso 'pick', y la rejilla de ese paso IGNORA el
+  // prefiltro — recorre `CATEGORIES`, que además excluye «Messaging» (INT12).
+  // Resultado: pulsar «Conectar» en Slack abría un diálogo SIN Slack, que
+  // ofrecía Gmail, Synology y CalDAV. El único servicio OAuth de mensajería es
+  // Slack, y por eso no lo había cazado nadie.
+  //
+  // Prefiltrado no hay nada que elegir: se va directo a su autorización, que ya
+  // comprueba si esta instalación puede completarla y, si no, enseña los pasos.
   useEffect(() => {
-    if (open) {
-      if (prefilterService) {
-        const svc = SERVICES.find(s => s.id === prefilterService);
-        if (svc) {
-          setSelectedService(svc);
-          setStep(svc.flow === 'oauth' ? 'pick' : 'form');
-        }
-      } else {
-        setStep('pick');
-        setSelectedService(null);
-      }
+    if (!open) return;
+    if (!prefilterService) {
+      setStep('pick');
+      setSelectedService(null);
+        return;
     }
+    const svc = SERVICES.find(s => s.id === prefilterService);
+    if (!svc) return;
+    setSelectedService(svc);
+    if (svc.flow === 'oauth') void handleServiceClick(svc);
+    else setStep('form');
+    // `handleServiceClick` es estable (useCallback sin dependencias) y añadirlo
+    // aquí re-dispararía la autorización en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, prefilterService]);
 
   // Listen for OAuth callback from popup — do the token exchange here (we have the session)
   useEffect(() => {
-    if (step !== 'oauth-pending') return;
+    if (!open || step !== 'oauth-pending') return;
 
     const handler = async (event: MessageEvent) => {
+      const pending = oauthPending.current;
+      if (!pending || event.source !== pending.popup || event.origin !== pending.origin || event.data?.state !== pending.state) return;
       if (event.data?.type === 'oauth_callback') {
+        oauthPending.current = null;
         // Exchange code for tokens via our authenticated API
         try {
           await syncSvc.oauthCallback({
@@ -89,7 +112,23 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
 
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
-  }, [step, selectedService, onConnected, onClose]);
+  }, [open, step, selectedService, onConnected, onClose]);
+
+  /**
+   * Qué hacer cuando una autorización no arranca.
+   *
+   * Volver al paso 'pick' es correcto cuando el usuario ha elegido de una lista,
+   * pero NO cuando venía prefiltrado desde «Conectar Slack»: esa rejilla ignora
+   * el prefiltro y encima excluye la categoría de mensajería, así que al fallar
+   * aparecía un diálogo lleno de Gmail, Synology y CalDAV — el mismo bug que ya
+   * se arregló en la entrada, colándose otra vez por la salida. Prefiltrado, el
+   * aviso ya lo ha dicho todo: se cierra.
+   */
+  const volverODesistir = useCallback(() => {
+    if (prefilterService) onClose();
+    else setStep('pick');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefilterService]);
 
   const handleServiceClick = useCallback(async (service: ServiceDef) => {
     setSelectedService(service);
@@ -98,7 +137,10 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
       // Start OAuth popup flow
       try {
         setStep('oauth-pending');
-        const oauth = await syncSvc.getOAuthAuthorizeUrl(service.provider ?? '', service.scopes ?? '');
+        const dataType = service.category !== 'Messaging'
+          ? (await syncSvc.listDataCatalog()).connectorTypes.find(type => type.type === service.id) : undefined;
+        const oauth = await syncSvc.getOAuthAuthorizeUrl(dataType?.oauth_provider ?? service.provider ?? '',
+          dataType ? dataType.oauth_scopes.join(',') : service.scopes ?? '', undefined, dataType?.type);
 
         // Stash provider in localStorage for the callback page
         localStorage.setItem('claw_oauth_pending', JSON.stringify({
@@ -113,18 +155,23 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
           'width=500,height=700,scrollbars=yes,resizable=yes',
         );
 
+        if (popup) oauthPending.current = { state: oauth.state, popup,
+          origin: new URL(new URL(oauth.authorize_url).searchParams.get('redirect_uri') ?? window.location.origin).origin };
         if (!popup) {
-          toast.error('Popup blocked. Please allow popups for this site.');
-          setStep('pick');
+          toast.error('El navegador ha bloqueado la ventana de autorización. Permítela e inténtalo otra vez.');
+          volverODesistir();
         }
       } catch (err: any) {
-        toast.error(err?.message || 'Failed to start authorization');
-        setStep('pick');
+        // El aviso ya dice qué ha pasado; no hace falta nada más en pantalla.
+        toast.error(err?.message || 'No se ha podido iniciar la autorización');
+        volverODesistir();
       }
     } else {
       // Show credential form
       setStep('form');
     }
+    // `volverODesistir` es estable (useCallback sin dependencias).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFormComplete = useCallback(() => {
@@ -317,6 +364,42 @@ export function AddIntegrationModal({ open, onClose, onConnected, prefilterServi
               )}
               {selectedService.flow === 'bot_token' && selectedService.id === 'whatsapp-matrix' && (
                 <WhatsAppMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'messenger-matrix' && (
+                <MessengerMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'gmessages-matrix' && (
+                <GoogleMessagesMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'irc-matrix' && (
+                <IrcMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'viber-observer' && (
+                <ViberForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'googlechat-matrix' && (
+                <GoogleChatMatrixForm
+                  onComplete={handleFormComplete}
+                  onCancel={handleFormCancel}
+                />
+              )}
+              {selectedService.flow === 'bot_token' && selectedService.id === 'qq-matrix' && (
+                <QqMatrixForm
                   onComplete={handleFormComplete}
                   onCancel={handleFormCancel}
                 />

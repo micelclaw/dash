@@ -54,7 +54,10 @@ export interface PendingTwoFactor {
   email: string;
 }
 
+export type AuthRefreshResult = { status: 'refreshed' | 'transient' | 'rejected' | 'unavailable' | 'cancelled' };
+
 interface AuthStore {
+  sessionGeneration: number;
   user: User | null;
   tokens: AuthTokens | null;
   isAuthenticated: boolean;
@@ -67,18 +70,19 @@ interface AuthStore {
   /** Cancel a pending 2FA challenge (return to email/password form). */
   cancelPending2fa: () => void;
   logout: () => void;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<AuthRefreshResult>;
   setAuth: (user: User, tokens: AuthTokens) => void;
   /** Patch the cached user in place (after self-service profile update). */
   setUser: (user: User) => void;
 }
 
 // Lock to deduplicate concurrent refresh calls — only one in-flight at a time
-let refreshPromise: Promise<void> | null = null;
+let refreshFlight: { generation: number; promise: Promise<AuthRefreshResult> } | null = null;
 
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
+      sessionGeneration: 0,
       user: null,
       tokens: null,
       isAuthenticated: false,
@@ -109,6 +113,7 @@ export const useAuthStore = create<AuthStore>()(
         const user = d.user as User;
         user.tier = (res.tier as Tier) ?? 'free';
         set({
+          sessionGeneration: get().sessionGeneration + 1,
           user,
           tokens: { accessToken, refreshToken, refreshTokenId },
           isAuthenticated: true,
@@ -133,6 +138,7 @@ export const useAuthStore = create<AuthStore>()(
         const user = d.user as User;
         user.tier = (res.tier as Tier) ?? 'free';
         set({
+          sessionGeneration: get().sessionGeneration + 1,
           user,
           tokens: { accessToken, refreshToken, refreshTokenId },
           isAuthenticated: true,
@@ -146,54 +152,52 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         sessionStorage.setItem('claw-explicit-logout', '1');
-        set({ user: null, tokens: null, isAuthenticated: false, pending2fa: null });
+        set({ sessionGeneration: get().sessionGeneration + 1, user: null, tokens: null, isAuthenticated: false, pending2fa: null });
       },
 
       refresh: async () => {
-        // Deduplicate: if a refresh is already in flight, wait for it
-        if (refreshPromise) return refreshPromise;
-
-        refreshPromise = (async () => {
-          const { tokens, user } = get();
-          if (!tokens?.refreshToken) return;
-          try {
-            const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
-              '/auth/refresh',
-              { refresh_token: tokens.refreshToken },
-            );
-            const d = res.data;
-            const updatedUser = user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user;
-            set({
-              user: updatedUser,
-              tokens: {
-                accessToken: d.access_token as string,
-                refreshToken: d.refresh_token as string,
-                refreshTokenId: d.refresh_token_id as string | undefined,
-              },
-            });
-          } catch (err) {
-            // Solo cerrar sesión si el servidor RECHAZA el refresh token (401/403 =
-            // token inválido/revocado/caducado). Un fallo transitorio (red caída, Core
-            // reiniciándose, VPN parpadeando, 5xx) NO debe desloguear: el access token
-            // vigente (24h) sigue sirviendo y reintentaremos. Esto arregla el
-            // "me desloguea cada vez que reabro la app".
-            const status = err instanceof ApiError ? err.status : undefined;
-            if (status === 401 || status === 403) {
-              get().logout();
+        const { tokens, user, sessionGeneration } = get();
+        if (refreshFlight?.generation === sessionGeneration) return refreshFlight.promise;
+        if (!tokens?.refreshToken) return { status: 'unavailable' };
+        const current = () => get().sessionGeneration === sessionGeneration && get().tokens === tokens;
+        const flight = {
+          generation: sessionGeneration,
+          promise: (async (): Promise<AuthRefreshResult> => {
+            try {
+              const res = await api.post<{ data: Record<string, unknown>; tier?: string }>(
+                '/auth/refresh', { refresh_token: tokens.refreshToken },
+              );
+              if (!current()) return { status: 'cancelled' };
+              const d = res.data;
+              set({
+                user: user ? { ...user, tier: (res.tier as Tier) ?? user.tier } : user,
+                tokens: {
+                  accessToken: d.access_token as string,
+                  refreshToken: d.refresh_token as string,
+                  refreshTokenId: d.refresh_token_id as string | undefined,
+                },
+              });
+              return { status: 'refreshed' };
+            } catch (err) {
+              if (!current()) return { status: 'cancelled' };
+              const status = err instanceof ApiError ? err.status : undefined;
+              if (status === 401 || status === 403) {
+                get().logout();
+                return { status: 'rejected' };
+              }
+              // Network/5xx retain the current session. Callers can distinguish
+              // this from a successful renewal without comparing JWT bytes.
+              return { status: 'transient' };
             }
-            // else: mantener la sesión; el caller sigue con el token actual.
-          }
-        })();
-
-        try {
-          await refreshPromise;
-        } finally {
-          refreshPromise = null;
-        }
+          })(),
+        };
+        refreshFlight = flight;
+        try { return await flight.promise; }
+        finally { if (refreshFlight === flight) refreshFlight = null; }
       },
 
       setAuth: (user: User, tokens: AuthTokens) => {
-        set({ user, tokens, isAuthenticated: true });
+        set({ sessionGeneration: get().sessionGeneration + 1, user, tokens, isAuthenticated: true });
       },
 
       setUser: (user: User) => {

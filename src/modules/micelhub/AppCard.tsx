@@ -12,6 +12,7 @@
 
 import { Download, Power, Scan, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { AppIcon, resolveManifestIcon } from '@/components/shared/AppIcon';
 import type { InstalledApp } from '@/types/apps';
 import { useAppActions } from './useAppActions';
 
@@ -85,8 +86,8 @@ export function AppCard({ app, origin, selected, onClick, onRefresh }: AppCardPr
             : manifest?.tags?.includes('installable') ? 'Available (will install deps on assign)'
             : 'Ready to use'
         } />
-        <span style={{ fontSize: 22, flexShrink: 0 }}>
-          {manifest?.icon || manifest?.ui?.module?.icon || '📦'}
+        <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+          <AppIcon {...resolveManifestIcon(manifest)} size={22} />
         </span>
         <span style={{
           fontSize: '0.875rem', fontWeight: 600, color: 'var(--text)',

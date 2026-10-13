@@ -34,12 +34,12 @@ export type PeriodSelection =
   | { mode: 'cuatrimestres'; year: number; from: number; to: number }; // from<=to en 1..3
 
 export const PRESETS: { id: PresetId; label: string }[] = [
-  { id: 'mes', label: 'Este mes' },
-  { id: '30d', label: '30 días' },
-  { id: '90d', label: '90 días' },
-  { id: '12m', label: '12 meses' },
-  { id: 'anio', label: 'Este año' },
-  { id: 'custom', label: 'Personalizado' },
+  { id: 'mes', label: 'This month' },
+  { id: '30d', label: '30 days' },
+  { id: '90d', label: '90 days' },
+  { id: '12m', label: '12 months' },
+  { id: 'anio', label: 'This year' },
+  { id: 'custom', label: 'Custom' },
 ];
 
 export const TRIMESTRES = [1, 2, 3, 4];   // 4 trimestres (3 meses cada uno)
@@ -58,9 +58,9 @@ export function toISODate(d: Date): string {
 // Etiqueta corta de un rango ISO (p.ej. "1 jun – 24 jun" o "1 ene 2025 – 24 jun").
 export function fmtRangeLabel(from: string, to: string): string {
   const f = new Date(from + 'T00:00:00'), t = new Date(to + 'T00:00:00');
-  if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return 'Personalizado';
+  if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime())) return 'Custom';
   const sameYear = f.getFullYear() === t.getFullYear();
-  const fmt = (d: Date, withY: boolean) => new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short', ...(withY ? { year: 'numeric' } : {}) }).format(d);
+  const fmt = (d: Date, withY: boolean) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', ...(withY ? { year: 'numeric' } : {}) }).format(d);
   return `${fmt(f, !sameYear)} – ${fmt(t, true)}`;
 }
 
@@ -151,9 +151,9 @@ export const dateInputStyle: React.CSSProperties = {
 export function CustomRangeInputs({ from, to, onFrom, onTo }: { from: string; to: string; onFrom: (v: string) => void; onTo: (v: string) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Desde</label>
+      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>From</label>
       <input type="date" value={from} max={to} onChange={(e) => onFrom(e.target.value)} style={dateInputStyle} />
-      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Hasta</label>
+      <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>To</label>
       <input type="date" value={to} min={from} max={todayISO()} onChange={(e) => onTo(e.target.value)} style={dateInputStyle} />
     </div>
   );
@@ -226,11 +226,11 @@ export function PeriodControl() {
         {/* Selector de año: solo para trimestres/cuatrimestres */}
         {isTQ && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 2, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
-            <button onClick={() => setYear(tqYear - 1)} aria-label="Año anterior" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
+            <button onClick={() => setYear(tqYear - 1)} aria-label="Previous year" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
               <ChevronLeft size={15} />
             </button>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', minWidth: 34, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{tqYear}</span>
-            <button onClick={() => setYear(tqYear + 1)} aria-label="Año siguiente" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
+            <button onClick={() => setYear(tqYear + 1)} aria-label="Next year" style={{ display: 'flex', alignItems: 'center', padding: 4, border: 'none', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', borderRadius: 'var(--radius-sm, 4px)' }}>
               <ChevronRight size={15} />
             </button>
           </div>

@@ -212,6 +212,10 @@ function NetworkDiscoveryBlock() {
   const handleSave = async () => {
     // Pre-flight: if wide-area is enabled, domain must look like a real
     // FQDN. Same regex used by the inline validator above.
+    if (wideAreaEnabled && !wideAreaDomain.trim()) {
+      toast.error('A DNS-SD domain is required when wide-area discovery is enabled');
+      return;
+    }
     if (wideAreaEnabled && wideAreaDomain.trim()) {
       const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
       if (!domainRegex.test(wideAreaDomain.trim())) {

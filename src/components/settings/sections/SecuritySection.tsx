@@ -1,406 +1,113 @@
-/**
- * Copyright (c) 2026 Micelclaw (Víctor García Valdunciel)
- * All rights reserved.
- *
- * This file is part of Micelclaw OS and is proprietary software.
- * Unauthorized copying, modification, distribution, or use of this
- * file, via any medium, is strictly prohibited.
- *
- * See LICENSE in the root of this repository for full terms.
- * https://micelclaw.com
- */
+/** Unified security control plane at /settings/security. */
 
-import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
-import { useSecurityStore } from '@/stores/security.store';
-import { useAuthStore } from '@/stores/auth.store';
-import { describeError } from '@/lib/api-errors';
-import { useSensitiveInputs } from '@/hooks/use-sensitive-inputs';
-import { SettingSection } from '../SettingSection';
-import { SettingToggle } from '../SettingToggle';
-import { SettingInput } from '../SettingInput';
-import { SettingSelect } from '../SettingSelect';
-import { SettingsBlock } from '../shared/SettingsBlock';
-import { ApprovalsForwardingSection } from './ApprovalsForwardingSection';
+import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
+import {
+  BellRing,
+  Bot,
+  Boxes,
+  ClipboardCheck,
+  FileClock,
+  Globe2,
+  Layers3,
+  LockKeyhole,
+  ShieldCheck,
+} from 'lucide-react';
+import { ApprovalInbox } from '@/modules/approvals/ApprovalInbox';
+import { SandboxSection } from './SandboxSection';
+import { AgentExecutionPanel } from './security/AgentExecutionPanel';
+import { ApprovalDeliveryPanel } from './security/ApprovalDeliveryPanel';
+import { BrowserSafetyPanel } from './security/BrowserSafetyPanel';
+import { CommandProfilesPanel } from './security/CommandProfilesPanel';
+import { ProtectedActionsPanel } from './security/ProtectedActionsPanel';
+import { SecurityAuditPanel } from './security/SecurityAuditPanel';
+import { SecurityOverviewPanel } from './security/SecurityOverviewPanel';
+import { ToolPolicyPanel } from './security/ToolPolicyPanel';
 
-const LEVEL_OPTIONS = [
-  { value: '0', label: '0 - Auto' },
-  { value: '1', label: '1 - Logged' },
-  { value: '2', label: '2 - Confirm' },
-  { value: '3', label: '3 - Secure' },
+export type SecurityTab =
+  | 'overview'
+  | 'agent-execution'
+  | 'command-profiles'
+  | 'protected-actions'
+  | 'action-approvals'
+  | 'isolation'
+  | 'approval-delivery'
+  | 'audit-log'
+  | 'browser-safety'
+  | 'tool-policy';
+
+interface TabDefinition {
+  id: SecurityTab;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+export const SECURITY_TABS: TabDefinition[] = [
+  { id: 'overview', label: 'Overview', description: 'Posture and reconciliation', icon: ShieldCheck },
+  { id: 'agent-execution', label: 'Agent execution', description: 'Desired and effective policy', icon: Bot },
+  { id: 'command-profiles', label: 'Command profiles', description: 'Versioned command rules', icon: Layers3 },
+  { id: 'protected-actions', label: 'Protected actions', description: 'Platform security floors', icon: LockKeyhole },
+  { id: 'tool-policy', label: 'Tools & approvals', description: 'Access, chat display and approval gates', icon: ShieldCheck },
+  { id: 'action-approvals', label: 'Action approvals', description: 'Inbox and decisions', icon: ClipboardCheck },
+  { id: 'isolation', label: 'Isolation', description: 'Sandbox and workspace access', icon: Boxes },
+  { id: 'approval-delivery', label: 'Approval delivery', description: 'Timing and forwarding', icon: BellRing },
+  { id: 'audit-log', label: 'Audit log', description: 'Append-only policy events', icon: FileClock },
+  { id: 'browser-safety', label: 'Browser safety', description: 'Network and session boundaries', icon: Globe2 },
 ];
 
-// In this section 401 specifically means "wrong password" (the
-// confirmation step for PIN setup / removal), not "session expired".
-const SECURITY_ERROR_OVERRIDES = {
-  status: { 401: 'Wrong password' },
-};
+const TAB_IDS = new Set<SecurityTab>(SECURITY_TABS.map((tab) => tab.id));
 
-export function SecuritySection() {
-  const config = useSecurityStore((s) => s.config);
-  const fetchConfig = useSecurityStore((s) => s.fetchConfig);
-  const updateConfig = useSecurityStore((s) => s.updateConfig);
-  const setupPin = useSecurityStore((s) => s.setupPin);
-  const removePin = useSecurityStore((s) => s.removePin);
-  const user = useAuthStore((s) => s.user);
-  const userRole = user?.role ?? 'user';
+function isSecurityTab(value: string | null): value is SecurityTab {
+  return value !== null && TAB_IDS.has(value as SecurityTab);
+}
 
-  const ROLE_RANK: Record<string, number> = { user: 0, admin: 1, owner: 2 };
-  const canEdit = (requiredRole: string) => (ROLE_RANK[userRole] ?? 0) >= (ROLE_RANK[requiredRole] ?? 999);
-
-  const [showPinSetup, setShowPinSetup] = useState(false);
-  const [showRemovePin, setShowRemovePin] = useState(false);
-  const [showShellConfirm, setShowShellConfirm] = useState(false);
-
-  // Sensitive inputs (PIN + password fields). The hook handles
-  // wiping on unmount automatically — no manual cleanup useEffect.
-  const sensitive = useSensitiveInputs([
-    'pin', 'pinConfirm', 'password', 'removePassword',
-  ] as const);
-  const { values, set, wipe } = sensitive;
-  const pinInput = values.pin;
-  const pinConfirm = values.pinConfirm;
-  const passwordInput = values.password;
-  const removePassword = values.removePassword;
-
-  useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
-
-  if (!config) return null;
-
-  // ─── Handlers ─────────────────────────────────────────
-
-  const handleLevelChange = async (operation: string, value: string) => {
-    const level = parseInt(value, 10);
-    try {
-      await updateConfig({
-        approval_levels: { ...config.approval_levels, [operation]: level },
-      });
-      toast.success('Approval level updated');
-    } catch (err) {
-      toast.error(describeError(err, 'Failed to update approval level'));
-    }
-  };
-
-  const handleSetupPin = async () => {
-    if (!/^\d{4,6}$/.test(pinInput)) {
-      toast.error('PIN must be 4-6 digits');
-      return;
-    }
-    if (pinInput !== pinConfirm) {
-      toast.error('PINs do not match');
-      return;
-    }
-    if (!passwordInput) {
-      toast.error('Current password required');
-      return;
-    }
-    try {
-      await setupPin(pinInput, passwordInput);
-      toast.success('PIN configured');
-      setShowPinSetup(false);
-      wipe();
-    } catch (err) {
-      // Wipe inputs even on failure so the PIN/password don't sit in
-      // memory while the user reads the error. They'll have to retype.
-      wipe();
-      toast.error(describeError(err, 'Failed to set PIN — check your password', SECURITY_ERROR_OVERRIDES));
-    }
-  };
-
-  const handleRemovePin = async () => {
-    if (!removePassword) {
-      toast.error('Current password required');
-      return;
-    }
-    try {
-      await removePin(removePassword);
-      toast.success('PIN removed');
-      setShowRemovePin(false);
-      set('removePassword', '');
-    } catch (err) {
-      set('removePassword', '');
-      toast.error(describeError(err, 'Failed to remove PIN — check your password', SECURITY_ERROR_OVERRIDES));
-    }
-  };
-
-  const handleToggleUnrestrictedShell = async () => {
-    if (!config.unrestricted_shell) {
-      // Enabling — show confirmation
-      setShowShellConfirm(true);
-      return;
-    }
-    // Disabling — no confirmation needed
-    try {
-      await updateConfig({ unrestricted_shell: false });
-      toast.success('Unrestricted shell disabled');
-    } catch (err) {
-      toast.error(describeError(err, 'Failed to disable unrestricted shell'));
-    }
-  };
-
-  const confirmEnableShell = async () => {
-    try {
-      await updateConfig({ unrestricted_shell: true });
-      toast.success('Unrestricted shell enabled');
-      setShowShellConfirm(false);
-    } catch (err) {
-      toast.error(describeError(err, 'Failed to enable unrestricted shell'));
-    }
-  };
-
-  const handleTimeoutChange = async (key: string, value: string) => {
-    const n = Math.max(1, parseInt(value) || 5);
-    try {
-      await updateConfig({
-        approval_timeouts: { ...config.approval_timeouts, [key]: n },
-      });
-    } catch (err) {
-      toast.error(describeError(err, 'Failed to update timeout'));
-    }
-  };
-
-  const handleIdleChange = async (value: string) => {
-    const n = Math.max(0, Math.min(10080, parseInt(value) || 0));
-    try {
-      await updateConfig({ session_idle_minutes: n });
-      toast.success(n === 0 ? 'Cierre por inactividad desactivado' : `Cierre por inactividad: ${n} min`);
-    } catch (err) {
-      toast.error(describeError(err, 'No se pudo actualizar el tiempo de inactividad'));
-    }
-  };
-
-  // ─── Render ───────────────────────────────────────────
-
+function IsolationPanel() {
   return (
-    <>
-      {/* Agent Shell Access */}
-      <SettingSection title="Agent Shell Access" description="Controls which shell commands the agent can execute across ALL channels (webchat, Telegram, etc.). Enforced at the code level by OpenClaw exec-approvals.">
-        <SettingToggle
-          label="Unrestricted Shell Mode"
-          description="When disabled, only safe commands (curl, jq, grep...) are allowed. When enabled, extended commands (ls, find, python3, git...) are also available. Destructive commands and database tools always require explicit approval regardless of this setting."
-          checked={config.unrestricted_shell}
-          onChange={handleToggleUnrestrictedShell}
-        />
-        {config.unrestricted_shell && (
-          <div style={{ padding: '8px 12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', color: '#ef4444', fontFamily: 'var(--font-sans)', marginTop: 4 }}>
-            Extended commands enabled. Destructive commands (rm, kill, apt, docker...) and database tools (psql, mysql, sudo...) still require exec approval.
-          </div>
-        )}
-
-        {/* Shell confirm modal */}
-        {showShellConfirm && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 380, width: '90%' }}>
-              <div style={{ fontSize: '1rem', fontWeight: 600, color: '#ef4444', fontFamily: 'var(--font-sans)', marginBottom: 12 }}>
-                Enable Unrestricted Shell?
-              </div>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)', marginBottom: 16, lineHeight: 1.5 }}>
-                This expands the agent's command allowlist to include extended tools (ls, find, python3, git, etc.) across all channels. Destructive commands and database tools still require explicit approval.
-              </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => { setShowShellConfirm(false); }}
-                  style={{ height: 32, padding: '0 16px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmEnableShell}
-                  style={{ height: 32, padding: '0 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
-                >
-                  Enable
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </SettingSection>
-
-      {/* Security PIN */}
-      <SettingSection title="Security PIN" description="A numeric PIN is required for Level 3 (Secure) operations.">
-        {config.pin_configured ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0' }}>
-            <span style={{ fontSize: '0.875rem', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>PIN Status</span>
-            <span style={{ fontSize: '0.8125rem', color: '#22c55e', fontFamily: 'var(--font-sans)' }}>Configured</span>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <button
-                onClick={() => setShowPinSetup(true)}
-                style={{ height: 28, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
-              >
-                Change
-              </button>
-              <button
-                onClick={() => setShowRemovePin(true)}
-                style={{ height: 28, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: '#ef4444', fontSize: '0.75rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: '12px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <span style={{ fontSize: '0.875rem', color: 'var(--text)', fontFamily: 'var(--font-sans)' }}>PIN Status</span>
-              <span style={{ fontSize: '0.8125rem', color: '#f59e0b', fontFamily: 'var(--font-sans)' }}>Not configured</span>
-            </div>
-            <button
-              onClick={() => setShowPinSetup(true)}
-              style={{ height: 30, padding: '0 16px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}
-            >
-              Set up PIN
-            </button>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6, fontFamily: 'var(--font-sans)' }}>
-              Required for Level 3 operations (manage API keys, delete user accounts, export data, etc.)
-            </div>
-          </div>
-        )}
-
-        {/* PIN Setup Form */}
-        {showPinSetup && (
-          <div style={{ padding: '12px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 260 }}>
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Enter PIN (4-6 digits)"
-                value={pinInput}
-                onChange={(e) => set('pin', e.target.value.replace(/\D/g, '').slice(0, 6))}
-                style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none', letterSpacing: 4 }}
-              />
-              <input
-                type="password"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                placeholder="Confirm PIN"
-                value={pinConfirm}
-                onChange={(e) => set('pinConfirm', e.target.value.replace(/\D/g, '').slice(0, 6))}
-                style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none', letterSpacing: 4 }}
-              />
-              <input
-                type="password"
-                placeholder="Current password"
-                {...sensitive.bind('password')}
-                style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none' }}
-              />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={handleSetupPin} style={{ height: 30, padding: '0 16px', background: 'var(--amber)', color: '#06060a', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Save</button>
-                <button onClick={() => { setShowPinSetup(false); wipe(); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Remove PIN Form */}
-        {showRemovePin && (
-          <div style={{ padding: '12px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 260 }}>
-              <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)' }}>Enter your password to remove the PIN:</div>
-              <input
-                type="password"
-                placeholder="Current password"
-                {...sensitive.bind('removePassword')}
-                style={{ height: 32, padding: '0 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)', outline: 'none' }}
-              />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={handleRemovePin} style={{ height: 30, padding: '0 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', fontSize: '0.8125rem', fontWeight: 600, fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Remove PIN</button>
-                <button onClick={() => { setShowRemovePin(false); set('removePassword', ''); }} style={{ height: 30, padding: '0 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', color: 'var(--text-dim)', fontSize: '0.8125rem', fontFamily: 'var(--font-sans)', cursor: 'pointer' }}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </SettingSection>
-
-      {/* Operation Approval Levels */}
-      <SettingSection
-        title="Operation Approval Levels"
-        description="Configure approval levels per operation. Auto=silent, Logged=recorded, Confirm=requires OK, Secure=requires PIN."
-      >
-        {config.operation_defaults?.map((op) => {
-          const currentLevel = config.approval_levels[op.operation] ?? op.default_level;
-          const availableOptions = LEVEL_OPTIONS.filter((l) => parseInt(l.value) >= op.min_level);
-          const editable = canEdit(op.edit_role);
-
-          return (
-            <SettingSelect
-              key={op.operation}
-              label={op.label}
-              description={`Default: Level ${op.default_level}${op.min_level > 0 ? ` (min: ${op.min_level})` : ''}${!editable ? ` · Requires ${op.edit_role}` : ''}`}
-              value={String(currentLevel)}
-              options={availableOptions}
-              onChange={(v) => handleLevelChange(op.operation, v)}
-              disabled={!editable}
-            />
-          );
-        })}
-      </SettingSection>
-
-      {/* Approval Timeouts */}
-      <SettingSection title="Approval Timeouts" description="Configure timing for approval request lifecycle.">
-        <SettingInput
-          label="Reminder"
-          description="Minutes before sending a reminder for pending approvals"
-          type="number"
-          value={String(config.approval_timeouts.reminder_minutes)}
-          onChange={(v) => handleTimeoutChange('reminder_minutes', v)}
-          min={1}
-          max={60}
-        />
-        <SettingInput
-          label="Escalation"
-          description="Minutes before escalating to admin users"
-          type="number"
-          value={String(config.approval_timeouts.escalation_minutes)}
-          onChange={(v) => handleTimeoutChange('escalation_minutes', v)}
-          min={1}
-          max={120}
-        />
-        <SettingInput
-          label="Expiry"
-          description="Minutes before an unanswered approval request expires"
-          type="number"
-          value={String(config.approval_timeouts.expiry_minutes)}
-          onChange={(v) => handleTimeoutChange('expiry_minutes', v)}
-          min={5}
-          max={1440}
-        />
-      </SettingSection>
-
-      {/* Session idle timeout (Fase 2) */}
-      <SettingSection title="Cierre de sesión por inactividad" description="Cierra tu sesión automáticamente tras un periodo sin actividad (estilo Synology). Solo afecta a tu sesión del navegador; los agentes no se ven afectados.">
-        <SettingInput
-          label="Minutos de inactividad"
-          description="0 = desactivado. Tras este tiempo sin actividad se pedirá iniciar sesión de nuevo. Rango: 0 a 10080 (1 semana)."
-          type="number"
-          value={String(config.session_idle_minutes ?? 0)}
-          onChange={handleIdleChange}
-          min={0}
-          max={10080}
-        />
-      </SettingSection>
-
-      <ApprovalsForwardingBlock />
-    </>
+    <div className="space-y-4">
+      <div><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><Boxes size={19} className="text-[var(--amber)]" />Isolation</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">Global container defaults. Per-agent sandbox overrides live in Agent execution and Agent → Security.</p></div>
+      <SandboxSection />
+    </div>
   );
 }
 
-// ── Fused block: Approvals Forwarding (was its own
-// /settings/approvals-forwarding section before Ola 9 reorg). Lives
-// here because forwarding is a security/approvals concern.
-function ApprovalsForwardingBlock() {
-  const [expanded, setExpanded] = useState(false);
+function ActionApprovalsPanel() {
   return (
-    <SettingsBlock
-      title="Approvals forwarding"
-      description="Forward to external channels"
-      expanded={expanded}
-      onToggle={() => setExpanded((v) => !v)}
-    >
-      <div style={{ marginTop: 4 }}>
-        <ApprovalsForwardingSection />
-      </div>
-    </SettingsBlock>
+    <div>
+      <div className="mb-4"><h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[var(--text)]"><ClipboardCheck size={19} className="text-[var(--amber)]" />Action approvals</h2><p className="mt-1 max-w-3xl text-sm text-[var(--text-dim)]">One inbox across Core actions, host commands, runtime-native requests and external authorities.</p></div>
+      <ApprovalInbox embedded />
+    </div>
+  );
+}
+
+function TabContent({ tab }: { tab: SecurityTab }) {
+  if (tab === 'overview') return <SecurityOverviewPanel />;
+  if (tab === 'agent-execution') return <AgentExecutionPanel />;
+  if (tab === 'command-profiles') return <CommandProfilesPanel />;
+  if (tab === 'protected-actions') return <ProtectedActionsPanel />;
+  if (tab === 'tool-policy') return <ToolPolicyPanel />;
+  if (tab === 'action-approvals') return <ActionApprovalsPanel />;
+  if (tab === 'isolation') return <IsolationPanel />;
+  if (tab === 'approval-delivery') return <ApprovalDeliveryPanel />;
+  if (tab === 'audit-log') return <SecurityAuditPanel />;
+  return <BrowserSafetyPanel />;
+}
+
+export function SecuritySection() {
+  const [searchParams] = useSearchParams();
+  const requested = searchParams.get('security_tab');
+  const activeTab: SecurityTab = isSecurityTab(requested) ? requested : 'overview';
+
+  return (
+    <div className="min-w-0 font-[var(--font-sans)]">
+      <header className="mb-5">
+        <h1 className="m-0 flex items-center gap-2 text-xl font-semibold text-[var(--text)]"><ShieldCheck size={22} className="text-[var(--amber)]" />Security</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-dim)]">Configure durable policy in Core, inspect what the runtime actually enforces and resolve actions without conflating model choice with execution authority.</p>
+      </header>
+
+      <main id={`security-panel-${activeTab}`} className="min-w-0" aria-live="polite">
+        <TabContent tab={activeTab} />
+      </main>
+    </div>
   );
 }

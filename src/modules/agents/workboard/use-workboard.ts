@@ -18,51 +18,73 @@ const POLL_MS = 8000;
 
 export function useWorkboard() {
   const [status, setStatus] = useState<WorkboardStatusResponse | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [cards, setCards] = useState<WorkboardCard[]>([]);
   const [diagnostics, setDiagnostics] = useState<WorkboardDiagnostic[]>([]);
   const [loading, setLoading] = useState(true);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const statusRequest = useRef<Promise<WorkboardStatusResponse | null> | null>(null);
+  const cardsRequest = useRef<Promise<boolean> | null>(null);
 
-  const loadCards = useCallback(async () => {
-    try {
+  // Las pills se derivan de cards + diagnostics (sin RPC de stats en el poll).
+  const loadCards = useCallback(() => {
+    if (cardsRequest.current) return cardsRequest.current;
+    const request = (async () => { try {
       const [{ cards }, diags] = await Promise.all([
         workboardApi.listCards(),
         workboardApi.diagnostics().catch(() => []),
       ]);
       setCards(cards);
       setDiagnostics(diags);
-    } catch { /* transitorio; el siguiente poll reintenta */ }
+      return true;
+    } catch { return false; }
+    finally { cardsRequest.current = null; }
+    })();
+    cardsRequest.current = request;
+    return request;
   }, []);
 
-  const refreshStatus = useCallback(async () => {
-    try {
+  const refreshStatus = useCallback(() => {
+    if (statusRequest.current) return statusRequest.current;
+    const request = (async () => { try {
       const s = await workboardApi.status();
       setStatus(s);
+      setStatusError(null);
+      if (s.enabled && s.reachable) await loadCards();
       return s;
     } catch {
-      setStatus({ enabled: false, reachable: false, board_id: '', boards: 0 });
+      setStatusError('No se pudo consultar el estado de Workboard. Reintenta cuando el Gateway esté disponible.');
       return null;
     }
-  }, []);
+    finally { statusRequest.current = null; }
+    })();
+    statusRequest.current = request;
+    return request;
+  }, [loadCards]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const s = await refreshStatus();
-      if (alive && s?.enabled && s.reachable) await loadCards();
+      await refreshStatus();
       if (alive) setLoading(false);
     })();
     return () => { alive = false; };
   }, [refreshStatus, loadCards]);
 
-  // Poll mientras el board esté activo (frescura de heartbeat / cambios de agentes).
+  // Reintentar también durante la carga del plugin o un fallo del Gateway.
+  // Retry y polling comparten la petición en vuelo; nunca se solapan.
   useEffect(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-    if (status?.enabled && status.reachable) {
-      pollRef.current = setInterval(loadCards, POLL_MS);
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [status?.enabled, status?.reachable, loadCards]);
+    if (!autoRefresh || (!status?.enabled && !statusError)) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      if (!status?.reachable || statusError) await refreshStatus();
+      else if (!await loadCards()) await refreshStatus();
+      if (alive) timer = setTimeout(poll, POLL_MS);
+    };
+    timer = setTimeout(poll, POLL_MS);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [autoRefresh, status?.enabled, status?.reachable, statusError, refreshStatus, loadCards]);
 
-  return { status, cards, diagnostics, loading, refreshStatus, loadCards, setLoading };
+  return { status, statusError, cards, diagnostics, loading, autoRefresh, setAutoRefresh, refreshStatus, loadCards, setLoading };
 }

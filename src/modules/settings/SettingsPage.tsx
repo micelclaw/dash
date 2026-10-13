@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useLocation, useParams, useNavigate } from 'react-router';
 import {
   Globe, Palette, Shield, Search as SearchIcon, HardDrive, Network,
   UserCircle, Brain, Terminal, Lock, AppWindow, Code, Menu,
@@ -27,6 +27,7 @@ import {
   type SettingsGroupId,
 } from '@/components/settings/sections';
 import { NotFoundSection } from '@/components/settings/sections/NotFoundSection';
+import { SECURITY_TABS } from '@/components/settings/sections/SecuritySection';
 import { SettingsSidebarGroup } from '@/components/settings/SettingsSidebarGroup';
 import { SettingsSidebarSearch } from '@/components/settings/SettingsSidebarSearch';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -35,6 +36,8 @@ import { searchSettings, validateSearchIndex } from './settings-search-index';
 
 interface SidebarItem {
   id: string;
+  sectionId: string;
+  target: string;
   label: string;
   icon: LucideIcon;
 }
@@ -72,8 +75,16 @@ const GROUP_COLORS = {
 function sectionsForGroup(groupId: SettingsGroupId): SidebarItem[] {
   return Object.entries(SECTION_REGISTRY)
     .filter(([, entry]) => entry.meta.group === groupId)
-    .map(([id, entry]) => ({ id, label: entry.meta.label, icon: entry.meta.icon ?? SearchIcon }));
+    .map(([id, entry]) => ({ id, sectionId: id, target: `/settings/${id}`, label: entry.meta.label, icon: entry.meta.icon ?? SearchIcon }));
 }
+
+const SECURITY_SIDEBAR_ITEMS: SidebarItem[] = SECURITY_TABS.map((tab) => ({
+  id: `security:${tab.id}`,
+  sectionId: 'security',
+  target: tab.id === 'overview' ? '/settings/security' : `/settings/security?security_tab=${tab.id}`,
+  label: tab.label,
+  icon: tab.icon,
+}));
 
 function buildGroups(isAdmin: boolean): SidebarGroup[] {
   const groups: SidebarGroup[] = [
@@ -130,8 +141,11 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
       label: 'Security',
       icon: Shield,
       color: GROUP_COLORS.security,
-      description: 'PIN, approval levels, agent sandbox, browser and shell commands.',
-      sections: sectionsForGroup('security'),
+      description: 'Unified execution policy, approvals, isolation, runtime state and audit.',
+      sections: [
+        ...SECURITY_SIDEBAR_ITEMS,
+        ...sectionsForGroup('security').filter((item) => item.sectionId !== 'security'),
+      ],
     },
   ];
   if (isAdmin) {
@@ -145,7 +159,7 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
         ...sectionsForGroup('admin'),
         // 'raw' es la página standalone /settings/raw (no vive en el
         // registro de secciones) — su item de sidebar se añade aquí.
-        { id: 'raw', label: 'Raw JSON', icon: Terminal },
+        { id: 'raw', sectionId: 'raw', target: '/settings/raw', label: 'Raw JSON', icon: Terminal },
       ],
     });
   }
@@ -168,21 +182,17 @@ function buildGroups(isAdmin: boolean): SidebarGroup[] {
 
 // ── Section ID redirects (back-compat for bookmarks) ─────────────
 //
-// After the Ola 9 reorganization, some sections were folded into
-// fused parents. We do NOT redirect their URLs — instead the legacy
-// IDs still render the standalone component (see `renderSection`),
-// and the sidebar shows them grouped under the fused parent. This
-// keeps existing bookmarks AND contract tests working: the contract
-// tests navigate to /settings/<id> and expect the standalone
-// component to mount and fetch. If we redirected, the fused parent
-// would render the children as collapsed blocks that don't mount
-// until the user expands them, breaking the tests.
-//
-// The sidebar entry for these legacy IDs is hidden (they live as
-// blocks inside the fused parent), but the URLs remain valid.
+// Security control-plane URLs redirect only when the unified destination
+// exposes the same control. Standalone surfaces with different semantics —
+// notably Channel commands versus host command profiles — remain registered
+// and visible so bookmarks never land on an unrelated policy editor.
 const SECTION_REDIRECTS: Record<string, string> = {
-  // empty — see comment above. Keep the constant so future redirects
-  // are easy to add if a section is truly removed (not just folded).
+  sandbox: 'security?security_tab=isolation',
+  'browser-config': 'security?security_tab=browser-safety',
+  'approvals-forwarding': 'security?security_tab=approval-delivery',
+  'approvals-history': 'security?security_tab=audit-log',
+  'tool-access-defaults': 'security?security_tab=tool-policy',
+  'chat-tools': 'security?security_tab=tool-policy',
 };
 
 // La fuente de verdad de los IDs de sección y sus componentes es el
@@ -224,7 +234,7 @@ function saveExpandedState(state: Record<string, boolean>) {
 
 function findGroupForSection(groups: SidebarGroup[], sectionId: string): string | null {
   for (const g of groups) {
-    if (g.sections.some((s) => s.id === sectionId)) return g.id;
+    if (g.sections.some((s) => s.sectionId === sectionId)) return g.id;
   }
   return null;
 }
@@ -232,6 +242,7 @@ function findGroupForSection(groups: SidebarGroup[], sectionId: string): string 
 export function Component() {
   const { section } = useParams<{ section?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
 
   const fetchSettings = useSettingsStore((s) => s.fetchSettings);
@@ -243,17 +254,17 @@ export function Component() {
 
   const GROUPS = useMemo(() => buildGroups(isAdmin), [isAdmin]);
 
-  // Effective active section: undefined → landing. Apply any redirect
-  // (currently empty — see SECTION_REDIRECTS comment above).
+  // Effective active section: undefined → landing. Apply redirects only for
+  // legacy controls that have a semantics-preserving destination.
   const rawSection = section;
-  const redirectedSection =
-    rawSection && SECTION_REDIRECTS[rawSection] ? SECTION_REDIRECTS[rawSection] : rawSection;
+  const redirectTarget = rawSection ? SECTION_REDIRECTS[rawSection] : undefined;
+  const redirectedSection = redirectTarget?.split('?')[0] ?? rawSection;
 
   useEffect(() => {
-    if (rawSection && SECTION_REDIRECTS[rawSection]) {
-      navigate(`/settings/${SECTION_REDIRECTS[rawSection]}`, { replace: true });
+    if (redirectTarget) {
+      navigate(`/settings/${redirectTarget}`, { replace: true });
     }
-  }, [rawSection, navigate]);
+  }, [redirectTarget, navigate]);
 
   // Raw editor lives at /settings/raw and renders a standalone page —
   // when someone navigates to it from the sidebar we just route there.
@@ -264,6 +275,7 @@ export function Component() {
   }, [redirectedSection, navigate]);
 
   const activeSection = redirectedSection;
+  const activeTarget = `${location.pathname}${location.search}`;
 
   // Sidebar group expanded state — accordion: at most one open.
   // Stored as a record so existing localStorage entries (which had
@@ -371,7 +383,7 @@ export function Component() {
     label: g.label,
     icon: g.icon,
     description: g.description,
-    firstSectionId: g.sections[0]?.id ?? 'general',
+    firstSectionPath: g.sections[0]?.target ?? '/settings/general',
     sectionCount: g.sections.length,
     color: g.color,
   }));
@@ -393,9 +405,11 @@ export function Component() {
           ) : (
             searchResults.map((r) => {
               const group = GROUPS.find((g) => g.id === r.entry.groupId);
-              const item = group?.sections.find((s) => s.id === r.entry.sectionId);
+              const item = group?.sections.find((s) => s.target === r.entry.path)
+                ?? group?.sections.find((s) => s.sectionId === r.entry.sectionId);
               const Icon = item?.icon ?? SearchIcon;
-              const isActive = activeSection === r.entry.sectionId;
+              const target = r.entry.path ?? `/settings/${r.entry.sectionId}`;
+              const isActive = activeTarget === target;
               const matchHint =
                 r.match.field === 'label'
                   ? group?.label
@@ -405,7 +419,7 @@ export function Component() {
                   key={r.entry.sectionId}
                   type="button"
                   onClick={() => {
-                    navigate(`/settings/${r.entry.sectionId}`, { replace: true });
+                    navigate(target, { replace: true });
                     setSearchQuery('');
                     onPick?.();
                   }}
@@ -474,12 +488,12 @@ export function Component() {
             >
               {group.sections.map((item) => {
                 const Icon = item.icon;
-                const isActive = activeSection === item.id;
+                const isActive = activeTarget === item.target;
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => { navigate(`/settings/${item.id}`, { replace: true }); onPick?.(); }}
+                    onClick={() => { navigate(item.target, { replace: true }); onPick?.(); }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, width: '100%',
                       padding: '6px 10px',
@@ -506,7 +520,9 @@ export function Component() {
 
   // Etiqueta de la sección activa (para la cabecera móvil junto a la hamburguesa).
   const activeSectionLabel = activeSection
-    ? GROUPS.flatMap((g) => g.sections).find((s) => s.id === activeSection)?.label ?? 'Settings'
+    ? GROUPS.flatMap((g) => g.sections).find((s) => s.target === activeTarget)?.label
+      ?? GROUPS.flatMap((g) => g.sections).find((s) => s.sectionId === activeSection)?.label
+      ?? 'Settings'
     : 'Settings';
 
   // Mobile: hamburguesa que abre el mismo side panel (drawer) que en escritorio.
@@ -559,6 +575,7 @@ export function Component() {
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: 'var(--font-sans)' }}>
       <nav
+        aria-label="Settings navigation"
         style={{
           width: 220,
           flexShrink: 0,

@@ -10,13 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bot, Package } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { useAgents } from './hooks/use-agents';
 import { AgentTree } from './AgentTree';
 import { CouncilTab } from './council/CouncilTab';
 import { WorkboardTab } from './workboard/WorkboardTab';
+import { DreamsTab } from './dreams/DreamsTab';
 import { AgentConversations } from './AgentConversations';
 import { AgentWorkspaces } from './AgentWorkspaces';
 import { FleetTab } from './fleet/FleetTab';
@@ -29,6 +30,7 @@ const TABS: { key: AgentTab; label: string }[] = [
   { key: 'tree', label: 'Tree' },
   { key: 'council', label: 'Council' },
   { key: 'workboard', label: 'Workboard' },
+  { key: 'memory', label: 'Memory' },
   { key: 'conversations', label: 'Conversations' },
   { key: 'workspaces', label: 'Workspaces' },
   { key: 'fleet', label: 'Fleet' },
@@ -37,7 +39,31 @@ const TABS: { key: AgentTab; label: string }[] = [
 export function Component() {
   const { agents, loading, error, addAgent, refetch } = useAgents();
   const isMobile = useIsMobile();
-  const [activeTab, setActiveTab] = useState<AgentTab>('tree');
+  // ?tab= permite deep-linkear a un tab top-level. `dreams` era el nombre
+  // anterior; se conserva sólo como redirección de enlaces existentes.
+  // los valores per-agente (tools/memory/…) los consume AgentDetail, no aquí.
+  const [activeTab, setActiveTab] = useState<AgentTab>(() => {
+    if (typeof window === 'undefined') return 'tree';
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('tab');
+    if (t === 'dreams') {
+      params.set('tab', 'memory');
+      params.set('memory_tab', 'dreams');
+      window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
+      return 'memory';
+    }
+    return TABS.some(x => x.key === t) ? (t as AgentTab) : 'tree';
+  });
+  // Salto de tab desde componentes anidados (p.ej. AgentMemory → "Ver Sueños").
+  useEffect(() => {
+    const onJump = (e: Event) => {
+      const tab = (e as CustomEvent<string>).detail;
+      if (tab === 'dreams') setActiveTab('memory');
+      else if (TABS.some(x => x.key === tab)) setActiveTab(tab as AgentTab);
+    };
+    window.addEventListener('claw:agents-tab', onJump);
+    return () => window.removeEventListener('claw:agents-tab', onJump);
+  }, []);
   // Read ?selected= so deep-links from elsewhere (e.g. Settings →
   // Sandbox per-agent table) can land on a specific agent. The
   // ?tab= param is consumed inside AgentDetail.
@@ -45,6 +71,9 @@ export function Component() {
     if (typeof window === 'undefined') return null;
     return new URLSearchParams(window.location.search).get('selected');
   });
+  const initialWorkspaceFile = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('file');
   const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [newBtnHover, setNewBtnHover] = useState(false);
@@ -248,8 +277,16 @@ export function Component() {
         )}
         {activeTab === 'council' && <CouncilTab agents={agents} />}
         {activeTab === 'workboard' && <WorkboardTab agents={agents} />}
+        {activeTab === 'memory' && <DreamsTab agents={agents} />}
         {activeTab === 'conversations' && <AgentConversations agents={agents} />}
-        {activeTab === 'workspaces' && <AgentWorkspaces agents={agents} isMobile={isMobile} initialAgentId={selectedAgentId} />}
+        {activeTab === 'workspaces' && (
+          <AgentWorkspaces
+            agents={agents}
+            isMobile={isMobile}
+            initialAgentId={selectedAgentId}
+            initialFilePath={initialWorkspaceFile}
+          />
+        )}
         {activeTab === 'fleet' && (
           <FleetTab
             agents={agents}

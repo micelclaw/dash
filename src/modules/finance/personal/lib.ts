@@ -80,7 +80,7 @@ export function movementFace(tx: FinanceTransaction, accounts: FinanceAccount[])
   // En una transferencia el dinero SALE de la cuenta con `credit` (origen) y
   // ENTRA en la del `debit` (destino). Solo se calcula cuando hay dos cuentas
   // del usuario; si no se resuelven ambos lados, se dejan undefined y el
-  // consumidor recae en el texto "Transferencia".
+  // consumidor recae en el texto "Transfer".
   let transferFrom: string | undefined;
   let transferTo: string | undefined;
   if (isTransfer) {

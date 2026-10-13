@@ -10,12 +10,12 @@
  * https://micelclaw.com
  */
 
-import { useMemo, useState, useRef, useEffect } from 'react';
+import { EntitySource } from '@/components/shared/SourceBadge';
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react';
 import {
   Pencil,
   Mail,
   Inbox,
-  Star,
   Clock,
   Send,
   FileText,
@@ -27,11 +27,17 @@ import {
   Unplug,
   Palette,
   Download,
+  Folder,
+  Tag,
 } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import type { SystemFolderCount, CustomFolderCount, MailLabelCount } from './hooks/use-mail-folders';
 import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
 import { MailSidebarItem } from './MailSidebarItem';
-import type { EmailAccount, Email } from './types';
+import type { EmailAccount } from './types';
+import { ConnectButton } from '@/components/shared/ConnectButton';
+import { api } from '@/services/api';
+import { toast } from 'sonner';
 
 const ACCOUNT_COLORS: Array<{ value: string; name: string }> = [
   { value: '#d4a017', name: 'Gold' },
@@ -46,7 +52,14 @@ const ACCOUNT_COLORS: Array<{ value: string; name: string }> = [
   { value: '#F59E0B', name: 'Amber' },
 ];
 
-// Persist renames in localStorage so they survive page reloads
+// ─── El nombre que le pones a una cuenta ────────────────────────────────────
+//
+// Vivía SOLO en el localStorage de este navegador: renombrar la cuenta aquí no
+// lo veía ni el móvil, ni la tarjeta de Ajustes, ni un agente — y al vaciar la
+// caché desaparecía. Ahora el nombre se guarda en la cuenta (`PATCH
+// /email-accounts/:id`) y esta lectura del localStorage se conserva solo para
+// no perder los nombres que ya hubiera puestos antes: al renombrar de nuevo,
+// suben al servidor y la entrada local se retira.
 const RENAME_KEY = 'claw:mail:account-names';
 function loadRenames(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem(RENAME_KEY) || '{}'); } catch { return {}; }
@@ -58,22 +71,37 @@ function saveRenames(map: Record<string, string>) {
 interface MailSidebarProps {
   activeAccount: string | null;
   activeFolder: string;
+  /** La etiqueta seleccionada, si el usuario está mirando una en vez de una carpeta. */
+  activeLabel?: string | null;
   onAccountChange: (id: string | null) => void;
   onFolderChange: (folder: string) => void;
+  onLabelChange?: (label: string | null) => void;
   collapsed: boolean;
   onCompose: () => void;
   onSync?: () => void;
   syncing?: boolean;
   accounts: EmailAccount[];
-  emails: Email[];
   onUnsyncAccount?: (id: string) => void;
   onChangeAccountColor?: (id: string, color: string) => void;
   onExport?: (accountId: string | null, folders: string[]) => void;
+  /** Para releer las cuentas cuando el nombre cambia en el servidor. */
+  onAccountRenamed?: () => void;
+  // Las carpetas llegan de FUERA (las lee MailPage una sola vez).
+  //
+  // Antes esta barra las pedía ella misma, y cuando el menú «Mover a…» de la
+  // lista necesitó los mismos datos había dos opciones: pedirlos otra vez
+  // —dos peticiones y dos suscripciones al mismo evento— o subirlas a quien es
+  // dueño de la pantalla. Una sola lectura, un solo estado: lo que se ve en la
+  // barra es exactamente lo que se ofrece como destino.
+  systemFolders: SystemFolderCount[];
+  customFolders: CustomFolderCount[];
+  mailLabels: MailLabelCount[];
 }
 
 const FOLDERS = [
   { key: 'INBOX', label: 'Inbox', icon: Inbox },
-  { key: 'STARRED', label: 'Starred', icon: Star },
+  // Starred is NOT a folder: a starred message lives in Inbox or in Sent like any
+  // other. It is a toggle in the list toolbar, combinable with the active folder.
   { key: 'SNOOZED', label: 'Snoozed', icon: Clock },
   { key: 'SENT', label: 'Sent', icon: Send },
   { key: 'DRAFTS', label: 'Drafts', icon: FileText },
@@ -85,18 +113,24 @@ const FOLDERS = [
 export function MailSidebar({
   activeAccount,
   activeFolder,
+  activeLabel = null,
   onAccountChange,
   onFolderChange,
+  onLabelChange,
   collapsed,
   onCompose,
   onSync,
   syncing,
   accounts,
-  emails,
   onUnsyncAccount,
   onChangeAccountColor,
   onExport,
+  onAccountRenamed,
+  systemFolders,
+  customFolders,
+  mailLabels,
 }: MailSidebarProps) {
+
   // ─── Export modal state ───
   const [exportOpen, setExportOpen] = useState(false);
   const [exportFolders, setExportFolders] = useState<Set<string>>(new Set(['INBOX', 'SENT']));
@@ -135,16 +169,25 @@ export function MailSidebar({
 
   function commitRename() {
     if (!renamingId) return;
+    const id = renamingId;
     const trimmed = renameValue.trim();
+    setRenamingId(null);
+    if (!trimmed) return;
+
+    // El nombre viaja al servidor: es la cuenta la que se llama así, no este
+    // navegador. La entrada local se retira para que no siga ganando.
     const updated = { ...renames };
-    if (trimmed && trimmed !== accounts.find(a => a.id === renamingId)?.name) {
-      updated[renamingId] = trimmed;
-    } else {
-      delete updated[renamingId];
-    }
+    delete updated[id];
     setRenames(updated);
     saveRenames(updated);
-    setRenamingId(null);
+
+    if (trimmed === accounts.find((a) => a.id === id)?.name) return;
+    void api
+      .patch(`/email-accounts/${id}`, { name: trimmed })
+      .then(() => onAccountRenamed?.())
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'No se pudo renombrar la cuenta');
+      });
   }
 
   // ─── Color picker state ───
@@ -159,33 +202,88 @@ export function MailSidebar({
     ];
   }
 
-  const totalUnread = useMemo(
-    () => emails.filter((e) => !e.is_read && e.folder === 'INBOX').length,
-    [emails],
+  // Los números de «All» y de cada cuenta salen del SERVIDOR, no de contar la
+  // página cargada: con 50 correos en memoria y 1423 sin leer, la cuenta decía
+  // «23» mientras la Entrada decía 1423. Es el mismo fallo que el comentario de
+  // `folderUnread` (abajo) ya reconocía para las carpetas.
+  const entrada = useMemo(
+    () => systemFolders.find((f) => f.folder === 'INBOX'),
+    [systemFolders],
   );
+  const totalUnread = entrada?.unread ?? 0;
+  const totalEnEntrada = entrada?.total ?? 0;
 
-  const accountUnread = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const acc of accounts) {
-      map[acc.id] = emails.filter(
-        (e) => !e.is_read && e.folder === 'INBOX' && e.account_id === acc.id,
-      ).length;
+  const porCuenta = useMemo(() => {
+    const map: Record<string, { unread: number; total: number }> = {};
+    for (const fila of entrada?.by_account ?? []) {
+      if (fila.account_id) map[fila.account_id] = { unread: fila.unread, total: fila.total };
     }
     return map;
-  }, [emails, accounts]);
+  }, [entrada]);
+
+  // Counts come from the server (one grouped query). Counting over the loaded
+  // page never matched: `Archive` is stored as 'Archive' but the sidebar key is
+  // 'ARCHIVE', and anything outside the open folder was simply not in memory.
+  //
+  // Y son los de LA CUENTA ELEGIDA cuando hay una.
+  //
+  // Con tres cuentas conectadas, las siete carpetas enseñaban SIEMPRE el mismo
+  // número —el de todas las cuentas juntas— así que al elegir una cuenta la
+  // lista decía «1-50 de 211» y la Entrada seguía diciendo 2579: dos números
+  // sobre lo mismo, contradiciéndose en la misma pantalla. El reparto por cuenta
+  // ya venía en la misma respuesta del servidor (`by_account`, lo usa la fila de
+  // cada cuenta desde que se arregló ese mismo fallo ahí); aquí simplemente no
+  // se miraba. Las carpetas propias del proveedor y las etiquetas sí filtraban
+  // (ver `customByAccount`), lo que hacía la incoherencia más visible.
+  const cuentaDe = useCallback((row: SystemFolderCount, campo: 'unread' | 'total') => {
+    if (!activeAccount) return row[campo];
+    return (row.by_account ?? [])
+      .filter((r) => r.account_id === activeAccount)
+      .reduce((n, r) => n + r[campo], 0);
+  }, [activeAccount]);
 
   const folderUnread = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const folder of FOLDERS) {
-      map[folder.key] = emails.filter(
-        (e) =>
-          !e.is_read &&
-          e.folder === folder.key &&
-          (activeAccount ? e.account_id === activeAccount : true),
-      ).length;
-    }
+    for (const row of systemFolders) map[row.folder] = cuentaDe(row, 'unread');
+    // The sidebar key for Archive differs from the stored value.
+    map.ARCHIVE = map.Archive ?? 0;
     return map;
-  }, [emails, activeAccount]);
+  }, [systemFolders, cuentaDe]);
+
+  // Y los TOTALES, que el servidor ya mandaba en la misma respuesta y no se
+  // pintaban: con solo los no leídos, una carpeta con todo leído no enseñaba
+  // ningún número y parecía vacía.
+  const folderTotal = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const row of systemFolders) map[row.folder] = cuentaDe(row, 'total');
+    map.ARCHIVE = map.Archive ?? 0;
+    return map;
+  }, [systemFolders, cuentaDe]);
+
+  // The provider's own folders, grouped under the account they belong to.
+  const customByAccount = useMemo(() => {
+    const groups = new Map<string | null, typeof customFolders>();
+    for (const row of customFolders) {
+      if (activeAccount && row.account_id !== activeAccount) continue;
+      const list = groups.get(row.account_id) ?? [];
+      list.push(row);
+      groups.set(row.account_id, list);
+    }
+    return [...groups.entries()];
+  }, [customFolders, activeAccount]);
+
+  // Las etiquetas de Gmail, bajo la cuenta que las trajo. Mismo criterio que las
+  // carpetas del proveedor: solo se listan las que tienen correo.
+  const labelsByAccount = useMemo(() => {
+    const groups = new Map<string | null, typeof mailLabels>();
+    for (const row of mailLabels) {
+      if (activeAccount && row.account_id !== activeAccount) continue;
+      const list = groups.get(row.account_id) ?? [];
+      list.push(row);
+      groups.set(row.account_id, list);
+    }
+    return [...groups.entries()];
+  }, [mailLabels, activeAccount]);
 
   const composeButton = (
     <div style={{ display: 'flex', gap: 4 }}>
@@ -273,6 +371,7 @@ export function MailSidebar({
         icon={<Mail size={18} />}
         label="All"
         count={totalUnread}
+        total={totalEnEntrada}
         active={activeAccount === null}
         collapsed={collapsed}
         onClick={() => onAccountChange(null)}
@@ -334,10 +433,11 @@ export function MailSidebar({
               <ContextMenu key={acc.id} items={getAccountMenuItems(acc)} trigger={
                 <MailSidebarItem
                   icon={
-                    <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: acc.color, display: 'inline-block' }} />
+                    <EntitySource entity={acc} domain="mail" />
                   }
                   label={displayName}
-                  count={accountUnread[acc.id]}
+                  count={porCuenta[acc.id]?.unread}
+                  total={porCuenta[acc.id]?.total}
                   active={activeAccount === acc.id}
                   collapsed={collapsed}
                   onClick={() => onAccountChange(acc.id)}
@@ -375,12 +475,85 @@ export function MailSidebar({
               icon={<FolderIcon size={18} />}
               label={folder.label}
               count={folderUnread[folder.key]}
-              active={activeFolder === folder.key}
+              total={folderTotal[folder.key]}
+              active={!activeLabel && activeFolder === folder.key}
               collapsed={collapsed}
               onClick={() => onFolderChange(folder.key)}
             />
           );
         })}
+
+        {/* The provider's own folders, under the account they came from. If the
+            wizard let you tick 12 folders, all 12 have to be reachable. */}
+        {customByAccount.map(([accountId, folders]) => (
+          <div key={accountId ?? 'sin-cuenta'} style={{ marginTop: 8 }}>
+            {!collapsed && (
+              <div
+                style={{
+                  fontSize: '0.6875rem',
+                  fontFamily: 'var(--font-sans)',
+                  color: 'var(--text-muted)',
+                  padding: '4px 12px',
+                  marginBottom: 2,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={accounts.find((a) => a.id === accountId)?.email_address ?? undefined}
+              >
+                {accounts.find((a) => a.id === accountId)?.email_address ?? 'Other'}
+              </div>
+            )}
+            {folders.map((row) => (
+              <MailSidebarItem
+                key={`${accountId ?? 'x'}:${row.folder}`}
+                icon={<Folder size={18} />}
+                label={row.folder}
+                count={row.unread}
+                total={row.total}
+                active={!activeLabel && activeFolder === row.folder}
+                collapsed={collapsed}
+                onClick={() => onFolderChange(row.folder)}
+              />
+            ))}
+          </div>
+        ))}
+
+        {/* Las etiquetas de Gmail. Una etiqueta atraviesa Entrada, Enviados y
+            Archivo, así que se muestra aparte de las carpetas y las excluye. */}
+        {labelsByAccount.map(([accountId, rows]) => (
+          <div key={`labels:${accountId ?? 'sin-cuenta'}`} style={{ marginTop: 8 }}>
+            {!collapsed && (
+              <div
+                style={{
+                  fontSize: '0.6875rem',
+                  fontFamily: 'var(--font-sans)',
+                  color: 'var(--text-muted)',
+                  padding: '4px 12px',
+                  marginBottom: 2,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={accounts.find((a) => a.id === accountId)?.email_address ?? undefined}
+              >
+                Labels · {accounts.find((a) => a.id === accountId)?.email_address ?? 'Other'}
+              </div>
+            )}
+            {rows.map((row) => (
+              <MailSidebarItem
+                key={`${accountId ?? 'x'}:label:${row.label}`}
+                icon={<Tag size={18} />}
+                label={row.label}
+                count={row.unread}
+                total={row.total}
+                active={activeLabel === row.label}
+                collapsed={collapsed}
+                onClick={() => onLabelChange?.(activeLabel === row.label ? null : row.label)}
+              />
+            ))}
+          </div>
+        ))}
       </div>
 
       {/* Export button */}
@@ -567,6 +740,10 @@ export function MailSidebar({
           </div>
         </>
       )}
+      {/* El mismo botón que llevan los otros ocho módulos: abre el asistente
+          saltándose la primera ventana, porque el tipo de dato ya lo dice el
+          sitio desde el que se pulsa. */}
+      <ConnectButton dataType="mail" />
     </nav>
   );
 }

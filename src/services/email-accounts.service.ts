@@ -65,8 +65,18 @@ export interface AccountTestResult {
 }
 
 /** Prueba REAL de la conexión: LOGIN + LIST contra IMAP y AUTH contra SMTP. */
-export async function testEmailAccount(id: string): Promise<AccountTestResult> {
-  const res = await api.post<{ data: AccountTestResult }>(`/email-accounts/${id}/test`);
+export async function testEmailAccount(
+  id: string,
+  // La casilla del certificado TAL COMO ESTÁ EN PANTALLA, sin haber guardado
+  // todavía: el endpoint la acepta en el cuerpo y, si no llega, la lee de la
+  // integración. Sin esto, marcar la casilla y pulsar «Probar» seguía probando
+  // con el valor viejo y el aspa roja no cambiaba.
+  opts?: { allowSelfSigned?: boolean },
+): Promise<AccountTestResult> {
+  const res = await api.post<{ data: AccountTestResult }>(
+    `/email-accounts/${id}/test`,
+    opts?.allowSelfSigned === true ? { allow_self_signed: true } : {},
+  );
   return res.data;
 }
 

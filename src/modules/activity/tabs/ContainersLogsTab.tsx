@@ -59,6 +59,9 @@ export function ContainersLogsTab(props: Props) {
       }
     }
     void load();
+    // El flag solo sirve si el unmount lo levanta: sin este cleanup el
+    // setServices llegaba igual tras desmontar (y `cancelled` era código muerto).
+    return () => { cancelled = true; };
   }, []);
 
   // Honour ?svc= on first paint.

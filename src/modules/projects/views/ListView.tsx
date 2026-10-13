@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, CheckSquare } from 'lucide-react';
 import { useProjectsStore } from '@/stores/projects.store';
@@ -362,7 +363,7 @@ function GroupRows({ group, showGroupHeader, collapsed, toggleGroup, columnMap, 
                   onDoubleClick={(e) => { e.stopPropagation(); startEdit(card.id, 'title', card.title); }}
                   style={{ color: 'var(--text)', fontWeight: 500 }}
                 >
-                  {card.title}
+                  <EntitySource entity={card} domain="tasks" size="xs" /> {card.title}
                   {checklist.length > 0 && (
                     <span style={{ marginLeft: 6, color: getChecklistProgressColor(checked, checklist.length), fontSize: 11 }}>
                       <CheckSquare size={10} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 2 }} />

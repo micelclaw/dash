@@ -11,7 +11,7 @@
  */
 
 // F2b — Resumen de Facturación (dashboard): 4 KPIs (Facturado / Cobrado /
-// Pendiente / Vencido, derivados de `documents`) + caja "Por cobrar" (facturas
+// Pendiente / Vencido, derivados de `documents`) + caja "Receivable" (facturas
 // sent/partial/overdue con su pendiente) + "Facturas recientes" con badge de
 // estado por color. Sin jerga contable. Molde visual = ResumenTab.tsx de F1.
 
@@ -80,7 +80,7 @@ function ChartCard({ title, subtitle, children, flex }: { title: string; subtitl
   );
 }
 
-function EmptyChart({ height = 200, label = 'Sin datos todavía.' }: { height?: number; label?: string }) {
+function EmptyChart({ height = 200, label = 'No data yet.' }: { height?: number; label?: string }) {
   return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
       {label}
@@ -94,7 +94,7 @@ function shortMonth(ym: string): string {
   if (!y || !m) return ym;
   const d = new Date(y, m - 1, 1);
   if (Number.isNaN(d.getTime())) return ym;
-  return new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(d).replace('.', '');
+  return new Intl.DateTimeFormat('en-GB', { month: 'short' }).format(d).replace('.', '');
 }
 
 // Etiqueta larga 'jun 2026' para tooltips.
@@ -103,7 +103,7 @@ function longMonth(ym: string): string {
   if (!y || !m) return ym;
   const d = new Date(y, m - 1, 1);
   if (Number.isNaN(d.getTime())) return ym;
-  return new Intl.DateTimeFormat('es-ES', { month: 'short', year: 'numeric' }).format(d).replace('.', '');
+  return new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' }).format(d).replace('.', '');
 }
 
 // € en el eje Y abreviado (sin decimales, pega el símbolo).
@@ -124,7 +124,7 @@ const BILLED_COLOR = 'var(--error)';          // gastos / facturas recibidas (ro
 function shortDay(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(d);
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(d);
 }
 // Etiqueta del bucket (mensual 'YYYY-MM' o diario 'YYYY-MM-DD') según su longitud.
 const bucketTick = (b: string) => (b.length === 7 ? shortMonth(b) : shortDay(b));
@@ -145,16 +145,16 @@ function InvoicingTooltip({ active, payload, label }: { active?: boolean; payloa
   return (
     <div style={{ padding: '8px 12px', background: 'var(--surface, #1a1a24)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', fontSize: 12, minWidth: 180 }}>
       <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>{label ? bucketLong(String(label)) : ''}</div>
-      <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 4 }}>Acumulado</div>
-      {row(INVOICED_COLOR, 'Facturado', get('cumInvoiced'))}
-      {row(COLLECTED_COLOR, 'Cobrado', get('cumCollected'))}
-      {row(PENDING_COLOR, 'Pendiente', get('cumPending'))}
+      <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 4 }}>Running total</div>
+      {row(INVOICED_COLOR, 'Invoiced', get('cumInvoiced'))}
+      {row(COLLECTED_COLOR, 'Collected', get('cumCollected'))}
+      {row(PENDING_COLOR, 'Pending', get('cumPending'))}
       {(inv > 0 || col > 0 || bil > 0) && (
-        <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 6 }}>En el periodo</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 6 }}>In the period</div>
       )}
-      {inv > 0 && row(INVOICED_COLOR, 'Facturado', inv)}
-      {col > 0 && row(COLLECTED_COLOR, 'Cobrado', col)}
-      {bil > 0 && row(BILLED_COLOR, 'Gastos', bil)}
+      {inv > 0 && row(INVOICED_COLOR, 'Invoiced', inv)}
+      {col > 0 && row(COLLECTED_COLOR, 'Collected', col)}
+      {bil > 0 && row(BILLED_COLOR, 'Expenses', bil)}
     </div>
   );
 }
@@ -171,7 +171,7 @@ function InvoicingChart({ series }: { series: InvoicingSeriesPoint[] }) {
     });
   }, [series]);
   const hasData = data.some((d) => d.invoiced > 0 || d.collected > 0 || d.billed > 0);
-  if (!hasData) return <EmptyChart label="Aún no hay facturas emitidas." />;
+  if (!hasData) return <EmptyChart label="No invoices issued yet." />;
   return (
     <ResponsiveContainer width="100%" height={240}>
       <ComposedChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 0 }} barGap={1} barCategoryGap="22%">
@@ -182,12 +182,12 @@ function InvoicingChart({ series }: { series: InvoicingSeriesPoint[] }) {
         {/* Eje derecho: barras del periodo (escala propia) */}
         <YAxis yAxisId="right" orientation="right" tickFormatter={moneyAxis} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={50} />
         <Tooltip content={<InvoicingTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
-        <Bar yAxisId="right" dataKey="invoiced" name="Facturado" fill={INVOICED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
-        <Bar yAxisId="right" dataKey="collected" name="Cobrado" fill={COLLECTED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
-        <Bar yAxisId="right" dataKey="billed" name="Gastos" fill={BILLED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
-        <Line yAxisId="left" type="monotone" dataKey="cumInvoiced" name="Facturado" stroke={INVOICED_COLOR} strokeWidth={2} dot={false} />
-        <Line yAxisId="left" type="monotone" dataKey="cumCollected" name="Cobrado" stroke={COLLECTED_COLOR} strokeWidth={2} dot={false} />
-        <Line yAxisId="left" type="monotone" dataKey="cumPending" name="Pendiente" stroke={PENDING_COLOR} strokeWidth={2} dot={false} />
+        <Bar yAxisId="right" dataKey="invoiced" name="Invoiced" fill={INVOICED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
+        <Bar yAxisId="right" dataKey="collected" name="Collected" fill={COLLECTED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
+        <Bar yAxisId="right" dataKey="billed" name="Expenses" fill={BILLED_COLOR} radius={[2, 2, 0, 0]} maxBarSize={16} />
+        <Line yAxisId="left" type="monotone" dataKey="cumInvoiced" name="Invoiced" stroke={INVOICED_COLOR} strokeWidth={2} dot={false} />
+        <Line yAxisId="left" type="monotone" dataKey="cumCollected" name="Collected" stroke={COLLECTED_COLOR} strokeWidth={2} dot={false} />
+        <Line yAxisId="left" type="monotone" dataKey="cumPending" name="Pending" stroke={PENDING_COLOR} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -199,17 +199,17 @@ interface AgingBucket { key: string; label: string; value: number; color: string
 function agingBuckets(summary: InvoicingSummary): AgingBucket[] {
   const a = summary.aging;
   return [
-    { key: 'current', label: 'Al día', value: Number(a.current), color: 'var(--success)' },
-    { key: 'd1_30', label: '≤30 días', value: Number(a.d1_30), color: 'var(--amber)' },
-    { key: 'd31_60', label: '31-60 días', value: Number(a.d31_60), color: 'var(--warning)' },
-    { key: 'd60_plus', label: '+60 días', value: Number(a.d60_plus), color: 'var(--error)' },
+    { key: 'current', label: 'Current', value: Number(a.current), color: 'var(--success)' },
+    { key: 'd1_30', label: '≤30 days', value: Number(a.d1_30), color: 'var(--amber)' },
+    { key: 'd31_60', label: '31-60 days', value: Number(a.d31_60), color: 'var(--warning)' },
+    { key: 'd60_plus', label: '+60 days', value: Number(a.d60_plus), color: 'var(--error)' },
   ];
 }
 
 function AgingChart({ summary }: { summary: InvoicingSummary }) {
   const buckets = useMemo(() => agingBuckets(summary), [summary]);
   const total = buckets.reduce((s, b) => s + b.value, 0);
-  if (total <= 0) return <EmptyChart height={160} label="Nada pendiente de cobro." />;
+  if (total <= 0) return <EmptyChart height={160} label="Nothing outstanding." />;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Barra apilada horizontal con los 4 tramos */}
@@ -247,7 +247,7 @@ function AgingChart({ summary }: { summary: InvoicingSummary }) {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, paddingTop: 2, borderTop: '1px solid var(--border)' }}>
-        <span style={{ color: 'var(--text-dim)' }}>Total pendiente</span>
+        <span style={{ color: 'var(--text-dim)' }}>Total outstanding</span>
         <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)', fontWeight: 600 }}>{fmtMoney(total)}</span>
       </div>
     </div>
@@ -259,10 +259,10 @@ function AgingChart({ summary }: { summary: InvoicingSummary }) {
 // tramos cada vez más rojos. Mismo molde visual que AgingChart de cobros.
 function apAgingBuckets(aging: ApAging): AgingBucket[] {
   return [
-    { key: 'current', label: 'Al día', value: Number(aging.current), color: 'var(--warning)' },
-    { key: 'd1_30', label: '≤30 días', value: Number(aging.d1_30), color: 'var(--amber)' },
-    { key: 'd31_60', label: '31-60 días', value: Number(aging.d31_60), color: 'var(--warning)' },
-    { key: 'd60_plus', label: '+60 días', value: Number(aging.d60_plus), color: 'var(--error)' },
+    { key: 'current', label: 'Current', value: Number(aging.current), color: 'var(--warning)' },
+    { key: 'd1_30', label: '≤30 days', value: Number(aging.d1_30), color: 'var(--amber)' },
+    { key: 'd31_60', label: '31-60 days', value: Number(aging.d31_60), color: 'var(--warning)' },
+    { key: 'd60_plus', label: '+60 days', value: Number(aging.d60_plus), color: 'var(--error)' },
   ];
 }
 
@@ -307,7 +307,7 @@ function ApAgingChart({ aging }: { aging: ApAging }) {
         })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, paddingTop: 2, borderTop: '1px solid var(--border)' }}>
-        <span style={{ color: 'var(--text-dim)' }}>Total por pagar</span>
+        <span style={{ color: 'var(--text-dim)' }}>Total payable</span>
         <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)', fontWeight: 600 }}>{fmtMoney(total)}</span>
       </div>
     </div>
@@ -317,7 +317,7 @@ function ApAgingChart({ aging }: { aging: ApAging }) {
 // (c) Top clientes — barras horizontales (facturado) + pendiente, clicable.
 function TopClientsChart({ rows, onOpen }: { rows: InvoicingTopClient[]; onOpen: (contactId: string) => void }) {
   const data = useMemo(() => rows.map((r) => ({ ...r, invoicedNum: Number(r.invoiced), outstandingNum: Number(r.outstanding) })), [rows]);
-  if (data.length === 0) return <EmptyChart height={160} label="Sin clientes facturados todavía." />;
+  if (data.length === 0) return <EmptyChart height={160} label="No invoiced customers yet." />;
   const max = Math.max(...data.map((d) => d.invoicedNum), 1);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -394,7 +394,7 @@ export function FacturacionResumenTab() {
   }, [fetchApAging, range.from, range.to]);
 
   // IVA a liquidar (Modelo 303): repercutido − soportado, en el periodo elegido
-  // (con "Personalizado" puedes acotar el trimestre fiscal real).
+  // (con "Custom" puedes acotar el trimestre fiscal real).
   useEffect(() => {
     let alive = true;
     void fetchVatReport({ from: range.from, to: range.to })
@@ -446,7 +446,7 @@ export function FacturacionResumenTab() {
   // Resultado del periodo: beneficio = facturado (ventas) − gastos (compras).
   const beneficio = facturado - gastos;
 
-  // "Por cobrar": facturas abiertas (enviadas / parciales / vencidas), las
+  // "Receivable": facturas abiertas (enviadas / parciales / vencidas), las
   // vencidas primero, luego por fecha de vencimiento más próxima.
   const porCobrar = invoices
     .filter((d) => pendienteStatuses.includes(d.status))
@@ -464,71 +464,71 @@ export function FacturacionResumenTab() {
     .sort((a, b) => (b.issue_date ?? '').localeCompare(a.issue_date ?? ''))
     .slice(0, 8);
 
-  const labelFor = (d: FinanceDoc) => d.number ?? 'Sin número';
+  const labelFor = (d: FinanceDoc) => d.number ?? 'No number';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Facturado" emoji="🧾" value={fmtMoney(facturado)} hint="facturas emitidas" accent="var(--amber)" />
-        <Kpi label="Cobrado" emoji="💰" value={fmtMoney(cobrado)} hint="facturas pagadas" accent="var(--mod-finance)" />
-        <Kpi label="Pendiente" emoji="⏳" value={fmtMoney(pendiente)} hint="por cobrar" accent="var(--info)" muted={pendiente <= 0} />
-        <Kpi label="Vencido" emoji="⚠️" value={fmtMoney(vencido)} hint="fuera de plazo" accent="var(--error)" muted={vencido <= 0} />
+        <Kpi label="Invoiced" emoji="🧾" value={fmtMoney(facturado)} hint="invoices issued" accent="var(--amber)" />
+        <Kpi label="Collected" emoji="💰" value={fmtMoney(cobrado)} hint="invoices paid" accent="var(--mod-finance)" />
+        <Kpi label="Pending" emoji="⏳" value={fmtMoney(pendiente)} hint="receivable" accent="var(--info)" muted={pendiente <= 0} />
+        <Kpi label="Overdue" emoji="⚠️" value={fmtMoney(vencido)} hint="past due" accent="var(--error)" muted={vencido <= 0} />
       </div>
 
       {/* KPIs de COMPRAS (facturas recibidas) — acentos rojos/naranjas. */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Gastos" emoji="🧾" value={fmtMoney(gastos)} hint="facturas recibidas" accent="var(--error)" muted={gastos <= 0} />
-        <Kpi label="Pagado" emoji="💸" value={fmtMoney(pagado)} hint="facturas saldadas" accent="var(--amber)" muted={pagado <= 0} />
-        <Kpi label="Por pagar" emoji="⏳" value={fmtMoney(porPagar)} hint="pendiente de pago" accent="var(--warning)" muted={porPagar <= 0} />
-        <Kpi label="Vencido a pagar" emoji="⚠️" value={fmtMoney(vencidoPagar)} hint="fuera de plazo" accent="var(--error)" muted={vencidoPagar <= 0} />
+        <Kpi label="Expenses" emoji="🧾" value={fmtMoney(gastos)} hint="invoices received" accent="var(--error)" muted={gastos <= 0} />
+        <Kpi label="Paid" emoji="💸" value={fmtMoney(pagado)} hint="invoices settled" accent="var(--amber)" muted={pagado <= 0} />
+        <Kpi label="To pay" emoji="⏳" value={fmtMoney(porPagar)} hint="awaiting payment" accent="var(--warning)" muted={porPagar <= 0} />
+        <Kpi label="Overdue to pay" emoji="⚠️" value={fmtMoney(vencidoPagar)} hint="past due" accent="var(--error)" muted={vencidoPagar <= 0} />
       </div>
 
-      {/* Resultado del periodo: beneficio (ventas − gastos) + IVA a liquidar (303). */}
+      {/* Resultado del periodo: beneficio (ventas − gastos) + VAT to settle (303). */}
       <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'stretch' }}>
           <div style={{ flex: '1 1 200px', minWidth: 180 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Resultado del periodo</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>Result for the period</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: beneficio >= 0 ? 'var(--mod-finance)' : 'var(--error)', fontFamily: 'var(--font-mono, monospace)', marginTop: 4 }}>
               {fmtMoney(beneficio)}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {fmtMoney(facturado)} facturado − {fmtMoney(gastos)} gastos
+              {fmtMoney(facturado)} invoiced − {fmtMoney(gastos)} expenses
             </div>
           </div>
           <div style={{ flex: '1 1 200px', minWidth: 180, borderLeft: '1px solid var(--border)', paddingLeft: 16 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>IVA a liquidar (303) · {title}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>VAT to settle (303) · {title}</div>
             {vat ? (
               <>
                 <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--font-mono, monospace)', marginTop: 4 }}>
                   {fmtMoney(vat.to_settle)}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                  repercutido {fmtMoney(vat.output)} − soportado {fmtMoney(vat.input)} = {fmtMoney(vat.to_settle)}
+                  charged {fmtMoney(vat.output)} − paid {fmtMoney(vat.input)} = {fmtMoney(vat.to_settle)}
                 </div>
               </>
             ) : (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>Sin datos de IVA todavía.</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>No VAT data yet.</div>
             )}
           </div>
         </div>
       </div>
 
       {/* Rótulo de la zona de gráficas (el selector de periodo vive en el header). */}
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Gráficas · {title}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Charts · {title}</div>
 
       {/* Gráficas: facturación unificada (líneas+barras) + aging + top clientes */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <ChartCard title={`Facturación · ${title}`} subtitle="acumulado + por periodo" flex="2 1 380px">
+        <ChartCard title={`Invoicing · ${title}`} subtitle="cumulative + by period" flex="2 1 380px">
           <InvoicingChart series={series} />
         </ChartCard>
         {invoicing && (
-          <ChartCard title="Antigüedad de cobros" subtitle="saldo pendiente" flex="1 1 320px">
+          <ChartCard title="Receivables ageing" subtitle="outstanding balance" flex="1 1 320px">
             <AgingChart summary={invoicing} />
           </ChartCard>
         )}
         {apAging && (
-          <ChartCard title="Antigüedad de pagos" subtitle="pendiente de pagar a proveedores" flex="1 1 320px">
+          <ChartCard title="Payables ageing" subtitle="outstanding to suppliers" flex="1 1 320px">
             <ApAgingChart aging={apAging} />
           </ChartCard>
         )}
@@ -538,7 +538,7 @@ export function FacturacionResumenTab() {
           No se pudieron cargar las gráficas de facturación.
         </div>
       ) : invoicing ? (
-        <ChartCard title="Top clientes" subtitle="por facturado" flex="1 1 100%">
+        <ChartCard title="Top customers" subtitle="of invoiced" flex="1 1 100%">
           <TopClientsChart rows={invoicing.top_clients} onOpen={openContact} />
         </ChartCard>
       ) : null}
@@ -546,8 +546,8 @@ export function FacturacionResumenTab() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* Por cobrar */}
         <div style={{ flex: '1 1 320px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Por cobrar</div>
-          {porCobrar.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nada pendiente de cobro.</div>}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Receivable</div>
+          {porCobrar.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Nothing outstanding.</div>}
           {porCobrar.map((d) => (
             <div key={d.id} {...rowInteractive(d.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 10, cursor: 'pointer', borderRadius: 4 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
@@ -564,8 +564,8 @@ export function FacturacionResumenTab() {
 
         {/* Facturas recientes */}
         <div style={{ flex: '2 1 400px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Documentos recientes</div>
-          {recientes.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sin documentos todavía. Crea uno con “+ Factura”.</div>}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Recent documents</div>
+          {recientes.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No documents yet. Create one with “+ Invoice”.</div>}
           {recientes.map((d) => (
             <div key={d.id} {...rowInteractive(d.id)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 4px', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 10, cursor: 'pointer', borderRadius: 4 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

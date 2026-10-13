@@ -19,6 +19,7 @@ import { SEARCHABLE_DOMAINS } from '@/config/search-domains';
 import { SearchResultsList } from './SearchResultsList';
 import { SearchDiscover } from './SearchDiscover';
 import { RankingPanel } from './RankingPanel';
+import { readSearchRouteState } from './search-route-state';
 
 export function Component() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,12 +36,16 @@ export function Component() {
   const loading = useSearchStore(s => s.loading);
   const results = useSearchStore(s => s.results);
   const error = useSearchStore(s => s.error);
-  // Sync query param → store on mount (la búsqueda la dispara el debounce de abajo)
+  // The URL owns deep-links from Drive. Apply both q and domains on mount and
+  // navigation so a persisted Zustand session cannot widen a file-only search.
+  const routeStateKey = searchParams.toString();
   useEffect(() => {
-    const q = searchParams.get('q');
-    if (q && q !== query) setQuery(q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const next = readSearchRouteState(searchParams);
+    setQuery(next.query);
+    setDomains(next.domains);
+  // URL changes, not local filter edits, own deep-link hydration.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeStateKey]);
 
   // Búsqueda EN VIVO con debounce: al teclear o cambiar los filtros de dominio,
   // busca sola tras 350ms (antes solo con Enter → parecía "no busca"). El
@@ -58,7 +63,10 @@ export function Component() {
 
   const handleSearch = useCallback(() => {
     if (!query.trim()) return;
-    setSearchParams({ q: query }, { replace: true });
+    const next = new URLSearchParams();
+    next.set('q', query);
+    if (domains.length) next.set('domains', domains.join(','));
+    setSearchParams(next, { replace: true });
     searchAdvanced();
   }, [query, searchAdvanced, setSearchParams]);
 

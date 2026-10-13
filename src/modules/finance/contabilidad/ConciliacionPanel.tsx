@@ -66,7 +66,7 @@ export function ConciliacionPanel() {
   const run = async (fn: () => Promise<unknown>, okMsg?: string) => {
     setBusy(true);
     try { await fn(); if (okMsg) toast.success(okMsg); await reload(); }
-    catch { toast.error('Operación no completada'); } finally { setBusy(false); }
+    catch { toast.error('Operation not completed'); } finally { setBusy(false); }
   };
   const addLine = () => {
     const amt = Number(String(nl.amount).replace(',', '.'));
@@ -79,12 +79,12 @@ export function ConciliacionPanel() {
       {/* Cuenta + resumen */}
       <div style={{ ...card, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Cuenta</span>
+          <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Account</span>
           <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={{ ...inp, minWidth: 220 }}>
             {accounts.length === 0 && <option value="">— sin cuentas de banco/caja —</option>}
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.code ? `${a.code} · ` : ''}{a.name}</option>)}
           </select>
-          <button type="button" disabled={busy || !accountId} onClick={() => void run(() => api.post(`/finance/reconciliation/${accountId}/auto-match`, {}), 'Auto-conciliación aplicada')} style={{ ...btn(), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" disabled={busy || !accountId} onClick={() => void run(() => api.post(`/finance/reconciliation/${accountId}/auto-match`, {}), 'Auto-reconciliation applied')} style={{ ...btn(), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {busy ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Wand2 size={13} />} Auto-conciliar
           </button>
           <button type="button" disabled={!accountId} onClick={() => setImporting(true)} style={{ ...btn(), display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -103,34 +103,34 @@ export function ConciliacionPanel() {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input type="date" value={nl.date} onChange={(e) => setNl({ ...nl, date: e.target.value })} style={inp} />
           <input type="number" step="0.01" placeholder="Importe (+/−)" value={nl.amount} onChange={(e) => setNl({ ...nl, amount: e.target.value })} style={{ ...inp, width: 130 }} />
-          <input placeholder="Descripción" value={nl.description} onChange={(e) => setNl({ ...nl, description: e.target.value })} style={{ ...inp, flex: 1, minWidth: 160 }} />
-          <button type="button" disabled={busy || !accountId} onClick={addLine} style={btn()}>Añadir línea</button>
+          <input placeholder="Description" value={nl.description} onChange={(e) => setNl({ ...nl, description: e.target.value })} style={{ ...inp, flex: 1, minWidth: 160 }} />
+          <button type="button" disabled={busy || !accountId} onClick={addLine} style={btn()}>Add line</button>
         </div>
       </div>
 
       {/* Líneas del extracto */}
       <div style={card}>
-        <div style={sectionTitle}>EXTRACTO BANCARIO</div>
+        <div style={sectionTitle}>BANK STATEMENT</div>
         <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-          <thead><tr><th style={th}>Fecha</th><th style={th}>Descripción</th><th style={{ ...th, textAlign: 'right' }}>Importe</th><th style={th}>Estado</th><th style={{ ...th, textAlign: 'right' }}>Acción</th></tr></thead>
+          <thead><tr><th style={th}>Date</th><th style={th}>Description</th><th style={{ ...th, textAlign: 'right' }}>Amount</th><th style={th}>Status</th><th style={{ ...th, textAlign: 'right' }}>Action</th></tr></thead>
           <tbody>
             {lines.map((l) => (
               <tr key={l.id}>
                 <td style={{ ...td, whiteSpace: 'nowrap', color: 'var(--text-dim)' }}>{l.date}</td>
                 <td style={td}>{l.description ?? '—'}</td>
                 <td style={{ ...tdR, color: Number(l.amount) < 0 ? 'var(--red)' : 'var(--green)' }}>{fmt(l.amount)}</td>
-                <td style={td}>{l.status === 'reconciled' ? <span style={{ color: 'var(--green)', fontSize: 12, fontWeight: 600 }}>Conciliada</span> : <span style={{ color: 'var(--amber)', fontSize: 12, fontWeight: 600 }}>Pendiente</span>}</td>
+                <td style={td}>{l.status === 'reconciled' ? <span style={{ color: 'var(--green)', fontSize: 12, fontWeight: 600 }}>Reconciled</span> : <span style={{ color: 'var(--amber)', fontSize: 12, fontWeight: 600 }}>Pending</span>}</td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   {l.status === 'reconciled' ? (
-                    <button type="button" disabled={busy} onClick={() => void run(() => api.post(`/finance/reconciliation/lines/${l.id}/unreconcile`, {}))} style={btn()}>Desconciliar</button>
+                    <button type="button" disabled={busy} onClick={() => void run(() => api.post(`/finance/reconciliation/lines/${l.id}/unreconcile`, {}))} style={btn()}>Unreconcile</button>
                   ) : (
                     <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                      <select defaultValue="" disabled={busy} onChange={(e) => { if (e.target.value) void run(() => api.post(`/finance/reconciliation/lines/${l.id}/reconcile`, { posting_id: e.target.value }), 'Conciliada'); }} style={{ ...inp, maxWidth: 220 }}>
-                        <option value="">Conciliar con apunte…</option>
+                      <select defaultValue="" disabled={busy} onChange={(e) => { if (e.target.value) void run(() => api.post(`/finance/reconciliation/lines/${l.id}/reconcile`, { posting_id: e.target.value }), 'Reconciled'); }} style={{ ...inp, maxWidth: 220 }}>
+                        <option value="">Reconcile with posting…</option>
                         {postings.map((p) => <option key={p.posting_id} value={p.posting_id}>{p.date} · {fmt(p.amount)} · {(p.description ?? '').slice(0, 24)}</option>)}
                       </select>
-                      <button type="button" disabled={busy} onClick={() => void run(() => api.post(`/finance/reconciliation/lines/${l.id}/create-movement`, {}), 'Movimiento creado y conciliado')} style={btn(true)}>Crear movimiento</button>
+                      <button type="button" disabled={busy} onClick={() => void run(() => api.post(`/finance/reconciliation/lines/${l.id}/create-movement`, {}), 'Movement created and reconciled')} style={btn(true)}>Create movement</button>
                     </span>
                   )}
                 </td>

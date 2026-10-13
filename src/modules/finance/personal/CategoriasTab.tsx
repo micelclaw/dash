@@ -68,20 +68,20 @@ function InlineForm({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = name.trim();
-    if (!n) { toast.error('Pon un nombre'); return; }
+    if (!n) { toast.error('Enter a name'); return; }
     setBusy(true);
     try {
       if (isEdit) {
         await updateCategory(editing!.id, { name: n, icon: emoji || null, color: color || null });
-        toast.success('Categoría actualizada');
+        toast.success('Category updated');
       } else {
         await createCategory({ name: n, kind, icon: emoji || undefined, color });
-        toast.success('Categoría creada');
+        toast.success('Category created');
       }
       onSaved();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : isEdit ? 'No se pudo guardar' : 'No se pudo crear');
+      toast.error(err instanceof Error ? err.message : isEdit ? 'Couldn\'t save' : 'Couldn\'t create');
     } finally { setBusy(false); }
   };
 
@@ -97,16 +97,16 @@ function InlineForm({
     >
       {/* Preview en vivo */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <CategoryPill cat={{ id: '_preview', name: name.trim() || (isEdit ? 'Categoría' : 'Nueva categoría'), kind, parent_id: null, color, icon: emoji }} />
-        <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 2 }} aria-label="Cancelar">
+        <CategoryPill cat={{ id: '_preview', name: name.trim() || (isEdit ? 'Category' : 'New category'), kind, parent_id: null, color, icon: emoji }} />
+        <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 2 }} aria-label="Cancel">
           <X size={15} />
         </button>
       </div>
 
       <div>
-        <label style={fieldLabel}>Nombre</label>
+        <label style={fieldLabel}>Name</label>
         <input
-          autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'income' ? 'p.ej. Nómina' : 'p.ej. Supermercado'}
+          autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'income' ? 'e.g. Salary' : 'p.ej. Supermercado'}
           style={{ width: '100%', padding: '7px 9px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13, boxSizing: 'border-box' }}
         />
       </div>
@@ -143,9 +143,9 @@ function InlineForm({
       </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" onClick={onClose} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+        <button type="button" onClick={onClose} style={{ padding: '7px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
         <button type="submit" disabled={busy} style={{ padding: '7px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
-          {busy ? (isEdit ? 'Guardando…' : 'Creando…') : (isEdit ? 'Guardar' : 'Crear')}
+          {busy ? (isEdit ? 'Guardando…' : 'Creando…') : (isEdit ? 'Save' : 'Create')}
         </button>
       </div>
     </form>
@@ -193,11 +193,11 @@ function Section({
     setBusyId(cat.id);
     try {
       await deleteCategory(cat.id);
-      toast.success('Categoría borrada');
+      toast.success('Category deleted');
       if (editingId === cat.id) setEditingId(null);
       onMutated();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo borrar');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t delete');
     } finally { setBusyId(null); }
   };
 
@@ -225,7 +225,7 @@ function Section({
       </div>
 
       <div style={{ padding: 14 }}>
-        {list.length === 0 && !adding && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sin categorías todavía.</div>}
+        {list.length === 0 && !adding && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No categories yet.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {list.map((c) => {
             const children = categories.filter((ch) => ch.parent_id === c.id);
@@ -239,7 +239,7 @@ function Section({
                   <CategoryTotal kind={kind} total={totals.get(c.id)} />
                   <div style={{ flex: 1 }} />
                   <button
-                    type="button" onClick={() => startEdit(c.id)} disabled={busy} title="Editar" aria-label={`Editar ${c.name}`}
+                    type="button" onClick={() => startEdit(c.id)} disabled={busy} title="Edit" aria-label={`Editar ${c.name}`}
                     style={{ ...iconBtn, color: editingId === c.id ? accent : 'var(--text-muted)' }}
                   >
                     <Pencil size={14} />
@@ -296,8 +296,8 @@ export function CategoriasTab() {
 
   return (
     <div style={{ display: 'flex', gap: 16, padding: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <Section kind="expense" title="Gasto" accent="var(--error)" Icon={TrendingDown} totals={expenseTotals} onMutated={loadTotals} />
-      <Section kind="income" title="Ingreso" accent="var(--mod-finance)" Icon={TrendingUp} totals={incomeTotals} onMutated={loadTotals} />
+      <Section kind="expense" title="Expense" accent="var(--error)" Icon={TrendingDown} totals={expenseTotals} onMutated={loadTotals} />
+      <Section kind="income" title="Income" accent="var(--mod-finance)" Icon={TrendingUp} totals={incomeTotals} onMutated={loadTotals} />
     </div>
   );
 }

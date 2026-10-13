@@ -17,6 +17,7 @@
  * All responses are snake_case on the wire (case-transform plugin in Core).
  */
 
+import type { OriginEntity } from '@/types/origins';
 import { api } from '@/services/api';
 import { useAuthStore } from '@/stores/auth.store';
 
@@ -37,7 +38,7 @@ export interface MusicStatus {
   running: boolean;
 }
 
-export interface AlbumSummary {
+export interface AlbumSummary extends OriginEntity {
   id: string;
   name: string;
   artist: string;
@@ -48,7 +49,7 @@ export interface AlbumSummary {
   year?: number;
 }
 
-export interface Track {
+export interface Track extends OriginEntity {
   id: string;
   title: string;
   album: string;
@@ -61,14 +62,14 @@ export interface Track {
   starred?: boolean;
 }
 
-export interface ArtistSummary {
+export interface ArtistSummary extends OriginEntity {
   id: string;
   name: string;
   cover_art?: string;
   album_count?: number;
 }
 
-export interface Playlist {
+export interface Playlist extends OriginEntity {
   id: string;
   name: string;
   song_count: number;

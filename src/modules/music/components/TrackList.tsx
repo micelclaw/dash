@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect, useState } from 'react';
 import {
   Heart, ListEnd, ListPlus, ListStart, MoreVertical, Music, Play,
@@ -138,6 +139,7 @@ export function TrackList({ tracks, onRemoveFromPlaylist }: TrackListProps) {
               <Heart size={15} fill={track.starred ? 'currentColor' : 'none'} />
             </button>
 
+            <EntitySource entity={track} domain="music" native />
             {/* Duration */}
             <span style={{
               fontSize: '0.8125rem', color: 'var(--text-muted)',

@@ -10,12 +10,18 @@
  * https://micelclaw.com
  */
 
-import { useMemo } from 'react';
-import { Mail } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Mail, ChevronDown, ChevronRight } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { MailListToolbar } from './MailListToolbar';
-import { MailListItem } from './MailListItem';
-import type { Email } from './types';
+import type { MoveTarget } from './lib/move-targets';
+import type { MailActionKey } from './lib/mail-actions';
+import { MailListItem, MAIL_ROW_MIN_HEIGHT, UNREAD_STRIPE_PX } from './MailListItem';
+import { groupEmailsByDate, readCollapsedGroups, writeCollapsedGroups } from './lib/mail-grouping';
+import type { Email, MailSortField, MailSortOrder } from './types';
+
+/** Sentinel for the ungrouped list: renders the rows with no header at all. */
+const FLAT_GROUP_KEY = '__flat__';
 
 interface MailListProps {
   emails: Email[];
@@ -30,20 +36,26 @@ interface MailListProps {
   search: string;
   onSearchChange: (val: string) => void;
   onRefresh: () => void;
-  onArchive: (id: string) => void;
-  onDelete: (id: string) => void;
-  onSnooze: (id: string, el: HTMLElement) => void;
-  onToggleStar: (id: string) => void;
-  onMarkRead?: (id: string) => void;
-  onMarkUnread?: (id: string) => void;
-  onMoveToFolder?: (id: string, folder: string) => void;
-  onBatchRead: () => void;
-  onBatchUnread: () => void;
-  onBatchArchive: () => void;
-  onBatchDelete: () => void;
-  onRestore?: (id: string) => void;
+  /** A dónde se puede mover (submenú «Move to…»). */
+  /** Los destinos de «Mover a…» de UNA cuenta (cada correo recibe los suyos). */
+  /** La ÚNICA vía de acción: la comparten la fila, su menú y la barra de arriba. */
+  onAction?: (
+    key: MailActionKey,
+    ids: string[],
+    params?: { folder?: string; label?: string; el?: HTMLElement },
+  ) => void;
+  /** ¿Están todos los seleccionados destacados? Decide destacar vs quitar. */
+  allSelectedStarred?: boolean;
+  moveTargetsFor?: (accountId: string | null) => MoveTarget[];
   activeFolder?: string;
   accounts: { id: string; color: string }[];
+  // Sorting
+  sortField: MailSortField;
+  sortOrder: MailSortOrder;
+  onSortChange: (field: MailSortField, order: MailSortOrder) => void;
+  // Starred filter
+  starredOnly: boolean;
+  onToggleStarredOnly: () => void;
   // Pagination
   page: number;
   pageSize: number;
@@ -86,9 +98,12 @@ function SkeletonRow() {
         flexDirection: 'column',
         gap: 6,
         padding: '8px 12px',
-        height: 68,
+        height: MAIL_ROW_MIN_HEIGHT,
         boxSizing: 'border-box',
         borderBottom: '1px solid var(--border)',
+        // El mismo hueco que reserva la franja de «sin leer» en la fila real: sin
+        // esto, al llegar los correos la lista se desplaza cinco píxeles.
+        borderLeft: `${UNREAD_STRIPE_PX}px solid transparent`,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -96,14 +111,77 @@ function SkeletonRow() {
         <div style={barStyle('30%', 12)} />
         <div style={{ marginLeft: 'auto', ...barStyle('50px', 10) }} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, paddingLeft: 20 }}>
+      <div style={{ paddingLeft: 20 }}>
         <div style={barStyle('70%', 12)} />
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 20 }}>
-        <div style={barStyle('40px', 10)} />
-        <div style={barStyle('50px', 10)} />
+      <div style={{ paddingLeft: 20 }}>
+        <div style={barStyle('85%', 12)} />
       </div>
     </div>
+  );
+}
+
+function GroupHeader({
+  groupKey,
+  label,
+  count,
+  collapsed,
+  onToggle,
+}: {
+  groupKey: string;
+  label: string;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const Chevron = collapsed ? ChevronRight : ChevronDown;
+
+  return (
+    <button
+      onClick={onToggle}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      aria-expanded={!collapsed}
+      // Anclaje estable para las pruebas: `aria-expanded` a secas también casa
+      // con el menú de usuario del pie y con cualquier desplegable de la página.
+      data-mail-group={groupKey}
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 5,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        width: '100%',
+        padding: '6px 12px',
+        border: 'none',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)',
+        color: 'var(--amber)',
+        fontSize: '0.75rem',
+        fontFamily: 'var(--font-sans)',
+        fontWeight: 600,
+        textAlign: 'left',
+        cursor: 'pointer',
+        boxSizing: 'border-box',
+      }}
+    >
+      <Chevron size={14} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flexShrink: 0,
+          fontFamily: 'var(--font-mono)',
+          fontWeight: 400,
+          color: hovered ? 'var(--text-dim)' : 'var(--text-muted)',
+        }}
+      >
+        {count}
+      </span>
+    </button>
   );
 }
 
@@ -120,20 +198,16 @@ export function MailList({
   search,
   onSearchChange,
   onRefresh,
-  onArchive,
-  onDelete,
-  onSnooze,
-  onToggleStar,
-  onMarkRead,
-  onMarkUnread,
-  onMoveToFolder,
-  onBatchRead,
-  onBatchUnread,
-  onBatchArchive,
-  onBatchDelete,
-  onRestore,
+  onAction,
+  allSelectedStarred,
+  moveTargetsFor,
   activeFolder,
   accounts,
+  sortField,
+  sortOrder,
+  onSortChange,
+  starredOnly,
+  onToggleStarredOnly,
   page,
   pageSize,
   total,
@@ -150,6 +224,37 @@ export function MailList({
     }
     return map;
   }, [accounts]);
+
+  // Grouping only makes sense while the list is in date order. Sorted by sender,
+  // day buckets would be single-item headers scattered through the list.
+  const grouped = sortField === 'received_at';
+
+  const groups = useMemo(
+    () => (grouped ? groupEmailsByDate(emails) : [{ key: FLAT_GROUP_KEY, label: '', emails }]),
+    [grouped, emails],
+  );
+
+  const folderKey = activeFolder ?? 'INBOX';
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() =>
+    readCollapsedGroups(folderKey),
+  );
+
+  useEffect(() => {
+    setCollapsedGroups(readCollapsedGroups(folderKey));
+  }, [folderKey]);
+
+  const toggleGroup = useCallback(
+    (key: string) => {
+      setCollapsedGroups((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        writeCollapsedGroups(folderKey, next);
+        return next;
+      });
+    },
+    [folderKey],
+  );
 
   return (
     <div
@@ -169,10 +274,16 @@ export function MailList({
         onSearchChange={onSearchChange}
         onRefresh={onRefresh}
         selectedCount={selectedIds.size}
-        onBatchRead={onBatchRead}
-        onBatchUnread={onBatchUnread}
-        onBatchArchive={onBatchArchive}
-        onBatchDelete={onBatchDelete}
+        onAction={onAction}
+        selectedIdList={[...selectedIds]}
+        allSelectedStarred={allSelectedStarred}
+        activeFolder={activeFolder}
+        moveTargets={moveTargetsFor?.(null)}
+        sortField={sortField}
+        sortOrder={sortOrder}
+        onSortChange={onSortChange}
+        starredOnly={starredOnly}
+        onToggleStarredOnly={onToggleStarredOnly}
         page={page}
         pageSize={pageSize}
         total={total}
@@ -242,31 +353,40 @@ export function MailList({
             description="Try a different filter or folder"
           />
         ) : (
-          emails.map((email) => (
-            <MailListItem
-              key={email.id}
-              email={email}
-              selected={selectedIds.has(email.id)}
-              active={email.id === selectedEmailId}
-              onSelect={(shiftKey) => onToggleSelection(email.id, shiftKey)}
-              onClick={() => onSelectEmail(email.id)}
-              accountColor={email.account_id ? accountColorMap.get(email.account_id) : undefined}
-              onArchive={() => onArchive(email.id)}
-              onDelete={() => onDelete(email.id)}
-              onSnooze={(el) => onSnooze(email.id, el)}
-              onToggleStar={() => onToggleStar(email.id)}
-              onMarkRead={onMarkRead ? () => onMarkRead(email.id) : undefined}
-              onMarkUnread={onMarkUnread ? () => onMarkUnread(email.id) : undefined}
-              onMoveToFolder={onMoveToFolder ? (folder) => onMoveToFolder(email.id, folder) : undefined}
-              onRestore={onRestore ? () => onRestore(email.id) : undefined}
-              activeFolder={activeFolder}
-              selectedCount={selectedIds.size}
-              onBatchRead={onBatchRead}
-              onBatchUnread={onBatchUnread}
-              onBatchArchive={onBatchArchive}
-              onBatchDelete={onBatchDelete}
-            />
-          ))
+          groups.map((group) => {
+            const collapsed = group.key !== FLAT_GROUP_KEY && collapsedGroups.has(group.key);
+            return (
+              <div key={group.key}>
+                {group.key !== FLAT_GROUP_KEY && (
+                  <GroupHeader
+                    groupKey={group.key}
+                    label={group.label}
+                    count={group.emails.length}
+                    collapsed={collapsed}
+                    onToggle={() => toggleGroup(group.key)}
+                  />
+                )}
+                {!collapsed &&
+                  group.emails.map((email) => (
+                    <MailListItem
+                      key={email.id}
+                      email={email}
+                      selected={selectedIds.has(email.id)}
+                      active={email.id === selectedEmailId}
+                      onSelect={(shiftKey) => onToggleSelection(email.id, shiftKey)}
+                      onClick={() => onSelectEmail(email.id)}
+                      accountColor={email.account_id ? accountColorMap.get(email.account_id) : undefined}
+                      onAction={onAction}
+                      moveTargets={moveTargetsFor?.(email.account_id ?? null)}
+                      activeFolder={activeFolder}
+                      selectedCount={selectedIds.size}
+                      selectedIds={[...selectedIds]}
+                      allSelectedStarred={allSelectedStarred}
+                    />
+                  ))}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

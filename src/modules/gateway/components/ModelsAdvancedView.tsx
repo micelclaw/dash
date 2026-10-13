@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Loader2, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, Loader2, Trash2, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { useGatewayStore } from '@/stores/gateway.store';
@@ -152,9 +152,11 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
 
+  const [reordering, setReordering] = useState(false);
   const list = kind === 'text' ? gwService.getFallbacks : gwService.getImageFallbacks;
   const add = kind === 'text' ? gwService.addFallback : gwService.addImageFallback;
   const remove = kind === 'text' ? gwService.removeFallback : gwService.removeImageFallback;
+  const setOrder = kind === 'text' ? gwService.setFallbacks : gwService.setImageFallbacks;
 
   const fetch = useCallback(async () => {
     setLoading(true);
@@ -191,6 +193,24 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
     } finally { setRemoving(null); }
   };
 
+  // Mover una entrada arriba/abajo → fija el orden completo (el orden ES la
+  // prioridad de fallback). Optimista con rollback si el backend falla.
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= fallbacks.length || reordering) return;
+    const prev = fallbacks;
+    const next = [...fallbacks];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    setFallbacks(next);
+    setReordering(true);
+    try {
+      await setOrder(next);
+    } catch (err) {
+      setFallbacks(prev);
+      toast.error(err instanceof Error ? err.message : 'Failed to reorder fallbacks');
+    } finally { setReordering(false); }
+  };
+
   const title = kind === 'text' ? 'Fallbacks' : 'Image model fallbacks';
   const description = kind === 'text'
     ? 'If the primary model fails, try these in order.'
@@ -212,7 +232,11 @@ function FallbacksBlock({ kind }: { kind: 'text' | 'image' }) {
                   <span style={{ color: valid ? 'var(--text)' : '#f43f5e' }}>{model}</span>
                   {!valid && <DanglingBadge title="Fallback not in configured models" />}
                 </span>
-                <RemoveButton onClick={() => handleRemove(model)} loading={removing === model} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <ReorderButton dir="up" disabled={i === 0 || reordering} onClick={() => move(i, -1)} />
+                  <ReorderButton dir="down" disabled={i === fallbacks.length - 1 || reordering} onClick={() => move(i, 1)} />
+                  <RemoveButton onClick={() => handleRemove(model)} loading={removing === model} />
+                </span>
               </Row>
             );
           })}
@@ -336,6 +360,27 @@ function RemoveButton({ onClick, loading }: { onClick: () => void; loading: bool
       }}
     >
       {loading ? <Loader2 size={12} className="spin" /> : <Trash2 size={12} />}
+    </button>
+  );
+}
+
+function ReorderButton({ dir, disabled, onClick }: { dir: 'up' | 'down'; disabled: boolean; onClick: () => void }) {
+  const Icon = dir === 'up' ? ChevronUp : ChevronDown;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={dir === 'up' ? 'Move up (higher priority)' : 'Move down'}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        cursor: disabled ? 'default' : 'pointer',
+        color: disabled ? 'var(--border)' : 'var(--text-dim)',
+        padding: 2,
+        display: 'flex',
+      }}
+    >
+      <Icon size={14} />
     </button>
   );
 }

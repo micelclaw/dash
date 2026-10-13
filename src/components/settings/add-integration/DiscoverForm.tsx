@@ -405,12 +405,6 @@ export function DiscoverForm({ onConnected, onManualFallback, onOAuth }: Discove
               pantalla.
             </div>
           )}
-          {resultado?.provider?.requires_own_oauth_client && (
-            <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)' }}>
-              Necesita que el dueño del box haya registrado su propia aplicación
-              en {resultado.provider.label}.
-            </div>
-          )}
         </div>
       ) : (
       <div>

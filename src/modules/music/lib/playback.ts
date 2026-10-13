@@ -20,6 +20,7 @@ export function trackToPlayable(track: Track): PlayableItem {
     fileId: track.id,
     sourceId: track.id,
     source: 'navidrome',
+    origins: track.origins,
     title: track.title,
     artist: track.artist,
     album: track.album,

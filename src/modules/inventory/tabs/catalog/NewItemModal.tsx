@@ -14,7 +14,9 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useInventoryStore } from '@/stores/inventory.store';
-import { CustomFieldsEditor, CATEGORY_FIELD_TEMPLATES } from '@/modules/inventory/components/CustomFieldsEditor';
+import { CATEGORY_FIELD_TEMPLATES } from '@/modules/inventory/components/CustomFieldsEditor';
+import { CategoryFieldsForm } from '@/modules/inventory/components/CategoryFieldsForm';
+import { sanitizeCustomFields } from '@/modules/inventory/components/category-fields';
 import {
   EMPTY_ITEM_FORM,
   itemFormToCreatePayload,
@@ -110,15 +112,7 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
     const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean);
     if (tags.length > 0) body.tags = tags;
     if (form.description.trim()) body.description = form.description.trim();
-    const customFields: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(form.customFields)) {
-      if (typeof v === 'string') {
-        const trimmed = v.trim();
-        if (trimmed !== '') customFields[k] = trimmed;
-      } else if (v !== null && v !== undefined) {
-        customFields[k] = v;
-      }
-    }
+    const customFields = sanitizeCustomFields(form.customFields);
     if (Object.keys(customFields).length > 0) body.custom_fields = customFields;
 
     setSubmitting(true);
@@ -241,8 +235,8 @@ export function NewItemModal({ onClose }: { onClose: () => void }) {
             />
           </Field>
 
-          <Field label="Custom fields">
-            <CustomFieldsEditor
+          <Field label="Category fields">
+            <CategoryFieldsForm
               value={form.customFields}
               onChange={next => set('customFields', next)}
               category={form.category.trim() || undefined}

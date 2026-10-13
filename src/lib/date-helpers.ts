@@ -100,6 +100,11 @@ export function formatMonthYear(d: Date): string {
 export function formatRelative(d: Date): string {
   const now = new Date();
   const diff = now.getTime() - d.getTime();
+  // Fechas FUTURAS (caducidad de un enlace público, un recordatorio): el cálculo
+  // de abajo daba `mins` negativo → caía siempre en 'just now' ("caduca just now"
+  // para un enlace que vence en 3 días). Se formatean con el mismo escalón, en
+  // sentido contrario (deuda DR6).
+  if (diff < 0) return formatRelativeFuture(-diff, d);
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -108,7 +113,41 @@ export function formatRelative(d: Date): string {
   const days = Math.floor(hours / 24);
   if (days === 1) return 'Yesterday';
   if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 30) return plural(Math.floor(days / 7), 'week', 'ago');
+  return formatDateShort(d);
+}
+
+const MIN = 60_000, HOUR = 3_600_000, DAY = 86_400_000;
+
+/** `2 weeks ago` / `in 1 week` — sin el «1 weeks» que emitía el interpolado directo. */
+function plural(n: number, unit: string, suffix: 'ago' | ''): string {
+  const label = `${n} ${unit}${n === 1 ? '' : 's'}`;
+  return suffix ? `${label} ago` : `in ${label}`;
+}
+
+/**
+ * Espejo futuro de formatRelative. `ahead` = milisegundos hasta la fecha (>0).
+ * REDONDEA HACIA ARRIBA (deuda DR6): en pasado `floor` mide tiempo TRANSCURRIDO y
+ * es correcto, pero en futuro mide tiempo QUE FALTA y truncar infra-declara un
+ * escalón entero en todos los casos reales — un enlace a 7 días visto dos minutos
+ * después decía «in 6 days», uno a 24h decía «in 23h» y la rama 'Tomorrow' era
+ * inalcanzable. Cada escalón se calcula desde `ahead` (no del escalón anterior ya
+ * truncado) para que los bordes no se pierdan por doble redondeo.
+ */
+function formatRelativeFuture(ahead: number, d: Date): string {
+  if (ahead < MIN) return 'in less than a minute';
+  const mins = Math.ceil(ahead / MIN);
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.ceil(ahead / HOUR);
+  if (hours < 24) return `in ${hours}h`;
+  const days = Math.ceil(ahead / DAY);
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return `in ${days} days`;
+  // El escalón de semanas sí trunca a la BAJA: es un cubo grueso y en una
+  // caducidad nunca se debe prometer más tiempo del que queda (10 días son
+  // «in 1 week», no «in 2 weeks»). El borde de los 7 días ya lo salva el ceil
+  // de `days` de arriba, que es lo que la ficha medía.
+  if (days < 30) return plural(Math.floor(days / 7), 'week', '');
   return formatDateShort(d);
 }
 
@@ -123,7 +162,7 @@ export function getMonthGridDays(d: Date, weekStartsOn = 1): Date[] {
   const first = startOfMonth(d);
   const start = startOfWeek(first, weekStartsOn);
   const days: Date[] = [];
-  let current = new Date(start);
+  const current = new Date(start);
   // Always show 6 weeks (42 days) for consistent grid height
   for (let i = 0; i < 42; i++) {
     days.push(new Date(current));

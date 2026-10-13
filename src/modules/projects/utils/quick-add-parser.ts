@@ -106,6 +106,7 @@ export function resolverFecha(texto: string, ahora = new Date()): Date | null {
   // martes significa el que viene, no dentro de un rato).
   if (DIAS.includes(t)) {
     const objetivo = DIA_INDICE[t];
+    if (objetivo === undefined) return null;
     let delta = (objetivo - hoy.getDay() + 7) % 7;
     if (delta === 0) delta = 7;
     return new Date(hoy.getTime() + delta * 86400000);
@@ -149,7 +150,10 @@ export function parsearCaptura(entrada: string, descartados: Set<string> = new S
   const consumidos: Array<[number, number]> = [];
 
   for (const m of entrada.matchAll(RE)) {
-    const [completo, espacio, simbolo, palabra] = m;
+    const espacio = m[1] ?? '';
+    const simbolo = m[2];
+    const palabra = m[3];
+    if (!simbolo || !palabra) continue;
     const inicio = (m.index ?? 0) + espacio.length;
     const fin = inicio + simbolo.length + palabra.length;
     const id = `${simbolo}${palabra}#${n++}`;
@@ -188,7 +192,6 @@ export function parsearCaptura(entrada: string, descartados: Set<string> = new S
       trozos.push(trozo);
       consumidos.push([inicio, fin]);
     }
-    void completo;
   }
 
   // Quitar del título lo consumido, de atrás hacia delante para no mover índices.

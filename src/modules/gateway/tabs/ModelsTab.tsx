@@ -24,25 +24,43 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { ModelSetupWizard, providerTypeForId, type ProviderType } from '../components/ModelSetupWizard';
+import { ProviderAuthWizard } from '../components/ProviderAuthWizard';
 import { ModelsAdvancedView } from '../components/ModelsAdvancedView';
+import { DecisionModelsView } from '../components/DecisionModelsView';
 import { CustomModelConfigModal } from '../components/CustomModelConfigModal';
 import { OllamaModelSettingsModal } from '../components/OllamaModelSettingsModal';
 import { AddOllamaModelModal } from '../components/AddOllamaModelModal';
-import type { GatewayModel, CatalogModel, ProviderOverview } from '../types';
-import { PROVIDER_COLORS, PROVIDER_LABELS } from './models/constants';
+import type { GatewayModel, CatalogModel, CatalogProvider, InstallableCatalogProvider } from '../types';
+import { PROVIDER_COLORS } from './models/constants';
 import type { View, CatalogSubView, ProviderEntry } from './models/types';
 import { useModelMutations } from './models/useModelMutations';
 import { ModelsHeader } from './models/ModelsHeader';
 import { ConfiguredRow } from './models/ConfiguredRow';
 import { CatalogProvidersGrid } from './models/CatalogProvidersGrid';
 import { ProviderModelsView } from './models/ProviderModelsView';
+import { useAppsStore } from '@/stores/apps.store';
+
+/**
+ * Forma canónica del Gateway para una clave de modelo: colapsa el prefijo de
+ * provider DUPLICADO (`nvidia/nvidia/nemotron-x` → `nvidia/nemotron-x`), que es
+ * lo que el Gateway persiste en `agents.defaults.models`. Espejo exacto de
+ * `collapseModelKey()` en core (`services/openclaw-config.service.ts`).
+ */
+function collapseModelKey(key: string): string {
+  const slash = key.indexOf('/');
+  if (slash <= 0) return key;
+  const provider = key.slice(0, slash);
+  const rest = key.slice(slash + 1);
+  return rest.startsWith(`${provider}/`) ? `${provider}/${rest.slice(provider.length + 1)}` : key;
+}
 
 export function ModelsTab() {
   const isMobile = useIsMobile();
   const {
     models, modelsLoading, modelsError, fetchModels,
     catalog, catalogLoading, catalogError, fetchCatalog,
-    providersOverview, providersOverviewLoading, providersOverviewError,
+    catalogProviders, installableProviders, catalogOpenclawVersion, catalogDegraded,
+    providersOverview, providersOverviewLoading,
     catalogWarm, fetchProvidersOverview,
     modelTests, testingModels, runModelTest, hydrateModelTests,
     addModel, removeModel,
@@ -50,7 +68,7 @@ export function ModelsTab() {
   } = useGatewayStore();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialView = ((searchParams.get('view') as View) === 'catalog' || (searchParams.get('view') as View) === 'advanced')
+  const initialView = ((searchParams.get('view') as View) === 'catalog' || (searchParams.get('view') as View) === 'advanced' || (searchParams.get('view') as View) === 'decision')
     ? (searchParams.get('view') as View)
     : 'configured';
   const [view, setViewState] = useState<View>(initialView);
@@ -69,11 +87,15 @@ export function ModelsTab() {
   const [catalogSubView, setCatalogSubView] = useState<CatalogSubView>('providers');
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [customWizardType, setCustomWizardType] = useState<ProviderType | null>(null);
+  const [authWizardProvider, setAuthWizardProvider] = useState<CatalogProvider | null>(null);
   const [customProviderIds, setCustomProviderIds] = useState<string[]>([]);
   const [providersConfig, setProvidersConfig] = useState<gwService.ProvidersConfig | null>(null);
   const [ollamaSettings, setOllamaSettings] = useState<{ modelId: string; modelName?: string; initialParams?: gwService.OllamaTuningParams } | null>(null);
   const [addModelOpen, setAddModelOpen] = useState(false);          // modal "Añadir modelo local (Ollama)"
   const [discoveredCounts, setDiscoveredCounts] = useState<Record<string, number>>({});
+  const [installingProvider, setInstallingProvider] = useState<string | null>(null);
+  const [migratingProvider, setMigratingProvider] = useState<string | null>(null);
+  const setRestartRequired = useAppsStore((state) => state.setRestartRequired);
   const [customModelEditor, setCustomModelEditor] = useState<{
     mode: 'add' | 'edit';
     provider: string;
@@ -156,6 +178,21 @@ export function ModelsTab() {
     return m;
   }, [catalog]);
 
+  // GM4: el Gateway COLAPSA el prefijo de provider duplicado al persistir la
+  // allow-list (`nvidia/nvidia/x` → `nvidia/x`), mientras el catálogo keya la
+  // forma DOBLADA que declara el provider. Una fila cuya única forma es la
+  // colapsada (está en la allow-list y NO declarada en `models.providers`) no
+  // casaba con ninguna key del catálogo y perdía los chips ctx/caps. Índice
+  // extra por clave colapsada → el cruce funciona en las dos formas.
+  const catalogByCollapsedKey = useMemo(() => {
+    const m = new Map<string, CatalogModel>();
+    for (const c of catalog) {
+      const collapsed = collapseModelKey(c.key);
+      if (!m.has(collapsed)) m.set(collapsed, c);
+    }
+    return m;
+  }, [catalog]);
+
   // Fetch custom provider IDs and full config (so the grid shows them
   // even with 0 catalog models, and the Edit modal can read existing
   // contextWindow/maxTokens from `models.providers[id].models[]`).
@@ -174,17 +211,21 @@ export function ModelsTab() {
     if (view === 'catalog') fetchCustomProviders();
   }, [view, fetchCustomProviders]);
 
-  // Índice del overview por provider id — la señal de auth de todo el tab.
-  const overviewById = useMemo(() => {
-    const m = new Map<string, ProviderOverview>();
-    for (const p of providersOverview ?? []) m.set(p.id, p);
-    return m;
-  }, [providersOverview]);
+  const catalogProviderById = useMemo(
+    () => new Map(catalogProviders.map((provider) => [provider.id, provider])),
+    [catalogProviders],
+  );
 
   // Abre el formulario de credencial correcto para un provider (paste-key
   // cloud, servidor local fijo o custom). Lo usan el click en tarjeta sin
   // credencial y el 409 PROVIDER_NOT_AUTHENTICATED de las mutaciones.
   const openCredentialWizard = useCallback((provider: string) => {
+    const dynamicProvider = catalogProviderById.get(provider);
+    if (dynamicProvider && !dynamicProvider.is_user_managed) {
+      setAuthWizardProvider(dynamicProvider);
+      setSelectedProvider(provider);
+      return;
+    }
     // Con un modelo representativo del catálogo, el wizard estándar añade el
     // modelo tras guardar la key; sin modelos (catálogo frío o provider vacío)
     // se abre el formulario del tipo correcto (nvidia/google/… o custom).
@@ -196,7 +237,7 @@ export function ModelsTab() {
       setCustomWizardType(providerTypeForId(provider));
     }
     setSelectedProvider(provider);
-  }, [catalog]);
+  }, [catalog, catalogProviderById]);
 
   const {
     mutatingModel, addingKey, addProgress, assigning,
@@ -225,11 +266,9 @@ export function ModelsTab() {
     return () => { cancelled = true; };
   }, [view, catalogSubView, customProviderIds, catalog]);
 
-  // Provider entries for the catalog grid. Counts salen del catálogo (y del
-  // discover para customs vacíos); la AUTH sale EXCLUSIVAMENTE del overview
-  // (`has_credential`). El flag `available` del catálogo NO es auth — marca
-  // modelos destacados aunque no haya key (por eso anthropic/nvidia/google-
-  // vertex salían verdes y dejaban añadir modelos que quedaban orphan).
+  // Provider entries come from the unified OpenClaw-owned catalog. A fallback
+  // row is created only for config/local providers that have models but no
+  // plugin metadata (custom endpoints, Ollama runtime).
   const providerEntries = useMemo((): ProviderEntry[] => {
     const grouped = new Map<string, { count: number; configured: number }>();
     for (const m of catalog) {
@@ -238,47 +277,45 @@ export function ModelsTab() {
       if (m.configured) entry.configured++;
       grouped.set(m.provider, entry);
     }
-    // Providers del overview sin modelos en el catálogo (cloud recién dado de
-    // alta, custom vacío, mirror declarado…): tarjeta igualmente, con el count
-    // del discover (customs) o el featured_count del overview como fallback.
-    for (const p of providersOverview ?? []) {
-      if (!grouped.has(p.id)) {
-        grouped.set(p.id, {
-          count: discoveredCounts[p.id] ?? p.featured_count ?? 0,
-          configured: p.configured_count,
-        });
-      }
-    }
-    const entries: ProviderEntry[] = Array.from(grouped.entries()).map(([provider, info]) => ({
-      provider,
-      label: PROVIDER_LABELS[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1),
-      color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
-      modelCount: info.count,
-      configuredCount: info.configured,
-      // LA señal de auth: overview.has_credential. Sin fila en el overview
-      // (p.ej. provider solo-destacado con catálogo frío) = sin credencial.
-      hasAuth: overviewById.get(provider)?.has_credential ?? false,
+    const entries: ProviderEntry[] = catalogProviders.map((provider) => ({
+      provider: provider.id,
+      label: provider.label,
+      color: PROVIDER_COLORS[provider.id] ?? 'var(--text-dim)',
+      modelCount: grouped.get(provider.id)?.count ?? provider.model_count,
+      configuredCount: grouped.get(provider.id)?.configured ?? provider.configured_count,
+      hasAuth: provider.has_credential,
+      description: provider.description,
+      version: provider.version,
+      authMethodCount: provider.auth_methods.length,
+      legacyConfigured: provider.legacy_configured,
+      migrationTarget: provider.migration_target,
+      enabled: provider.enabled,
     }));
+    const known = new Set(entries.map((entry) => entry.provider));
+    for (const [provider, info] of grouped) {
+      if (known.has(provider)) continue;
+      entries.push({
+        provider,
+        label: provider.split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' '),
+        color: PROVIDER_COLORS[provider] ?? 'var(--text-dim)',
+        modelCount: discoveredCounts[provider] ?? info.count,
+        configuredCount: info.configured,
+        hasAuth: false,
+        description: '', version: null, authMethodCount: 0,
+        legacyConfigured: false, enabled: true,
+        migrationTarget: null,
+      });
+    }
     // Providers with auth first, then alphabetical
     entries.sort((a, b) => {
       if (a.hasAuth !== b.hasAuth) return a.hasAuth ? -1 : 1;
       return a.label.localeCompare(b.label);
     });
     return entries;
-  }, [catalog, providersOverview, overviewById, discoveredCounts]);
-
-  // Dedup de tarjetas "Add provider" del grid: presente = entrada en config o
-  // credencial activa (contrato del overview).
-  const presentProviders = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of providersOverview ?? []) {
-      if (p.entry_in_config || p.has_credential) s.add(p.id);
-    }
-    return s;
-  }, [providersOverview]);
+  }, [catalog, catalogProviders, discoveredCounts]);
 
   const handleProviderClick = (provider: string) => {
-    if (!overviewById.get(provider)?.has_credential) {
+    if (!catalogProviderById.get(provider)?.has_credential) {
       // Sin credencial — re-pedir la key con el formulario correcto del
       // provider (nvidia/google/groq/… su paste-key; ollama/vllm su form
       // fijo; desconocidos/custom-api-* el Custom). Nunca entrar a modelos.
@@ -288,6 +325,49 @@ export function ModelsTab() {
     // Has credentials — go directly to models
     setSelectedProvider(provider);
     setCatalogSubView('models');
+  };
+
+  const installEvent = useWebSocket('service.*');
+  useEffect(() => {
+    if (!installEvent || (installEvent.data as Record<string, unknown>)?.service !== 'plugin-install') return;
+    const data = installEvent.data as Record<string, unknown>;
+    if (data.provider_id && data.provider_id !== installingProvider) return;
+    if (installEvent.event === 'service.ready') {
+      setInstallingProvider(null);
+      setRestartRequired('openclaw', 'A provider plugin was installed — reload the Gateway to load it.');
+      toast.success(`${String(data.name ?? 'Provider')} installed`);
+      void fetchCatalog(true);
+    } else if (installEvent.event === 'service.failed') {
+      setInstallingProvider(null);
+      toast.error(String(data.error ?? 'Provider installation failed'));
+    }
+  }, [installEvent, installingProvider, setRestartRequired, fetchCatalog]);
+
+  const handleInstallProvider = async (provider: InstallableCatalogProvider) => {
+    setInstallingProvider(provider.id);
+    try {
+      await gwService.installOfficialProvider(provider.id);
+      toast.message(`Installing ${provider.label}…`);
+    } catch (error) {
+      setInstallingProvider(null);
+      toast.error(error instanceof Error ? error.message : 'Provider installation failed');
+    }
+  };
+
+  const handleMigrateProvider = async (provider: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setMigratingProvider(provider);
+    try {
+      const result = await gwService.migrateLegacyProvider(provider);
+      toast.success(result.changed
+        ? `${result.migrated_refs.length} legacy model reference${result.migrated_refs.length !== 1 ? 's' : ''} migrated to ${result.target}`
+        : `No legacy ${provider} references remain`);
+      await Promise.all([fetchModels(), fetchCatalog(true)]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Legacy provider migration failed');
+    } finally {
+      setMigratingProvider(null);
+    }
   };
 
   const handleWizardSuccess = () => {
@@ -427,8 +507,8 @@ export function ModelsTab() {
     });
   }, [catalog, search, providerFilter]);
 
-  const loading = view === 'advanced' ? false : (view === 'configured' ? modelsLoading : catalogLoading);
-  const error = view === 'advanced' ? null : (view === 'configured' ? modelsError : catalogError);
+  const loading = view === 'advanced' || view === 'decision' ? false : (view === 'configured' ? modelsLoading : catalogLoading);
+  const error = view === 'advanced' || view === 'decision' ? null : (view === 'configured' ? modelsError : catalogError);
   // For custom providers in models view, include available-to-add
   // (discovered but not yet configured) in the count.
   const selectedProviderModelsCount = (() => {
@@ -440,12 +520,13 @@ export function ModelsTab() {
     const available = discoveredModels.filter(dm => !configuredKeys.has(`${selectedProvider}/${dm.id}`)).length;
     return configured + available;
   })();
-  const count = view === 'advanced' ? 0
+  const count = view === 'advanced' || view === 'decision' ? 0
     : view === 'configured' ? filteredModels.length
     : catalogSubView === 'providers' ? providerEntries.length
     : selectedProviderModelsCount;
-  const countLabel = view === 'catalog' && catalogSubView === 'providers'
-    ? `${count} provider${count !== 1 ? 's' : ''}`
+  const countLabel = view === 'decision' ? 'OpenClaw 2026.9.6'
+    : view === 'catalog' && catalogSubView === 'providers'
+    ? `${providerEntries.length} installed · ${installableProviders.length} available`
     : `${count} model${count !== 1 ? 's' : ''}`;
 
   if (loading && (view === 'configured' ? models.length === 0 : catalog.length === 0)) {
@@ -481,11 +562,13 @@ export function ModelsTab() {
           view={view}
           onViewChange={(v) => { setView(v); setProviderFilter(null); setCatalogSubView('providers'); setSelectedProvider(null); setSearch(''); }}
           countLabel={countLabel}
-          onRefresh={() => view === 'configured' ? fetchModels() : fetchCatalog()}
+          onRefresh={() => view === 'configured' ? fetchModels() : view === 'decision' ? setView('decision') : fetchCatalog(true)}
         />
 
         {/* Content by view */}
-        {view === 'advanced' ? (
+        {view === 'decision' ? (
+          <DecisionModelsView />
+        ) : view === 'advanced' ? (
           <ModelsAdvancedView />
         ) : view === 'configured' ? (
           filteredModels.length === 0 ? (
@@ -501,7 +584,10 @@ export function ModelsTab() {
                 // ("qwen3:8b"), pero el catalog usa key con prefijo ("ollama/qwen3:8b").
                 // Probar ambas formas para cruzar contexto/tamaño en todos los casos.
                 const cat = catalogByKey.get(model.model)
-                  ?? catalogByKey.get(`${model.provider}/${model.model}`);
+                  ?? catalogByKey.get(`${model.provider}/${model.model}`)
+                  // GM4: fila que solo existe en su forma COLAPSADA (allow-list)
+                  // frente al catálogo, que keya la doblada del provider.
+                  ?? catalogByCollapsedKey.get(collapseModelKey(`${model.provider}/${model.model}`));
                 // Key compartida con el Catalog y con el store de tests:
                 // 'provider/modelId' (== model.id en el contrato actual).
                 const testKey = model.id || `${model.provider}/${model.model}`;
@@ -537,48 +623,26 @@ export function ModelsTab() {
               })}
             </div>
           )
-        ) : providersOverviewError ? (
-          /* ── Catalog: el overview de providers FALLÓ ──
-             Sin él no hay señal de auth fiable: pintar el grid supondría
-             "todo sin credencial" (el bug histórico de los catch{} silencios).
-             Error visible + Retry, nunca degradar en silencio. */
-          <div style={{
-            padding: 20, background: '#ef444410', border: '1px solid #ef444425',
-            borderRadius: 'var(--radius-md)',
-          }}>
-            <p style={{ color: '#ef4444', fontSize: '0.8125rem', fontWeight: 500, marginBottom: 4 }}>
-              Could not load provider credentials overview
-            </p>
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: 10 }}>{providersOverviewError}</p>
-            <button
-              onClick={() => { void fetchProvidersOverview(); }}
-              disabled={providersOverviewLoading}
-              style={{
-                padding: '4px 12px', fontSize: '0.75rem', background: 'var(--surface)',
-                border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer', color: 'var(--text-dim)', fontFamily: 'var(--font-sans)',
-                opacity: providersOverviewLoading ? 0.6 : 1,
-              }}
-            >
-              {providersOverviewLoading ? 'Retrying…' : 'Retry'}
-            </button>
-          </div>
-        ) : providersOverview === null ? (
-          /* Primer fetch del overview en vuelo: no pintar gates erróneos. */
-          <div style={{ padding: 20, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>
-            Loading providers…
-          </div>
         ) : catalogSubView === 'providers' ? (
           /* ── Catalog: Provider Grid (Step 1) ── */
+          <>
+          {catalogDegraded && (
+            <div style={{ marginBottom: 10, padding: 8, color: 'var(--amber)', background: 'color-mix(in srgb, var(--amber) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem' }}>
+              Showing the last valid OpenClaw provider catalog; refresh is temporarily unavailable.
+            </div>
+          )}
           <CatalogProvidersGrid
             entries={providerEntries}
-            presentProviders={presentProviders}
+            availableProviders={installableProviders}
             search={search}
             isMobile={isMobile}
             customProviderIds={customProviderIds}
             deletingProvider={deletingProvider}
+            installingProvider={installingProvider}
+            migratingProvider={migratingProvider}
             onProviderClick={handleProviderClick}
             onDeleteProvider={handleDeleteProvider}
+            onMigrateProvider={(provider, event) => { void handleMigrateProvider(provider, event); }}
             onSelectProviderType={(type) => {
               setCustomWizardType(type);
               // Para un provider conocido (no 'custom', cuyo id se acuña al
@@ -588,7 +652,14 @@ export function ModelsTab() {
               if (type !== 'custom') setSelectedProvider(type);
             }}
             onOpenAdvanced={() => { setView('advanced'); }}
+            onInstallProvider={(provider) => { void handleInstallProvider(provider); }}
           />
+          {catalogOpenclawVersion && (
+            <div style={{ marginTop: 12, color: 'var(--text-muted)', fontSize: '0.6875rem' }}>
+              Provider and model data supplied by OpenClaw {catalogOpenclawVersion}
+            </div>
+          )}
+          </>
         ) : (
           /* ── Catalog: Provider Models (Step 2) ── */
           <ProviderModelsView
@@ -611,7 +682,10 @@ export function ModelsTab() {
             onAddModel={handleAddModel}
             onAddCustomModelDirect={(provider, modelId) => { void handleAddCustomModelDirect(provider, modelId); }}
             onRemoveModel={handleRemoveModel}
-            onConfigure={(m) => setWizardModel(m)}
+            queuedRemovals={queuedRemovals}
+            inflightRemovals={inflightRemovals}
+            onUndoRemove={undoRemoveModel}
+            onConfigure={(m) => openCredentialWizard(m.provider)}
             onEditOllama={(key) => { void openOllamaSettings(key); }}
             onEditCustomModel={handleEditCustomModel}
             onDeleteFromDisk={handleDeleteFromDisk}
@@ -637,6 +711,16 @@ export function ModelsTab() {
           providerModels={catalog.filter(m => m.provider === customWizardType)}
           onClose={() => setCustomWizardType(null)}
           onSuccess={handleWizardSuccess}
+        />
+      )}
+      {authWizardProvider && (
+        <ProviderAuthWizard
+          provider={authWizardProvider}
+          onClose={() => setAuthWizardProvider(null)}
+          onSuccess={() => {
+            setAuthWizardProvider(null);
+            handleWizardSuccess();
+          }}
         />
       )}
       {customModelEditor && (

@@ -97,7 +97,7 @@ function formatPreview(dateFormat: string, timeFormat: string): string {
   const day = String(now.getDate()).padStart(2, '0');
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const year = now.getFullYear();
-  let datePart = '';
+  let datePart: string;
   if (dateFormat === 'DD/MM/YYYY') datePart = `${day}/${month}/${year}`;
   else if (dateFormat === 'MM/DD/YYYY') datePart = `${month}/${day}/${year}`;
   else datePart = `${year}-${month}-${day}`;

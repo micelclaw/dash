@@ -4,28 +4,21 @@
  */
 
 import { useState } from 'react';
-import { X, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { X, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
 import { getProviderIcon } from '@/config/provider-icons';
+import { describeCredentialError } from '../lib/credential-errors';
+import { OmniRouteSetupWizard } from './OmniRouteSetupWizard';
 import type { CatalogModel } from '../types';
 
-// U10: 5 generic + 6 cloud-provider quickstarts. The cloud entries map
-// 1-to-1 to PROVIDER_INFO ids further below so the wizard can read the
-// signup URL / token prefix / description from the same source as the
-// `model.provider`-driven path.
 export type ProviderType =
   | 'custom'
   | 'ollama'
   | 'sglang'
   | 'vllm'
   | 'lm-studio'
-  | 'xai'
-  | 'fal'
-  | 'minimax'
-  | 'cohere'
-  | 'openrouter'
-  | 'arcee';
+  | 'omniroute';
 
 interface ModelSetupWizardProps {
   model: CatalogModel | null;
@@ -37,109 +30,6 @@ interface ModelSetupWizardProps {
   onClose: () => void;
   onSuccess: () => void;
 }
-
-// Provider-specific copy: where to get an API key. Hardcoded because the
-// CLI catalog doesn't surface this info per provider, but the list is
-// short and easy to maintain.
-const PROVIDER_INFO: Record<string, { label: string; signupUrl?: string; tokenPrefix?: string; description: string }> = {
-  anthropic: {
-    label: 'Anthropic',
-    signupUrl: 'https://console.anthropic.com/settings/keys',
-    tokenPrefix: 'sk-ant-',
-    description: 'Claude models — Opus 4.8 for the hardest tasks, Sonnet 4.6 for everyday work, Haiku 4.5 for fast cheap turns. Pay-as-you-go.',
-  },
-  openai: {
-    label: 'OpenAI',
-    signupUrl: 'https://platform.openai.com/api-keys',
-    tokenPrefix: 'sk-',
-    description: 'Create an API key in your OpenAI dashboard. Pay-as-you-go billing.',
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    signupUrl: 'https://openrouter.ai/keys',
-    tokenPrefix: 'sk-or-',
-    description: 'Aggregator that lets you use models from many providers with a single key.',
-  },
-  groq: {
-    label: 'Groq',
-    signupUrl: 'https://console.groq.com/keys',
-    tokenPrefix: 'gsk_',
-    description: 'Very fast inference for open-weight models. Free tier available.',
-  },
-  xai: {
-    label: 'xAI',
-    signupUrl: 'https://console.x.ai/',
-    tokenPrefix: 'xai-',
-    description: 'Grok models (Grok 4, Grok Code) including web search and code execution tools. Sign in with your X account if you prefer not to manage an API key.',
-  },
-  deepseek: {
-    label: 'DeepSeek',
-    signupUrl: 'https://platform.deepseek.com/api_keys',
-    tokenPrefix: 'sk-',
-    description: 'DeepSeek\u2019s native API. Cheap reasoning models.',
-  },
-  mistral: {
-    label: 'Mistral',
-    signupUrl: 'https://console.mistral.ai/api-keys',
-    tokenPrefix: '',
-    description: 'Mistral AI models.',
-  },
-  google: {
-    label: 'Google AI Studio',
-    signupUrl: 'https://aistudio.google.com/apikey',
-    tokenPrefix: 'AIza',
-    description: 'Gemini models via Google AI Studio.',
-  },
-  cohere: {
-    label: 'Cohere',
-    signupUrl: 'https://dashboard.cohere.com/api-keys',
-    tokenPrefix: '',
-    description: 'Cohere\u2019s text and embedding models.',
-  },
-  // \u2500\u2500 New bundled providers in OpenClaw 2026.5.7 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  // Same shape as the rest \u2014 OpenClaw knows each baseUrl natively
-  // (see `extensions/<id>/onboard.ts` in the bundled binary). Only the
-  // signup link + token-format hint are dash-side metadata.
-  cerebras: {
-    label: 'Cerebras',
-    signupUrl: 'https://cloud.cerebras.ai/platform/',
-    tokenPrefix: 'csk-',
-    description: 'Ultra-fast inference for Llama, Qwen, GLM-4.7 and others. Free tier available.',
-  },
-  nvidia: {
-    label: 'NVIDIA',
-    signupUrl: 'https://build.nvidia.com/',
-    tokenPrefix: 'nvapi-',
-    description: 'Featured catalog of hosted open models \u2014 Nemotron Ultra, Llama Nemotron, Qwen Coder, and others. Free credits to start.',
-  },
-  arcee: {
-    label: 'Arcee AI',
-    signupUrl: 'https://models.arcee.ai/',
-    tokenPrefix: '',
-    description: 'Small/medium specialised models (Trinity, Coder, Spark, SuperNova).',
-  },
-  deepinfra: {
-    label: 'DeepInfra',
-    signupUrl: 'https://deepinfra.com/dash/api_keys',
-    tokenPrefix: '',
-    description: 'Hosted open-source models (Llama, Mixtral, DeepSeek, BGE, etc.) at low cost.',
-  },
-  // ── Added in OpenClaw 2026.5.17 → 2026.5.28 ───────────────────
-  fal: {
-    label: 'Fal',
-    signupUrl: 'https://fal.ai/dashboard/keys',
-    tokenPrefix: '',
-    description: 'Image and video generation — Krea models, Flux family, SDXL, and more. Use when an agent needs to make visuals.',
-  },
-  minimax: {
-    label: 'MiniMax',
-    signupUrl: 'https://www.minimax.io/',
-    tokenPrefix: '',
-    description: 'M2 series (M2.5 reasoning, M2.6) plus Music — the only mainstream provider that streams full songs back. Strong on Chinese.',
-  },
-};
-
-const CUSTOM_PROVIDER_PREFIX = 'custom-api-';
 
 // ─── Fixed provider defaults (OpenClaw CLI alignment) ──────────────
 
@@ -192,28 +82,27 @@ const FIXED_PROVIDER_DEFAULTS: Record<string, FixedProviderDefaults> = {
   },
 };
 
-// U10: providers cloud con API key + extensión nativa en el binario
-// (signup URL conocido, token prefix esperado, descripción enriquecida en
-// PROVIDER_INFO). El binario resuelve el baseUrl internamente — no le
-// pedimos al user que lo escriba como sí pasa con `custom`.
-const CLOUD_PROVIDER_QUICKSTART: ReadonlySet<ProviderType> = new Set([
-  'xai',
-  'fal',
-  'minimax',
-  'cohere',
-  'openrouter',
-  'arcee',
-]);
+/**
+ * Resuelve el `ProviderType` de un id de proveedor para abrir el formulario de
+ * alta de las extensiones explícitamente gestionadas por Micelclaw. Todos los
+ * proveedores OpenClaw usan ProviderAuthWizard y nunca llegan a este fallback.
+ */
+export function providerTypeForId(id: string): ProviderType {
+  if (id === 'omniroute') return 'omniroute';
+  if (FIXED_PROVIDER_DEFAULTS[id]) return id as ProviderType;
+  return 'custom';
+}
 
 export function ModelSetupWizard({ model, providerType, providerModels, onClose, onSuccess }: ModelSetupWizardProps) {
   // Standalone mode with specific provider type (user clicked a type card)
   if (!model && providerType) {
+    // OmniRoute: no es "pega tu API key" — instala el gateway local y apunta OpenClaw a él.
+    if (providerType === 'omniroute') {
+      return <OmniRouteSetupWizard onClose={onClose} onSuccess={onSuccess} />;
+    }
     const defaults = FIXED_PROVIDER_DEFAULTS[providerType];
     if (defaults) {
       return <FixedProviderForm defaults={defaults} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
-    }
-    if (CLOUD_PROVIDER_QUICKSTART.has(providerType)) {
-      return <CloudProviderForm providerId={providerType} onClose={onClose} onSuccess={onSuccess} />;
     }
     // 'custom' type falls through to CustomProviderForm
     return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
@@ -222,166 +111,13 @@ export function ModelSetupWizard({ model, providerType, providerModels, onClose,
   if (!model) {
     return <CustomProviderForm model={null} onClose={onClose} onSuccess={onSuccess} />;
   }
-  if (model.provider.startsWith(CUSTOM_PROVIDER_PREFIX)) {
-    return <CustomProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
+  const fixed = FIXED_PROVIDER_DEFAULTS[model.provider];
+  if (fixed) {
+    return <FixedProviderForm defaults={fixed} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
   }
-  return <StandardProviderForm model={model} providerModels={providerModels} onClose={onClose} onSuccess={onSuccess} />;
+  return <CustomProviderForm model={model} onClose={onClose} onSuccess={onSuccess} />;
 }
 
-// ─── Standard provider form (Anthropic, OpenAI, etc.) ──────────────
-
-function StandardProviderForm({ model, providerModels, onClose, onSuccess }: ModelSetupWizardProps & { model: CatalogModel }) {
-  const info = PROVIDER_INFO[model.provider] ?? {
-    label: model.provider,
-    description: `Configure an API key for ${model.provider}.`,
-  };
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [addingModel, setAddingModel] = useState(false);
-
-  const canSave = token.trim().length >= 8;
-
-  const handleSave = async () => {
-    if (!canSave) return;
-    setSaving(true);
-    try {
-      // 1. Save the token via the new auth endpoint
-      await gwService.setAuthToken({ provider: model.provider, token: token.trim() });
-      toast.success(`${info.label} credentials saved`);
-
-      // 2. If the model wasn't already configured, add it now
-      if (!model.configured) {
-        setAddingModel(true);
-        await gwService.addModel(model.key);
-        toast.success(`${model.name || model.key} added to your models`);
-      }
-
-      onSuccess();
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to configure provider';
-      toast.error(msg);
-    } finally {
-      setSaving(false);
-      setAddingModel(false);
-    }
-  };
-
-  return (
-    <ModalShell
-      title={`Configure ${info.label}`}
-      titleIcon={(() => {
-        const Icon = getProviderIcon(model.provider);
-        return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
-      })()}
-      onClose={onClose}
-    >
-      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
-        {info.description}
-      </p>
-      <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: 6 }}>
-        Needed for: <strong style={{ color: 'var(--text)' }}>{model.name || model.key}</strong>
-      </p>
-
-      {info.signupUrl && (
-        <div style={{ marginBottom: 16 }}>
-          <a
-            href={info.signupUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: '0.75rem',
-              color: 'var(--amber)',
-              textDecoration: 'none',
-              padding: '6px 10px',
-              border: '1px solid var(--amber)',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            Get an API key from {info.label} <ExternalLink size={12} />
-          </a>
-        </div>
-      )}
-
-      <label style={{
-        display: 'block',
-        fontSize: '0.75rem',
-        color: 'var(--text-dim)',
-        marginBottom: 6,
-        fontFamily: 'var(--font-sans)',
-      }}>
-        Paste your API key:
-      </label>
-
-      <div style={{ position: 'relative', marginBottom: 12 }}>
-        <input
-          type={showToken ? 'text' : 'password'}
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder={info.tokenPrefix ? `${info.tokenPrefix}...` : 'paste here'}
-          autoFocus
-          style={{
-            width: '100%',
-            background: 'var(--bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '10px 36px 10px 12px',
-            color: 'var(--text)',
-            fontSize: '0.8125rem',
-            fontFamily: 'var(--font-mono)',
-            outline: 'none',
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => setShowToken(!showToken)}
-          style={{
-            position: 'absolute',
-            right: 8,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-dim)',
-            display: 'flex',
-            padding: 4,
-          }}
-        >
-          {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-
-      <p style={{
-        fontSize: '0.6875rem',
-        color: 'var(--text-dim)',
-        background: 'var(--surface)',
-        padding: '8px 10px',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--border)',
-        marginBottom: 16,
-        lineHeight: 1.4,
-      }}>
-        🔒 This key is stored locally in your agents' auth profile files (<code style={{ fontFamily: 'var(--font-mono)' }}>~/.openclaw/agents/&lt;you&gt;--&lt;agent&gt;/agent/auth-profiles.json</code>) and never sent anywhere except {info.label} when you make a model call.
-      </p>
-
-      <ButtonRow
-        cancelLabel="Cancel"
-        confirmLabel={addingModel ? 'Adding model...' : saving ? 'Saving...' : 'Save & Add'}
-        onCancel={onClose}
-        onConfirm={handleSave}
-        confirmDisabled={!canSave || saving}
-        loading={saving}
-      />
-
-      <ProviderModelsList models={providerModels} providerLabel={info.label} />
-    </ModalShell>
-  );
-}
 
 // ─── Custom provider form (custom-api-*) ────────────────────────────
 
@@ -417,21 +153,28 @@ function CustomProviderForm({ model, onClose, onSuccess }: ModelSetupWizardProps
         },
       });
       toast.success(`Custom provider ${providerId} configured`);
+    } catch (err) {
+      // El provider NO se guardó → modal abierto para reintentar.
+      toast.error(describeCredentialError(err, 'Failed to configure custom provider'));
+      setSaving(false);
+      return;
+    }
 
-      // If opened from a catalog model, add that model too
-      if (model && !model.configured) {
+    // If opened from a catalog model, add that model too. Fallo parcial: la
+    // credencial/entrada SÍ se guardó → onSuccess (refetch) igualmente, con
+    // toast preciso de qué mitad falló.
+    if (model && !model.configured) {
+      try {
         await gwService.addModel(model.key);
         toast.success(`${model.name || model.key} added`);
+      } catch (err) {
+        toast.error(`Key saved, but the model could not be added: ${describeCredentialError(err, 'unknown error')}`);
       }
-
-      onSuccess();
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to configure custom provider';
-      toast.error(msg);
-    } finally {
-      setSaving(false);
     }
+
+    setSaving(false);
+    onSuccess();
+    onClose();
   };
 
   return (
@@ -573,7 +316,7 @@ function FixedProviderForm({ defaults, providerModels, onClose, onSuccess }: {
       onSuccess();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : `Failed to configure ${defaults.label}`);
+      toast.error(describeCredentialError(err, `Failed to configure ${defaults.label}`));
     } finally {
       setSaving(false);
     }
@@ -731,162 +474,6 @@ function ButtonRow({
   );
 }
 
-// ─── Cloud provider quickstart (U10) ──────────────────────────────
-// Used when the user clicks one of the U10 quickstart cards in the
-// catalog grid (xAI, Fal, MiniMax, Cohere, OpenRouter, Arcee). Just
-// saves an API key under the provider id — the binary already knows
-// the baseUrl via its native extension. After save, discover models
-// in the background so they appear in the catalog grid next time.
-function CloudProviderForm({
-  providerId,
-  onClose,
-  onSuccess,
-}: {
-  providerId: string;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const info = PROVIDER_INFO[providerId] ?? {
-    label: providerId,
-    description: `Configure an API key for ${providerId}.`,
-  };
-  const [token, setToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const canSave = token.trim().length >= 8;
-
-  const handleSave = async () => {
-    if (!canSave) return;
-    setSaving(true);
-    try {
-      await gwService.setAuthToken({ provider: providerId, token: token.trim() });
-      toast.success(`${info.label} credentials saved`);
-      // Background-discover models so they show up in the catalog grid
-      // on the next mount. Fire-and-forget; the user can refresh manually
-      // if they want to see them sooner.
-      void gwService.discoverProviderModels(providerId).catch(() => {});
-      onSuccess();
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save credentials';
-      toast.error(msg);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <ModalShell
-      title={`Configure ${info.label}`}
-      titleIcon={(() => {
-        const Icon = getProviderIcon(providerId);
-        return Icon ? <Icon size={26} style={{ color: 'var(--amber)' }} /> : null;
-      })()}
-      onClose={onClose}
-    >
-      <p style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>
-        {info.description}
-      </p>
-
-      {info.signupUrl && (
-        <div style={{ marginBottom: 16 }}>
-          <a
-            href={info.signupUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: '0.75rem',
-              color: 'var(--amber)',
-              textDecoration: 'none',
-              padding: '6px 10px',
-              border: '1px solid var(--amber)',
-              borderRadius: 'var(--radius-sm)',
-            }}
-          >
-            Get an API key from {info.label} <ExternalLink size={12} />
-          </a>
-        </div>
-      )}
-
-      <label style={{
-        display: 'block',
-        fontSize: '0.75rem',
-        color: 'var(--text-dim)',
-        marginBottom: 6,
-        fontFamily: 'var(--font-sans)',
-      }}>
-        Paste your API key:
-      </label>
-
-      <div style={{ position: 'relative', marginBottom: 12 }}>
-        <input
-          type={showToken ? 'text' : 'password'}
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          placeholder={info.tokenPrefix ? `${info.tokenPrefix}...` : 'paste here'}
-          autoFocus
-          style={{
-            width: '100%',
-            background: 'var(--bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: '10px 36px 10px 12px',
-            color: 'var(--text)',
-            fontSize: '0.8125rem',
-            fontFamily: 'var(--font-mono)',
-            outline: 'none',
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => setShowToken(!showToken)}
-          style={{
-            position: 'absolute',
-            right: 8,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: 'var(--text-dim)',
-            display: 'flex',
-            padding: 4,
-          }}
-        >
-          {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-
-      <p style={{
-        fontSize: '0.6875rem',
-        color: 'var(--text-dim)',
-        background: 'var(--surface)',
-        padding: '8px 10px',
-        borderRadius: 'var(--radius-sm)',
-        border: '1px solid var(--border)',
-        marginBottom: 16,
-        lineHeight: 1.4,
-      }}>
-        🔒 The key is stored locally in your agents' auth profile files and never sent
-        anywhere except {info.label} when you make a model call. Models for this provider
-        will appear in the catalog next time you open it.
-      </p>
-
-      <ButtonRow
-        cancelLabel="Cancel"
-        confirmLabel={saving ? 'Saving…' : 'Save credentials'}
-        onCancel={onClose}
-        onConfirm={handleSave}
-        confirmDisabled={!canSave || saving}
-        loading={saving}
-      />
-    </ModalShell>
-  );
-}
 
 function ModalShell({ title, titleIcon, onClose, children }: { title: string; titleIcon?: React.ReactNode; onClose: () => void; children: React.ReactNode }) {
   return (

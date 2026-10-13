@@ -124,10 +124,10 @@ export function FacturacionAjustesTab() {
     try {
       const r = await saveCrossDomainSettings({ bill_propose_items: next });
       setProposeItems(r.bill_propose_items);
-      toast.success(next ? 'Activado: las facturas recibidas propondrán artículos nuevos' : 'Desactivado');
+      toast.success(next ? 'On: received invoices will propose new items' : 'Desactivado');
     } catch (e) {
       setProposeItems(!next); // revertir
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el ajuste');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save the setting');
     } finally {
       setCdBusy(false);
     }
@@ -138,7 +138,7 @@ export function FacturacionAjustesTab() {
   const accentValid = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(accent);
 
   const onSaveCompany = async () => {
-    if (!coName.trim()) { toast.error('Pon al menos el nombre comercial de tu empresa'); return; }
+    if (!coName.trim()) { toast.error('Enter at least your company\'s trading name'); return; }
     setCoBusy(true);
     try {
       // Solo mandamos la dirección si tiene algún campo; si no, se omite (no [{}]).
@@ -158,16 +158,16 @@ export function FacturacionAjustesTab() {
         email: coEmail.trim() || undefined,
         phone: coPhone.trim() || undefined,
       });
-      toast.success('Datos de empresa guardados');
+      toast.success('Company details saved');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudieron guardar los datos de empresa');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save the company details');
     } finally {
       setCoBusy(false);
     }
   };
 
   const onSaveBrand = async () => {
-    if (!accentValid) { toast.error('El color de acento no es un hex válido (p.ej. #4338ca)'); return; }
+    if (!accentValid) { toast.error('The accent colour isn\'t valid hex (e.g. #4338ca)'); return; }
     setBrandBusy(true);
     try {
       await saveBrand({
@@ -177,7 +177,7 @@ export function FacturacionAjustesTab() {
       });
       toast.success('Marca guardada');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la marca');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save the branding');
     } finally {
       setBrandBusy(false);
     }
@@ -187,18 +187,18 @@ export function FacturacionAjustesTab() {
     const file = e.target.files?.[0];
     if (e.target) e.target.value = ''; // permite re-elegir el mismo archivo
     if (!file) return;
-    if (!file.type.startsWith('image/')) { toast.error('El logo debe ser una imagen'); return; }
-    if (file.size > 512 * 1024) { toast.error('El logo es muy grande (máx. 512 KB). Usa una URL si pesa más.'); return; }
+    if (!file.type.startsWith('image/')) { toast.error('The logo must be an image'); return; }
+    if (file.size > 512 * 1024) { toast.error('The logo is too large (max 512 KB). Use a URL if it\'s bigger.'); return; }
     const reader = new FileReader();
     reader.onload = () => { if (typeof reader.result === 'string') setLogo(reader.result); };
-    reader.onerror = () => toast.error('No se pudo leer el archivo');
+    reader.onerror = () => toast.error('Couldn\'t read the file');
     reader.readAsDataURL(file);
   };
 
   const onCreate = async () => {
     const pct = Number(String(ratePct).replace(',', '.'));
-    if (!name.trim()) { toast.error('Pon un nombre a la tarifa'); return; }
-    if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('El porcentaje debe estar entre 0 y 100'); return; }
+    if (!name.trim()) { toast.error('Give the rate a name'); return; }
+    if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('The percentage must be between 0 and 100'); return; }
     setBusy(true);
     try {
       await createTaxRate({ name: name.trim(), rate: String(pct / 100), mode });
@@ -206,7 +206,7 @@ export function FacturacionAjustesTab() {
       setName('');
       setRatePct('21');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo crear');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t create');
     } finally {
       setBusy(false);
     }
@@ -218,7 +218,7 @@ export function FacturacionAjustesTab() {
       await deleteTaxRate(id);
       toast.success('Tarifa borrada');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo borrar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t delete');
     }
   };
 
@@ -229,16 +229,16 @@ export function FacturacionAjustesTab() {
     <div style={{ padding: 24, maxWidth: 760, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <Percent size={16} style={{ color: 'var(--mod-finance)' }} />
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Tarifas de IVA</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>VAT rates</h3>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 18 }}>
-        Tipos de IVA que podrás elegir por línea al crear facturas. "Exclusivo" = el IVA se suma al precio; "Inclusivo" = el precio ya lleva el IVA incorporado.
+        Tipos de IVA que podrás elegir por línea al crear facturas. "Exclusive" = el IVA se suma al precio; "Inclusive" = el precio ya lleva el IVA incorporado.
       </p>
 
       {/* Alta */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14, marginBottom: 20 }}>
         <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-          <label style={labelStyle}>Nombre</label>
+          <label style={labelStyle}>Name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="IVA general" style={{ ...fieldStyle, width: '100%' }} />
         </div>
         <div style={{ width: 100 }}>
@@ -246,10 +246,10 @@ export function FacturacionAjustesTab() {
           <input value={ratePct} onChange={(e) => setRatePct(e.target.value)} inputMode="decimal" style={{ ...fieldStyle, width: '100%', textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }} />
         </div>
         <div style={{ width: 140 }}>
-          <label style={labelStyle}>Modo</label>
+          <label style={labelStyle}>Mode</label>
           <select value={mode} onChange={(e) => setMode(e.target.value as TaxMode)} style={{ ...fieldStyle, width: '100%' }}>
-            <option value="exclusive">Exclusivo</option>
-            <option value="inclusive">Inclusivo</option>
+            <option value="exclusive">Exclusive</option>
+            <option value="inclusive">Inclusive</option>
           </select>
         </div>
         <button onClick={onCreate} disabled={busy} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#fff', cursor: busy ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, height: 36 }}>
@@ -269,7 +269,7 @@ export function FacturacionAjustesTab() {
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
               <div style={{ flex: 1, fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{t.name}</div>
               <div style={{ width: 70, textAlign: 'right', fontSize: 13, fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)' }}>{(Number(t.rate) * 100).toFixed(0)}%</div>
-              <div style={{ width: 90, textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>{t.mode === 'inclusive' ? 'Inclusivo' : 'Exclusivo'}</div>
+              <div style={{ width: 90, textAlign: 'right', fontSize: 12, color: 'var(--text-muted)' }}>{t.mode === 'inclusive' ? 'Inclusive' : 'Exclusive'}</div>
               <button onClick={() => onDelete(t.id, t.name)} title="Borrar tarifa" style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer', padding: 4 }}>
                 <Trash2 size={14} />
               </button>
@@ -281,7 +281,7 @@ export function FacturacionAjustesTab() {
       {/* ─── Datos de tu empresa (emisor del PDF) ──────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 36, marginBottom: 4 }}>
         <Building2 size={16} style={{ color: 'var(--mod-finance)' }} />
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Datos de tu empresa</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Your company details</h3>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 18 }}>
         Estos datos salen en la cabecera de tus facturas (PDF).
@@ -291,46 +291,46 @@ export function FacturacionAjustesTab() {
         {/* Nombre + razón social */}
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label style={labelStyle}>Nombre comercial</label>
+            <label style={labelStyle}>Trading name</label>
             <input value={coName} onChange={(e) => setCoName(e.target.value)} placeholder="Mi Empresa S.L." style={{ ...fieldStyle, width: '100%' }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label style={labelStyle}>Razón social</label>
-            <input value={coLegalName} onChange={(e) => setCoLegalName(e.target.value)} placeholder="Razón social (opcional)" style={{ ...fieldStyle, width: '100%' }} />
+            <label style={labelStyle}>Legal name</label>
+            <input value={coLegalName} onChange={(e) => setCoLegalName(e.target.value)} placeholder="Legal name (optional)" style={{ ...fieldStyle, width: '100%' }} />
           </div>
         </div>
 
         {/* NIF/CIF + divisa */}
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label style={labelStyle}>NIF/CIF</label>
+            <label style={labelStyle}>Tax ID</label>
             <input value={coTaxId} onChange={(e) => setCoTaxId(e.target.value)} placeholder="B12345678" style={{ ...fieldStyle, width: '100%' }} />
           </div>
           <div style={{ width: 120 }}>
-            <label style={labelStyle}>Divisa</label>
+            <label style={labelStyle}>Currency</label>
             <input value={coCurrency} onChange={(e) => setCoCurrency(e.target.value.toUpperCase())} placeholder="EUR" maxLength={3} style={{ ...fieldStyle, width: '100%', textTransform: 'uppercase' }} />
           </div>
         </div>
 
         {/* Dirección */}
         <div>
-          <label style={labelStyle}>Dirección</label>
-          <input value={coLine1} onChange={(e) => setCoLine1(e.target.value)} placeholder="Calle y número" style={{ ...fieldStyle, width: '100%', marginBottom: 8 }} />
+          <label style={labelStyle}>Address</label>
+          <input value={coLine1} onChange={(e) => setCoLine1(e.target.value)} placeholder="Street and number" style={{ ...fieldStyle, width: '100%', marginBottom: 8 }} />
           <div style={{ display: 'flex', gap: 12 }}>
             <input value={coPostalCode} onChange={(e) => setCoPostalCode(e.target.value)} placeholder="C.P." style={{ ...fieldStyle, width: 110 }} />
-            <input value={coCity} onChange={(e) => setCoCity(e.target.value)} placeholder="Ciudad" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
-            <input value={coCountry} onChange={(e) => setCoCountry(e.target.value)} placeholder="País" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
+            <input value={coCity} onChange={(e) => setCoCity(e.target.value)} placeholder="City" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
+            <input value={coCountry} onChange={(e) => setCoCountry(e.target.value)} placeholder="Country" style={{ ...fieldStyle, flex: 1, minWidth: 0 }} />
           </div>
         </div>
 
         {/* Email + teléfono */}
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label style={labelStyle}>Email (opcional)</label>
+            <label style={labelStyle}>Email (optional)</label>
             <input value={coEmail} onChange={(e) => setCoEmail(e.target.value)} type="email" placeholder="hola@miempresa.com" style={{ ...fieldStyle, width: '100%' }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <label style={labelStyle}>Teléfono (opcional)</label>
+            <label style={labelStyle}>Phone (optional)</label>
             <input value={coPhone} onChange={(e) => setCoPhone(e.target.value)} placeholder="+34 600 000 000" style={{ ...fieldStyle, width: '100%' }} />
           </div>
         </div>
@@ -346,7 +346,7 @@ export function FacturacionAjustesTab() {
       {/* ─── Marca de tus facturas ─────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 36, marginBottom: 4 }}>
         <Palette size={16} style={{ color: 'var(--mod-finance)' }} />
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Marca de tus facturas</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Your invoice branding</h3>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 18 }}>
         Personaliza el aspecto de los PDF y la vista previa de tus facturas: color de acento, tipografía y logo.
@@ -357,7 +357,7 @@ export function FacturacionAjustesTab() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
           {/* Color de acento */}
           <div>
-            <label style={labelStyle}>Color de acento</label>
+            <label style={labelStyle}>Accent colour</label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
                 type="color"
@@ -376,7 +376,7 @@ export function FacturacionAjustesTab() {
 
           {/* Tipografía */}
           <div>
-            <label style={labelStyle}>Tipografía</label>
+            <label style={labelStyle}>Typeface</label>
             <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} style={{ ...fieldStyle, width: 220 }}>
               {FONT_PRESETS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
@@ -384,12 +384,12 @@ export function FacturacionAjustesTab() {
 
           {/* Logo */}
           <div>
-            <label style={labelStyle}>Logo (URL de imagen)</label>
+            <label style={labelStyle}>Logo (image URL)</label>
             <div style={{ display: 'flex', gap: 8 }}>
               <input
                 value={logo}
                 onChange={(e) => setLogo(e.target.value)}
-                placeholder="https://… o sube un archivo"
+                placeholder="https://… or upload a file"
                 style={{ ...fieldStyle, flex: 1, minWidth: 0 }}
               />
               <button
@@ -422,12 +422,12 @@ export function FacturacionAjustesTab() {
 
         {/* Mini-vista de feedback */}
         <div style={{ width: isMobile ? '100%' : 200, flexShrink: 0, borderLeft: isMobile ? 'none' : '1px solid var(--border)', borderTop: isMobile ? '1px solid var(--border)' : 'none', paddingLeft: isMobile ? 0 : 18, paddingTop: isMobile ? 14 : 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>Vista</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.4 }}>View</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <div style={{ width: 28, height: 28, borderRadius: 6, background: accentValid ? accent : DEFAULT_ACCENT, border: '1px solid var(--border)', flexShrink: 0 }} />
-            <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>{accentValid ? accent : 'inválido'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>{accentValid ? accent : 'invalid'}</div>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Tipografía</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Typeface</div>
           <div style={{ fontSize: 15, color: 'var(--text)', fontFamily: fontFamily, marginBottom: 14 }}>
             {fontLabel(fontFamily)} · Abc 123
           </div>
@@ -445,7 +445,7 @@ export function FacturacionAjustesTab() {
       {/* ─── Conexión con inventario (opt-in) ──────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 36, marginBottom: 4 }}>
         <Package size={16} style={{ color: 'var(--mod-finance)' }} />
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Conexión con inventario</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Inventory link</h3>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 18 }}>
         Cuando vinculas una línea de factura a un artículo existente, al registrar la factura el stock se ajusta solo (entra en compras, sale en ventas). Esto es siempre así. El ajuste de abajo es opcional.

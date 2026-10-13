@@ -214,7 +214,10 @@ export function MultimediaEmbed({ serviceName, displayName, description, icon: I
     // El camino per-port (`<host>:<puerto>`) solo es alcanzable en la MISMA máquina que
     // corre los servicios (dev box: localhost). Desde un cliente REMOTO (app móvil vía
     // victor.claw, otro PC) ese puerto no existe → se usa el proxy same-origin de Core
-    // (`/api/v1/multimedia/proxy/<svc>/`, ya existente, autorizado por la cookie claw_session).
+    // (`/api/v1/multimedia/proxy/<svc>/`, ya existente).
+    // OJO (medido 2026-08-06): ese prefijo está en PUBLIC_PREFIXES de core/src/plugins/auth.ts
+    // → NO lo autoriza la cookie claw_session; pasa sin token (curl sin cabeceras devuelve la
+    // respuesta del upstream, no 401). La única autenticación es la propia de cada app.
     // Mismo criterio que OpencodeEmbed (isRemoteClient). Local no cambia (cero regresión).
     const hostname = window.location.hostname;
     const isRemoteClient = hostname !== 'localhost' && hostname !== '127.0.0.1';

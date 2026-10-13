@@ -56,7 +56,7 @@ export function useEvents(params: {
 
   useEffect(() => { fetchEvents(); }, [fetchEvents]);
 
-  useRealtimeList('event', events, setEvents);
+  useRealtimeList('event', events, setEvents, fetchEvents);
 
   const createEvent = async (input: EventCreateInput): Promise<CalendarEvent> => {
     const res = await api.post<ApiResponse<CalendarEvent>>('/events', input);
@@ -94,8 +94,8 @@ export function useEvents(params: {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.post(`/events/${id}/restore`);
-              if (removed) setEvents(prev => [...prev, removed].sort((a, b) => a.start_at.localeCompare(b.start_at)));
+              const restored = await api.post<ApiResponse<CalendarEvent>>(`/events/${id}/restore`);
+              if (restored.data) setEvents(prev => [...prev, restored.data].sort((a, b) => a.start_at.localeCompare(b.start_at)));
             } catch { toast.error('Failed to restore event'); }
           },
         } : undefined,

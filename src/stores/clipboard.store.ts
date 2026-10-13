@@ -15,13 +15,26 @@ import { api } from '@/services/api';
 
 // ─── Types ──────────────────────────────────────────────
 
+/** Fila de `GET /clipboard` — snake_case, como todo el contrato (03_CONVENTIONS §API). */
 export interface ClipboardEntry {
   id: string;
   content: string;
-  contentType: string;
+  content_type: string;
   source: string;
   metadata?: Record<string, unknown>;
-  createdAt: string;
+  created_at: string;
+}
+
+/**
+ * Payload del evento WS `clipboard.new` (`core/src/routes/clipboard.ts`):
+ * NO es una `ClipboardEntry` — trae `content_preview` (100 chars) en vez de
+ * `content` y no trae `created_at`.
+ */
+export interface ClipboardNewEvent {
+  id: string;
+  content_type: string;
+  content_preview: string;
+  source: string;
 }
 
 // ─── Store ──────────────────────────────────────────────
@@ -37,7 +50,7 @@ interface ClipboardState {
   clearAll: () => Promise<void>;
   togglePanel: () => void;
   setPanelOpen: (open: boolean) => void;
-  addEntry: (entry: ClipboardEntry) => void;
+  addEntry: (event: ClipboardNewEvent) => void;
 }
 
 export const useClipboardStore = create<ClipboardState>()((set, get) => ({
@@ -94,7 +107,19 @@ export const useClipboardStore = create<ClipboardState>()((set, get) => ({
     if (open) get().fetchHistory();
   },
 
-  addEntry: (entry: ClipboardEntry) => {
-    set((s) => ({ entries: [entry, ...s.entries].slice(0, 20) }));
+  addEntry: (event: ClipboardNewEvent) => {
+    // El WS solo trae un preview de 100 chars y ningún `created_at`: se pinta
+    // ya (feedback inmediato) y se reconcilia con GET /clipboard, que sí trae
+    // el contenido entero y la fecha real. Sin esta normalización la entrada
+    // entraba sin `content` y el panel reventaba al hacer content.slice().
+    const entry: ClipboardEntry = {
+      id: event.id,
+      content: event.content_preview,
+      content_type: event.content_type,
+      source: event.source,
+      created_at: new Date().toISOString(),
+    };
+    set((s) => ({ entries: [entry, ...s.entries.filter((e) => e.id !== entry.id)].slice(0, 20) }));
+    void get().fetchHistory();
   },
 }));

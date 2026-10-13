@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState } from 'react';
 import { ExternalLink, Star, FileText, Sparkles, Eye, EyeOff, Loader2, Share2 } from 'lucide-react';
 import { useFeedsStore } from '@/stores/feeds.store';
@@ -67,6 +68,7 @@ export function ArticleReader() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-[var(--border)] space-y-2">
         <h1 className="text-lg font-semibold text-[var(--text)] leading-tight">{article.title}</h1>
+        <EntitySource entity={article} domain="feeds" native detail />
         <div className="flex items-center gap-2 text-xs text-[var(--text-dim)]">
           {article.author && <span>{article.author}</span>}
           {article.author && feed && <span>·</span>}

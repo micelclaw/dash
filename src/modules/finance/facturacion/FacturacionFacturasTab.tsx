@@ -12,7 +12,7 @@
 
 // F4/F5/F6 — Facturas: tabla de documentos (number, cliente, emitida, vence,
 // total, estado) + panel de detalle/acciones al clicar una fila (emitir, cobro,
-// abono, convertir presupuesto). Botón "+ Factura" abre el editor.
+// abono, convertir presupuesto). Botón "+ Invoice" abre el editor.
 // Molde = MovimientosTab.tsx de la lente Personal.
 
 import { useEffect, useMemo, useState } from 'react';
@@ -35,11 +35,11 @@ import { useEscapeClose } from '../use-escape-close';
 
 // ─── Etiqueta de tipo de documento ───────────────────────────────────────
 const DOC_TYPE_LABEL: Record<DocType, string> = {
-  invoice: 'Factura',
-  quote: 'Presupuesto',
+  invoice: 'Invoice',
+  quote: 'Quote',
   bill: 'Factura recibida',
   receipt: 'Recibo',
-  credit_note: 'Abono',
+  credit_note: 'Credit note',
 };
 
 function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType }) {
@@ -47,29 +47,29 @@ function StatusBadge({ status, docType }: { status: DocStatus; docType?: DocType
   return <span style={tintedPillStyle(m.color)}>{statusLabel(status, docType)}</span>;
 }
 
-// Las facturas RECIBIDAS (bill) tienen su propia pestaña "Recibidas" (lockedType);
+// Las facturas RECIBIDAS (bill) tienen su propia pestaña "Received" (lockedType);
 // no se ofrecen aquí para no duplicar la puerta de acceso (la pestaña Facturas es
 // el lado VENTAS: factura/presupuesto/recibo/abono).
-// Sin 'quote' ni 'bill': los presupuestos tienen su pestaña "Presupuestos" y las
-// facturas recibidas la suya "Recibidas". Aquí solo documentos de VENTA emitidos.
+// Sin 'quote' ni 'bill': los presupuestos tienen su pestaña "Quotes" y las
+// facturas recibidas la suya "Received". Aquí solo documentos de VENTA emitidos.
 const TYPE_FILTERS: { id: '' | DocType; label: string }[] = [
-  { id: '', label: 'Todos' },
-  { id: 'invoice', label: 'Facturas' },
+  { id: '', label: 'All' },
+  { id: 'invoice', label: 'Invoices' },
   { id: 'receipt', label: 'Recibos' },
-  { id: 'credit_note', label: 'Abonos' },
+  { id: 'credit_note', label: 'Credit notes' },
 ];
 
 const STATUS_FILTERS: { id: '' | DocStatus; label: string }[] = [
-  { id: '', label: 'Cualquier estado' },
-  { id: 'draft', label: 'Borrador' },
-  { id: 'sent', label: 'Enviada' },
-  { id: 'accepted', label: 'Aceptada' },
-  { id: 'declined', label: 'Rechazada' },
-  { id: 'partial', label: 'Cobro parcial' },
-  { id: 'paid', label: 'Cobrada' },
-  { id: 'overdue', label: 'Vencida' },
-  { id: 'cancelled', label: 'Anulada' },
-  { id: 'converted', label: 'Convertida' },
+  { id: '', label: 'Any status' },
+  { id: 'draft', label: 'Draft' },
+  { id: 'sent', label: 'Sent' },
+  { id: 'accepted', label: 'Accepted' },
+  { id: 'declined', label: 'Rejected' },
+  { id: 'partial', label: 'Partial payment' },
+  { id: 'paid', label: 'Paid' },
+  { id: 'overdue', label: 'Overdue' },
+  { id: 'cancelled', label: 'Voided' },
+  { id: 'converted', label: 'Converted' },
 ];
 
 export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } = {}) {
@@ -149,7 +149,7 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{visibleDocs.length} documento{visibleDocs.length === 1 ? '' : 's'}</span>
         {lockedType === 'quote' ? (
           <button onClick={openNewQuote} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Presupuesto
+            <Plus size={15} /> Quote
           </button>
         ) : lockedType === 'bill' ? (
           <button onClick={openNewBill} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--surface-hover)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
@@ -157,7 +157,7 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
           </button>
         ) : (
           <button onClick={() => openInvoice('')} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Factura
+            <Plus size={15} /> Invoice
           </button>
         )}
       </div>
@@ -166,12 +166,12 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
           <thead>
             <tr>
-              <SortableTh label={lockedType === 'bill' ? 'Nº proveedor' : 'Número'} col="number" state={sort} />
-              <SortableTh label={lockedType === 'bill' ? 'Proveedor' : 'Cliente'} col="client" state={sort} />
-              <SortableTh label={lockedType === 'bill' ? 'Recibida' : 'Emitida'} col="issue" state={sort} />
-              <SortableTh label="Vence" col="due" state={sort} />
+              <SortableTh label={lockedType === 'bill' ? 'Nº proveedor' : 'Number'} col="number" state={sort} />
+              <SortableTh label={lockedType === 'bill' ? 'Supplier' : 'Customer'} col="client" state={sort} />
+              <SortableTh label={lockedType === 'bill' ? 'Received' : 'Issued'} col="issue" state={sort} />
+              <SortableTh label="Due" col="due" state={sort} />
               <SortableTh label="Total" col="total" state={sort} align="right" />
-              <SortableTh label="Estado" col="status" state={sort} align="right" />
+              <SortableTh label="Status" col="status" state={sort} align="right" />
             </tr>
           </thead>
           <tbody>
@@ -190,14 +190,14 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
                   <span
                     role="button"
                     tabIndex={0}
-                    title="Abrir en el editor"
+                    title="Open in the editor"
                     onClick={(e) => { e.stopPropagation(); openEdit(doc.id); }}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openEdit(doc.id); } }}
                     style={{ color: 'var(--mod-finance)', cursor: 'pointer', fontFamily: 'inherit' }}
                     onMouseEnter={(e) => (e.currentTarget.style.textDecoration = 'underline')}
                     onMouseLeave={(e) => (e.currentTarget.style.textDecoration = 'none')}
                   >
-                    {doc.number ?? <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>— borrador</span>}
+                    {doc.number ?? <span style={{ color: 'var(--text-muted)', fontFamily: 'inherit' }}>— draft</span>}
                   </span>
                   {doc.external_ref?.attachment && <Paperclip size={12} style={{ marginLeft: 6, verticalAlign: 'middle', color: 'var(--text-muted)' }} />}
                   {doc.type !== 'invoice' && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'inherit' }}>{DOC_TYPE_LABEL[doc.type]}</span>}
@@ -208,7 +208,7 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
                       <span
                         role="button"
                         tabIndex={0}
-                        title="Ver ficha del cliente"
+                        title="Open the customer record"
                         onClick={(e) => { e.stopPropagation(); openContact(doc.contact_id); }}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); openContact(doc.contact_id); } }}
                         style={{ cursor: 'pointer' }}
@@ -243,21 +243,21 @@ export function FacturacionFacturasTab({ lockedType }: { lockedType?: DocType } 
               setOpenDocId(null);
               openEdit(inv.id);
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : 'No se pudo convertir');
+              toast.error(e instanceof Error ? e.message : 'Couldn\'t convert');
             }
           }}
           onCreditNote={async (id, total, currency) => {
             const raw = window.prompt('Importe a abonar', total);
             if (!raw) return;
             const amt = raw.replace(',', '.').trim();
-            if (!amt || Number(amt) <= 0) { toast.error('Indica un importe'); return; }
+            if (!amt || Number(amt) <= 0) { toast.error('Enter an amount'); return; }
             const reason = window.prompt('Motivo del abono (opcional)') ?? undefined;
             try {
               await createCreditNote({ invoice_id: id, amount: Number(amt).toFixed(2), reason: reason || undefined });
-              toast.success('Abono creado');
+              toast.success('Credit note created');
               setOpenDocId(null);
             } catch (e) {
-              toast.error(e instanceof Error ? e.message : 'No se pudo crear el abono');
+              toast.error(e instanceof Error ? e.message : 'Couldn\'t create the credit note');
             }
             void currency;
           }}
@@ -322,9 +322,9 @@ function DocDetailPanel({
     setEmitting(true);
     try {
       await emitDocument(docId);
-      toast.success('Documento emitido');
+      toast.success('Document issued');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo emitir');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t issue');
     } finally {
       setEmitting(false);
     }
@@ -338,7 +338,7 @@ function DocDetailPanel({
       toast.success('Presupuesto aceptado');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo aceptar el presupuesto');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t accept the quote');
     } finally {
       setDecideBusy(false);
     }
@@ -352,7 +352,7 @@ function DocDetailPanel({
       toast.success('Presupuesto rechazado');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo rechazar el presupuesto');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t reject the quote');
     } finally {
       setDecideBusy(false);
     }
@@ -370,7 +370,7 @@ function DocDetailPanel({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <FileText size={18} style={{ color: 'var(--mod-finance)' }} />
-            {doc?.number ?? 'Borrador'}
+            {doc?.number ?? 'Draft'}
             {doc && <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>{DOC_TYPE_LABEL[doc.type]}</span>}
           </h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
@@ -385,10 +385,10 @@ function DocDetailPanel({
         {doc && (
           <>
             <div style={{ marginBottom: 14 }}>
-              <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Proveedor' : 'Cliente'}</span><span style={valueStyle}>{contactName ?? '—'}</span></div>
-              <div style={rowStyle}><span style={labelStyle}>Estado</span><StatusBadge status={doc.status} docType={doc.type} /></div>
+              <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Supplier' : 'Customer'}</span><span style={valueStyle}>{contactName ?? '—'}</span></div>
+              <div style={rowStyle}><span style={labelStyle}>Status</span><StatusBadge status={doc.status} docType={doc.type} /></div>
               <div style={rowStyle}><span style={labelStyle}>{doc.type === 'bill' ? 'Recibida' : 'Emitida'}</span><span style={valueStyle}>{doc.issue_date}</span></div>
-              <div style={rowStyle}><span style={labelStyle}>Vence</span><span style={valueStyle}>{doc.due_date ?? '—'}</span></div>
+              <div style={rowStyle}><span style={labelStyle}>Due</span><span style={valueStyle}>{doc.due_date ?? '—'}</span></div>
             </div>
 
             {/* Líneas */}
@@ -396,14 +396,14 @@ function DocDetailPanel({
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Concepto</th>
-                    <th style={{ textAlign: 'right', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Cant.</th>
-                    <th style={{ textAlign: 'right', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Importe</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Description</th>
+                    <th style={{ textAlign: 'right', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Qty</th>
+                    <th style={{ textAlign: 'right', padding: '6px 10px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 500, borderBottom: '1px solid var(--border)' }}>Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {doc.lines.length === 0 && (
-                    <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>Sin líneas.</td></tr>
+                    <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>No lines.</td></tr>
                   )}
                   {doc.lines.map((l) => (
                     <tr key={l.id}>
@@ -420,14 +420,14 @@ function DocDetailPanel({
             <div style={{ marginBottom: 14, fontFamily: 'var(--font-mono, monospace)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Base</span><span>{fmtMoney(doc.subtotal, doc.currency)}</span></div>
               {Number(doc.discount_value ?? 0) > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Descuento</span><span>{doc.discount_kind === 'percent' ? `${Number(doc.discount_value)}%` : `−${fmtMoney(doc.discount_value, doc.currency)}`}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>Discount</span><span>{doc.discount_kind === 'percent' ? `${Number(doc.discount_value)}%` : `−${fmtMoney(doc.discount_value, doc.currency)}`}</span></div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--text-dim)' }}><span>IVA</span><span>{fmtMoney(doc.tax_total, doc.currency)}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 16, fontWeight: 700, color: 'var(--text)', borderTop: '1px solid var(--border)', marginTop: 4 }}><span>TOTAL</span><span>{fmtMoney(doc.total, doc.currency)}</span></div>
               {paid > 0 && (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--mod-finance)' }}><span>{doc.type === 'bill' ? 'Pagado' : 'Cobrado'}</span><span>{fmtMoney(paid, doc.currency)}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: balance > 0 ? 'var(--info)' : 'var(--text-dim)' }}><span>Pendiente</span><span>{fmtMoney(balance, doc.currency)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: 'var(--mod-finance)' }}><span>{doc.type === 'bill' ? 'Paid' : 'Collected'}</span><span>{fmtMoney(paid, doc.currency)}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13, color: balance > 0 ? 'var(--info)' : 'var(--text-dim)' }}><span>Pending</span><span>{fmtMoney(balance, doc.currency)}</span></div>
                 </>
               )}
             </div>
@@ -435,7 +435,7 @@ function DocDetailPanel({
             {/* Pagos registrados */}
             {doc.payments.length > 0 && (
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{doc.type === 'bill' ? 'Pagos' : 'Cobros'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{doc.type === 'bill' ? 'Payments' : 'Payments in'}</div>
                 {doc.payments.map((p) => {
                   // Enlace al dinero: la cuenta donde ENTRÓ el cobro / de donde SALIÓ el pago.
                   const acct = related?.payments.find((rp) => rp.id === p.id)?.account_name;
@@ -459,7 +459,7 @@ function DocDetailPanel({
                 </div>
                 {related.inventory.map((it) => (
                   <div key={it.item_id} role="button" tabIndex={0}
-                    title="Abrir en Inventario"
+                    title="Open in Inventory"
                     onClick={() => navigate(`/inventory?id=${it.item_id}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/inventory?id=${it.item_id}`); } }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
@@ -474,26 +474,26 @@ function DocDetailPanel({
                     </span>
                   </div>
                 ))}
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>Clic para abrir el artículo en Inventario.</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>Click to open the item in Inventory.</div>
               </div>
             )}
 
             {/* Acciones */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
               {doc.status === 'draft' && (
-                <button onClick={() => onEdit(doc.id)} style={actionBtn('transparent', 'var(--text-dim)')}>Editar</button>
+                <button onClick={() => onEdit(doc.id)} style={actionBtn('transparent', 'var(--text-dim)')}>Edit</button>
               )}
               {canAcceptDecline && (
                 <>
-                  <button onClick={accept} disabled={decideBusy} style={actionBtn('var(--mod-finance)', '#0a0a0a')}>Aceptar</button>
-                  <button onClick={decline} disabled={decideBusy} style={actionBtn('transparent', 'var(--error)')}>Rechazar</button>
+                  <button onClick={accept} disabled={decideBusy} style={actionBtn('var(--mod-finance)', '#0a0a0a')}>OK</button>
+                  <button onClick={decline} disabled={decideBusy} style={actionBtn('transparent', 'var(--error)')}>Reject</button>
                 </>
               )}
               {canConvert && (
-                <button onClick={() => onConvert(doc.id)} style={actionBtn('transparent', 'var(--text-dim)')}>Convertir a factura</button>
+                <button onClick={() => onConvert(doc.id)} style={actionBtn('transparent', 'var(--text-dim)')}>Convert to invoice</button>
               )}
               {canCreditNote && (
-                <button onClick={() => onCreditNote(doc.id, doc.total, doc.currency)} style={actionBtn('transparent', 'var(--text-dim)')}>{doc.type === 'bill' ? 'Registrar abono recibido' : 'Crear abono'}</button>
+                <button onClick={() => onCreditNote(doc.id, doc.total, doc.currency)} style={actionBtn('transparent', 'var(--text-dim)')}>{doc.type === 'bill' ? 'Registrar abono recibido' : 'Create credit note'}</button>
               )}
               {canPay && (
                 <button onClick={() => setPayOpen(true)} style={actionBtn('var(--info)', '#0a0a0a')}>{doc.type === 'bill' ? 'Registrar pago' : 'Registrar cobro'}</button>
@@ -501,7 +501,7 @@ function DocDetailPanel({
               {canEmit && (
                 <button onClick={emit} disabled={emitting} style={actionBtn(doc.type === 'bill' ? 'var(--mod-finance)' : 'var(--amber)', '#0a0a0a')}>
                   {emitting ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : null}
-                  {emitting ? (doc.type === 'bill' ? 'Registrando…' : 'Emitiendo…') : (doc.type === 'bill' ? 'Registrar' : 'Emitir')}
+                  {emitting ? (doc.type === 'bill' ? 'Registrando…' : 'Emitiendo…') : (doc.type === 'bill' ? 'Registrar' : 'Issue')}
                 </button>
               )}
             </div>

@@ -65,6 +65,14 @@ export function useChatReconcile(): void {
     if (!syncedEvent) return;
     const convId = syncedEvent.data?.conversation_id as string | undefined;
     if (!convId) return;
+    // Restore is an authoritative rewind, not an append. Process it even for
+    // a cached inactive chat and don't lose it in the ordinary sync debounce.
+    if (syncedEvent.data?.history_reset === true || syncedEvent.data?.history_replaced === true) {
+      const cs = useChatStore.getState();
+      void cs.loadConversations();
+      void cs.loadMessages(convId, { replace: true });
+      return;
+    }
     if (pokeTimer.current) clearTimeout(pokeTimer.current);
     pokeTimer.current = setTimeout(() => {
       const cs = useChatStore.getState();

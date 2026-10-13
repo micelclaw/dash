@@ -171,6 +171,20 @@ function AddBookmarkModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// Fixed local fallback; a new source mounts a fresh image attempt.
+function BookmarkFavicon({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <span aria-hidden="true" style={{ width: 20, height: 20, marginTop: 2, flexShrink: 0 }}>
+      {failed ? (
+        <BookmarkIcon size={20} style={{ color: 'var(--text-muted)' }} />
+      ) : (
+        <img src={src} alt="" style={{ width: 20, height: 20, borderRadius: 4 }} onError={() => setFailed(true)} />
+      )}
+    </span>
+  );
+}
+
 // ─── Bookmark Card ───────────────────────────────────────
 
 function BookmarkCard({
@@ -219,12 +233,7 @@ function BookmarkCard({
       />
 
       {/* Favicon */}
-      <img
-        src={faviconSrc}
-        alt=""
-        style={{ width: 20, height: 20, borderRadius: 4, marginTop: 2, flexShrink: 0 }}
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
+      <BookmarkFavicon key={faviconSrc} src={faviconSrc} />
 
       {/* Content */}
       <div style={{ flex: 1, minWidth: 0 }}>

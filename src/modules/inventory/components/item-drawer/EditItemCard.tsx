@@ -20,6 +20,8 @@ import {
   type UpdateItemPayload,
 } from '@/modules/inventory/types';
 import { btnPrimary, btnSecondary, inputStyle } from '@/modules/inventory/ui';
+import { CategoryFieldsForm } from '@/modules/inventory/components/CategoryFieldsForm';
+import { sanitizeCustomFields } from '@/modules/inventory/components/category-fields';
 import { cardStyle, editLabelStyle, sectionLabel } from './drawer-ui';
 
 interface EditItemCardProps {
@@ -40,6 +42,7 @@ export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditIte
   // Snapshot al abrir la edición — se remonta al reabrir (mismo comportamiento
   // que el openEdit original).
   const [form, setForm] = useState<ItemFormFields>(() => itemToFormFields(item));
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>(() => item.custom_fields ?? {});
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
@@ -49,7 +52,7 @@ export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditIte
     }
     setSaving(true);
     try {
-      await onSubmit(itemFormToUpdatePayload(form));
+      await onSubmit({ ...itemFormToUpdatePayload(form), custom_fields: sanitizeCustomFields(customFields) });
       toast.success('Item updated');
       onClose();
     } catch {
@@ -73,6 +76,10 @@ export function EditItemCard({ item, onSubmit, onClose, onGenerateTag }: EditIte
     <div style={{ ...cardStyle, gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={sectionLabel}>Edit item</span>
+      </div>
+      <div>
+        <label style={editLabelStyle}>Category fields</label>
+        <CategoryFieldsForm category={form.category} value={customFields} onChange={setCustomFields} />
       </div>
       <div>
         <label style={editLabelStyle}>Name *</label>

@@ -237,7 +237,7 @@ export function TerminalPanel({ sessionId, ws, isActive, type, cwd, connectionId
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                e.shiftKey ? handleSearchPrev() : handleSearchNext();
+                if (e.shiftKey) handleSearchPrev(); else handleSearchNext();
               } else if (e.key === 'Escape') {
                 handleCloseSearch();
               }

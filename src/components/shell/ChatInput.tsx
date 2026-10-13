@@ -10,9 +10,12 @@
  * https://micelclaw.com
  */
 
+import { toast } from 'sonner';
+
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react';
-import { ArrowUp, ChevronUp, ChevronDown, Paperclip, X, FileText, Image as ImageIcon, File } from 'lucide-react';
+import { ArrowUp, ChevronUp, ChevronDown, Paperclip, X, FileText, Image as ImageIcon, File, Lock } from 'lucide-react';
 import { useChatStore } from '@/stores/chat.store';
+import { useLocation } from 'react-router';
 import { useGatewayStore } from '@/stores/gateway.store';
 import { useSettingsStore } from '@/stores/settings.store';
 import { useModuleContext } from '@/hooks/use-module-context';
@@ -26,6 +29,7 @@ import { SpeakingIndicator } from '@/components/voice/SpeakingIndicator';
 import { ThinkingLevelIndicator } from './ThinkingLevelIndicator';
 import { useIsMobile } from '@/hooks/use-media-query';
 import { api } from '@/services/api';
+import { useWebSocketStore } from '@/stores/websocket.store';
 import type { ChatAttachment } from '@/types/chat';
 
 interface ChatInputProps {
@@ -41,11 +45,15 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   // que la textarea no quede contraída entre el selector de agente, slash, mic, clip, etc.
   const isMobile = useIsMobile();
   const [text, setText] = useState('');
+  const location = useLocation();
+  const pendingDraft = useChatStore((state) => state.pendingDraft);
   const [pendingFiles, setPendingFiles] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const lastInputWasVoiceRef = useRef(false);
+  // Último transcript que la voz metió en la caja y que aún no se ha enviado (ver handleSend).
+  const dictatedTextRef = useRef<string | null>(null);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
   const cancelStream = useChatStore((s) => s.cancelStream);
@@ -60,6 +68,59 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   const voiceStream = useVoiceStream();
   const isFullDuplex = true; // Always use streaming voice mode
   const conversationId = useChatStore((s) => s.activeConversationId);
+  const collaborationAccess = useChatStore((s) => {
+    const id = s.activeConversationId;
+    return id ? s.conversations.find((conversation) => conversation.id === id)?.access : undefined;
+  });
+  const wsSend = useWebSocketStore((state) => state.send);
+  const wsStatus = useWebSocketStore((state) => state.status);
+  const isViewer = collaborationAccess === 'viewer';
+  // Conversación de TAREA DE AGENTE (Workboard "Trabajar ahora"): el chat es de solo-lectura.
+  // Selectores primitivos (no crean objeto → sin re-render espurio).
+  const isAgentTask = useChatStore((s) => {
+    const id = s.activeConversationId;
+    const conversation = id ? s.conversations.find(c => c.id === id) : null;
+    return conversation?.is_agent_task || conversation?.read_only || conversation?.is_heartbeat || false;
+  });
+  const isHeartbeat = useChatStore((s) => {
+    const id = s.activeConversationId;
+    return id ? (s.conversations.find(c => c.id === id)?.is_heartbeat ?? false) : false;
+  });
+  const startNewConversation = useChatStore((s) => s.startNewConversation);
+  useEffect(() => {
+    if (location.pathname !== '/chat' || !pendingDraft) return;
+    const timer = window.setTimeout(() => {
+      if (useChatStore.getState().pendingDraft !== pendingDraft) return;
+      setText(pendingDraft);
+      useChatStore.getState().setPendingDraft(null);
+      textareaRef.current?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname, pendingDraft]);
+  const agentTaskTitle = useChatStore((s) => {
+    const id = s.activeConversationId;
+    return id ? (s.conversations.find(c => c.id === id)?.workboard_card_title ?? null) : null;
+  });
+
+  useEffect(() => {
+    if (!conversationId || isViewer || !text.trim()) return;
+    wsSend('chat.typing.set', { conversation_id: conversationId, is_typing: true });
+    const clear = window.setTimeout(() => wsSend('chat.typing.set', { conversation_id: conversationId, is_typing: false }), 5_000);
+    return () => window.clearTimeout(clear);
+  }, [conversationId, isViewer, text, wsSend]);
+
+  // Canvas suggestions populate the composer only; sending always remains a
+  // deliberate action in the chat composer.
+  useEffect(() => {
+    const receiveDraft = (event: Event) => {
+      const draft = (event as CustomEvent<string>).detail;
+      if (typeof draft !== 'string' || !draft.trim()) return;
+      setText(draft);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener('micelclaw:chat-draft', receiveDraft);
+    return () => window.removeEventListener('micelclaw:chat-draft', receiveDraft);
+  }, []);
 
   const uploadFile = useCallback(async (file: File): Promise<ChatAttachment | null> => {
     try {
@@ -103,12 +164,20 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed && pendingFiles.length === 0) return;
-    lastInputWasVoiceRef.current = false;
-    sendMessage(trimmed || '(attached files)', {
+    // Procedencia del turno. En full-duplex lo dictado NO se envía solo: aterriza en la
+    // textarea y sale por aquí con Enter, así que poner el flag a false a ciegas borraba
+    // la marca de "esto lo dije hablando" antes de que llegara la respuesta y el auto-play
+    // de TTS no sonaba nunca. Cuenta como voz si lo que se envía SIGUE conteniendo lo
+    // dictado (si el usuario lo borró y escribió otra cosa, es un turno tecleado).
+    const dictated = dictatedTextRef.current;
+    const result = sendMessage(trimmed || '(attached files)', {
       module: moduleContext.moduleId,
       active_item: moduleContext.activeItem,
       editor_context: moduleContext.editorContext,
     }, pendingFiles.length > 0 ? pendingFiles : undefined);
+    if (!result.accepted) { toast.error('No se pudo enviar el mensaje. La entrada se conserva.'); return; }
+    dictatedTextRef.current = null;
+    lastInputWasVoiceRef.current = !!dictated && trimmed.includes(dictated);
     setText('');
     setPendingFiles([]);
     if (textareaRef.current) {
@@ -119,12 +188,17 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
   const handleVoiceStop = useCallback(async () => {
     const transcript = await voice.stopRecording();
     if (transcript) {
-      lastInputWasVoiceRef.current = true;
-      sendMessage(transcript, {
+      const result = sendMessage(transcript, {
         module: moduleContext.moduleId,
         active_item: moduleContext.activeItem,
         editor_context: moduleContext.editorContext,
       });
+      if (result.accepted) lastInputWasVoiceRef.current = true;
+      else {
+        setText((previous) => previous ? `${previous}\n${transcript}` : transcript);
+        dictatedTextRef.current = transcript;
+        toast.error('No se pudo enviar la transcripción. Se conserva en la entrada.');
+      }
     }
   }, [voice, sendMessage, moduleContext]);
 
@@ -154,6 +228,7 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       const trimmed = voiceStream.transcript.trim();
       if (trimmed) {
         lastInputWasVoiceRef.current = true;
+        dictatedTextRef.current = trimmed;
         // Append a lo que el usuario ya tuviera escrito (no sobrescribir).
         setText(prev => (prev.trim() ? prev.trimEnd() + ' ' + trimmed : trimmed));
       }
@@ -261,6 +336,44 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
     return () => window.removeEventListener('claw:tts-autoplay', handler);
   }, [voice]);
 
+  // Conversación de TAREA DE AGENTE: en vez del composer, un banner de solo-lectura. El agente la
+  // completa solo, sin intervención del usuario. Las approvals se siguen aprobando/rechazando desde
+  // sus tarjetas inline en el chat (no pasan por este input).
+  if (isAgentTask || isViewer) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '12px 16px',
+          background: 'var(--surface)',
+          borderTop: '1px solid var(--border)',
+          flexShrink: 0,
+          color: 'var(--text-dim)',
+          fontSize: '0.8125rem',
+          lineHeight: 1.4,
+        }}
+      >
+        <Lock size={15} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
+        <span>
+          {isViewer
+            ? 'Tienes acceso de solo lectura a esta conversación.'
+            : isHeartbeat
+            ? 'Chat de latidos: solo muestra resultados relevantes y conserva su historial.'
+            : <>El agente está completando esta tarea solo
+              {agentTaskTitle ? <> — «{agentTaskTitle}»</> : null}. No puedes escribir aquí; solo aprobar
+              las solicitudes que aparezcan en el chat.</>}
+        </span>
+        {isHeartbeat && !isViewer && (
+          <button type="button" onClick={startNewConversation} style={{ marginLeft: 'auto' }}>
+            Abrir chat normal
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -287,11 +400,12 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
           textareaRef.current?.focus();
           return;
         }
-        sendMessage(cmd, {
+        const result = sendMessage(cmd, {
           module: moduleContext.moduleId,
           active_item: moduleContext.activeItem,
           editor_context: moduleContext.editorContext,
         });
+        if (!result.accepted) toast.error('No se pudo enviar el comando.');
       }} />
 
       <div
@@ -356,7 +470,16 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(e) => !isProcessing && setText(e.target.value)}
+          onChange={(e) => {
+            if (isProcessing) return;
+            const next = e.target.value;
+            setText(next);
+            // El primer carácter debe anunciarse en el mismo ciclo de la
+            // interacción. El efecto inferior conserva la expiración de 5 s.
+            if (conversationId && !isViewer && next.trim()) {
+              wsSend('chat.typing.set', { conversation_id: conversationId, is_typing: true });
+            }
+          }}
           onKeyDown={isProcessing ? undefined : handleKeyDown}
           onInput={isProcessing ? undefined : handleInput}
           readOnly={isProcessing}
@@ -482,6 +605,8 @@ export function ChatInput({ onExpand, onCollapse, showExpand, showCollapse, comp
       {(text.trim() || pendingFiles.length > 0) && !isProcessing && (
         <button
           onClick={handleSend}
+          disabled={wsStatus !== 'connected'}
+          title={wsStatus === 'connected' ? 'Send' : 'Waiting for connection to Core'}
           style={{
             background: 'var(--amber)',
             border: 'none',

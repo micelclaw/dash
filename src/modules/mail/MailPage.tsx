@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
 import { Mail, PanelLeftClose, PanelLeftOpen, Menu, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
@@ -24,6 +24,9 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { useMailState } from './hooks/use-mail-state';
 import { useEmails } from './hooks/use-emails';
 import { useEmailAccounts } from './hooks/use-email-accounts';
+import { useMailFolders } from './hooks/use-mail-folders';
+import { buildMoveTargets } from './lib/move-targets';
+import type { MailActionKey } from './lib/mail-actions';
 import { MailSidebar } from './MailSidebar';
 import { MailList } from './MailList';
 import { MailReadingPane } from './MailReadingPane';
@@ -50,9 +53,12 @@ export function Component() {
   const {
     activeAccount, setActiveAccount,
     activeFolder, setActiveFolder,
+    activeLabel, setActiveLabel,
     selectedEmailId, setSelectedEmailId,
     selectedIds, toggleSelection, selectAll, clearSelection,
     composerData, openComposer, closeComposer,
+    sortField, sortOrder, setSort,
+    starredOnly, toggleStarredOnly,
   } = useMailState();
 
   // Filters + pagination
@@ -66,8 +72,10 @@ export function Component() {
   useBackGuard(composerData?.mode === 'new', () => closeComposer(), isMobile);
   useBackGuard(!!selectedEmailId, () => setSelectedEmailId(null), isMobile);
 
-  // Reset page when folder/account/search changes
-  useEffect(() => { setPage(0); }, [activeFolder, activeAccount, search]);
+  // Reset page when folder/account/search/sort/starred changes
+  useEffect(() => {
+    setPage(0);
+  }, [activeFolder, activeLabel, activeAccount, search, sortField, sortOrder, starredOnly]);
 
   const {
     emails, meta, loading, error, fetchEmails,
@@ -75,14 +83,21 @@ export function Component() {
     archiveEmail, moveToFolder, deleteEmail, restoreEmail, snoozeEmail,
     sendEmail, batchAction,
   } = useEmails({
-    folder: activeFolder,
+    // Con una etiqueta seleccionada NO se filtra por carpeta: en Gmail la
+    // etiqueta atraviesa Entrada, Enviados y Archivo.
+    folder: activeLabel ? undefined : activeFolder,
+    label: activeLabel || undefined,
     account_id: activeAccount || undefined,
     search: search || undefined,
+    is_starred: starredOnly || undefined,
+    sort: sortField,
+    order: sortOrder,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   });
 
   const { accounts, refetch: refetchAccounts } = useEmailAccounts();
+  const { systemFolders, customFolders, mailLabels } = useMailFolders();
 
   // Account context menu actions
   const handleUnsyncAccount = useCallback(async (id: string) => {
@@ -186,7 +201,7 @@ export function Component() {
         setSyncing(false);
       }
     }
-  }, [syncError]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [syncError]);
 
   useEffect(() => {
     return () => clearTimeout(syncFallbackRef.current);
@@ -224,8 +239,9 @@ export function Component() {
   // Collapsible list
   const [listCollapsed, setListCollapsed] = useState(false);
 
-  // Snooze menu
-  const [snoozeTarget, setSnoozeTarget] = useState<{ id: string; el: HTMLElement } | null>(null);
+  // Snooze menu. Lleva una LISTA porque aplazar ya se ofrece también en
+  // selección múltiple (antes solo existía en la esquina de la fila).
+  const [snoozeTarget, setSnoozeTarget] = useState<{ ids: string[]; el: HTMLElement } | null>(null);
 
   // URL sync
   useEffect(() => {
@@ -263,16 +279,77 @@ export function Component() {
     openComposer({ mode: 'forward', ...data } as ComposeData);
   }, [openComposer]);
 
-  const handleSnooze = useCallback((id: string, el: HTMLElement) => {
-    setSnoozeTarget({ id, el });
-  }, []);
-
   const handleSnoozeConfirm = useCallback((until: string) => {
-    if (snoozeTarget) {
-      snoozeEmail(snoozeTarget.id, until);
-      setSnoozeTarget(null);
+    if (!snoozeTarget) return;
+    const { ids } = snoozeTarget;
+    const [primero] = ids;
+    if (ids.length === 1 && primero) snoozeEmail(primero, until);
+    else batchAction(ids, 'snooze', { until });
+    setSnoozeTarget(null);
+  }, [snoozeTarget, snoozeEmail, batchAction]);
+
+  // ─── El despachador ÚNICO de acciones sobre correos ─────────────────────
+  //
+  // Un solo sitio al que llaman las TRES superficies (la esquina de la fila, el
+  // menú del botón derecho y la barra de selección múltiple), para que hagan lo
+  // mismo. Antes cada una tenía su propia lista y su propio cableado, y por eso
+  // se olvidaban de cosas distintas.
+  //
+  // Con UN correo se usan los caminos de siempre (traen su deshacer y su pintado
+  // optimista); con varios, el lote del servidor. Misma lista de acciones, el
+  // mejor comportamiento en cada caso.
+  const runMailAction = useCallback((
+    key: MailActionKey,
+    ids: string[],
+    params?: { folder?: string; label?: string; el?: HTMLElement },
+  ) => {
+    if (ids.length === 0) return;
+    const uno = ids.length === 1 ? ids[0] ?? null : null;
+    const lote = (accion: string, p?: Record<string, string>) => batchAction(ids, accion, p);
+
+    /** Uno con su camino de siempre, varios con el lote. */
+    const unoOLote = (conUno: (id: string) => void, accion: string, p?: Record<string, string>) => {
+      if (uno) conUno(uno); else lote(accion, p);
+    };
+
+    switch (key) {
+      case 'read':      unoOLote((id) => markRead(id), 'mark_read'); break;
+      case 'unread':    unoOLote((id) => markUnread(id), 'mark_unread'); break;
+      // `toggleStar` alterna; en lote el servidor tiene las dos acciones por
+      // separado, así que la intención («destacar» / «quitar») no se pierde con
+      // una selección en estados mezclados.
+      case 'star':      unoOLote((id) => toggleStar(id), 'star'); break;
+      case 'unstar':    unoOLote((id) => toggleStar(id), 'unstar'); break;
+      case 'archive':   unoOLote((id) => archiveEmail(id), 'move', { folder: 'Archive' }); break;
+      case 'unarchive': unoOLote((id) => moveToFolder(id, 'INBOX'), 'move', { folder: 'INBOX' }); break;
+      case 'spam':      unoOLote((id) => moveToFolder(id, 'SPAM'), 'move', { folder: 'SPAM' }); break;
+      case 'notspam':   unoOLote((id) => moveToFolder(id, 'INBOX'), 'move', { folder: 'INBOX' }); break;
+      case 'delete':    unoOLote((id) => deleteEmail(id), 'delete'); break;
+      case 'restore':   unoOLote((id) => restoreEmail(id), 'restore'); break;
+      case 'snooze':
+        // Necesita una fecha: abre el menú, que ya sabe de listas.
+        if (params?.el) setSnoozeTarget({ ids, el: params.el });
+        break;
+      case 'move':
+        // Una etiqueta no es una carpeta: en Gmail el correo NO se mueve, se le
+        // añade la etiqueta (y sigue donde estaba).
+        if (params?.label) {
+          // También con UNO se usa el lote: es el único camino que AÑADE la
+          // etiqueta. Lo que había antes ponía `folder = 'Empleo'`, o sea que
+          // inventaba una carpeta con el nombre de la etiqueta — y en Gmail no
+          // existen las carpetas, así que eso no llegaba a ninguna parte.
+          lote('add_label', { label: params.label });
+        } else if (params?.folder) {
+          const destino = params.folder;
+          if (uno) moveToFolder(uno, destino); else lote('move', { folder: destino });
+        }
+        break;
+      case 'relate':
+        // Habla de UN registro: lo abre la propia fila (tiene el modal).
+        break;
     }
-  }, [snoozeTarget, snoozeEmail]);
+  }, [batchAction, markRead, markUnread, toggleStar, archiveEmail, moveToFolder,
+      deleteEmail, restoreEmail]);
 
   // Keyboard shortcuts
   const composerOpen = !!composerData;
@@ -312,6 +389,38 @@ export function Component() {
   }, [composerOpen, selectedEmailId, handleCompose, archiveEmail, deleteEmail, toggleStar, markUnread, setSelectedEmailId]);
 
   const accountColorMap = accounts.map(a => ({ id: a.id, color: a.color }));
+
+  // ¿Está TODO lo seleccionado destacado? Decide si el menú ofrece «destacar» o
+  // «quitar destacado». Se mira el dato, no se supone: con una selección mixta lo
+  // que se quiere es poner la estrella a los que no la tienen.
+  const allSelectedStarred = selectedIds.size > 0
+    && emails.filter((e) => selectedIds.has(e.id)).every((e) => e.is_starred);
+
+  // Los destinos de «Mover a…»: la MISMA lista que pinta la barra lateral, así
+  // que lo que se ve es lo que se puede elegir.
+  //
+  // Es una FUNCIÓN de la cuenta, no una lista fija: cada correo solo puede
+  // moverse a las carpetas de SU cuenta (mover a la de otra cuenta sería copiar
+  // entre proveedores, que no existe). Se memoiza por cuenta para no recalcular
+  // por fila.
+  const moveTargetsFor = useMemo(() => {
+    const cache = new Map<string, ReturnType<typeof buildMoveTargets>>();
+    return (accountId: string | null) => {
+      const clave = accountId ?? '';
+      const ya = cache.get(clave);
+      if (ya) return ya;
+      const targets = buildMoveTargets({
+        systemFolders,
+        customFolders,
+        mailLabels,
+        accountEmail: (id) => accounts.find((a) => a.id === id)?.email_address,
+        currentFolder: activeLabel ?? activeFolder,
+        accountId,
+      });
+      cache.set(clave, targets);
+      return targets;
+    };
+  }, [systemFolders, customFolders, mailLabels, accounts, activeFolder, activeLabel]);
 
   // Mobile: single column stack
   if (isMobile) {
@@ -392,20 +501,16 @@ export function Component() {
           search={search}
           onSearchChange={setSearch}
           onRefresh={fetchEmails}
-          onArchive={archiveEmail}
-          onDelete={deleteEmail}
-          onSnooze={handleSnooze}
-          onToggleStar={toggleStar}
-          onMarkRead={markRead}
-          onMarkUnread={markUnread}
-          onMoveToFolder={moveToFolder}
-          onBatchRead={() => batchAction([...selectedIds], 'mark_read')}
-          onBatchUnread={() => batchAction([...selectedIds], 'mark_unread')}
-          onBatchArchive={() => batchAction([...selectedIds], 'move', { folder: 'Archive' })}
-          onBatchDelete={() => batchAction([...selectedIds], 'delete')}
-          onRestore={restoreEmail}
+          onAction={runMailAction}
+          allSelectedStarred={allSelectedStarred}
           activeFolder={activeFolder}
           accounts={accountColorMap}
+          moveTargetsFor={moveTargetsFor}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onSortChange={setSort}
+          starredOnly={starredOnly}
+          onToggleStarredOnly={toggleStarredOnly}
           page={page}
           pageSize={PAGE_SIZE}
           total={meta?.total ?? 0}
@@ -424,19 +529,24 @@ export function Component() {
         <Sheet open={mobileNav} onOpenChange={setMobileNav}>
           <SheetContent side="left" style={{ width: 260, padding: 0, paddingTop: 'env(safe-area-inset-top, 0px)', overflow: 'hidden' }} aria-describedby={undefined}>
             <MailSidebar
+              systemFolders={systemFolders}
+              customFolders={customFolders}
+              mailLabels={mailLabels}
               activeAccount={activeAccount}
               activeFolder={activeFolder}
+              activeLabel={activeLabel}
               onAccountChange={(id) => { setActiveAccount(id); setMobileNav(false); }}
               onFolderChange={(f) => { setActiveFolder(f); setMobileNav(false); }}
+              onLabelChange={(l) => { setActiveLabel(l); setMobileNav(false); }}
               collapsed={false}
               onCompose={() => { setMobileNav(false); handleCompose(); }}
               onSync={handleSync}
               syncing={syncing}
               accounts={accounts}
-              emails={emails}
               onUnsyncAccount={handleUnsyncAccount}
               onChangeAccountColor={handleChangeAccountColor}
               onExport={handleExport}
+              onAccountRenamed={refetchAccounts}
             />
           </SheetContent>
         </Sheet>
@@ -446,23 +556,86 @@ export function Component() {
 
   // Desktop / Tablet: sidebar + resizable split pane
   const sidebarWidth = isTablet ? 56 : 200;
+
+  /*
+    El panel de lectura, extraído para poder pintarlo en DOS sitios: dentro del
+    divisor (con la lista) y a ancho completo cuando la lista está oculta.
+
+    Antes, ocultar la lista dejaba su columna vacía: `defaultSizes` solo se lee
+    al montar (y el tamaño guardado del divisor manda sobre él), así que pasar
+    `[0, 100]` al colapsar no hacía nada y quedaba un hueco negro del 35 %.
+  */
+  const panelLectura = (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Collapse/expand toggle */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        padding: '4px 8px',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={() => setListCollapsed((prev) => !prev)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 28, height: 28,
+            border: 'none', borderRadius: 'var(--radius-sm)',
+            background: 'transparent', color: 'var(--text-dim)',
+            cursor: 'pointer', transition: 'background var(--transition-fast)',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--surface-hover)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+          title={listCollapsed ? 'Show email list' : 'Hide email list'}
+        >
+          {listCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+        </button>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto' }}>
+        {selectedEmailId ? (
+          <MailReadingPane
+            emailId={selectedEmailId}
+            onReply={handleReply}
+            onForward={handleForward}
+            composerData={composerData ?? null}
+            onSend={sendEmail}
+            onCloseComposer={closeComposer}
+            accounts={accounts}
+          />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
+            <EmptyState
+              icon={Mail}
+              title="Select an email"
+              description="Choose an email from the list to read"
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
       <div style={{ width: sidebarWidth, flexShrink: 0, borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
         <MailSidebar
+          systemFolders={systemFolders}
+          customFolders={customFolders}
+          mailLabels={mailLabels}
           activeAccount={activeAccount}
           activeFolder={activeFolder}
+          activeLabel={activeLabel}
           onAccountChange={setActiveAccount}
           onFolderChange={setActiveFolder}
+          onLabelChange={setActiveLabel}
           collapsed={isTablet}
           onCompose={handleCompose}
           onSync={handleSync}
           syncing={syncing}
           accounts={accounts}
-          emails={emails}
           onUnsyncAccount={handleUnsyncAccount}
           onChangeAccountColor={handleChangeAccountColor}
           onExport={handleExport}
+          onAccountRenamed={refetchAccounts}
         />
       </div>
 
@@ -481,9 +654,15 @@ export function Component() {
             inline
           />
         </div>
+      ) : listCollapsed ? (
+        /* Lista oculta: el panel de lectura ocupa TODO el ancho. */
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>{panelLectura}</div>
       ) : (
       <SplitPane
-        defaultSizes={listCollapsed ? [0, 100] : [35, 65]}
+        // Solo el reparto INICIAL: aquí `listCollapsed` es siempre false (con la
+        // lista oculta no se pinta el divisor) y, si el usuario ya arrastró, su
+        // tamaño guardado manda sobre esto.
+        defaultSizes={[35, 65]}
         minSizes={[200, 300]}
         id="mail-split"
       >
@@ -505,20 +684,16 @@ export function Component() {
           search={search}
           onSearchChange={setSearch}
           onRefresh={fetchEmails}
-          onArchive={archiveEmail}
-          onDelete={deleteEmail}
-          onSnooze={handleSnooze}
-          onToggleStar={toggleStar}
-          onMarkRead={markRead}
-          onMarkUnread={markUnread}
-          onMoveToFolder={moveToFolder}
-          onBatchRead={() => batchAction([...selectedIds], 'mark_read')}
-          onBatchUnread={() => batchAction([...selectedIds], 'mark_unread')}
-          onBatchArchive={() => batchAction([...selectedIds], 'move', { folder: 'Archive' })}
-          onBatchDelete={() => batchAction([...selectedIds], 'delete')}
-          onRestore={restoreEmail}
+          onAction={runMailAction}
+          allSelectedStarred={allSelectedStarred}
           activeFolder={activeFolder}
           accounts={accountColorMap}
+          moveTargetsFor={moveTargetsFor}
+          sortField={sortField}
+          sortOrder={sortOrder}
+          onSortChange={setSort}
+          starredOnly={starredOnly}
+          onToggleStarredOnly={toggleStarredOnly}
           page={page}
           pageSize={PAGE_SIZE}
           total={meta?.total ?? 0}
@@ -526,53 +701,7 @@ export function Component() {
         />}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Collapse/expand toggle */}
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          padding: '4px 8px',
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--bg)',
-          flexShrink: 0,
-        }}>
-          <button
-            onClick={() => setListCollapsed(prev => !prev)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 28, height: 28,
-              border: 'none', borderRadius: 'var(--radius-sm)',
-              background: 'transparent', color: 'var(--text-dim)',
-              cursor: 'pointer', transition: 'background var(--transition-fast)',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            title={listCollapsed ? 'Show email list' : 'Hide email list'}
-          >
-            {listCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-          </button>
-        </div>
-        <div style={{ flex: 1, overflow: 'auto' }}>
-          {selectedEmailId ? (
-            <MailReadingPane
-              emailId={selectedEmailId}
-              onReply={handleReply}
-              onForward={handleForward}
-              composerData={composerData ?? null}
-              onSend={sendEmail}
-              onCloseComposer={closeComposer}
-              accounts={accounts}
-            />
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'var(--bg)' }}>
-              <EmptyState
-                icon={Mail}
-                title="Select an email"
-                description="Choose an email from the list to read"
-              />
-            </div>
-          )}
-        </div>
-      </div>
+{panelLectura}
       </SplitPane>
       )}
 

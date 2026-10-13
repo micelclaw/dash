@@ -38,7 +38,7 @@ export function useSearchSelection(results: SearchResult[]) {
           for (let i = start; i <= end; i++) next.add(toKey(results[i]!));
         }
       } else {
-        next.has(key) ? next.delete(key) : next.add(key);
+        if (next.has(key)) next.delete(key); else next.add(key);
       }
       lastToggleRef.current = key;
       return next;

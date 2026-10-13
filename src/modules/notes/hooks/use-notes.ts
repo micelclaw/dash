@@ -52,7 +52,7 @@ export function useNotes(filters: NoteFilters) {
   useEffect(() => { fetchNotes(); }, [fetchNotes]);
 
   // Real-time WS updates
-  useRealtimeList('note', notes, setNotes);
+  useRealtimeList('note', notes, setNotes, fetchNotes);
 
   const createNote = async (input: NoteCreateInput): Promise<Note> => {
     const tempId = `temp-${Date.now()}`;
@@ -97,29 +97,38 @@ export function useNotes(filters: NoteFilters) {
     return res.data;
   };
 
-  const deleteNote = async (id: string): Promise<void> => {
+  const deleteNote = async (id: string): Promise<boolean> => {
     const removed = notes.find(n => n.id === id);
     setNotes(prev => prev.filter(n => n.id !== id));
 
     try {
+      if(removed?.sync){
+        if(!removed.sync.delete_certified||!removed.sync.local_revision)throw new Error('La papelera de esta conexión aún no está habilitada.');
+        const result=await api.delete<ApiResponse<{sync:Note['sync']}>>(`/notes/${id}`,{expected_local_revision:removed.sync.local_revision},{timeout:150000});
+        if(result.data.sync?.state==='synced')toast.success('Nota enviada a la papelera de Notion.');
+        else if(result.data.sync?.state==='pending')toast.warning('Nota retirada de Micelclaw. La confirmación de Notion sigue pendiente.');
+        else toast.error('Notion no confirmó la papelera. La copia local se conserva y el cambio requiere revisión.');
+        return true;
+      }
       await api.delete(`/notes/${id}`);
       toast('Note moved to trash', {
         action: removed ? {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.post(`/notes/${id}/restore`);
-              if (removed) setNotes(prev => [removed, ...prev]);
+              const restored = await api.post<ApiResponse<Note>>(`/notes/${id}/restore`);
+              setNotes(prev => [restored.data, ...prev]);
             } catch {
               toast.error('Failed to restore note');
             }
           },
         } : undefined,
       });
+      return true;
     } catch (err) {
-      console.error('deleteNote failed:', err);
       if (removed) setNotes(prev => [removed, ...prev]);
-      toast.error('Failed to delete note');
+      toast.error(err instanceof Error ? err.message : 'No se pudo retirar la nota.');
+      return false;
     }
   };
 
@@ -134,8 +143,8 @@ export function useNotes(filters: NoteFilters) {
           label: 'Undo',
           onClick: async () => {
             try {
-              await api.post(`/notes/${id}/unarchive`);
-              if (removed) setNotes(prev => [removed, ...prev]);
+              const restored = await api.post<ApiResponse<Note>>(`/notes/${id}/unarchive`);
+              setNotes(prev => [restored.data, ...prev]);
             } catch {
               toast.error('Failed to unarchive note');
             }
@@ -151,12 +160,28 @@ export function useNotes(filters: NoteFilters) {
   const togglePin = async (id: string): Promise<void> => {
     const note = notes.find(n => n.id === id);
     if (!note) return;
-    const newPinned = !note.pinned;
-    setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned: newPinned } : n));
     try {
+      if (note.source === 'nextcloud-notes') {
+        const detail = (await api.get<ApiResponse<Note>>(`/notes/${id}`)).data;
+        if (detail.sync?.provider === 'nextcloud-notes' && detail.sync.favorite_certified) {
+          if (detail.sync.state !== 'synced' || !detail.sync.local_revision) {
+            toast.warning('Espera a que termine la sincronización antes de cambiar el favorito.');
+            return;
+          }
+          const result = await api.post<ApiResponse<Note>>(`/notes/${id}/sync-edit`, {
+            expected_local_revision: detail.sync.local_revision,
+            operations: [{ op: 'set_favorite', favorite: !detail.pinned }],
+          }, { timeout: 150_000 });
+          setNotes(prev => prev.map(n => n.id === id ? result.data : n));
+          return;
+        }
+      }
+      const newPinned = !note.pinned;
+      setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned: newPinned } : n));
       await api.patch(`/notes/${id}`, { pinned: newPinned });
+      if (note.source === 'nextcloud-notes') toast.info('Fijada solo en Micelclaw; el favorito de Nextcloud aún no está certificado.');
     } catch {
-      setNotes(prev => prev.map(n => n.id === id ? { ...n, pinned: !newPinned } : n));
+      setNotes(prev => prev.map(n => n.id === id ? note : n));
       toast.error('Failed to update note');
     }
   };

@@ -16,6 +16,42 @@ import { ChatMessage } from './ChatMessage';
 import type { Message } from '@/types/chat';
 import { useUserAvatar } from '@/hooks/use-user-avatar';
 
+/**
+ * The native session ledger persists each tool lifecycle as its own assistant
+ * row. Visually they still belong to one uninterrupted activity group when no
+ * text was emitted between them. Merge only adjacent, tool-only rows from the
+ * same agent; any text/thinking/approval/attachment is a hard boundary.
+ */
+export function groupConsecutiveToolMessages(messages: Message[]): Message[] {
+  const grouped: Message[] = [];
+  for (const message of messages) {
+    const toolOnly = message.role === 'assistant'
+      && !message.content.trim()
+      && (message.tool_calls?.length ?? 0) > 0
+      && !message.thinking
+      && !message.approval
+      && (message.attachments?.length ?? 0) === 0;
+    const previous = grouped[grouped.length - 1];
+    const previousToolOnly = previous?.role === 'assistant'
+      && !previous.content.trim()
+      && (previous.tool_calls?.length ?? 0) > 0
+      && !previous.thinking
+      && !previous.approval
+      && (previous.attachments?.length ?? 0) === 0;
+
+    if (toolOnly && previous && previousToolOnly && previous.agent === message.agent) {
+      grouped[grouped.length - 1] = {
+        ...previous,
+        id: `${previous.id}+${message.id}`,
+        tool_calls: [...(previous.tool_calls ?? []), ...(message.tool_calls ?? [])],
+      };
+      continue;
+    }
+    grouped.push(message);
+  }
+  return grouped;
+}
+
 export function ChatPanel() {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const messages = useChatStore((s) => s.messages);
@@ -26,6 +62,7 @@ export function ChatPanel() {
   const convMessages = activeConversationId
     ? (messages.get(activeConversationId) ?? [])
     : [];
+  const displayMessages = groupConsecutiveToolMessages(convMessages);
 
   // Auto-scroll on new messages / streaming
   useEffect(() => {
@@ -72,11 +109,11 @@ export function ChatPanel() {
         padding: '12px 16px',
       }}
     >
-      {convMessages.map((msg, idx) => (
+      {displayMessages.map((msg, idx) => (
         <ChatMessage
           key={msg.id}
           message={msg}
-          previousMessage={idx > 0 ? convMessages[idx - 1] : undefined}
+          previousMessage={idx > 0 ? displayMessages[idx - 1] : undefined}
           userAvatar={userAvatar}
         />
       ))}

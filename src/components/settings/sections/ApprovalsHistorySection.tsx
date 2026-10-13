@@ -30,7 +30,8 @@ export function ApprovalsHistorySection() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void load(); }, [load]);
 
   return (
     <SettingSection
@@ -51,18 +52,20 @@ export function ApprovalsHistorySection() {
         <div className="space-y-1">
           {entries.map(entry => (
             <div key={entry.id} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[var(--surface)] text-xs">
-              {entry.decision === 'approved' ? (
+              {entry.decision === 'approved' || entry.decision === 'executed' ? (
                 <CheckCircle2 size={14} className="text-green-500 flex-shrink-0" />
-              ) : (
+              ) : entry.decision === 'rejected' || entry.decision === 'blocked_by_policy' ? (
                 <XCircle size={14} className="text-red-500 flex-shrink-0" />
+              ) : (
+                <History size={14} className="text-[var(--text-muted)] flex-shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 <span className="font-medium text-[var(--text)]">{entry.operation}</span>
                 <span className="text-[var(--text-muted)] ml-2">by {entry.requested_by}</span>
               </div>
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                entry.decision === 'approved' ? 'bg-green-500/10 text-green-400' :
-                entry.decision === 'rejected' ? 'bg-red-500/10 text-red-400' :
+                entry.decision === 'approved' || entry.decision === 'executed' ? 'bg-green-500/10 text-green-400' :
+                entry.decision === 'rejected' || entry.decision === 'blocked_by_policy' ? 'bg-red-500/10 text-red-400' :
                 'bg-[var(--surface-hover)] text-[var(--text-muted)]'
               }`}>
                 {entry.decision}

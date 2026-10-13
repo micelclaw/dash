@@ -10,12 +10,14 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useEffect, useState } from 'react';
 import { Rss, Star, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, MoreVertical, FileUp } from 'lucide-react';
 import { useFeedsStore, type RssFeed } from '@/stores/feeds.store';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { AddFeedDialog } from './AddFeedDialog';
 import { OpmlDialog } from './OpmlDialog';
+import { ConnectButton } from '@/components/shared/ConnectButton';
 
 export function FeedsSidebar() {
   const feeds = useFeedsStore(s => s.feeds);
@@ -220,6 +222,7 @@ function FeedItem({ feed, active, unread, onClick }: {
           <Rss size={14} className="opacity-50" />
         )}
         <span className="flex-1 text-left truncate">{feed.title}</span>
+        <EntitySource entity={feed} domain="feeds" native />
         {unread > 0 && (
           <span className="text-[10px] bg-[var(--amber-dim)] text-[var(--amber)] px-1.5 rounded-full min-w-[18px] text-center">
             {unread > 99 ? '99+' : unread}
@@ -257,6 +260,8 @@ function FeedItem({ feed, active, unread, onClick }: {
           </button>
         </div>
       )}
+
+      <ConnectButton dataType="feeds" />
 
       <ConfirmDialog
         open={confirmUnsub}

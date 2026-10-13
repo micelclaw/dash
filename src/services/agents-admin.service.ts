@@ -123,13 +123,48 @@ export async function updateAgentModel(agentId: string, model: string): Promise<
   await api.post(`/managed-agents/${agentId}/set-model`, { model }, { timeout: 150_000 });
 }
 
-/**
- * Generic agent patch (used by PermissionsSection to update the
- * `permissions` field — allowed_domains + tag_filter).
- */
-export async function updateManagedAgent(
-  agentId: string,
-  body: Record<string, unknown>,
-): Promise<void> {
-  await api.patch(`/managed-agents/${agentId}`, body);
+export interface DecisionModelEntry {
+  provider: string;
+  id: string;
+  name?: string;
+  label?: string;
+  availability?: boolean;
+  incompatible_reason?: 'credential-missing' | 'connection-mode' | null;
+  pluginId?: string;
 }
+
+export interface AgentDecisionModelState {
+  mode: 'inherit' | 'disabled' | 'model';
+  model: string | null;
+  global_model: string | null;
+  effective_model: string | null;
+}
+
+export async function listDecisionModels(): Promise<{ models: DecisionModelEntry[]; default_model: string | null }> {
+  const res = await api.get<{ data: { models: DecisionModelEntry[]; default_model: string | null } }>('/gateway/decision-models');
+  return res.data;
+}
+
+export async function getAgentDecisionModel(agentId: string): Promise<AgentDecisionModelState> {
+  const res = await api.get<{ data: AgentDecisionModelState }>(`/managed-agents/${agentId}/decision-model`);
+  return res.data;
+}
+
+export async function updateAgentDecisionModel(agentId: string, body: { mode: AgentDecisionModelState['mode']; model?: string }): Promise<AgentDecisionModelState> {
+  const res = await api.patch<{ data: AgentDecisionModelState }>(`/managed-agents/${agentId}/decision-model`, body, { timeout: 240_000 });
+  return res.data;
+}
+
+export async function testAgentDecisionModel(agentId: string, body: {
+  type: 'choice' | 'score' | 'boolean';
+  text: string;
+  criteria: Record<string, string> | string[];
+}): Promise<Record<string, unknown>> {
+  const res = await api.post<{ data: Record<string, unknown> }>(`/managed-agents/${agentId}/decision-model/test`, body, { timeout: 65_000 });
+  return res.data;
+}
+
+// IN1-P: `updateManagedAgent` (el PATCH genérico que usaba PermissionsSection para
+// escribir `permissions.allowed_domains`) se elimina con su único consumidor. El
+// modelo viejo ya no tiene cliente en el dash Y el backend rechaza esa clave
+// (400 PERMISSIONS_DOMAINS_REMOVED). Los scopes los concede la app/skill asignada.

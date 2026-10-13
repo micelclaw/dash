@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMeetings } from './hooks/use-meetings';
@@ -32,10 +32,13 @@ type PendingItemRow = ActionItem & {
 
 export function CouncilTab({ agents }: CouncilTabProps) {
   const {
-    meetings, loading,
+    meetings, loading, awaitingUser,
+    createMeeting, editMeeting,
     runMeeting, endMeeting,
     archiveMeeting, unarchiveMeeting, resetMeeting, deleteMeeting,
     updateActionItemStatus, fetchPendingItemsForName,
+    sendUserMessage, skipIntervention,
+    continueMeeting, addItemToWorkboard,
   } = useMeetings();
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [showNewMeeting, setShowNewMeeting] = useState(false);
@@ -56,6 +59,14 @@ export function CouncilTab({ agents }: CouncilTabProps) {
 
   useEffect(() => { void refreshPending(); }, [refreshPending, meetings.length]);
 
+  // `meetings` en un ref para resolver el título sin meterlo en las deps del efecto de abajo:
+  // el array cambia de referencia en CADA delta (setMeetings(prev.map)), así que tenerlo en deps
+  // haría re-disparar el toast + el GET de refreshPending en cada token del stream siguiente a
+  // cualquier council ya completado (completedEv sigue truthy). Con el ref, el efecto corre
+  // EXACTAMENTE una vez por evento meeting.completed.
+  const meetingsRef = useRef(meetings);
+  useEffect(() => { meetingsRef.current = meetings; }, [meetings]);
+
   // Toast on `meeting.completed` with per-agent counts so the user knows
   // how the work is split. Counts come from itemCounts: { atlas: 2, user: 1 }.
   const completedEv = useWebSocket('meeting.completed');
@@ -64,7 +75,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
     const data = completedEv.data as { meeting_id?: string; item_counts?: Record<string, number> } | undefined;
     if (!data?.meeting_id) return;
     const counts = data.item_counts ?? {};
-    const m = meetings.find(x => x.id === data.meeting_id);
+    const m = meetingsRef.current.find(x => x.id === data.meeting_id);
     const title = m?.title ?? 'Council';
     const parts = Object.entries(counts)
       .filter(([, n]) => n > 0)
@@ -75,7 +86,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
       toast.success(`Council "${title}" completado. ${parts.join(', ')}.`);
     }
     void refreshPending();
-  }, [completedEv, meetings, refreshPending]);
+  }, [completedEv, refreshPending]);
 
   const selectedMeeting = selectedMeetingId
     ? meetings.find(m => m.id === selectedMeetingId) ?? null
@@ -255,6 +266,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
           <MeetingDetail
             meeting={selectedMeeting}
             agents={agents}
+            onEditMeeting={editMeeting}
             onBack={() => setSelectedMeetingId(null)}
             onStart={() => runMeeting(selectedMeeting.id)}
             onEnd={() => endMeeting(selectedMeeting.id)}
@@ -268,6 +280,11 @@ export function CouncilTab({ agents }: CouncilTabProps) {
               const ok = await deleteMeeting(selectedMeeting.id);
               if (ok) setSelectedMeetingId(null);
             }}
+            awaitingUser={awaitingUser.has(selectedMeeting.id)}
+            onSendUserMessage={content => sendUserMessage(selectedMeeting.id, content)}
+            onSkipIntervention={() => skipIntervention(selectedMeeting.id)}
+            onContinue={opts => continueMeeting(selectedMeeting.id, opts)}
+            onAddToWorkboard={itemId => addItemToWorkboard(selectedMeeting.id, itemId)}
           />
         ) : (
           <MeetingArchive
@@ -284,6 +301,7 @@ export function CouncilTab({ agents }: CouncilTabProps) {
           agents={agents}
           onClose={() => setShowNewMeeting(false)}
           onCreated={handleCreated}
+          createMeeting={createMeeting}
         />
       )}
     </div>

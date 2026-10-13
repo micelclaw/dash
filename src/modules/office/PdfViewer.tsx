@@ -157,7 +157,7 @@ export function Component() {
         const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
         const doc = await loadingTask.promise;
         if (cancelled) {
-          doc.destroy().catch(() => { /* ignore */ });
+          doc.loadingTask.destroy().catch(() => { /* ignore */ });
           return;
         }
         pdfDocRef.current = doc;
@@ -211,7 +211,7 @@ export function Component() {
       renderTasksRef.current = [];
       const doc = pdfDocRef.current;
       pdfDocRef.current = null;
-      if (doc) doc.destroy().catch(() => { /* ignore */ });
+      if (doc) doc.loadingTask.destroy().catch(() => { /* ignore */ });
       host.replaceChildren();
     };
   }, [blobUrl]);

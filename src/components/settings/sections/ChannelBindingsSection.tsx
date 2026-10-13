@@ -9,6 +9,7 @@ import { SectionShell } from '../shared/SectionShell';
 import { ToggleSwitch } from '../shared/ToggleSwitch';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { OPENCLAW_QUEUE_DEBOUNCE_MS } from '@/services/openclaw-94-config';
 import { describeError } from '@/lib/api-errors';
 
 const QUEUE_MODES = [
@@ -126,6 +127,16 @@ const ACK_REACTION_SCOPES = [
   { value: 'all', label: 'All messages' },
 ];
 
+function hasNonAscii(value: string): boolean {
+  return Array.from(value).some((character) => (character.codePointAt(0) ?? 0) > 0x7f);
+}
+
+function stripAsciiAndWhitespace(value: string): string {
+  return Array.from(value)
+    .filter((character) => !/\s/u.test(character) && (character.codePointAt(0) ?? 0) > 0x7f)
+    .join('');
+}
+
 function SelectRow({ label, desc, value, options, onChange }: {
   label: string;
   desc?: string;
@@ -193,6 +204,34 @@ function NumberRow({ label, desc, value, min, max, suffix, onChange }: {
   );
 }
 
+function FixedValueRow({ label, desc, value }: { label: string; desc: string; value: string }) {
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text)' }}>{label}</span>
+          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: 2 }}>{desc}</div>
+        </div>
+        <span
+          role="status"
+          style={{
+            padding: '4px 9px',
+            borderRadius: 999,
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--text-dim)',
+            fontSize: '0.6875rem',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // U2 (OpenClaw 6.1): fila con slider float (NumberRow es integer). Para TTS speed.
 function SliderRow({ label, desc, value, min, max, step, format, onChange }: {
   label: string;
@@ -252,7 +291,6 @@ export function ChannelBindingsSection() {
 
   // Queue state
   const [queueMode, setQueueMode] = useState('collect');
-  const [queueDebounce, setQueueDebounce] = useState(1000);
   const [queueCap, setQueueCap] = useState(20);
   const [inboundDebounce, setInboundDebounce] = useState(2000);
 
@@ -298,7 +336,6 @@ export function ChannelBindingsSection() {
       const tts = (data.tts ?? {}) as Record<string, unknown>;
 
       setQueueMode((q.mode ?? 'collect') as string);
-      setQueueDebounce((q.debounce_ms ?? 1000) as number);
       setQueueCap((q.cap ?? 20) as number);
       const inb = (data.inbound ?? {}) as Record<string, unknown>;
       setInboundDebounce((inb.debounce_ms ?? 2000) as number);
@@ -348,17 +385,16 @@ export function ChannelBindingsSection() {
       const payload = {
         queue: {
           mode: queueMode,
-          debounceMs: queueDebounce,
           cap: queueCap,
         },
         inbound: {
           debounceMs: inboundDebounce,
         },
-        status_reactions: {
+        statusReactions: {
           enabled: reactionsEnabled,
         },
-        ack_reaction: ackReaction || null,
-        ack_reaction_scope: ackReactionScope,
+        ackReaction: ackReaction || null,
+        ackReactionScope,
         tts: {
           auto: ttsAuto,
           provider: ttsProvider,
@@ -408,7 +444,11 @@ export function ChannelBindingsSection() {
         onToggle={() => toggleSection('queue')}
       >
         <SelectRow label="Queue mode" value={queueMode} options={QUEUE_MODES} onChange={markDirty(setQueueMode)} />
-        <NumberRow label="Queue debounce" desc="Wait before starting followup turn" value={queueDebounce} min={0} max={10000} suffix="ms" onChange={markDirty(setQueueDebounce)} />
+        <FixedValueRow
+          label="Queue debounce"
+          desc="Managed by OpenClaw 2026.9.4. This global delay can no longer be configured."
+          value={`${OPENCLAW_QUEUE_DEBOUNCE_MS} ms · fixed`}
+        />
         <NumberRow label="Queue cap" desc="Max messages in queue per session" value={queueCap} min={1} max={100} onChange={markDirty(setQueueCap)} />
         <NumberRow label="Inbound debounce" desc="Group rapid messages from same sender" value={inboundDebounce} min={0} max={10000} suffix="ms" onChange={markDirty(setInboundDebounce)} />
       </SettingsBlock>
@@ -468,7 +508,7 @@ export function ChannelBindingsSection() {
                   // characters outside the basic Latin range (likely emoji).
                   // Imperfect (some emojis use multi-codepoint ZWJ sequences)
                   // but catches the common "user typed a word by mistake" case.
-                  const cleaned = v.replace(/[\s\x00-\x7F]/g, '');
+                  const cleaned = stripAsciiAndWhitespace(v);
                   setAckReaction(cleaned);
                   setDirty(true);
                 }}
@@ -476,12 +516,12 @@ export function ChannelBindingsSection() {
                   padding: '4px 8px', fontSize: '0.875rem', width: 50, textAlign: 'center',
                   background: 'var(--surface)',
                   border: `1px solid ${
-                    !ackReaction || /[^\x00-\x7F]/.test(ackReaction) ? 'var(--border)' : '#ef4444'
+                    !ackReaction || hasNonAscii(ackReaction) ? 'var(--border)' : '#ef4444'
                   }`,
                   borderRadius: 'var(--radius-sm)', color: 'var(--text)',
                 }}
               />
-              {ackReaction && /^[\x00-\x7F]+$/.test(ackReaction) && (
+              {ackReaction && !hasNonAscii(ackReaction) && (
                 <span style={{ fontSize: '0.625rem', color: '#ef4444' }} title="Not an emoji — try 👀, 👍, ✅, etc.">
                   !
                 </span>

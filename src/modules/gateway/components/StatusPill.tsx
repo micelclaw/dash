@@ -10,6 +10,8 @@ interface StatusPillProps {
           string;
   label?: string;
   size?: 'sm' | 'md';
+  /** Tooltip nativo (p.ej. detalle de un test de modelo: HTTP, mensaje, fecha). */
+  title?: string;
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
@@ -39,13 +41,13 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> =
 
 const DEFAULT_COLORS = { bg: '#6b728020', text: '#9ca3af', dot: '#6b7280' };
 
-export function StatusPill({ status, label, size = 'sm' }: StatusPillProps) {
+export function StatusPill({ status, label, size = 'sm', title }: StatusPillProps) {
   const colors = STATUS_COLORS[status] ?? DEFAULT_COLORS;
   const displayLabel = label ?? status.replace(/_/g, ' ');
   const isSmall = size === 'sm';
 
   return (
-    <span style={{
+    <span title={title} style={{
       display: 'inline-flex',
       alignItems: 'center',
       gap: 6,

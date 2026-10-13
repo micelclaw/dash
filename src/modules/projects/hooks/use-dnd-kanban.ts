@@ -27,6 +27,8 @@ export function useDndKanban(boardId: string) {
   const cards = useProjectsStore((s) => s.cards);
   const columnCardIds = useProjectsStore((s) => s.columnCardIds);
   const boardColumnIds = useProjectsStore((s) => s.boardColumnIds);
+  const multiSelectedIds = useProjectsStore((s) => s.multiSelectedIds);
+  const clearMultiSelect = useProjectsStore((s) => s.clearMultiSelect);
 
   const [dragState, setDragState] = useState<DragState>({
     activeId: null,
@@ -59,7 +61,7 @@ export function useDndKanban(boardId: string) {
     }));
   }, []);
 
-  const onDragEnd = useCallback((event: DragEndEvent) => {
+  const onDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
     setDragState({ activeId: null, activeType: null, overId: null, overType: null });
 
@@ -92,32 +94,55 @@ export function useDndKanban(boardId: string) {
 
       // Determine target column
       let targetColumnId: string;
-      let targetIndex: number;
 
       const overType = over.data.current?.type;
       if (overType === 'column') {
         // Dropped on empty column
         targetColumnId = String(over.id);
-        targetIndex = (columnCardIds[targetColumnId] ?? []).length;
       } else {
         // Dropped on another card — find its column
         const overCard = cards[String(over.id)];
         if (!overCard) return;
         targetColumnId = overCard.column_id;
-        const colCards = (columnCardIds[targetColumnId] ?? [])
-          .map(id => cards[id])
-          .filter((c): c is NonNullable<typeof c> => !!c);
-        targetIndex = colCards.findIndex(c => c.id === String(over.id));
-        if (targetIndex === -1) targetIndex = colCards.length;
       }
 
-      const colCards = (columnCardIds[targetColumnId] ?? [])
+      const movingIds = multiSelectedIds.has(cardId)
+        ? Array.from(multiSelectedIds)
+        : [cardId];
+      const columnOrder = boardColumnIds[boardId] ?? [];
+      movingIds.sort((a, b) => {
+        const cardA = cards[a];
+        const cardB = cards[b];
+        if (!cardA || !cardB) return 0;
+        const columnDelta = columnOrder.indexOf(cardA.column_id) - columnOrder.indexOf(cardB.column_id);
+        return columnDelta || cardA.position - cardB.position;
+      });
+
+      const targetCards = (columnCardIds[targetColumnId] ?? [])
         .map(id => cards[id])
-        .filter((c): c is NonNullable<typeof c> => !!c);
-      const position = calculatePosition(colCards, targetIndex, cardId);
-      moveCard(boardId, cardId, targetColumnId, position);
+        .filter((c): c is NonNullable<typeof c> => !!c && !movingIds.includes(c.id))
+        .sort((a, b) => a.position - b.position);
+
+      let targetIndex: number;
+      if (overType !== 'column') {
+        const overIndex = targetCards.findIndex(c => c.id === String(over.id));
+        targetIndex = overIndex === -1 ? targetCards.length : overIndex;
+      } else {
+        targetIndex = targetCards.length;
+      }
+
+      const before = targetIndex > 0 ? targetCards[targetIndex - 1]!.position : 0;
+      const after = targetIndex < targetCards.length
+        ? targetCards[targetIndex]!.position
+        : before + ((movingIds.length + 1) * 1000);
+      const gap = (after - before) / (movingIds.length + 1);
+
+      await Promise.all(movingIds.map((id, index) =>
+        moveCard(boardId, id, targetColumnId, before + (gap * (index + 1))),
+      ));
+      if (movingIds.length > 1) clearMultiSelect();
     }
-  }, [boardId, moveCard, reorderColumn, columns, cards, columnCardIds, boardColumnIds]);
+  }, [boardId, moveCard, reorderColumn, columns, cards, columnCardIds, boardColumnIds, multiSelectedIds, clearMultiSelect]);
 
   return {
     dragState,

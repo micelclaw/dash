@@ -23,11 +23,11 @@ import { fmt, Money, Tip } from './shared';
 
 type Area = 'resumen' | 'contabilidad' | 'gestion' | 'informes' | 'config';
 const AREAS = [
-  { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
-  { id: 'contabilidad', label: 'Contabilidad', icon: BookOpen },
-  { id: 'gestion', label: 'Gestión', icon: FolderKanban },
-  { id: 'informes', label: 'Informes', icon: FileBarChart },
-  { id: 'config', label: 'Configuración', icon: Settings },
+  { id: 'resumen', label: 'Overview', icon: LayoutDashboard },
+  { id: 'contabilidad', label: 'Accounting', icon: BookOpen },
+  { id: 'gestion', label: 'Management', icon: FolderKanban },
+  { id: 'informes', label: 'Reports', icon: FileBarChart },
+  { id: 'config', label: 'Settings', icon: Settings },
 ];
 
 export function ContabilidadLens() {
@@ -51,7 +51,7 @@ export function ContabilidadLens() {
     let cancelled = false;
     void api.get<{ data: JournalEntry }>(`/finance/journal-entries/${entryParam}`)
       .then((r) => { if (!cancelled) setDeepEntry(r.data); })
-      .catch(() => { if (!cancelled) toast.error('Asiento no encontrado'); });
+      .catch(() => { if (!cancelled) toast.error('Entry not found'); });
     return () => { cancelled = true; };
   }, [entryParam]);
 
@@ -136,33 +136,33 @@ function ResumenArea({ onGo }: { onGo: (a: Area) => void; onOpenLedger: (id: str
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Resultado" sub={title} value={`${fmt(result)} €`} color={result >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingIcon(result)} />
-        <KpiCard label="Tesorería" sub="bancos y caja" value={tesoreria != null ? `${fmt(tesoreria)} €` : '—'} icon={<Wallet size={16} />} />
-        <KpiCard label={toSettle >= 0 ? 'IVA a ingresar' : 'IVA a compensar'} sub="modelo 303" value={`${fmt(Math.abs(toSettle))} €`} icon={<Receipt size={16} />} />
-        <KpiCard label="Patrimonio neto" sub="capital + resultado" value={`${fmt(netWorth)} €`} icon={<Scale size={16} />} />
+        <KpiCard label="Result" sub={title} value={`${fmt(result)} €`} color={result >= 0 ? 'var(--green)' : 'var(--red)'} icon={TrendingIcon(result)} />
+        <KpiCard label="Cash" sub="banks and cash" value={tesoreria != null ? `${fmt(tesoreria)} €` : '—'} icon={<Wallet size={16} />} />
+        <KpiCard label={toSettle >= 0 ? 'VAT payable' : 'VAT refundable'} sub="form 303" value={`${fmt(Math.abs(toSettle))} €`} icon={<Receipt size={16} />} />
+        <KpiCard label="Net worth" sub="capital + result" value={`${fmt(netWorth)} €`} icon={<Scale size={16} />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="text-[13px] font-semibold mb-3 flex items-center gap-1.5">Pérdidas y ganancias <Tip k="resultados" /></div>
+          <div className="text-[13px] font-semibold mb-3 flex items-center gap-1.5">Profit and loss <Tip k="resultados" /></div>
           <div className="flex flex-col gap-2 text-sm">
-            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Ingresos</span><Money v={pl?.total_income ?? 0} /></div>
-            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Gastos</span><Money v={pl?.total_expense ?? 0} /></div>
-            <div className="flex justify-between font-bold pt-2 border-t border-[var(--border)]"><span>Resultado</span><span className="font-mono" style={{ color: result >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(pl?.result ?? 0)} €</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Income</span><Money v={pl?.total_income ?? 0} /></div>
+            <div className="flex justify-between"><span className="text-[var(--text-dim)]">Expenses</span><Money v={pl?.total_expense ?? 0} /></div>
+            <div className="flex justify-between font-bold pt-2 border-t border-[var(--border)]"><span>Result</span><span className="font-mono" style={{ color: result >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(pl?.result ?? 0)} €</span></div>
           </div>
-          <button type="button" onClick={() => onGo('informes')} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--mod-finance)] hover:underline">Ver informes <ArrowRight size={13} /></button>
+          <button type="button" onClick={() => onGo('informes')} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--mod-finance)] hover:underline">See reports <ArrowRight size={13} /></button>
         </div>
 
         <div className="rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col gap-3">
-          <div className="text-[13px] font-semibold">Accesos rápidos</div>
+          <div className="text-[13px] font-semibold">Quick actions</div>
           <div className="grid grid-cols-2 gap-2">
-            <Quick label="Nuevo asiento" icon={<Plus size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Libro Diario" icon={<BookOpen size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Plan de cuentas" icon={<FolderKanban size={15} />} onClick={() => onGo('contabilidad')} />
-            <Quick label="Modelos fiscales" icon={<Receipt size={15} />} onClick={() => onGo('informes')} />
+            <Quick label="New entry" icon={<Plus size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label="Journal" icon={<BookOpen size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label="Chart of accounts" icon={<FolderKanban size={15} />} onClick={() => onGo('contabilidad')} />
+            <Quick label="Tax forms" icon={<Receipt size={15} />} onClick={() => onGo('informes')} />
           </div>
-          {bs && !bs.balanced && <div className="text-xs text-[var(--red)] mt-1">⚠ El balance no cuadra — revisa los asientos en el Libro Diario.</div>}
-          {bs && bs.balanced && <div className="text-xs text-[var(--green)] mt-1">✓ La contabilidad cuadra.</div>}
+          {bs && !bs.balanced && <div className="text-xs text-[var(--red)] mt-1">⚠ The balance sheet does not balance — check the entries in the Journal.</div>}
+          {bs && bs.balanced && <div className="text-xs text-[var(--green)] mt-1">✓ The books balance.</div>}
         </div>
       </div>
     </div>

@@ -46,9 +46,6 @@ interface RegistryBrowserProps {
 function toInstalledApp(r: RegistryApp): InstalledApp {
   const installed = r.status === 'installed' || r.status === 'update_available';
   const m = (r.manifest ?? {}) as Record<string, unknown>;
-  const icon = (typeof m.icon === 'string' && m.icon) ? m.icon : '🔌';
-  const mUi = m.ui as Record<string, unknown> | undefined;
-  const mMod = mUi?.module as Record<string, unknown> | undefined;
   return {
     id: `registry-${r.name}`,
     app_name: r.name,
@@ -57,14 +54,14 @@ function toInstalledApp(r: RegistryApp): InstalledApp {
     status: installed ? 'active' : 'disabled',
     source: 'registry',
     install_path: null,
+    // El icono lo resuelve <AppIcon>/resolveManifestIcon desde el manifest
+    // (soporta ui.module.icon como nombre Lucide) → sin override de emoji.
     manifest: {
       ...m,
       name: r.name,
-      icon,
       description: (m.description as string) ?? r.description ?? '',
       tier_required: (m.tier_required as string) ?? 'free',
       tags: [...(installed ? [] : ['registry-available']), 'free'],
-      ...(mMod ? { ui: { ...mUi, module: { ...mMod, icon } } } : {}),
     },
     forked_from: null,
     installed_by: null,

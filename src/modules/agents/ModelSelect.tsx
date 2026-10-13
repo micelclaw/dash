@@ -34,6 +34,7 @@ export function ModelSelect({ value, saving, onSelect }: {
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
@@ -43,15 +44,15 @@ export function ModelSelect({ value, saving, onSelect }: {
   useEffect(() => {
     if (!open || models.length > 0) return;
     setLoading(true);
+    setLoadError(null);
     api.get<{ data: ModelOption[] }>('/managed-agents/models')
       .then(res => setModels(
         [...res.data].sort((a, b) => a.provider.localeCompare(b.provider) || a.name.localeCompare(b.name)),
       ))
-      .catch(() => setModels([
-        { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', name: 'claude-haiku-4-5' },
-        { id: 'anthropic/claude-sonnet-4-6', provider: 'anthropic', name: 'claude-sonnet-4-6' },
-        { id: 'anthropic/claude-opus-4-6', provider: 'anthropic', name: 'claude-opus-4-6' },
-      ]))
+      .catch((error) => {
+        setModels([]);
+        setLoadError(error instanceof Error ? error.message : 'No se pudo cargar el catálogo real');
+      })
       .finally(() => setLoading(false));
   }, [open, models.length]);
 
@@ -176,6 +177,10 @@ export function ModelSelect({ value, saving, onSelect }: {
             {loading ? (
               <div style={{ padding: '10px 14px', fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
                 Cargando modelos...
+              </div>
+            ) : loadError ? (
+              <div style={{ padding: '10px 14px', fontSize: '0.8125rem', color: 'var(--error)' }}>
+                {loadError}. No se muestran modelos inventados.
               </div>
             ) : shown.length === 0 ? (
               <div style={{ padding: '10px 14px', fontSize: '0.8125rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>

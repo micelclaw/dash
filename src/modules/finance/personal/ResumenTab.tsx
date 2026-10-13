@@ -26,7 +26,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { useFinancePersonalStore, type FinanceSeriesPoint, type FinanceCategoryTotal, type FinanceSummary, type FinanceTransaction } from '@/stores/finance-personal.store';
+import { useFinancePersonalStore, type FinanceSeriesPoint, type FinanceAccountSeries, type FinanceCategoryTotal, type FinanceSummary, type FinanceTransaction } from '@/stores/finance-personal.store';
 import { fmtMoney, movementFace, categoryVisual, tintBackground, CATEGORY_FALLBACK_COLOR } from './lib';
 import { usePersonalNav } from './navigation';
 import { RecurrenceBadge } from './RecurrenceBadge';
@@ -48,7 +48,7 @@ function Kpi({ label, value, hint, accent, emoji }: { label: string; value: stri
 // ── Tarjeta contenedora de gráfica ─────────────────────────────────
 // `action` (opcional) se pinta a la derecha del título, en la misma fila. Si no
 // se pasa, la cabecera es idéntica a la versión previa (retrocompatible).
-function ChartCard({ title, children, flex, action }: { title: string; children: React.ReactNode; flex: string; action?: React.ReactNode }) {
+export function ChartCard({ title, children, flex, action }: { title: string; children: React.ReactNode; flex: string; action?: React.ReactNode }) {
   return (
     <div style={{ flex, minWidth: 0, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
@@ -64,8 +64,8 @@ function ChartCard({ title, children, flex, action }: { title: string; children:
 // color: rojo (var(--error)) para gasto, verde (var(--mod-finance)) para ingreso.
 function SpendKindToggle({ value, onChange }: { value: 'expense' | 'income'; onChange: (k: 'expense' | 'income') => void }) {
   const opts: { id: 'expense' | 'income'; label: string; accent: string }[] = [
-    { id: 'expense', label: 'Gasto', accent: 'var(--error)' },
-    { id: 'income', label: 'Ingreso', accent: 'var(--mod-finance)' },
+    { id: 'expense', label: 'Expense', accent: 'var(--error)' },
+    { id: 'income', label: 'Income', accent: 'var(--mod-finance)' },
   ];
   return (
     <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--bg)', borderRadius: 'var(--radius-md, 6px)' }}>
@@ -84,7 +84,7 @@ function SpendKindToggle({ value, onChange }: { value: 'expense' | 'income'; onC
 function EmptyChart({ height = 200 }: { height?: number }) {
   return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
-      Sin datos todavía.
+      No data yet.
     </div>
   );
 }
@@ -93,7 +93,7 @@ function EmptyChart({ height = 200 }: { height?: number }) {
 function shortDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'short' }).format(d);
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(d);
 }
 
 // ── Tooltip de la gráfica de patrimonio ────────────────────────────
@@ -124,9 +124,9 @@ function NetWorthTooltip({ active, payload, label }: { active?: boolean; payload
   return (
     <div style={{ padding: '8px 12px', background: 'var(--surface, #1a1a24)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', fontSize: 12, minWidth: 150 }}>
       <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>{label ? shortDate(String(label)) : ''}</div>
-      {row(NET_WORTH_COLOR, 'Patrimonio', get('net_worth'))}
-      {income > 0 && row(INCOME_BAR_COLOR, 'Ingreso', income)}
-      {expense > 0 && row(EXPENSE_BAR_COLOR, 'Gasto', expense)}
+      {row(NET_WORTH_COLOR, 'Net worth', get('net_worth'))}
+      {income > 0 && row(INCOME_BAR_COLOR, 'Income', income)}
+      {expense > 0 && row(EXPENSE_BAR_COLOR, 'Expense', expense)}
     </div>
   );
 }
@@ -171,22 +171,103 @@ function NetWorthChart({ series }: { series: FinanceSeriesPoint[] }) {
           width={52}
         />
         <Tooltip content={<NetWorthTooltip />} cursor={{ stroke: 'var(--border)' }} />
-        <Bar yAxisId="right" dataKey="income" name="Ingreso" fill={INCOME_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={22} />
-        <Bar yAxisId="right" dataKey="expense" name="Gasto" fill={EXPENSE_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={22} />
-        <Line yAxisId="left" type="monotone" dataKey="net_worth" name="Patrimonio" stroke={NET_WORTH_COLOR} strokeWidth={2} dot={false} />
+        <Bar yAxisId="right" dataKey="income" name="Income" fill={INCOME_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={22} />
+        <Bar yAxisId="right" dataKey="expense" name="Expense" fill={EXPENSE_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={22} />
+        <Line yAxisId="left" type="monotone" dataKey="net_worth" name="Net worth" stroke={NET_WORTH_COLOR} strokeWidth={2} dot={false} />
       </ComposedChart>
     </ResponsiveContainer>
   );
 }
 
-// ── Flujo de caja mensual (ingresos vs gastos + ahorro) ────────────
+const ACCOUNT_LINE_COLORS = ['#4f8cff', '#3ecf8e', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'];
+
+function AccountSeriesTooltip({
+  active,
+  payload,
+  label,
+  accounts,
+  seriesCurrency,
+}: {
+  active?: boolean;
+  payload?: { dataKey?: string; value?: number; color?: string }[];
+  label?: string;
+  accounts: FinanceAccountSeries['accounts'];
+  seriesCurrency: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const byId = new Map(accounts.map((account) => [account.account_id, account]));
+  return (
+    <div style={{ padding: '8px 12px', background: 'var(--surface, #1a1a24)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', fontSize: 12, minWidth: 170 }}>
+      <div style={{ color: 'var(--text-dim)', marginBottom: 4 }}>{label ? shortDate(String(label)) : ''}</div>
+      {payload.map((point) => {
+        const account = byId.get(String(point.dataKey));
+        if (!account) return null;
+        return (
+          <div key={account.account_id} style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text)', marginTop: 2 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: point.color, display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.name}</span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono, monospace)' }}>{fmtMoney(point.value, seriesCurrency)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function buildAccountSeriesLines(accounts: FinanceAccountSeries['accounts']): React.ReactElement[] {
+  return accounts.map((account, index) => (
+    <Line key={account.account_id} type="monotone" dataKey={account.account_id} name={account.name} stroke={ACCOUNT_LINE_COLORS[index % ACCOUNT_LINE_COLORS.length]} strokeWidth={2} dot={false} />
+  ));
+}
+
+export function AccountBalanceChart({ series }: { series: FinanceAccountSeries }) {
+  const data = useMemo(
+    () => series.dates.map((date, index) => ({
+      date,
+      ...Object.fromEntries(series.accounts.map((account) => [account.account_id, Number(account.values[index] ?? 0)])),
+    })),
+    [series],
+  );
+  if (data.length === 0 || series.accounts.length === 0) return <EmptyChart />;
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginBottom: 8 }}>
+        {series.accounts.map((account, index) => (
+          <span key={account.account_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--text-dim)', fontSize: 11 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: ACCOUNT_LINE_COLORS[index % ACCOUNT_LINE_COLORS.length] }} />
+            {account.name}
+          </span>
+        ))}
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} minTickGap={28} />
+          <YAxis tickFormatter={moneyAxisShort} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={64} />
+          <Tooltip content={<AccountSeriesTooltip accounts={series.accounts} seriesCurrency={series.base_currency} />} cursor={{ stroke: 'var(--border)' }} />
+          {buildAccountSeriesLines(series.accounts)}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function AccountSeriesChartCard({ series, title }: { series: FinanceAccountSeries; title: string }) {
+  return (
+    <ChartCard title={`Account balances over time · ${title}${series.base_currency ? ` · ${series.base_currency}` : ''}`} flex="1 1 100%">
+      <AccountBalanceChart series={series} />
+    </ChartCard>
+  );
+}
+
+// ── Cash flow mensual (ingresos vs gastos + ahorro) ────────────
 // 'YYYY-MM' → 'jun' (mes corto) para el eje X.
 function shortMonth(ym: string): string {
   const [y, m] = ym.split('-').map(Number);
   if (!y || !m) return ym;
   const d = new Date(y, m - 1, 1);
   if (Number.isNaN(d.getTime())) return ym;
-  return new Intl.DateTimeFormat('es-ES', { month: 'short' }).format(d).replace('.', '');
+  return new Intl.DateTimeFormat('en-GB', { month: 'short' }).format(d).replace('.', '');
 }
 
 function CashflowTooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey?: string; value?: number }[]; label?: string }) {
@@ -202,9 +283,9 @@ function CashflowTooltip({ active, payload, label }: { active?: boolean; payload
   return (
     <div style={{ padding: '8px 12px', background: 'var(--surface, #1a1a24)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm, 4px)', fontSize: 12, minWidth: 150 }}>
       <div style={{ color: 'var(--text-dim)', marginBottom: 2 }}>{label ? shortMonth(String(label)) : ''}</div>
-      {row(INCOME_BAR_COLOR, 'Ingresos', inc)}
-      {row(EXPENSE_BAR_COLOR, 'Gastos', exp)}
-      {row(NET_WORTH_COLOR, 'Ahorro', net)}
+      {row(INCOME_BAR_COLOR, 'Income', inc)}
+      {row(EXPENSE_BAR_COLOR, 'Expenses', exp)}
+      {row(NET_WORTH_COLOR, 'Savings', net)}
     </div>
   );
 }
@@ -230,9 +311,9 @@ function CashflowChart({ series }: { series: FinanceSeriesPoint[] }) {
         <XAxis dataKey="bucket" tickFormatter={shortMonth} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} minTickGap={16} />
         <YAxis tickFormatter={moneyAxisShort} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} width={64} />
         <Tooltip content={<CashflowTooltip />} cursor={{ fill: 'var(--surface-hover)' }} />
-        <Bar dataKey="income" name="Ingresos" fill={INCOME_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
-        <Bar dataKey="expense" name="Gastos" fill={EXPENSE_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
-        <Line type="monotone" dataKey="net" name="Ahorro" stroke={NET_WORTH_COLOR} strokeWidth={2} dot={{ r: 2 }} />
+        <Bar dataKey="income" name="Income" fill={INCOME_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
+        <Bar dataKey="expense" name="Expenses" fill={EXPENSE_BAR_COLOR} radius={[2, 2, 0, 0]} maxBarSize={26} />
+        <Line type="monotone" dataKey="net" name="Savings" stroke={NET_WORTH_COLOR} strokeWidth={2} dot={{ r: 2 }} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -267,7 +348,7 @@ function SpendByCategoryChart({ rows }: { rows: FinanceCategoryTotal[] }) {
       rows
         .map((r) => ({
           id: r.category_id ?? '__none__',
-          name: r.name ?? 'Sin categoría',
+          name: r.name ?? 'Uncategorised',
           emoji: r.icon?.trim() || '🏷️',
           color: r.color?.trim() || CATEGORY_FALLBACK_COLOR,
           value: Number(r.total),
@@ -312,7 +393,7 @@ function SpendByCategoryChart({ rows }: { rows: FinanceCategoryTotal[] }) {
 }
 
 export function ResumenTab() {
-  const { summary: storeSummary, accounts, categories, fetchSeries, fetchSpendByCategory, fetchSummaryRange, fetchRecentTransactions } = useFinancePersonalStore();
+  const { summary: storeSummary, accounts, categories, fetchSeries, fetchAccountSeries, fetchSpendByCategory, fetchSummaryRange, fetchRecentTransactions } = useFinancePersonalStore();
   const catById = new Map(categories.map((c) => [c.id, c]));
   const userAccounts = accounts.filter((a) => a.type === 'asset' || a.type === 'liability');
 
@@ -320,6 +401,7 @@ export function ResumenTab() {
   // Periodo compartido (selector en el header de la lente) — conduce KPIs, gráficas y recientes.
   const { range, title } = useFinancePeriod();
   const [series, setSeries] = useState<FinanceSeriesPoint[]>([]);
+  const [accountSeries, setAccountSeries] = useState<FinanceAccountSeries>({ base_currency: '', dates: [], accounts: [] });
   const [spend, setSpend] = useState<FinanceCategoryTotal[]>([]);
   const [spendKind, setSpendKind] = useState<'expense' | 'income'>('expense');
   // Resumen y movimientos recientes ACOTADOS al periodo. net_worth/available siguen
@@ -353,6 +435,14 @@ export function ResumenTab() {
     return () => { alive = false; };
   }, [fetchSeries, range.from, range.to, storeSummary?.net_worth]);
 
+  useEffect(() => {
+    let alive = true;
+    void fetchAccountSeries({ from: range.from, to: range.to })
+      .then((data) => { if (alive) setAccountSeries(data); })
+      .catch(() => { if (alive) setAccountSeries({ base_currency: '', dates: [], accounts: [] }); });
+    return () => { alive = false; };
+  }, [fetchAccountSeries, range.from, range.to, storeSummary?.net_worth]);
+
   // Carga el reparto por categoría del donut. Depende además de spendKind (gasto
   // vs ingreso), así cambiar el toggle recarga solo el donut, no la serie.
   useEffect(() => {
@@ -372,21 +462,21 @@ export function ResumenTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Kpi label="Patrimonio" emoji="💎" value={fmtMoney(periodSummary?.net_worth)} hint={series.length >= 2 ? `${nwDelta >= 0 ? '▲ +' : '▼ −'}${fmtMoney(Math.abs(nwDelta))} · ${title.toLowerCase()}` : 'activo − pasivo'} accent={Number(periodSummary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
-        <Kpi label="Gastado" emoji="💸" value={fmtMoney(periodSummary?.expenses_period)} hint={title} accent="var(--error)" />
-        <Kpi label="Ingresos" emoji="💰" value={fmtMoney(periodSummary?.income_period)} hint={title} accent="var(--mod-finance)" />
-        <Kpi label="Tasa de ahorro" emoji="🐷" value={`${savingsRate} %`} hint={netSaved >= 0 ? `ahorras ${fmtMoney(netSaved)}` : `gastas ${fmtMoney(-netSaved)} de más`} accent={netSaved >= 0 ? 'var(--mod-finance)' : 'var(--error)'} />
-        <Kpi label="Saldo disponible" emoji="🏦" value={fmtMoney(periodSummary?.available)} hint="cuentas de activo" />
+        <Kpi label="Net worth" emoji="💎" value={fmtMoney(periodSummary?.net_worth)} hint={series.length >= 2 ? `${nwDelta >= 0 ? '▲ +' : '▼ −'}${fmtMoney(Math.abs(nwDelta))} · ${title.toLowerCase()}` : 'activo − pasivo'} accent={Number(periodSummary?.net_worth ?? 0) < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
+        <Kpi label="Spent" emoji="💸" value={fmtMoney(periodSummary?.expenses_period)} hint={title} accent="var(--error)" />
+        <Kpi label="Income" emoji="💰" value={fmtMoney(periodSummary?.income_period)} hint={title} accent="var(--mod-finance)" />
+        <Kpi label="Savings rate" emoji="🐷" value={`${savingsRate} %`} hint={netSaved >= 0 ? `you save ${fmtMoney(netSaved)}` : `you overspend by ${fmtMoney(-netSaved)}`} accent={netSaved >= 0 ? 'var(--mod-finance)' : 'var(--error)'} />
+        <Kpi label="Available balance" emoji="🏦" value={fmtMoney(periodSummary?.available)} hint="asset accounts" />
       </div>
 
       {/* Gráficas: evolución del patrimonio + gasto por categoría (el selector de
           periodo vive en el header de la lente). */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-        <ChartCard title={`Evolución del patrimonio · ${title}`} flex="2 1 360px">
+        <ChartCard title={`Net worth over time · ${title}`} flex="2 1 360px">
           <NetWorthChart series={series} />
         </ChartCard>
         <ChartCard
-          title={`${spendKind === 'income' ? 'Ingreso' : 'Gasto'} por categoría · ${title}`}
+          title={`${spendKind === 'income' ? 'Income' : 'Expense'} by category · ${title}`}
           flex="1 1 320px"
           action={<SpendKindToggle value={spendKind} onChange={setSpendKind} />}
         >
@@ -394,16 +484,18 @@ export function ResumenTab() {
         </ChartCard>
       </div>
 
-      {/* Flujo de caja mensual: ingresos vs gastos + ahorro neto (línea). */}
-      <ChartCard title={`Flujo de caja · ${title}`} flex="1 1 100%">
+      {/* Cash flow mensual: ingresos vs gastos + ahorro neto (línea). */}
+      <ChartCard title={`Cash flow · ${title}`} flex="1 1 100%">
         <CashflowChart series={series} />
       </ChartCard>
+
+      <AccountSeriesChartCard series={accountSeries} title={title} />
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         {/* Cuentas */}
         <div style={{ flex: '1 1 280px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Cuentas</div>
-          {userAccounts.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sin cuentas todavía.</div>}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Accounts</div>
+          {userAccounts.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No accounts yet.</div>}
           {userAccounts.map((a) => (
             <div key={a.id} role="button" tabIndex={0}
               title="Abrir cuenta"
@@ -420,8 +512,8 @@ export function ResumenTab() {
 
         {/* Movimientos recientes */}
         <div style={{ flex: '2 1 400px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Movimientos recientes</div>
-          {recent.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sin movimientos. Crea uno con “+ Nuevo movimiento”.</div>}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 10 }}>Recent movements</div>
+          {recent.length === 0 && <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No movements yet. Create one with “+ New movement”.</div>}
           {recent.map((tx) => {
             const f = movementFace(tx, accounts);
             const cat = f.categoryId ? catById.get(f.categoryId) : undefined;
@@ -436,7 +528,7 @@ export function ResumenTab() {
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px', margin: '0 -6px', borderRadius: 'var(--radius-sm, 4px)', borderBottom: '1px solid var(--border)', fontSize: 13, gap: 10, cursor: 'pointer' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', minWidth: 0 }}>
                   <span aria-hidden style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', flexShrink: 0, fontSize: 13, background: cv ? tintBackground(cv.color) : 'var(--surface-hover)' }}>{cv ? cv.emoji : f.glyph}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || (f.isTransfer ? 'Transferencia' : 'Movimiento')}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description || (f.isTransfer ? 'Transfer' : 'Movement')}</span>
                   {tx.recurring_rule_id && <RecurrenceBadge compact />}
                 </span>
                 <span style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>

@@ -23,3 +23,8 @@ export interface WsAction {
 }
 
 export type WsStatus = 'connected' | 'reconnecting' | 'offline' | 'auth_failed';
+
+/** Local browser transport acceptance; never a Core/agent delivery ACK. */
+export type WsSendResult =
+  | { accepted: true }
+  | { accepted: false; reason: 'not_connected' | 'send_failed' };

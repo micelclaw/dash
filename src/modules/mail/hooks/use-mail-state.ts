@@ -11,18 +11,54 @@
  */
 
 import { create } from 'zustand';
-import type { ComposeData } from '../types';
+import type { ComposeData, MailSortField, MailSortOrder } from '../types';
+
+const SORT_STORAGE_KEY = 'mail-sort';
+
+function readStoredSort(): { field: MailSortField; order: MailSortOrder } {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { field?: string; order?: string };
+      const field = parsed.field as MailSortField | undefined;
+      const order = parsed.order as MailSortOrder | undefined;
+      // Anything unknown falls back to the default rather than reaching the API:
+      // an invalid `sort` is a 400 and the list would just fail to load.
+      if (
+        field && ['received_at', 'from', 'subject', 'category'].includes(field) &&
+        order && ['asc', 'desc'].includes(order)
+      ) {
+        return { field, order };
+      }
+    }
+  } catch {
+    // Unreadable storage is not a reason to break the module.
+  }
+  return { field: 'received_at', order: 'desc' };
+}
 
 interface MailState {
   activeAccount: string | null;
   activeFolder: string;
+  /**
+   * Etiqueta de Gmail seleccionada. Es EXCLUYENTE con la carpeta: en Gmail una
+   * etiqueta atraviesa Entrada, Enviados y Archivo, así que cruzarla con una
+   * carpeta daría casi siempre una lista vacía y parecería que no hay correo.
+   */
+  activeLabel: string | null;
   selectedEmailId: string | null;
   selectedIds: Set<string>;
   lastSelectedId: string | null;
   composerData: ComposeData | null;
+  sortField: MailSortField;
+  sortOrder: MailSortOrder;
+  starredOnly: boolean;
 
+  setSort: (field: MailSortField, order: MailSortOrder) => void;
+  toggleStarredOnly: () => void;
   setActiveAccount: (id: string | null) => void;
   setActiveFolder: (folder: string) => void;
+  setActiveLabel: (label: string | null) => void;
   setSelectedEmailId: (id: string | null) => void;
   toggleSelection: (id: string, shiftKey?: boolean, orderedIds?: string[]) => void;
   selectAll: (ids: string[]) => void;
@@ -34,13 +70,30 @@ interface MailState {
 export const useMailState = create<MailState>()((set) => ({
   activeAccount: null,
   activeFolder: 'INBOX',
+  activeLabel: null,
   selectedEmailId: null,
   selectedIds: new Set<string>(),
   lastSelectedId: null,
   composerData: null,
+  sortField: readStoredSort().field,
+  sortOrder: readStoredSort().order,
+  starredOnly: false,
+
+  setSort: (field, order) => {
+    try {
+      localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify({ field, order }));
+    } catch {
+      // Not persisting is acceptable; not sorting is not.
+    }
+    set({ sortField: field, sortOrder: order, selectedEmailId: null });
+  },
+  toggleStarredOnly: () => set((s) => ({ starredOnly: !s.starredOnly, selectedEmailId: null })),
 
   setActiveAccount: (id) => set({ activeAccount: id, selectedEmailId: null }),
-  setActiveFolder: (folder) => set({ activeFolder: folder, selectedEmailId: null }),
+  // Elegir carpeta suelta la etiqueta y al revés: son dos formas distintas de
+  // mirar el mismo buzón, no dos filtros que se apilen.
+  setActiveFolder: (folder) => set({ activeFolder: folder, activeLabel: null, selectedEmailId: null }),
+  setActiveLabel: (label) => set({ activeLabel: label, selectedEmailId: null }),
   setSelectedEmailId: (id) => set({ selectedEmailId: id }),
   toggleSelection: (id, shiftKey, orderedIds) =>
     set((s) => {

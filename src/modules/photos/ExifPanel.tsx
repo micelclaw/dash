@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState, useEffect } from 'react';
 import { Save, PanelRightClose, Search } from 'lucide-react';
 import { getPreviewUrl, formatFileSize } from '@/lib/file-utils';
@@ -184,6 +185,7 @@ export function ExifPanel({ photo, onSaved, collapsed, onToggleCollapse }: ExifP
         ...(isMobile ? { position: 'fixed', inset: 0, zIndex: 60, paddingTop: 'env(safe-area-inset-top, 0px)' } : {}),
       }}
     >
+      <EntitySource entity={photo} domain="photos" detail />
       {/* Header */}
       <div style={{
         display: 'flex',

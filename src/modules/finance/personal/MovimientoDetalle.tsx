@@ -25,7 +25,7 @@ import { NuevoMovimientoDialog } from './NuevoMovimientoDialog';
 import { useEscapeClose } from '../use-escape-close';
 
 const KIND_LABEL = (isTransfer: boolean, signed: number) =>
-  isTransfer ? 'Transferencia' : signed >= 0 ? 'Ingreso' : 'Gasto';
+  isTransfer ? 'Transfer' : signed >= 0 ? 'Income' : 'Expense';
 
 // Origen del movimiento (de dónde salió el asiento) → badge en la cabecera, para que
 // el usuario sepa si lo creó a mano, viene de una factura, de una regla, o del sistema.
@@ -58,10 +58,10 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
     setBusy(true);
     try {
       await reverseTransaction(tx.id);
-      toast.success('Movimiento revertido');
+      toast.success('Movement reversed');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo revertir');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t reverse');
     } finally { setBusy(false); }
   };
 
@@ -85,14 +85,14 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
               {(() => {
                 const sm = sourceMeta(tx.source, recurring);
                 return (
-                  <span title="De dónde salió este movimiento" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-dim)' }}>
+                  <span title="Where this movement came from" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999, background: 'var(--card)', border: '1px solid var(--border)', fontSize: 10.5, color: 'var(--text-dim)' }}>
                     <span style={{ fontSize: 11, lineHeight: 1 }}>{sm.glyph}</span>{sm.label}
                   </span>
                 );
               })()}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Cerrar" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></button>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></button>
         </div>
 
         {/* Importe destacado */}
@@ -103,24 +103,24 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
         </div>
 
         <div>
-          {row('Concepto', tx.description
+          {row('Description', tx.description
             ? <span style={{ color: 'var(--text)' }}>{tx.description}</span>
             : <span style={{ color: 'var(--text-muted)' }}>(sin concepto)</span>)}
-          {row('Tipo', <span>{f.glyph} {KIND_LABEL(f.isTransfer, f.signed)}</span>)}
+          {row('Type', <span>{f.glyph} {KIND_LABEL(f.isTransfer, f.signed)}</span>)}
           {f.isTransfer && f.transferFrom && f.transferTo ? (
-            row('Cuentas', (
+            row('Accounts', (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                 {f.transferFrom}<ArrowRight size={13} style={{ color: 'var(--text-muted)' }} />{f.transferTo}
               </span>
             ))
           ) : (
-            row('Cuenta', f.accountName)
+            row('Account', f.accountName)
           )}
-          {!f.isTransfer && row('Categoría', cv ? (
+          {!f.isTransfer && row('Category', cv ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px 2px 7px', background: tintBackground(cv.color), borderRadius: 'var(--radius-full, 999px)', fontSize: 12 }}>
               <span style={{ fontSize: 13, lineHeight: 1 }}>{cv.emoji}</span>{cv.name}
             </span>
-          ) : <span style={{ color: 'var(--text-muted)' }}>Sin categoría</span>)}
+          ) : <span style={{ color: 'var(--text-muted)' }}>Uncategorised</span>)}
           {recurring && row('Recurrencia', <RecurrenceBadge />)}
         </div>
 
@@ -140,10 +140,10 @@ export function MovimientoDetalle({ tx, onClose }: { tx: FinanceTransaction | nu
               <Undo2 size={14} /> Revertir
             </button>
             <button onClick={() => setEditing(true)} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-              <Pencil size={14} /> Editar
+              <Pencil size={14} /> Edit
             </button>
           </div>
-          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cerrar</button>
+          <button onClick={onClose} style={{ padding: '8px 16px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Close</button>
         </div>
       </div>
 

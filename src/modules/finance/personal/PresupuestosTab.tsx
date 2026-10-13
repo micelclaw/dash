@@ -62,7 +62,7 @@ function MonthNav({ month, onChange }: { month: string; onChange: (next: string)
       <button onClick={() => onChange(shiftMonth(month, 1))} title="Mes siguiente" style={navBtn}><ChevronRight size={16} /></button>
       {!isCurrent && (
         <button
-          onClick={() => onChange(currentMonth())} title="Volver al mes en curso"
+          onClick={() => onChange(currentMonth())} title="Back to the current month"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
         >
           <CalendarClock size={14} /> Hoy
@@ -79,7 +79,7 @@ function OverspentBanner({ names }: { names: string[] }) {
   const shown = names.slice(0, MAX);
   const extra = names.length - shown.length;
   const list = shown.join(', ') + (extra > 0 ? ` y ${extra} más` : '');
-  const plural = names.length === 1 ? 'categoría' : 'categorías';
+  const plural = names.length === 1 ? 'category' : 'categories';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: tintBackground('var(--error)'), border: '1px solid var(--error)', borderRadius: 'var(--radius-md, 6px)' }}>
@@ -118,7 +118,7 @@ function Totals({ budgets }: { budgets: Budget[] }) {
   return (
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
       <Cell label="Presupuestado" value={fmtMoney(t.budgeted)} color="var(--text)" />
-      <Cell label="Gastado" value={fmtMoney(t.spent)} color={overspent ? 'var(--error)' : 'var(--text)'} />
+      <Cell label="Spent" value={fmtMoney(t.spent)} color={overspent ? 'var(--error)' : 'var(--text)'} />
       <Cell label="Restante" value={fmtMoney(t.remaining)} color={t.remaining < 0 ? 'var(--error)' : 'var(--mod-finance)'} />
     </div>
   );
@@ -145,14 +145,14 @@ function BudgetRow({ budget }: { budget: Budget }) {
 
   const save = async () => {
     const n = Number(draft);
-    if (!Number.isFinite(n) || n <= 0) { toast.error('Importe no válido'); return; }
+    if (!Number.isFinite(n) || n <= 0) { toast.error('Invalid amount'); return; }
     setBusy(true);
     try {
       await updateBudget(budget.id, { amount: String(n) });
       toast.success('Presupuesto actualizado');
       setEditing(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo actualizar');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t update');
     } finally { setBusy(false); }
   };
 
@@ -163,7 +163,7 @@ function BudgetRow({ budget }: { budget: Budget }) {
       await deleteBudget(budget.id);
       toast.success('Presupuesto borrado');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo borrar');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t delete');
     } finally { setBusy(false); }
   };
 
@@ -184,8 +184,8 @@ function BudgetRow({ budget }: { budget: Budget }) {
               onKeyDown={(e) => { if (e.key === 'Enter') void save(); if (e.key === 'Escape') setEditing(false); }}
               style={{ width: 96, padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}
             />
-            <button onClick={() => void save()} disabled={busy} title="Guardar" style={iconBtn('var(--mod-finance)')}><Check size={15} /></button>
-            <button onClick={() => { setEditing(false); setDraft(budget.amount); }} title="Cancelar" style={iconBtn('var(--text-muted)')}><X size={15} /></button>
+            <button onClick={() => void save()} disabled={busy} title="Save" style={iconBtn('var(--mod-finance)')}><Check size={15} /></button>
+            <button onClick={() => { setEditing(false); setDraft(budget.amount); }} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={15} /></button>
           </span>
         ) : (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -236,15 +236,15 @@ function AddBudget({ takenCategoryIds }: { takenCategoryIds: Set<string> }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = Number(amount);
-    if (!categoryId) { toast.error('Elige una categoría'); return; }
-    if (!Number.isFinite(n) || n <= 0) { toast.error('Pon un importe válido'); return; }
+    if (!categoryId) { toast.error('Pick a category'); return; }
+    if (!Number.isFinite(n) || n <= 0) { toast.error('Enter a valid amount'); return; }
     setBusy(true);
     try {
       await createBudget({ category_id: categoryId, amount: String(n) });
       toast.success('Presupuesto creado');
       setCategoryId(''); setAmount(''); setOpen(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear');
+      toast.error(err instanceof Error ? err.message : 'Couldn\'t create');
     } finally { setBusy(false); }
   };
 
@@ -253,10 +253,10 @@ function AddBudget({ takenCategoryIds }: { takenCategoryIds: Set<string> }) {
     return (
       <button
         onClick={() => setOpen(true)} disabled={disabled}
-        title={disabled ? 'Todas las categorías de gasto ya tienen presupuesto' : undefined}
+        title={disabled ? 'Every expense category already has a budget' : undefined}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: disabled ? 'var(--text-muted)' : 'var(--text-dim)', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, opacity: disabled ? 0.6 : 1 }}
       >
-        <Plus size={15} /> Nuevo presupuesto
+        <Plus size={15} /> New quote
       </button>
     );
   }
@@ -267,7 +267,7 @@ function AddBudget({ takenCategoryIds }: { takenCategoryIds: Set<string> }) {
         value={categoryId} onChange={(e) => setCategoryId(e.target.value)} autoFocus
         style={{ flex: '1 1 200px', minWidth: 160, padding: '8px 9px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13 }}
       >
-        <option value="">Categoría de gasto…</option>
+        <option value="">Expense category…</option>
         {available.map((c) => {
           const cv = categoryVisual(c);
           return <option key={c.id} value={c.id}>{cv.emoji} {cv.name}</option>;
@@ -278,7 +278,7 @@ function AddBudget({ takenCategoryIds }: { takenCategoryIds: Set<string> }) {
         style={{ width: 130, padding: '8px 9px', background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text)', fontSize: 13, fontFamily: 'var(--font-mono, monospace)' }}
       />
       <button type="submit" disabled={busy} style={{ padding: '8px 14px', background: 'var(--mod-finance)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600, opacity: busy ? 0.6 : 1 }}>
-        {busy ? 'Creando…' : 'Crear'}
+        {busy ? 'Creando…' : 'Create'}
       </button>
       <button type="button" onClick={() => { setOpen(false); setCategoryId(''); setAmount(''); }} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>
         Cancelar

@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import React, { useCallback, useState } from 'react';
 import { Calendar, CheckSquare, MessageSquare, GitBranch, Link2 } from 'lucide-react';
 import { getPreviewUrl } from '@/lib/file-utils';
@@ -91,14 +92,16 @@ export const KanbanCard = React.memo(function KanbanCard({
         background: coverSize === 'full' && card.cover_color
           ? card.cover_color
           : 'color-mix(in srgb, var(--card) 40%, transparent)',
-        border: isSelected
+        borderTop: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+        borderRight: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+        borderBottom: isSelected ? '2px solid var(--primary)' : '1px solid var(--border)',
+        borderLeft: isSelected
           ? '2px solid var(--primary)'
-          : '1px solid var(--border)',
+          : card.color
+            ? `3px solid ${card.color}`
+            : '1px solid var(--border)',
         borderRadius: 6,
         cursor: 'pointer',
-        borderLeft: !isSelected && card.color
-          ? `3px solid ${card.color}`
-          : undefined,
         transition: 'border-color 0.15s, opacity 0.3s',
         opacity: agingOpacity,
         position: 'relative',
@@ -251,7 +254,6 @@ export const KanbanCard = React.memo(function KanbanCard({
         })()}
 
         {/* Footer: due date + checklist + comments + dependencies + assignees */}
-        {(card.due_date || checklist.length > 0 || commentCount > 0 || dependencyCount > 0 || (card.assignee_ids && card.assignee_ids.length > 0)) && (
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -259,6 +261,7 @@ export const KanbanCard = React.memo(function KanbanCard({
             marginTop: 8,
             flexWrap: 'wrap',
           }}>
+            <span style={{ marginLeft: "auto", display: "inline-flex", order: 10 }}><EntitySource entity={card} domain="tasks" /></span>
             {card.due_date && (
               <span
                 style={{
@@ -402,7 +405,7 @@ export const KanbanCard = React.memo(function KanbanCard({
               </>
             )}
           </div>
-        )}
+
 
         {/* Inline expanded checklist */}
         {checklistOpen && checklist.length > 0 && (

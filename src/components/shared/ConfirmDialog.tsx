@@ -19,6 +19,8 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'warning' | 'default';
+  closeOnConfirm?: boolean;
+  pending?: boolean;
 }
 
 const VARIANT_COLORS: Record<string, string> = {
@@ -36,6 +38,8 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   variant = 'default',
+  closeOnConfirm = true,
+  pending = false,
 }: ConfirmDialogProps) {
   if (!open) return null;
 
@@ -43,7 +47,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      onClick={onClose}
+      onClick={() => { if(!pending)onClose(); }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -89,6 +93,7 @@ export function ConfirmDialog({
         )}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button
+            disabled={pending}
             onClick={onClose}
             style={{
               padding: '8px 16px',
@@ -104,7 +109,8 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
-            onClick={() => { onConfirm(); onClose(); }}
+            disabled={pending}
+            onClick={() => { onConfirm(); if(closeOnConfirm)onClose(); }}
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-md)',

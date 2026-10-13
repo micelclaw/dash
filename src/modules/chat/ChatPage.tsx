@@ -10,11 +10,14 @@
  * https://micelclaw.com
  */
 
-import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react';
-import { useNavigate } from 'react-router';
-import { ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX, History } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { useState, useEffect, useCallback, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
+import { Activity, ChevronDown, ChevronUp, PanelRight, MessageSquare, X, Lightbulb, RefreshCw, Volume1, Volume2, VolumeX, History } from 'lucide-react';
 import { CheckpointsPanel } from '@/components/chat/CheckpointsPanel';
 import { useChatStore } from '@/stores/chat.store';
+import { useAuthStore } from '@/stores/auth.store';
 import { useTtsChatState, nextTtsChatState, type TtsChatState } from '@/hooks/use-tts-chat-state';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useIsMobile } from '@/hooks/use-media-query';
@@ -33,19 +36,27 @@ import { ContextCard } from '@/components/shell/ContextCard';
 import { ContextSignals } from '@/components/shell/ContextSignals';
 import { InsightsWidget } from '@/components/shell/InsightsWidget';
 import type { InsightsWidgetHandle } from '@/components/shell/InsightsWidget';
+import { ConversationCollaboration } from './ConversationCollaboration';
+import { ConversationTasksPanel } from './ConversationTasksPanel';
 
 export function Component() {
   const isMobile = useIsMobile();
   const activeConvId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
   const activeConv = activeConvId ? conversations.find(c => c.id === activeConvId) : null;
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const [canvasOpen, setCanvasOpen] = useState(false);
+  const [canvasWidth, setCanvasWidth] = useState(520);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const setChatState = useChatStore((s) => s.setChatState);
   const loadMessages = useChatStore((s) => s.loadMessages);
+  const selectConversation = useChatStore((s) => s.selectConversation);
+  const loadConversations = useChatStore((s) => s.loadConversations);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const insightsRef = useRef<InsightsWidgetHandle>(null);
   const [insightsCollapsed, setInsightsCollapsed] = useState(() => {
     try { return localStorage.getItem('claw-insights-collapsed') === 'true'; } catch { return false; }
@@ -55,11 +66,30 @@ export function Component() {
     setInsightsCollapsed(next);
     try { localStorage.setItem('claw-insights-collapsed', String(next)); } catch { /* ignore */ }
   };
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const saved = Number(localStorage.getItem(`micelclaw.canvas.width.${userId}`));
+      if (Number.isFinite(saved) && saved >= 320 && saved <= 900) setCanvasWidth(saved);
+    } catch { /* UI preference is optional. */ }
+  }, [userId]);
+  const resizeCanvas = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (isMobile) return;
+    event.preventDefault();
+    const startX = event.clientX; const startWidth = canvasWidth;
+    // Capture the final width through the updater, avoiding stale state in the
+    // closure used by pointerup.
+    let finalWidth = startWidth;
+    const trackedMove = (moveEvent: PointerEvent) => { finalWidth = Math.max(320, Math.min(900, startWidth + startX - moveEvent.clientX)); setCanvasWidth(finalWidth); };
+    const trackedEnd = () => { window.removeEventListener('pointermove', trackedMove); window.removeEventListener('pointerup', trackedEnd); if (userId) try { localStorage.setItem(`micelclaw.canvas.width.${userId}`, String(finalWidth)); } catch { /* ignore */ } };
+    window.addEventListener('pointermove', trackedMove); window.addEventListener('pointerup', trackedEnd, { once: true });
+  }, [canvasWidth, isMobile, userId]);
 
   // Back jerárquico móvil: cada overlay se cierra con "atrás" (de más interna a
   // más externa) en vez de salir del módulo. Replican el onClose/onClick actual.
   useBackGuard(canvasOpen, () => setCanvasOpen(false), isMobile);
   useBackGuard(checkpointsOpen, () => setCheckpointsOpen(false), isMobile);
+  useBackGuard(tasksOpen, () => setTasksOpen(false), isMobile);
   useBackGuard(showSidebar, () => setShowSidebar(false), isMobile);
 
   // Set chat state to 3 on mount
@@ -67,6 +97,18 @@ export function Component() {
     setChatState(3);
     return () => setChatState(1);
   }, [setChatState]);
+
+  // Deep-link `/chat?conversation=<id>` (p.ej. desde "Trabajar ahora" / "Trabajos" del Workboard):
+  // selecciona esa conversación (→ el effect de abajo carga sus mensajes) + refresca la lista para
+  // que aparezca en el sidebar Y traiga su flag `is_agent_task` (necesario para el chat read-only),
+  // y limpia el param para no re-disparar en re-renders.
+  useEffect(() => {
+    const convId = searchParams.get('conversation');
+    if (!convId) return;
+    selectConversation(convId);
+    void loadConversations();
+    navigate('/chat', { replace: true });
+  }, [searchParams, selectConversation, loadConversations, navigate]);
 
   // `chat.stream.*` ahora se maneja en una ÚNICA suscripción global (Shell,
   // useChatStreamSubscription) → no se pierde el `done` al navegar fuera del chat.
@@ -79,6 +121,8 @@ export function Component() {
 
   // Listen for dash.navigate events
   const navEvent = useWebSocket('dash.navigate');
+  const collaborationEvent = useWebSocket('chat.collaboration.changed');
+  const revokedEvent = useWebSocket('chat.access.revoked');
 
   useEffect(() => {
     if (!navEvent) return;
@@ -89,15 +133,41 @@ export function Component() {
     navigate(route + query);
   }, [navEvent, navigate, setChatState]);
 
+  useEffect(() => {
+    if (!collaborationEvent) return;
+    void loadConversations();
+    const conversationId = collaborationEvent.data.conversation_id;
+    if (typeof conversationId === 'string' && conversationId === activeConvId) void loadMessages(conversationId);
+  }, [collaborationEvent, activeConvId, loadConversations, loadMessages]);
+
+  useEffect(() => {
+    if (!revokedEvent) return;
+    const conversationId = revokedEvent.data.conversation_id;
+    if (typeof conversationId !== 'string') return;
+    if (conversationId === activeConvId) useChatStore.getState().startNewConversation();
+    void loadConversations();
+  }, [revokedEvent, activeConvId, loadConversations]);
+
   // Canvas & browser session hooks — auto-open panel on content
-  const { hasContent } = useCanvasEvents();
+  const { hasContent, hasNativeCanvas } = useCanvasEvents();
   const { isActive: browserActive } = useBrowserSession();
 
   useEffect(() => {
-    if (!isMobile && (hasContent || browserActive)) {
-      setCanvasOpen(true);
-    }
-  }, [hasContent, browserActive, isMobile]);
+    // First real content opens Canvas once. Once a person closes it, later
+    // updates remain discoverable through the dot and never steal focus.
+    if (!activeConvId || !(hasContent || hasNativeCanvas || browserActive)) return;
+    const key = `micelclaw.canvas.opened.${activeConvId}`;
+    try {
+      if (sessionStorage.getItem(key)) return;
+      sessionStorage.setItem(key, '1');
+    } catch { /* Storage is optional; opening once is still preferable. */ }
+    setCanvasOpen(true);
+  }, [activeConvId, hasContent, hasNativeCanvas, browserActive]);
+  useEffect(() => {
+    const open = () => setCanvasOpen(true);
+    window.addEventListener('micelclaw:open-canvas', open);
+    return () => window.removeEventListener('micelclaw:open-canvas', open);
+  }, []);
 
   const handleCollapse = useCallback(() => {
     setChatState(2);
@@ -201,9 +271,25 @@ export function Component() {
             onClick={() => setCheckpointsOpen(v => !v)}
           />
 
-          {/* Canvas toggle — hidden on mobile */}
-          {!isMobile && (
-            <button
+          <button
+            type="button"
+            title="Tareas de este chat"
+            aria-label="Abrir tareas de este chat"
+            aria-pressed={tasksOpen}
+            disabled={!activeConvId}
+            onClick={() => setTasksOpen((open) => !open)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', background: tasksOpen ? 'var(--surface-hover)' : 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', color: 'var(--text-dim)', cursor: activeConvId ? 'pointer' : 'default', fontSize: 12 }}
+          >
+            <Activity size={14} />{!isMobile && 'Trabajo'}
+          </button>
+
+          <ConversationCollaboration conversationId={activeConvId} compact={isMobile} />
+
+          {/* The same Canvas dashboard opens as a split pane on desktop and a
+              full-screen overlay on PWA/Android. */}
+          <button
+              aria-label={isMobile ? 'Abrir dashboard Canvas' : undefined}
+              aria-pressed={canvasOpen}
               onClick={() => setCanvasOpen(!canvasOpen)}
               style={{
                 display: 'flex',
@@ -222,8 +308,8 @@ export function Component() {
               }}
             >
               <PanelRight size={14} />
-              Canvas
-              {!canvasOpen && (hasContent || browserActive) && (
+              {!isMobile && 'Canvas'}
+              {!canvasOpen && (hasContent || hasNativeCanvas || browserActive) && (
                 <span style={{
                   position: 'absolute',
                   top: -2,
@@ -234,8 +320,7 @@ export function Component() {
                   background: 'var(--amber)',
                 }} />
               )}
-            </button>
-          )}
+          </button>
         </div>
 
         {/* Chat + Canvas split */}
@@ -265,9 +350,28 @@ export function Component() {
             <ChatPanel />
           </div>
 
-          {/* Canvas (50/50 split when open) — never shown on mobile */}
-          {!isMobile && canvasOpen && <CanvasPanel onClose={() => setCanvasOpen(false)} />}
+          {/* Canvas has a user-local, resizable width. The narrow grab area is
+              outside the panel so widget iframes keep their own interaction. */}
+          {!isMobile && canvasOpen && <>
+            <div
+              role="separator"
+              aria-label="Redimensionar Canvas"
+              aria-orientation="vertical"
+              onPointerDown={resizeCanvas}
+              onDoubleClick={() => setCanvasWidth(520)}
+              style={{ width: 7, flexShrink: 0, cursor: 'col-resize', background: 'var(--border)', touchAction: 'none' }}
+            />
+            <div style={{ width: canvasWidth, minWidth: 320, maxWidth: 900, display: 'flex', flexShrink: 0 }}><CanvasPanel onClose={() => setCanvasOpen(false)} /></div>
+          </>}
         </div>
+
+        {/* On phones, a file link opens the same canvas as a full chat-local
+            overlay instead of navigating away to Agents → Workspaces. */}
+        {isMobile && canvasOpen && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 60, display: 'flex' }}>
+            <CanvasPanel onClose={() => setCanvasOpen(false)} />
+          </div>
+        )}
 
         {/* G8: Checkpoints drawer (fixed overlay, right side) */}
         {checkpointsOpen && activeConvId && (
@@ -277,6 +381,8 @@ export function Component() {
             onClose={() => setCheckpointsOpen(false)}
           />
         )}
+
+        {tasksOpen && activeConvId && <ConversationTasksPanel conversationId={activeConvId} onClose={() => setTasksOpen(false)} />}
 
         {/* Input */}
         <ChatInput
@@ -358,7 +464,8 @@ function TtsToggleButton() {
     // sendMessage takes care of writeTtsChatState via the early hook inside the
     // store (so localStorage updates synchronously) AND ships the slash to the
     // backend dispatcher, which echoes the confirmation chip into the chat.
-    sendMessage(`/tts chat ${next}`);
+    const result = sendMessage(`/tts chat ${next}`);
+    if (!result.accepted) toast.error('No se pudo enviar el cambio de TTS.');
   };
 
   return (

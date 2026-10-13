@@ -11,8 +11,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { api } from '@/services/api';
-import type { Channel } from '../types';
+import { listChannels, type Channel } from '@/services/messages.service';
 
 interface UseChannelsOptions {
   platform?: string;
@@ -21,22 +20,24 @@ interface UseChannelsOptions {
 export function useChannels(options: UseChannelsOptions = {}) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetch = useCallback(async () => {
+  const refetch = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = {};
-      if (options.platform) params.platform = options.platform;
-      const res = await api.get<{ data: Channel[] }>('/messages/channels', params);
-      setChannels(res.data);
-    } catch {
-      // ignore
+      const data = await listChannels(options.platform ? { platform: options.platform } : undefined);
+      setChannels(data);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
   }, [options.platform]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
 
-  return { channels, loading, refetch: fetch };
+  return { channels, loading, error, refetch };
 }

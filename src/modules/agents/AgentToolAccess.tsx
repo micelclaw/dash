@@ -4,9 +4,11 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Save, RotateCcw, Search, X, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { Save, RotateCcw, Search, X, ChevronDown, ChevronRight, Check, ExternalLink, Stethoscope } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useToolCatalog } from './hooks/use-tool-catalog';
 
 interface AgentToolAccessProps {
   agentId: string;
@@ -19,6 +21,13 @@ interface ToolAccessResponse {
   data: {
     global: { profile: string | null; allow: string[] | null; alsoAllow?: string[] | null; deny: string[] | null };
     agent: { profile: string | null; allow: string[] | null; alsoAllow?: string[] | null; deny: string[] | null };
+    // Dominios de fachada ACTIVOS = los que conceden las apps/skills asignadas del
+    // agente (unificación 2026-07-12). El bloque de tools `claw_*` es read-only y se
+    // marca activo/inactivo por dominio a partir de esto.
+    active_facade_domains?: string[];
+    // Estado EFECTIVO del set de workboard del agente (perfil + override). `effective`
+    // son las tools ON ahora mismo; se usa como estado inicial de los toggles.
+    workboard?: { enabled: boolean; effective: string[]; override: { add: string[]; remove: string[] } | null };
     openclaw_agent_id: string;
   };
 }
@@ -44,88 +53,13 @@ function serverGlobsFrom(list: string[] | null | undefined): string[] {
   return (list ?? []).filter(isServerGlob).map((t) => t.replace(/__\*$/, ''));
 }
 
-const TOOL_GROUPS: { label: string; tools: { name: string; desc: string }[] }[] = [
-  { label: 'Files', tools: [
-    { name: 'read', desc: 'Read file contents' },
-    { name: 'write', desc: 'Create or overwrite files' },
-    { name: 'edit', desc: 'Make precise edits' },
-    { name: 'apply_patch', desc: 'Patch files (OpenAI)' },
-  ]},
-  { label: 'Runtime', tools: [
-    { name: 'exec', desc: 'Run shell commands' },
-    { name: 'process', desc: 'Manage background processes' },
-  ]},
-  { label: 'Web', tools: [
-    { name: 'web_search', desc: 'Search the web' },
-    { name: 'web_fetch', desc: 'Fetch web content' },
-  ]},
-  { label: 'Memory', tools: [
-    { name: 'memory_search', desc: 'Semantic search' },
-    { name: 'memory_get', desc: 'Read memory files' },
-  ]},
-  { label: 'Sessions', tools: [
-    { name: 'sessions_list', desc: 'List sessions' },
-    { name: 'sessions_history', desc: 'Session history' },
-    { name: 'sessions_send', desc: 'Send to session' },
-    { name: 'sessions_spawn', desc: 'Spawn sub-agent' },
-    { name: 'sessions_yield', desc: 'Receive sub-agent results' },
-    { name: 'subagents', desc: 'Manage sub-agents' },
-    { name: 'session_status', desc: 'Session status' },
-  ]},
-  { label: 'UI', tools: [
-    { name: 'browser', desc: 'Control web browser' },
-    { name: 'canvas', desc: 'Control canvases' },
-  ]},
-  { label: 'Messaging', tools: [
-    { name: 'message', desc: 'Send messages' },
-  ]},
-  { label: 'Automation', tools: [
-    { name: 'cron', desc: 'Schedule tasks' },
-    { name: 'gateway', desc: 'Gateway control' },
-  ]},
-  { label: 'Other', tools: [
-    { name: 'nodes', desc: 'Nodes & devices' },
-    { name: 'agents_list', desc: 'List agents' },
-    { name: 'image', desc: 'Image understanding' },
-    { name: 'tts', desc: 'Text-to-speech' },
-  ]},
-];
-
-const ALL_TOOLS = TOOL_GROUPS.flatMap(g => g.tools.map(t => t.name));
-
-// Native OpenClaw preset definitions (source of truth)
-const PRESET_TOOLS = {
-  minimal: new Set(['session_status']),
-  coding: new Set([
-    'read', 'write', 'edit', 'apply_patch',
-    'exec', 'process',
-    'web_search', 'web_fetch',
-    'memory_search', 'memory_get',
-    'sessions_list', 'sessions_history', 'sessions_send',
-    'sessions_spawn', 'sessions_yield', 'subagents', 'session_status',
-    'cron', 'image',
-    // bundle-mcp: las tools MCP (claw_*) se materializan en los perfiles
-    // coding/messaging/full del embedded Pi (no en minimal).
-    'bundle-mcp',
-  ]),
-  messaging: new Set([
-    'sessions_list', 'sessions_history', 'sessions_send',
-    'session_status', 'message',
-    'bundle-mcp',
-  ]),
-  full: new Set([...ALL_TOOLS, 'bundle-mcp']),
-};
-
-// Vista indexable por string (para perfiles que llegan del backend sin tipar).
-const PRESET_LOOKUP: Record<string, Set<string> | undefined> = PRESET_TOOLS;
-
-const PRESETS: { label: string; value: ToolProfile; desc: string }[] = [
-  { label: 'Inherit', value: 'inherit', desc: 'Use global defaults from Settings' },
-  { label: 'Minimal', value: 'minimal', desc: '1 tool: session_status only' },
-  { label: 'Coding', value: 'coding', desc: '19 tools: files, runtime, web, memory, sessions' },
-  { label: 'Messaging', value: 'messaging', desc: '5 tools: sessions + message' },
-  { label: 'Full', value: 'full', desc: 'All 26 tools enabled' },
-  { label: 'Custom', value: 'custom', desc: 'Per-agent allow/deny overrides' },
+const PRESET_META: { label: string; value: ToolProfile }[] = [
+  { label: 'Inherit', value: 'inherit' },
+  { label: 'Minimal', value: 'minimal' },
+  { label: 'Coding', value: 'coding' },
+  { label: 'Messaging', value: 'messaging' },
+  { label: 'Full', value: 'full' },
+  { label: 'Custom', value: 'custom' },
 ];
 
 function getActiveProfile(agent: { profile: string | null; allow: string[] | null; deny: string[] | null }): ToolProfile {
@@ -140,15 +74,6 @@ function getActiveProfile(agent: { profile: string | null; allow: string[] | nul
   return 'inherit';
 }
 
-function getToolsForProfile(profile: ToolProfile, globalProfile: string | null): Set<string> {
-  if (profile === 'inherit') {
-    const gp = globalProfile ?? 'coding';
-    return PRESET_LOOKUP[gp] ?? PRESET_TOOLS.coding;
-  }
-  if (profile === 'custom') return PRESET_TOOLS.full; // custom starts with all enabled
-  return PRESET_LOOKUP[profile] ?? PRESET_TOOLS.coding;
-}
-
 export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -157,22 +82,39 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [justSaved, setJustSaved] = useState(false);
+  const [accessMode, setAccessMode] = useState<'standard' | 'restricted'>('standard');
+
+  // Catálogo dinámico (nativas + presets + workboard) — sustituye TOOL_GROUPS/
+  // ALL_TOOLS/PRESET_TOOLS hardcodeados, compartido con ToolAccessDefaultsSection.
+  const catalog = useToolCatalog(agentId);
 
   const [globalProfile, setGlobalProfile] = useState<string | null>(null);
   const [activeProfile, setActiveProfile] = useState<ToolProfile>('inherit');
   const [customAllow, setCustomAllow] = useState<Set<string>>(new Set());
   const [customDeny, setCustomDeny] = useState<Set<string>>(new Set());
-  // Fase 3.6-B: tools MCP (claw_*) descubiertas dinámicamente del registro.
-  const [mcpTools, setMcpTools] = useState<{ name: string; domain: string; label: string; actions: string[] }[]>([]);
   // §B3: third-party MCP servers + which this agent is DENIED (by name).
-  const [externalMcp, setExternalMcp] = useState<{ name: string; enabled: boolean }[]>([]);
   const [mcpDeny, setMcpDeny] = useState<Set<string>>(new Set());
+  // Dominios de fachada activos según las apps asignadas (read-only, del GET tool-access).
+  const [activeFacadeDomains, setActiveFacadeDomains] = useState<Set<string>>(new Set());
+  // Set DESEADO de tools de workboard (toggleable, plugin de primera clase). Estado
+  // inicial de `tool-access.workboard.effective`; se reescribe al elegir un preset.
+  const [workboardOn, setWorkboardOn] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    api.get<{ data: { bundle_key: string; mcp_tools: { name: string; domain: string; label: string; actions: string[] }[]; external_mcp?: { name: string; enabled: boolean }[] } }>('/managed-agents/available-tools')
-      .then((r) => { setMcpTools(r.data.mcp_tools ?? []); setExternalMcp(r.data.external_mcp ?? []); })
-      .catch(() => { /* opcional: la UI nativa sigue funcionando sin el grupo MCP */ });
-  }, []);
+  // Fase 3.6-B: tools MCP (claw_*) + third-party MCP servers — del catálogo compartido.
+  const mcpTools = catalog.mcpTools;
+  const externalMcp = catalog.externalMcp;
+
+  const nativePresetSet = useCallback((profile: string): Set<string> => {
+    return new Set(catalog.nativePresets[profile] ?? catalog.nativePresets.coding ?? []);
+  }, [catalog.nativePresets]);
+
+  const getToolsForProfile = useCallback((profile: ToolProfile, gProfile: string | null): Set<string> => {
+    if (profile === 'inherit') {
+      return nativePresetSet(gProfile ?? 'coding');
+    }
+    if (profile === 'custom') return new Set(catalog.allNativeTools); // custom starts with all enabled
+    return nativePresetSet(profile);
+  }, [nativePresetSet, catalog.allNativeTools]);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -189,6 +131,8 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
       // MCP per-server visibility lives in `deny` as <server>__* globs,
       // independent of the native profile (loaded for every mode).
       setMcpDeny(new Set(serverGlobsFrom(res.data.agent.deny)));
+      setActiveFacadeDomains(new Set(res.data.active_facade_domains ?? []));
+      setWorkboardOn(new Set(res.data.workboard?.effective ?? []));
       setDirty(false);
     } catch {
       toast.error('Failed to load tool access config');
@@ -198,12 +142,32 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
   }, [agentId]);
 
   useEffect(() => { fetchConfig(); }, [fetchConfig]);
+  useEffect(() => { setAccessMode(catalog.accessMode); }, [catalog.accessMode]);
+
+  const changeAccessMode = async (value: 'standard' | 'restricted') => {
+    try {
+      await api.patch(`/managed-agents/${agentId}`, { access_mode: value });
+      setAccessMode(value);
+      toast.success(`Access mode: ${value}. Las sesiones abiertas necesitan /reset.`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'No se pudo cambiar el modo de acceso'); }
+  };
 
   const handleProfileSelect = (profile: ToolProfile) => {
     setActiveProfile(profile);
     if (profile !== 'custom') {
       setCustomAllow(new Set());
       setCustomDeny(new Set());
+    }
+    // Los presets aplican TAMBIÉN el set de workboard de profile_tools[preset]. 'custom'
+    // conserva el workboardOn actual (igual que conserva allow/deny al pulsar el botón);
+    // 'inherit' sigue el set del perfil global, igual que hace con las nativas.
+    if (catalog.workboardEnabled) {
+      if (profile === 'inherit') {
+        const gp = globalProfile ?? 'coding';
+        setWorkboardOn(new Set(catalog.profileTools[gp]?.tools ?? []));
+      } else if (profile !== 'custom') {
+        setWorkboardOn(new Set(catalog.profileTools[profile]?.tools ?? []));
+      }
     }
     setDirty(true);
   };
@@ -249,17 +213,33 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
     setDirty(true);
   };
 
+  const isWorkboardToolEnabled = (tool: string): boolean => workboardOn.has(tool);
+
+  const handleWorkboardToggle = (tool: string) => {
+    setWorkboardOn((prev) => {
+      const next = new Set(prev);
+      if (next.has(tool)) next.delete(tool); else next.add(tool);
+      return next;
+    });
+    setDirty(true);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       // §B3: MCP per-server denies ride along in `deny` as <server>__* globs,
       // in every mode, without disturbing the native profile/allow/deny.
       const serverGlobs = [...mcpDeny].map((n) => `${n}__*`);
+      // Workboard: el SET COMPLETO deseado — el backend lo convierte a delta contra
+      // el perfil efectivo. Se envía siempre que el plugin esté activo, en TODOS los
+      // modos (inherit/preset/custom), como campo independiente del bloque nativo.
+      const workboardPatch = catalog.workboardEnabled ? [...workboardOn] : undefined;
       if (activeProfile === 'inherit') {
         // Remove per-agent override (native) but keep any MCP server denies.
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
           scope: 'agent', profile: null, allow: null,
           deny: serverGlobs.length ? serverGlobs : null,
+          ...(workboardPatch !== undefined ? { workboard: workboardPatch } : {}),
         });
       } else if (activeProfile === 'custom') {
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
@@ -267,12 +247,14 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
           profile: null,
           allow: [...customAllow],
           deny: [...customDeny, ...serverGlobs],
+          ...(workboardPatch !== undefined ? { workboard: workboardPatch } : {}),
         });
       } else {
         // Standard profile (minimal, coding, messaging, full)
         await api.patch(`/managed-agents/${agentId}/tool-access`, {
           scope: 'agent', profile: activeProfile, allow: null,
           deny: serverGlobs.length ? serverGlobs : null,
+          ...(workboardPatch !== undefined ? { workboard: workboardPatch } : {}),
         });
       }
       toast.success('Tool access updated');
@@ -303,25 +285,84 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
     });
   };
 
-  const enabledCount = ALL_TOOLS.filter(t => isToolEnabled(t)).length;
+  const enabledCount = catalog.allNativeTools.filter(t => isToolEnabled(t)).length;
+  const workboardEnabledCount = catalog.allWorkboardTools.filter(t => isWorkboardToolEnabled(t)).length;
+  const effectiveByName = useMemo(() => new Map(catalog.effectiveTools.map((tool) => [tool.name, tool])), [catalog.effectiveTools]);
+
+  const diagnoseRuntime = async () => {
+    try {
+      const response = await api.get<{ data: {
+        recovery: string;
+        reason?: string;
+        gateway_loaded_version: number | null;
+        expected_tools?: string[];
+        plugin?: { gateway_registered?: boolean; sandbox_allowed?: boolean; registration_errors?: string[] };
+      } }>(`/managed-agents/${agentId}/runtime-capabilities`);
+      const recovery = response.data.recovery;
+      if (recovery === 'none') toast.success(`Runtime al día · catálogo v${response.data.gateway_loaded_version}`);
+      else if (recovery === 'reset_session') {
+        toast.warning(`Gateway correcto · ${response.data.expected_tools?.length ?? 0} tools esperadas. Abre una sesión nueva o usa /reset.`);
+      } else if (recovery === 'repair_sandbox_policy') {
+        toast.error('Gateway ha cargado el plugin, pero la allowlist de la sandbox bloquea sus tools. /reset no basta: Core debe reparar esa política.');
+      } else {
+        const detail = response.data.plugin?.registration_errors?.[0];
+        toast.error(detail
+          ? `Gateway rechazó el catálogo: ${detail}`
+          : 'El plugin nativo de Micelclaw no está registrado en Gateway. /reset todavía no lo solucionará.');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudo diagnosticar el runtime');
+    }
+  };
+
+  const presets = useMemo(() => PRESET_META.map((p) => {
+    if (p.value === 'inherit') return { ...p, desc: 'Use global defaults from Settings' };
+    if (p.value === 'custom') return { ...p, desc: 'Per-agent allow/deny overrides' };
+    const nativeCount = catalog.nativePresets[p.value]?.length ?? 0;
+    const wbCount = catalog.workboardEnabled ? (catalog.profileTools[p.value]?.tools.length ?? 0) : 0;
+    const desc = wbCount > 0
+      ? `${nativeCount} native tools + ${wbCount} workboard tools`
+      : `${nativeCount} native tools`;
+    return { ...p, desc };
+  }), [catalog.nativePresets, catalog.profileTools, catalog.workboardEnabled]);
 
   // Filtro por nombre/descripcion (case-insensitive). Con filtro activo, los
   // grupos sin coincidencias se ocultan y los demas se expanden.
   const q = filter.trim().toLowerCase();
   const filteredGroups = useMemo(() => {
-    if (!q) return TOOL_GROUPS;
-    return TOOL_GROUPS
+    if (!q) return catalog.nativeGroups;
+    return catalog.nativeGroups
       .map(g => ({ ...g, tools: g.tools.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)) }))
       .filter(g => g.tools.length > 0);
-  }, [q]);
+  }, [q, catalog.nativeGroups]);
+
+  const filteredWorkboardGroups = useMemo(() => {
+    if (!catalog.workboardEnabled) return [];
+    if (!q) return catalog.workboardGroups;
+    return catalog.workboardGroups
+      .map(g => ({ ...g, tools: g.tools.filter(t => t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q)) }))
+      .filter(g => g.tools.length > 0);
+  }, [q, catalog.workboardGroups, catalog.workboardEnabled]);
 
   // El bloque bundle-mcp (claw_*) también respeta el filtro: chips por nombre,
   // y el bloque entero se oculta si nada coincide.
   const labelMatchesMcp = !q || 'bundle-mcp micelclaw os claw'.includes(q);
   const shownMcpTools = q ? mcpTools.filter(t => t.name.toLowerCase().includes(q)) : mcpTools;
   const showMcpBlock = mcpTools.length > 0 && (!q || labelMatchesMcp || shownMcpTools.length > 0);
+  // Agrupar las tools claw_* por DOMINIO/módulo y marcar activas según las apps
+  // asignadas (unificación 2026-07-12): vista READ-ONLY, sin toggle bundle-mcp.
+  const mcpByDomain = (() => {
+    const m = new Map<string, { label: string; tools: typeof mcpTools }>();
+    for (const t of shownMcpTools) {
+      const g = m.get(t.domain) ?? { label: (t.label || t.domain).split(' · ')[0] ?? t.domain, tools: [] as typeof mcpTools };
+      g.tools.push(t); m.set(t.domain, g);
+    }
+    return [...m.entries()]
+      .map(([domain, g]) => ({ domain, label: g.label, tools: g.tools, active: activeFacadeDomains.has(domain) }))
+      .sort((a, b) => (a.active === b.active ? a.label.localeCompare(b.label) : a.active ? -1 : 1));
+  })();
 
-  if (loading) {
+  if (loading || catalog.loading) {
     return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: '0.8125rem' }}>Loading tool access...</div>;
   }
 
@@ -334,7 +375,7 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
             Tool Access
           </h3>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            {enabledCount}/{ALL_TOOLS.length} enabled
+            {enabledCount}/{catalog.allNativeTools.length} enabled
             {dirty && <span style={{ color: 'var(--warning)', marginLeft: 8 }}>unsaved</span>}
           </span>
         </div>
@@ -376,7 +417,7 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
 
       {/* Presets */}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {PRESETS.map(p => (
+        {presets.map(p => (
           <button
             key={p.value}
             onClick={() => handleProfileSelect(p.value)}
@@ -406,6 +447,60 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
           Custom per-agent configuration. Toggle individual tools below.
         </div>
       )}
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12, background: 'var(--surface)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '0.75rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+              Micelclaw System
+            </h4>
+            <div style={{ marginTop: 3, fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+              Capacidades nativas del sistema · catálogo v{catalog.catalogVersion}
+            </div>
+          </div>
+          <select value={accessMode} onChange={(event) => void changeAccessMode(event.target.value as 'standard' | 'restricted')} style={{ padding: '5px 7px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '0.6875rem' }}>
+            <option value="standard">Standard · owner data</option>
+            <option value="restricted">Restricted · assigned apps</option>
+          </select>
+          <button onClick={diagnoseRuntime} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.6875rem' }}>
+            <Stethoscope size={12} /> Diagnose runtime
+          </button>
+        </div>
+        {catalog.capabilitySnapshotStale && (
+          <div style={{ marginBottom: 8, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: '#f59e0b16', color: 'var(--warning)', fontSize: '0.6875rem' }}>
+            La sesión abierta puede tener un snapshot anterior. El diagnóstico indica si basta con /reset.
+          </div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {catalog.systemGroups.map((group) => (
+            <div key={group.id}>
+              <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: 5 }}>{group.label}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {group.tools.map((tool) => {
+                  const state = effectiveByName.get(tool.name);
+                  const label = !state?.available ? 'NO DISPONIBLE · PLUGIN' : !state.effective ? 'BLOQUEADA · PERFIL' : state.runtime_loaded ? 'ACTIVA · RUNTIME' : 'ACTIVA · SESIÓN NUEVA';
+                  const active = state?.effective ?? false;
+                  return (
+                    <span key={tool.name} title={state?.reason ?? tool.description} style={{ padding: '4px 7px', borderRadius: 'var(--radius-sm)', border: `1px solid ${active ? '#22c55e30' : 'var(--border)'}`, background: active ? '#22c55e12' : 'transparent', color: active ? 'var(--success)' : 'var(--text-muted)', fontSize: '0.625rem', fontFamily: 'var(--font-mono)' }}>
+                      {tool.name} · {label}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: 12 }}>
+        <h4 style={{ margin: 0, fontSize: '0.75rem', letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-dim)' }}>Direct MCP Connections</h4>
+        <p style={{ margin: '5px 0 10px', fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+          Grants personales o compartidos del agente. Asignar una app no concede una conexión MCP.
+        </p>
+        <Link to={catalog.mcpConnectionsLink} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--amber)', fontSize: '0.75rem', textDecoration: 'none' }}>
+          Configure MCP connections <ExternalLink size={11} />
+        </Link>
+      </div>
 
       {/* Búsqueda/filtro por nombre de herramienta */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -529,72 +624,178 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
         );
       })}
 
-      {/* Fase 3.6-B: tools de Micelclaw OS (claw_*) descubiertas del registro.
-          Se controlan en bloque vía bundle-mcp; la lista es informativa. */}
+      {/* Workboard (plugin de primera clase): tools toggleables como las nativas — a
+          diferencia del bloque claw_* de abajo, que sigue read-only por-app. Solo se
+          renderiza si el plugin está habilitado en el Gateway. */}
+      {catalog.workboardEnabled && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <h4 style={{
+              fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
+              margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em',
+            }}>
+              Workboard
+            </h4>
+            <span style={{
+              fontSize: '0.625rem', fontWeight: 600, fontFamily: 'var(--font-mono)',
+              color: workboardEnabledCount > 0 ? 'var(--success)' : 'var(--text-muted)',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-full)', padding: '1px 7px',
+            }}>
+              {workboardEnabledCount}/{catalog.allWorkboardTools.length}
+            </span>
+          </div>
+          <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.5 }}>
+            Coordinación de tareas entre agentes (tablero Por reclamar/En curso/Hecho). Toggleables por tool,
+            igual que las nativas — a diferencia del bloque de abajo (lo concede la app asignada).
+          </p>
+          {filteredWorkboardGroups.length === 0 && q && (
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 2px' }}>
+              Ninguna herramienta de Workboard coincide con «{filter}».
+            </div>
+          )}
+          {filteredWorkboardGroups.map(group => {
+            const groupKey = `wb:${group.key}`;
+            const groupTotal = group.tools.length;
+            const groupEnabled = group.tools.filter(t => isWorkboardToolEnabled(t.name)).length;
+            const isCollapsed = !q && collapsed.has(groupKey);
+            return (
+            <div key={groupKey} style={{ marginBottom: 8 }}>
+              <button
+                onClick={() => !q && toggleGroup(groupKey)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  margin: '0 0 8px', padding: 0, background: 'transparent', border: 'none',
+                  cursor: q ? 'default' : 'pointer', textAlign: 'left',
+                }}
+              >
+                {!q && (isCollapsed
+                  ? <ChevronRight size={12} style={{ color: 'var(--text-muted)' }} />
+                  : <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />)}
+                <span style={{
+                  fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-dim)',
+                }}>
+                  {group.label}
+                </span>
+                <span style={{
+                  fontSize: '0.5625rem', fontWeight: 600, fontFamily: 'var(--font-mono)',
+                  color: groupEnabled > 0 ? 'var(--success)' : 'var(--text-muted)',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-full)', padding: '1px 6px',
+                }}>
+                  {groupEnabled}/{groupTotal}
+                </span>
+              </button>
+              {!isCollapsed && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+                gap: 6,
+              }}>
+                {group.tools.map(tool => {
+                  const enabled = isWorkboardToolEnabled(tool.name);
+                  return (
+                    <div
+                      key={tool.name}
+                      onClick={() => handleWorkboardToggle(tool.name)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 10px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        transition: 'var(--transition-fast)',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>
+                          {tool.name}
+                        </div>
+                        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                          {tool.desc}
+                        </div>
+                      </div>
+                      <div style={{
+                        width: 32, height: 18, borderRadius: 9,
+                        background: enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+                        position: 'relative', flexShrink: 0, marginLeft: 8,
+                        transition: 'background 0.2s',
+                      }}>
+                        <div style={{
+                          width: 14, height: 14, borderRadius: '50%',
+                          background: '#fff', position: 'absolute', top: 2,
+                          left: enabled ? 16 : 2, transition: 'left 0.2s',
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              )}
+            </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tools de Micelclaw OS (claw_*) por APP asignada (unificación 2026-07-12).
+          READ-ONLY: cada app concede sus tools; no hay toggle bundle-mcp. Las apps
+          se asignan en Overview → Apps; ahí se concede visibilidad Y permiso de uso. */}
       {showMcpBlock && (
         <div>
           <h4 style={{
             fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)',
-            margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em',
+            margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.05em',
           }}>
-            Micelclaw OS · bundle-mcp
+            Micelclaw OS · tools por app
           </h4>
-          <div
-            onClick={() => handleToolToggle('bundle-mcp')}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-              opacity: activeProfile === 'inherit' ? 0.6 : 1,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>bundle-mcp</div>
-              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                Habilita las {mcpTools.length} herramientas de Micelclaw OS (claw_*)
+          <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.5 }}>
+            Estas tools las concede la <b>app</b> correspondiente (asígnala en <b>Overview → Apps</b>).
+            El agente solo lleva en su contexto las tools de sus apps asignadas — no se activan una a una aquí.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {mcpByDomain.map(({ domain, label, tools, active }) => (
+              <div key={domain} style={{
+                padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', opacity: active ? 1 : 0.5,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: tools.length > 0 ? 6 : 0 }}>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text)' }}>{label}</span>
+                  <span style={{
+                    fontSize: '0.5625rem', padding: '1px 6px', borderRadius: 'var(--radius-full)',
+                    background: active ? 'var(--success-dim, #22c55e22)' : 'var(--surface-hover)',
+                    color: active ? 'var(--success, #22c55e)' : 'var(--text-muted)', fontWeight: 600,
+                    textTransform: 'uppercase', letterSpacing: '0.03em',
+                  }}>
+                    {active ? 'activa · app asignada' : 'no asignada'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {tools.map((t) => (
+                    <span key={t.name} title={t.actions.join(', ')} style={{
+                      fontSize: '0.625rem', padding: '2px 6px', borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text-dim)',
+                    }}>
+                      {t.name} <span style={{ color: 'var(--text-muted)' }}>({t.actions.length})</span>
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div style={{
-              width: 32, height: 18, borderRadius: 9,
-              background: isToolEnabled('bundle-mcp') ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-              position: 'relative', flexShrink: 0, marginLeft: 8, transition: 'background 0.2s',
-            }}>
-              <div style={{
-                width: 14, height: 14, borderRadius: '50%', background: '#fff',
-                position: 'absolute', top: 2, left: isToolEnabled('bundle-mcp') ? 16 : 2, transition: 'left 0.2s',
-              }} />
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.45 }}>
-            {shownMcpTools.map((t) => (
-              <span
-                key={t.name}
-                title={t.actions.join(', ')}
-                style={{
-                  fontSize: '0.625rem', padding: '2px 6px', borderRadius: 'var(--radius-sm)',
-                  background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)',
-                }}
-              >
-                {t.name} <span style={{ color: 'var(--text-muted)' }}>({t.actions.length})</span>
-              </span>
             ))}
           </div>
-          <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6 }}>
-            Las claw_* se controlan en bloque (bundle-mcp). El acceso por dominio/etiqueta de
-            cada agente se ajusta en Settings → Agent Permissions.
-          </p>
         </div>
       )}
 
-      {/* §B3: third-party MCP connections — per-agent visibility. Gated by the
-          bundle-mcp master above; toggling a server writes <server>__* to this
-          agent's deny (independent of the native matrix). */}
+      {/* Legacy shared adapters remain visible during the positive-grants migration. Toggling a server
+          writes <server>__* to this agent's deny (independent of the native matrix
+          and de las tools de app de Micelclaw). */}
       {externalMcp.length > 0 && (
         <div>
           <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            MCP connections
+            Legacy shared MCP adapters
           </h4>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, opacity: isToolEnabled('bundle-mcp') ? 1 : 0.5 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {externalMcp.map((srv) => {
               const visible = !mcpDeny.has(srv.name);
               return (
@@ -622,7 +823,7 @@ export function AgentToolAccess({ agentId }: AgentToolAccessProps) {
           </div>
           <p style={{ fontSize: '0.625rem', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
             Off blocks every tool from that server for this agent (writes <code>&lt;server&gt;__*</code> to its deny).
-            The <b>bundle-mcp</b> master above gates all MCP tools. Manage the connections in Settings → MCP Connections.
+            Compatibility only: new personal/shared connections use explicit grants in Settings → MCP Connections.
           </p>
         </div>
       )}

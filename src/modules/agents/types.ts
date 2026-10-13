@@ -70,6 +70,10 @@ export interface AgentSkill {
   skill_id?: string;
   name: string;
   icon: string;
+  /** Display SSOT (Fase E): 'emoji' → `icon` crudo · 'lucide' → `icon` es nombre Lucide. */
+  icon_kind?: 'emoji' | 'lucide';
+  /** Display SSOT (Fase E): tinte opcional del icono (solo Lucide). */
+  color?: string;
   enabled: boolean;
   domain: string;
 }
@@ -78,6 +82,10 @@ export interface AvailableSkill {
   id: string;
   name: string;
   icon: string;
+  /** Display SSOT (Fase E): 'emoji' → `icon` crudo · 'lucide' → `icon` es nombre Lucide. */
+  icon_kind?: 'emoji' | 'lucide';
+  /** Display SSOT (Fase E): tinte opcional del icono (solo Lucide). */
+  color?: string;
   description: string;
   domain: string;
 }
@@ -174,6 +182,8 @@ export interface ActionItem {
   status: 'pending' | 'in_progress' | 'complete';
   description?: string;
   deliverable_url?: string;
+  /** id de la card del Workboard si la tarea ya se añadió (bajo demanda). Presente = "en el Workboard". */
+  workboard_card_id?: string | boolean;
 }
 
 export interface MeetingParticipant {
@@ -189,6 +199,8 @@ export interface MeetingAdvancedOptions {
   max_words?: number;
   devils_advocate?: boolean;
   extract_action_items?: boolean;
+  /** Cuándo pausa el council para la intervención humana (solo con user_participates). */
+  intervention?: 'each_round' | 'before_conclusion';
 }
 
 export interface Meeting {
@@ -204,13 +216,15 @@ export interface Meeting {
   messages: MeetingMessage[];
   action_items: ActionItem[];
   advanced_options: MeetingAdvancedOptions;
+  /** true si el orquestador tiene abierta la ventana de intervención humana (rehidratación). */
+  awaiting_user?: boolean;
   created_at: string;
 }
 
-export type AgentTab = 'tree' | 'council' | 'workboard' | 'conversations' | 'workspaces' | 'fleet';
+export type AgentTab = 'tree' | 'council' | 'workboard' | 'memory' | 'conversations' | 'workspaces' | 'fleet';
 
 /** Sub-pestañas del panel AgentDetail. Centralizado aquí (antes era local). */
-export type AgentDetailTab = 'overview' | 'tools' | 'memory' | 'advanced' | 'activity' | 'health';
+export type AgentDetailTab = 'overview' | 'tools' | 'memory' | 'security' | 'advanced' | 'activity' | 'health';
 
 // ─── A) Centro de actividad ───────────────────────────────────────
 

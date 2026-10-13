@@ -6,14 +6,17 @@
  * `agent.event` WS topic.
  */
 
+import { useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { ActivityHeader } from '../ActivityHeader';
 import { ActivityTable } from '../ActivityTable';
 import { useActivityRows } from '../useActivityRows';
 import { eventsAdapter } from '../adapters/events.adapter';
 import type { TimeRange } from '../adapters/types';
-import type { AgentEventRow } from '@/services/activity.service';
+import { getAgentEventBusStats, type AgentEventBusStats, type AgentEventRow } from '@/services/activity.service';
 import type { ActivityStats } from '@/services/activity.service';
 import type { WsEvent } from '@/types/websocket';
+import { eventStatsSections, shouldFetchEventStats } from '../event-stats-view';
 
 interface AgentEventWsPayload {
   id: string;
@@ -58,6 +61,18 @@ interface Props {
 }
 
 export function EventsTab({ filters, onFilterChange, search, onSearchChange, paused, onTogglePause, range, onRangeChange }: Props) {
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [busStats, setBusStats] = useState<AgentEventBusStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  const loadStats = async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try { setBusStats(await getAgentEventBusStats()); }
+    catch { setStatsError('Statistics are unavailable for this account.'); }
+    finally { setStatsLoading(false); }
+  };
+  useEffect(() => { if (shouldFetchEventStats(statsOpen, !!busStats)) void loadStats(); }, [statsOpen, busStats]);
   const { filteredRows, loading } = useActivityRows<AgentEventRow>({
     adapter: eventsAdapter,
     filters,
@@ -85,6 +100,17 @@ export function EventsTab({ filters, onFilterChange, search, onSearchChange, pau
         range={range}
         onRangeChange={onRangeChange}
       />
+      <section style={{ borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
+          <button type="button" onClick={() => setStatsOpen((open) => !open)} aria-expanded={statsOpen} style={{ display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+            {statsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />} Process statistics
+          </button>
+          {statsOpen && <button type="button" onClick={() => void loadStats()} title="Refresh statistics" aria-label="Refresh statistics" style={{ display: 'flex', border: 0, background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}><RefreshCw size={14} className={statsLoading ? 'animate-spin' : ''} /></button>}
+          {statsOpen && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>Resets when Core restarts.</span>}
+        </div>
+        {statsOpen && busStats && <EventStatsSummary stats={busStats} />}
+        {statsOpen && statsError && <div role="status" style={{ padding: '0 16px 12px', color: 'var(--text-muted)', fontSize: '0.75rem' }}>{statsError}</div>}
+      </section>
       <ActivityTable<AgentEventRow>
         adapter={eventsAdapter}
         rows={filteredRows}
@@ -92,4 +118,20 @@ export function EventsTab({ filters, onFilterChange, search, onSearchChange, pau
       />
     </div>
   );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return <div style={{ padding: 8, borderRadius: 'var(--radius-sm)', background: 'var(--surface)' }}><div style={{ color: 'var(--text-muted)' }}>{label}</div><div style={{ color: 'var(--text)', fontWeight: 600, marginTop: 2 }}>{value}</div></div>;
+}
+
+export function EventStatsSummary({ stats }: { stats: AgentEventBusStats }) {
+  const sections = eventStatsSections(stats);
+  return <div style={{ display: 'grid', gap: 10, padding: '0 16px 12px', fontSize: '0.75rem' }}>
+    <StatsSection label="Since this Core started" rows={sections.sinceStart} />
+    <StatsSection label="Persistent backlog" rows={sections.backlog} />
+  </div>;
+}
+
+function StatsSection({ label, rows }: { label: string; rows: Array<[string, string | number]> }) {
+  return <section aria-label={label}><div style={{ color: 'var(--text-muted)', fontWeight: 600, marginBottom: 5 }}>{label}</div><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>{rows.map(([name, value]) => <Stat key={name} label={name} value={value} />)}</div></section>;
 }

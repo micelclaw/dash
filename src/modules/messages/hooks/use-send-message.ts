@@ -11,31 +11,35 @@
  */
 
 import { useState, useCallback } from 'react';
-import { api } from '@/services/api';
-import type { Message } from '../types';
+import { sendMessage, type Message } from '@/services/messages.service';
+
+export interface SendOutcome {
+  message: Message | null;
+  /** El mensaje de error REAL del backend (para el toast) — nunca un genérico. */
+  error: string | null;
+}
 
 export function useSendMessage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const send = useCallback(async (platform: string, channelId: string, content: string): Promise<Message | null> => {
-    setSending(true);
-    setError(null);
-    try {
-      const res = await api.post<{ data: Message }>('/messages/send', {
-        platform,
-        channel_id: channelId,
-        content,
-      });
-      return res.data;
-    } catch (err: any) {
-      console.error('[messages] send failed:', err, 'status:', err?.status, 'code:', err?.code, 'details:', err?.details);
-      setError(err?.message || 'Failed to send');
-      return null;
-    } finally {
-      setSending(false);
-    }
-  }, []);
+  const send = useCallback(
+    async (platform: string, channelId: string, content: string): Promise<SendOutcome> => {
+      setSending(true);
+      setError(null);
+      try {
+        const message = await sendMessage({ platform, channel_id: channelId, content });
+        return { message, error: null };
+      } catch (err) {
+        const msg = (err as Error).message || 'Failed to send';
+        setError(msg);
+        return { message: null, error: msg };
+      } finally {
+        setSending(false);
+      }
+    },
+    [],
+  );
 
   return { send, sending, error };
 }

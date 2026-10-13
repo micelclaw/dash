@@ -20,6 +20,8 @@ interface NotificationState {
   addNotification: (n: Omit<Notification, 'id' | 'read' | 'timestamp'> & { id?: string; timestamp?: string }) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
+  /** Retira las notificaciones sobre un registro que dejó de ser accionable. */
+  removeByRef: (kind: string, id: string) => void;
   clearAll: () => void;
 }
 
@@ -76,6 +78,17 @@ export const useNotificationStore = create<NotificationState>()((set) => ({
       notifications: state.notifications.map((n) => ({ ...n, read: true })),
       unreadCount: 0,
     })),
+
+  // Lo dispara `notification.dismiss` del servidor (o el propio ✓/✗, optimista). Puede
+  // haber varias notificaciones del mismo registro (reintentos, escalado) → se van todas.
+  removeByRef: (kind, id) =>
+    set((state) => {
+      const notifications = state.notifications.filter(
+        (n) => !(n.ref?.kind === kind && n.ref?.id === id),
+      );
+      if (notifications.length === state.notifications.length) return state;
+      return { notifications, unreadCount: notifications.filter((x) => !x.read).length };
+    }),
 
   clearAll: () => set({ notifications: [], unreadCount: 0 }),
 }));

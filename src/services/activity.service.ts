@@ -73,6 +73,19 @@ export interface AgentEventRow {
   created_at: string;
 }
 
+/** Process-local EventBus health. Counters reset when Core restarts. */
+export interface AgentEventBusStats {
+  uptime_seconds: number;
+  total_emits: number;
+  validation_rejects: number;
+  subscriptions: number;
+  latency_ms: { p50: number; p95: number; p99: number; samples: number };
+  count_by_severity: Record<string, number>;
+  top_types: Array<{ type: string; count: number }>;
+  backlog: { unprocessed: number; unprocessed_older_1h: number; unprocessed_older_24h: number; unprocessed_warn_plus: number };
+  registered_schemas: Array<{ type: string; default_severity: string; default_visibility: string; schema_version: number; description: string }>;
+}
+
 export interface NotificationHistoryRow {
   id: string;
   type: string;
@@ -192,6 +205,11 @@ export async function listEvents(params: {
   if (params.to) query.to = params.to;
   if (params.processed) query.processed = params.processed;
   const { data } = await api.get<{ data: { events: AgentEventRow[] } }>('/agent-events', query);
+  return data;
+}
+
+export async function getAgentEventBusStats(): Promise<AgentEventBusStats> {
+  const { data } = await api.get<{ data: AgentEventBusStats }>('/agent-events/stats');
   return data;
 }
 

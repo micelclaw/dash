@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { type OriginPhoto } from '@/types/origins';
 import type { Photo } from '@/types/files';
 
 export type PhotosView = 'timeline' | 'albums' | 'people' | 'dejavu' | 'dna';
@@ -49,6 +50,7 @@ export interface DejaVuCollection {
   id: string;
   title: string;
   photo_ids: string[];
+  origin_photos?: OriginPhoto[];
   date_range: { earliest: string; latest: string };
   photo_count: number;
 }

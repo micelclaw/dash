@@ -10,9 +10,10 @@
  * https://micelclaw.com
  */
 
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Selecto from 'react-selecto';
-import { Image, Mail, FolderPlus, Info, Download, ImageIcon, Star, Loader2, Clock, CheckCircle2, PauseCircle, Cpu } from 'lucide-react';
+import { Image, FolderPlus, Info, Download, ImageIcon, Star, Loader2, Clock, CheckCircle2, PauseCircle, Cpu } from 'lucide-react';
 import { api } from '@/services/api';
 import { toast } from 'sonner';
 import { usePhotoProcessingStore } from '@/stores/photo-processing.store';
@@ -345,22 +346,7 @@ function PhotoThumbnail({
             )}
 
             {/* Source badge for non-local photos */}
-            {photo.source !== 'local' && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 4,
-                  right: 4,
-                  background: 'rgba(0,0,0,0.6)',
-                  borderRadius: 'var(--radius-sm)',
-                  padding: '2px 4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <Mail size={10} style={{ color: 'var(--text-dim)' }} />
-              </div>
-            )}
+            <PhotoSource entity={photo} />
 
             {/* Processing overlay */}
             {processingPhase && (() => {

@@ -16,7 +16,7 @@
  * - DATA_DOMAINS: dominios de DATOS con registros (tags filtrables). Alimentan
  *   tanto PermissionsSection como DigestSection.
  * - CAPABILITY_DOMAINS: dominios de CAPACIDAD migrados a la fachada MCP en Fase 4.2
- *   (sensors, feeds, diagrams, office, flows, graph, insights, hal). Se gobiernan en
+ *   (feeds, diagrams, office, databases, hal, music, video, books). Se gobiernan en
  *   Agent Permissions (concesión de scope por-agente) pero NO entran en el Digest.
  *   Añadidos al cerrar el gap de concesión (2026-06-01).
  *
@@ -27,7 +27,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   StickyNote, Users, BookOpen, Calendar, Mail, FolderOpen,
   Image, Columns, Bookmark, DollarSign,
-  Rss, GitBranch, FileText, Workflow, Cpu, Boxes, Music, Clapperboard, Library, Database,
+  Rss, GitBranch, FileText, Cpu, Boxes, Music, Clapperboard, Library, Database,
 } from 'lucide-react';
 
 export interface DataDomain {
@@ -60,7 +60,7 @@ export const CAPABILITY_DOMAINS: DataDomain[] = [
   // Databases (2026-06-18): gestor tipo Access (Mathesar) vía tools databases_*,
   // tab del módulo Office — sin tags ni Digest. Mapea a scope `databases:*`.
   { id: 'databases', label: 'Databases', icon: Database, hasTagSupport: false },
-  { id: 'flows',    label: 'Flows',    icon: Workflow,  hasTagSupport: false },
+  // `flows` retirado 2026-06-30 (MicelFlow eliminado; la automatización es n8n).
   { id: 'hal',      label: 'Hardware', icon: Cpu,       hasTagSupport: false },
   // Música (2026-06-12): biblioteca Navidrome vía tools music_* — sin tags ni Digest.
   { id: 'music',    label: 'Music',    icon: Music,     hasTagSupport: false },

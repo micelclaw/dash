@@ -12,13 +12,12 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Shield, Download, Power, Trash2, Save, Copy, Code } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { AppIcon, resolveManifestIcon } from '@/components/shared/AppIcon';
 import {
   getApp, scanApp, exportApp, updateAppStatus, uninstallApp, forkApp, suggestForkName, deleteApp,
 } from '@/services/apps.service';
@@ -368,7 +367,7 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
           >
             <ArrowLeft size={16} />
           </button>
-          <span style={{ fontSize: 18 }}>{manifest?.ui?.module?.icon || '📦'}</span>
+          <span style={{ display: 'inline-flex', flexShrink: 0 }}><AppIcon {...resolveManifestIcon(manifest)} size={18} /></span>
           <span style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text)', flex: 1 }}>
             {manifest?.name || app.app_name}
           </span>
@@ -456,9 +455,10 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
         <div className="app-detail-content">
           {activeTab === 'readme' && (
             <div className="app-detail-md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
-                {readmeContent || registryReadme || manifest?.description || `# ${manifest?.name || app.app_name}\n\nNo README available.`}
-              </ReactMarkdown>
+              <MarkdownRenderer
+                content={readmeContent || registryReadme || manifest?.description || `# ${manifest?.name || app.app_name}\n\nNo README available.`}
+                components={mdComponents}
+              />
 
               {/* Ficheros del paquete (.claw) — solo apps del registry. Fundido aquí desde el
                   panel propio de RegistryBrowser (ahora hay un único panel de detalles). */}
@@ -486,10 +486,11 @@ export function AppDetail({ app, onBack, onRefresh, onEditFiles }: AppDetailProp
 
           {activeTab === 'skill' && (
             <div className="app-detail-md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
-                {(skillContent?.replace(/^---\n[\s\S]*?\n---\s*/, '')
+              <MarkdownRenderer
+                content={(skillContent?.replace(/^---\n[\s\S]*?\n---\s*/, '')
                   ?? (registryAvailable ? '_El SKILL.md estará disponible al instalar el paquete (ver README)._' : '_Loading SKILL.md..._')).trim()}
-              </ReactMarkdown>
+                components={mdComponents}
+              />
             </div>
           )}
 

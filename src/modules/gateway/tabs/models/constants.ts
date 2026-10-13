@@ -97,6 +97,7 @@ export const PROVIDER_COLORS: Record<string, string> = {
   synthetic: '#10b981',
   tokenjuice: '#84cc16',
   vydra: '#ec4899',
+  omniroute: '#06b6d4',
 };
 
 export const PROVIDER_LABELS: Record<string, string> = {
@@ -120,6 +121,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   chutes: 'Chutes',
   minimax: 'MiniMax',
   qwen: 'Qwen',
+  omniroute: 'OmniRoute',
 };
 
 // Providers that the user installs/configures from the dash wizard.
@@ -148,3 +150,8 @@ export function formatCtx(ctx: number | null): string {
 export function formatBytes(b: number): string {
   return b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`;
 }
+
+// Ficha pública del modelo en Artificial Analysis (benchmarks/precios). El
+// slug viene VERIFICADO del catálogo curado de Core (aa_slug) — sin slug no
+// se muestra el botón (cero enlaces rotos).
+export const AA_BASE_URL = 'https://artificialanalysis.ai/models/';

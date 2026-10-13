@@ -32,10 +32,10 @@ interface AccountOption {
 }
 
 const METHODS: { id: string; label: string }[] = [
-  { id: 'transfer', label: 'Transferencia' },
+  { id: 'transfer', label: 'Transfer' },
   { id: 'card', label: 'Tarjeta' },
   { id: 'cash', label: 'Efectivo' },
-  { id: 'direct_debit', label: 'Domiciliación' },
+  { id: 'direct_debit', label: 'Direct debit' },
   { id: 'other', label: 'Otro' },
 ];
 
@@ -81,7 +81,7 @@ export function RegistrarPagoDialog({
         setAccounts(treasury);
         if (treasury[0]) setAccountId(treasury[0].id);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'No se pudieron cargar las cuentas');
+        toast.error(e instanceof Error ? e.message : 'Couldn\'t load the accounts');
       }
     })();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -92,8 +92,8 @@ export function RegistrarPagoDialog({
 
   const submit = async () => {
     const amt = amount.replace(',', '.').trim();
-    if (!amt || Number(amt) <= 0) { toast.error('Indica un importe'); return; }
-    if (Number(amt) > pending + 0.005) { toast.error('El importe supera el pendiente'); return; }
+    if (!amt || Number(amt) <= 0) { toast.error('Enter an amount'); return; }
+    if (Number(amt) > pending + 0.005) { toast.error('The amount is more than what\'s outstanding'); return; }
     if (!accountId) { toast.error(isBill ? 'Elige la cuenta de pago' : 'Elige la cuenta del cobro'); return; }
     setSaving(true);
     try {
@@ -105,10 +105,10 @@ export function RegistrarPagoDialog({
         method,
         reference: reference || undefined,
       });
-      toast.success(isBill ? 'Pago registrado' : 'Cobro registrado');
+      toast.success(isBill ? 'Payment recorded' : 'Cobro registrado');
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : (isBill ? 'No se pudo registrar el pago' : 'No se pudo registrar el cobro'));
+      toast.error(e instanceof Error ? e.message : (isBill ? 'Couldn\'t record the payment' : 'Couldn\'t record the payment in'));
     } finally {
       setSaving(false);
     }
@@ -125,40 +125,40 @@ export function RegistrarPagoDialog({
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={18} /></button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-          {document.number ?? 'Borrador'} · Pendiente <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--info)' }}>{fmtMoney(pending, document.currency)}</span>
+          {document.number ?? 'Draft'} · Pendiente <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--info)' }}>{fmtMoney(pending, document.currency)}</span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Importe</label>
+            <label style={labelStyle}>Amount</label>
             <input ref={amountRef} value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="0,00"
               style={{ ...fieldStyle, fontSize: 22, fontFamily: 'var(--font-mono, monospace)', textAlign: 'center' }} />
           </div>
           <div>
-            <label style={labelStyle}>{isBill ? 'Pagar desde' : 'Cuenta del cobro'}</label>
+            <label style={labelStyle}>{isBill ? 'Pay from' : 'Receiving account'}</label>
             <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={fieldStyle}>
               <option value="">— elige cuenta —</option>
               {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Método</label>
+            <label style={labelStyle}>Method</label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} style={fieldStyle}>
               {METHODS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Referencia (opcional)</label>
-            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="p.ej. nº de transferencia" style={fieldStyle} />
+            <label style={labelStyle}>Reference (optional)</label>
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. transfer reference" style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Fecha</label>
+            <label style={labelStyle}>Date</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={fieldStyle} />
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: isBill ? 'var(--mod-finance)' : 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
             {saving ? 'Guardando…' : (isBill ? 'Registrar pago' : 'Registrar cobro')}
           </button>

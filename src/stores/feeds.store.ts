@@ -10,12 +10,13 @@
  * https://micelclaw.com
  */
 
+import type { OriginEntity } from '@/types/origins';
 import { create } from 'zustand';
 import { api } from '@/services/api';
 
 // ─── Types ───────────────────────────────────────────────
 
-export interface RssFeed {
+export interface RssFeed extends OriginEntity {
   id: string;
   title: string;
   description: string | null;
@@ -35,7 +36,7 @@ export interface RssFeed {
   updated_at: string;
 }
 
-export interface RssArticle {
+export interface RssArticle extends OriginEntity {
   id: string;
   feed_id: string;
   guid: string;

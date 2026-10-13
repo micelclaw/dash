@@ -13,7 +13,7 @@
 import { useState, useEffect } from 'react';
 import { useToolVisibility } from '@/hooks/use-tool-visibility';
 import { api } from '@/services/api';
-import { TOOL_DEFS, type Preset, classify, shouldRenderTool } from '@/config/tool-rendering';
+import { TOOL_DEFS, type Preset, shouldRenderTool } from '@/config/tool-rendering';
 
 // Las tools MCP llegan al chat con el nombre `<server>__<tool>`; nuestro server es
 // `claw-os`. Los overrides de visibilidad deben usar ese nombre completo para casar.
@@ -173,7 +173,7 @@ export function ChatToolsSection() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {mcpTools.map((t) => {
                 const fullName = `${MCP_SERVER_PREFIX}${t.name}`;
-                const enabled = shouldRenderTool(fullName, visibility);
+                const enabled = shouldRenderTool(fullName, visibility, { origin: 'micelclaw_app', visibility: 'normal' });
                 return (
                   <label key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={enabled} onChange={(e) => toggleTool(fullName, e.target.checked)} />
@@ -194,15 +194,6 @@ export function ChatToolsSection() {
           Connections and each Agent → Tools).
         </p>
       </section>
-
-      {/* Live classify utility for debugging — uncomment if useful */}
-      {false && (
-        <section style={{ marginTop: 24, padding: 12, background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-            Try a tool name: {classify('foo').label}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

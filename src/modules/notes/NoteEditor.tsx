@@ -10,6 +10,10 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { NoteAttachments } from './NoteAttachments';
+import { NoteNativeView } from './NoteNativeView';
+import { NoteNativeExport } from './NoteNativeExport';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useEditor, EditorContent, type Editor as TiptapEditor } from '@tiptap/react';
@@ -39,13 +43,13 @@ import { common, createLowlight } from 'lowlight';
 import { AlertCircle, Code, GripVertical, Share2 } from 'lucide-react';
 import { EntityShareModal } from '@/components/shared/EntityShareModal';
 import { SharedWithIndicator } from '@/components/shared/SharedWithIndicator';
-import { AuthImage } from './extensions/auth-image';
+import { AuthImage, setNoteImageDisplayResources } from './extensions/auth-image';
 import { UniversalMention, parseClawHref } from './extensions/mention';
 import { buildMentionSuggestion } from './extensions/mention-suggestion';
 import { ENTITY_REF_MAP } from '@/config/entity-refs';
 import { TagInput } from '@/components/shared/TagInput';
 import { toast } from 'sonner';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useNoteLinks } from './hooks/use-note-links';
@@ -55,11 +59,16 @@ import { SimilarContentPanel } from '@/components/shared/SimilarContentPanel';
 import { GraphProximityPanel } from '@/components/shared/GraphProximityPanel';
 import { useCoNavigation } from '@/hooks/use-co-navigation';
 import { useKeyboardOpen } from '@/hooks/use-media-query';
-import { SourceBadge } from '@/components/shared/SourceBadge';
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { SourcePickerModal } from './SourcePickerModal';
-import type { Note } from '@/types/notes';
+import type { Note, NoteAttachment } from '@/types/notes';
 import type { ApiResponse } from '@/types/api';
+import { noteEditPolicy } from './note-edit-policy';
+import { NativeNoteIdentity, NativeNoteProtected } from './extensions/native-note';
+import { useOneNoteEditor } from './hooks/use-onenote-editor';
+import {useNotionTitle} from './hooks/use-notion-title';
+import {useNotionResources} from './hooks/use-notion-resources';
+import { useNextcloudMarkdown } from './hooks/use-nextcloud-markdown';
 
 const lowlight = createLowlight(common);
 
@@ -130,11 +139,21 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   useCoNavigation('note', noteId);
   const navigate = useNavigate();
   const [note, setNote] = useState<Note | null>(null);
+  const [attachmentState, setAttachmentState] = useState<{ noteId: string; items: NoteAttachment[] }>({ noteId, items: [] });
+  const receiveAttachments = useCallback((items: NoteAttachment[]) => setAttachmentState({ noteId, items }), [noteId]);
+  const nativeView = note?.content_format === 'html' && (['onenote-notes','notion-notes'].includes(note.sync?.provider || '') ||
+    note.content.startsWith('<div data-note-native-view="onenote">'));
+  const { bodyReadOnly, metadataReadOnly } = noteEditPolicy(note);
+  const bodyReadOnlyRef = useRef(true);
+  bodyReadOnlyRef.current = bodyReadOnly;
+  const connectedChangeRef = useRef<((html: string) => void) | null>(null);
+  const nativeEditorRef = useRef(false); nativeEditorRef.current = nativeView === true;
+  const notionEditorRef=useRef(false);notionEditorRef.current=note?.sync?.provider==='notion-notes';
+  const nextcloudEditorRef=useRef(false);nextcloudEditorRef.current=note?.sync?.provider==='nextcloud-notes';
   const [loading, setLoading] = useState(true);
   const [confirmPlain, setConfirmPlain] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [shareInitial, setShareInitial] = useState<'shared' | undefined>(undefined);
   const [shareRefreshKey, setShareRefreshKey] = useState(0);
@@ -149,6 +168,8 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   // Bug 5: el botón de imagen abre este input nativo (galería en móvil,
   // explorador en PC) y sube vía insertImages (mismo flujo que paste/drop).
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const resourceInputRef=useRef<HTMLInputElement|null>(null),resourceTarget=useRef<{id:string;image:boolean}|null>(null);
+  const resourceUploadRef=useRef<((file:File)=>Promise<void>)|null>(null),resourceBusyRef=useRef(false);
   // Con el teclado desplegado (móvil), ocultamos los paneles de inteligencia del
   // pie para dar más espacio a la escritura.
   const keyboardOpen = useKeyboardOpen();
@@ -172,17 +193,27 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
   // Fetch note
   useEffect(() => {
+    let active = true;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    setNote(null);
     setLoading(true);
     setIsDirty(false);
     setSourceMode(false);
     api.get<ApiResponse<Note>>(`/notes/${noteId}`)
-      .then(res => setNote(res.data))
-      .catch(() => toast.error('Failed to load note'))
-      .finally(() => setLoading(false));
+      .then(res => { if (active) setNote(res.data); })
+      .catch(() => { if (active) toast.error('Failed to load note'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [noteId]);
+
+  useOriginRefresh('notes', async () => {
+    const { data } = await api.get<ApiResponse<Note>>(`/notes/${noteId}`);
+    setNote(prev => prev?.id === data.id ? { ...prev, origins: data.origins, sync: data.sync } : prev);
+  });
 
   // Tiptap editor
   const editor = useEditor({
+    editable: false,
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3, 4, 5, 6] },
@@ -194,6 +225,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         underline: false,
         listKeymap: false,
       }),
+      NativeNoteIdentity.configure({ enabled: () => nativeEditorRef.current,unitBlocks:()=>notionEditorRef.current }), NativeNoteProtected,
       Placeholder.configure({ placeholder: 'Start writing...' }),
       UnderlineExt,
       Link.configure({ openOnClick: false, autolink: true }),
@@ -206,7 +238,8 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
       AuthImage.configure({ inline: true }),
       Details, DetailsSummary, DetailsContent,
       Highlight, Subscript, Superscript,
-      Typography,
+      // Measurements/code in notes must retain the character the user typed.
+      Typography.configure({ multiplication: false }),
       ListKeymap,
       CharacterCount,
       Youtube.configure({ width: 480, height: 270, nocookie: true }),
@@ -223,14 +256,16 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         },
       }),
       FileHandler.configure({
-        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
-        onPaste: (ed, files) => { void insertImages(ed, files); },
-        onDrop: (ed, files, pos) => { void insertImages(ed, files, pos); },
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp','application/pdf'],
+        onPaste: (ed, files) => { if(notionEditorRef.current){if(files[0])void resourceUploadRef.current?.(files[0]);return;}if(nextcloudEditorRef.current)return;if(!nativeEditorRef.current&&!bodyReadOnlyRef.current)void insertImages(ed,files.filter(file=>file.type.startsWith('image/'))); },
+        onDrop: (ed, files, pos) => { if(notionEditorRef.current){if(files[0])void resourceUploadRef.current?.(files[0]);return;}if(nextcloudEditorRef.current)return;if(!nativeEditorRef.current&&!bodyReadOnlyRef.current)void insertImages(ed,files.filter(file=>file.type.startsWith('image/')),pos); },
       }),
       UniversalMention.configure({ suggestion: buildMentionSuggestion() }),
     ],
     content: '',
     onUpdate: ({ editor: ed }) => {
+      if (connectedChangeRef.current) { connectedChangeRef.current(ed.getHTML()); return; }
+      if (bodyReadOnlyRef.current) return;
       // Serializar según el formato de la nota: el content guardado SIEMPRE
       // coincide con content_format (antes una nota markdown editada aquí se
       // guardaba como HTML y divergía para los agentes que la releyeran).
@@ -268,6 +303,20 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
     },
   });
 
+  const titleBlocksBody=useRef(false);
+  const oneNoteEditor = useOneNoteEditor(note, editor, fresh => { setNote(fresh); onSaved?.(fresh.id, fresh); },titleBlocksBody);
+  const nextcloudEditor = useNextcloudMarkdown(note, fresh => { setNote(fresh); onSaved?.(fresh.id, fresh); }, titleBlocksBody);
+  const notionTitle=useNotionTitle(note,()=>oneNoteEditor.hasPending()||nextcloudEditor.hasPending()||resourceBusyRef.current,titleBlocksBody,fresh=>{setNote(fresh);onSaved?.(fresh.id,fresh);});
+  const resources=useNotionResources(note,()=>oneNoteEditor.hasPending()||nextcloudEditor.hasPending()||notionTitle.dirty||notionTitle.saving,fresh=>{setNote(fresh);onSaved?.(fresh.id,fresh);});
+  resourceBusyRef.current=resources.busy;
+  titleBlocksBody.current=notionTitle.dirty||notionTitle.saving||resources.busy;
+  resourceUploadRef.current=resources.enabled?file=>resources.upload(file):null;
+  connectedChangeRef.current = oneNoteEditor.active ? oneNoteEditor.onChange : nextcloudEditor.active ? () => {
+    const markdown = editor?.getMarkdown() ?? '';
+    nextcloudEditor.onChange(markdown);
+    setNote(prev => prev?.sync?.provider === 'nextcloud-notes' ? { ...prev, content: markdown } : prev);
+  } : null;
+
   // Handle de debugging en dev (tests E2E / consola).
   useEffect(() => {
     if (import.meta.env.DEV && editor) {
@@ -275,10 +324,13 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
     }
   }, [editor]);
 
+  useEffect(() => { editor?.setEditable((!bodyReadOnly || oneNoteEditor.enabled || nextcloudEditor.enabled)&&!notionTitle.dirty&&!notionTitle.saving&&!resources.busy, false); }, [editor, bodyReadOnly, oneNoteEditor.enabled,nextcloudEditor.enabled,notionTitle.dirty,notionTitle.saving,resources.busy]);
+
   // Set editor content when note loads or noteId changes — parseando según
   // el formato de la nota (markdown se renderiza rico, no caracteres literales).
   useEffect(() => {
     if (editor && note && note.content_format !== 'plain') {
+      if (nativeView) return; // OneNote's adapter prepares the SAME editor with provenance.
       const current = note.content_format === 'markdown' ? editor.getMarkdown() : editor.getHTML();
       if (current !== note.content) {
         editor.commands.setContent(note.content || '', {
@@ -290,13 +342,46 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note?.id, editor]);
 
+  useEffect(() => {
+    if (!editor || note?.sync?.provider !== 'nextcloud-notes' || note.content_format !== 'markdown' ||
+      attachmentState.noteId !== note.id) return;
+    let active = true;
+    const urls: string[] = [];
+    const images = attachmentState.items.filter(item => item.kind === 'copied' && item.resource_ref &&
+      ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(item.mime_type ?? ''));
+    void Promise.all(images.map(async item => {
+      try {
+        const response = await api.getBlob(`/notes/${note.id}/attachments/${item.id}/download`);
+        if (!active) return null;
+        const url = URL.createObjectURL(new Blob([response.blob], { type: item.mime_type! }));
+        urls.push(url);
+        return [item.resource_ref!, url] as const;
+      } catch { return null; }
+    })).then(found => {
+      if (!active) return;
+      const map = new Map(found.filter((pair): pair is readonly [string, string] => pair !== null));
+      setNoteImageDisplayResources(editor, map);
+    });
+    return () => {
+      active = false;
+      setNoteImageDisplayResources(editor, new Map());
+      urls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [editor, note?.id, note?.content_format, note?.sync?.provider, attachmentState]);
+
   const handleContentChange = useCallback((content: string) => {
-    if (!note) return;
+    if (note?.sync?.provider === 'nextcloud-notes') {
+      nextcloudEditor.onChange(content);
+      setNote(prev => prev ? { ...prev, content } : null);
+      return;
+    }
+    if (!note || bodyReadOnlyRef.current) return;
     setNote(prev => prev ? { ...prev, content } : null);
     setIsDirty(true);
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      if (bodyReadOnlyRef.current) return;
       setSaving(true);
       try {
         await api.patch(`/notes/${noteId}`, { content });
@@ -308,12 +393,12 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         setSaving(false);
       }
     }, 1500);
-  }, [note, noteId, onSaved]);
+  }, [note, noteId, onSaved, nextcloudEditor.onChange]);
 
   // Cambio de formato: convierte el contenido actual con el propio editor y
   // persiste content + content_format JUNTOS (una sola PATCH).
   const applyFormatChange = useCallback(async (target: NoteFormat) => {
-    if (!note || !editor || target === note.content_format) return;
+    if (!note || !editor || bodyReadOnlyRef.current || target === note.content_format) return;
     // En modo código el doc de TipTap puede ir por detrás del textarea —
     // recargar el contenido vivo antes de convertir.
     if (sourceMode && note.content_format !== 'plain') {
@@ -353,7 +438,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   // Convertir a texto plano pierde el formato → confirma antes; el resto
   // de conversiones (md↔html) se aplican directo.
   const handleFormatChange = useCallback((target: NoteFormat) => {
-    if (!note) return;
+    if (!note || bodyReadOnlyRef.current) return;
     if (target === 'plain' && note.content_format !== 'plain') { setConfirmPlain(true); return; }
     void applyFormatChange(target);
   }, [note, applyFormatChange]);
@@ -364,7 +449,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
   const toggleSourceMode = useCallback(() => {
     if (!note || !editor || format === 'plain') return;
     if (sourceMode) {
-      editor.commands.setContent(note.content || '', {
+      if (!nativeView) editor.commands.setContent(note.content || '', {
         emitUpdate: false,
         contentType: format === 'markdown' ? 'markdown' : 'html',
       });
@@ -372,16 +457,18 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
     } else {
       setSourceMode(true);
     }
-  }, [note, editor, format, sourceMode]);
+  }, [note, editor, format, sourceMode, nativeView]);
 
   const handleTitleChange = useCallback((title: string) => {
-    if (!note) return;
+    if(notionTitle.active){notionTitle.onChange(title);return;}
+    if (!note || bodyReadOnlyRef.current) return;
     setNote(prev => prev ? { ...prev, title } : null);
     setIsDirty(true);
     onSaved?.(noteId, { title });
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      if (bodyReadOnlyRef.current) return;
       setSaving(true);
       try {
         await api.patch(`/notes/${noteId}`, { title });
@@ -392,26 +479,33 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         setSaving(false);
       }
     }, 1500);
-  }, [note, noteId, onSaved]);
+  }, [note, noteId, onSaved,notionTitle.active,notionTitle.onChange]);
 
   // Listen for WS updates to the current note
-  const wsEvent = useWebSocket('note.updated');
+  const wsEvent = useWebSocket('note.*');
   useEffect(() => {
     if (!wsEvent || !note) return;
-    if (wsEvent.data.id === note.id && !isDirty) {
-      const updated = wsEvent.data as unknown as Note;
-      setNote(updated);
-      if (editor && updated.content_format !== 'plain') {
-        const current = updated.content_format === 'markdown' ? editor.getMarkdown() : editor.getHTML();
-        if (updated.content !== current) {
-          editor.commands.setContent(updated.content || '', {
-            emitUpdate: false,
-            contentType: updated.content_format === 'markdown' ? 'markdown' : 'html',
-          });
-        }
-      }
+    if (wsEvent.data.id === note.id && !isDirty && !oneNoteEditor.dirty && !nextcloudEditor.dirty && !nextcloudEditor.saving && !notionTitle.dirty&&!notionTitle.saving) {
+      let active = true;
+      // Re-read authorization/sync state: legacy WS payloads do not carry the public descriptor.
+      void api.get<ApiResponse<Note>>(`/notes/${noteId}`).then(({ data: updated }) => {
+        if (!active) return;
+        setNote(updated);
+        const native = updated.content_format === 'html' && (['onenote-notes','notion-notes'].includes(updated.sync?.provider||'') || updated.content.startsWith('<div data-note-native-view="onenote">'));
+        if (editor && !native && updated.content_format !== 'plain') editor.commands.setContent(updated.content || '', {
+          emitUpdate: false, contentType: updated.content_format === 'markdown' ? 'markdown' : 'html',
+        });
+      }).catch(error => {
+        if (!active) return;
+        if (error instanceof ApiError && (error.status === 403 || error.status === 404)) {
+          setNote(null); editor?.setEditable(false, false);
+        } else toast.error('No se pudo actualizar la nota');
+      });
+      return () => { active = false; };
     }
-  }, [wsEvent, note, isDirty, editor]);
+    // A descriptor refresh must not itself trigger another refresh of the same event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsEvent, noteId, isDirty, oneNoteEditor.dirty, nextcloudEditor.dirty, nextcloudEditor.saving, notionTitle.dirty,notionTitle.saving, editor]);
 
   // Cleanup save timer
   useEffect(() => {
@@ -420,18 +514,8 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
     };
   }, []);
 
-  const handleSourceChange = useCallback(async (source: string) => {
-    if (!note) return;
-    setNote(prev => prev ? { ...prev, source } : null);
-    try {
-      await api.patch(`/notes/${noteId}`, { source });
-    } catch {
-      toast.error('Failed to update source');
-    }
-  }, [note, noteId]);
-
   const handleTagsChange = useCallback(async (newTags: string[]) => {
-    if (!note) return;
+    if (!note || noteEditPolicy(note).metadataReadOnly) return;
     setNote(prev => prev ? { ...prev, tags: newTags } : null);
     onSaved?.(noteId, { tags: newTags });
     try {
@@ -457,11 +541,33 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
       {/* Header (incluye la toolbar de formato en modo renderizado → sin doble
           línea: si la toolbar se muestra, ella aporta el separador inferior). */}
       <div style={{ padding: '12px 16px 8px', borderBottom: (format !== 'plain' && !sourceMode) ? 'none' : '1px solid var(--border)' }}>
+        {note.sync && (
+          <div role="status" data-note-sync-state={note.sync.state} style={{ fontSize: '0.8125rem', marginBottom: 8, color: 'var(--text-dim)' }}>
+            {note.sync.label} · {{ synced: 'Sincronizada', pending: 'Cambio pendiente', conflict: 'Conflicto pendiente', paused: 'Sincronización pausada', unavailable: 'Conexión no disponible' }[note.sync.state]}
+            <div style={{ fontSize: '0.75rem' }}>
+              {!note.sync.owner ? 'Nota compartida: contenido conectado de solo lectura.'
+                : note.sync.remote_editable === false ? 'Esta nota es de solo lectura en Nextcloud o no ofrece ETag para una escritura segura.'
+                : note.sync.state !== 'synced' ? {
+                  pending: 'Guardado pendiente: la edición espera confirmación del proveedor.',
+                  conflict: 'Edición bloqueada por un conflicto pendiente. Tu cambio se conserva.',
+                  paused: 'Edición bloqueada mientras la sincronización está pausada.',
+                  unavailable: 'Edición bloqueada: la conexión necesita recuperar la sincronización.',
+                }[note.sync.state]
+                : note.sync.write_certified ? (note.sync.provider === 'notion-notes'
+                  ? 'Texto y checklist editables y sincronizados con Notion. Los elementos especiales se conservan protegidos.'
+                  : note.sync.provider === 'nextcloud-notes'
+                    ? 'Markdown editable y sincronizado con Nextcloud. Los adjuntos nuevos requieren una subida compatible.'
+                    : 'Texto editable y sincronizado con OneNote. Las imágenes del lienzo se conservan protegidas; añadir o eliminar elementos aún no está habilitado.')
+                : 'Contenido nativo conservado. Escritura todavía pendiente de verificación.'}
+            </div>
+          </div>
+        )}
         {/* Título + "Back to list" en la MISMA fila (a la derecha) para no gastar
             una fila propia (bug 6). */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
-            value={note.title || ''}
+            readOnly={notionTitle.active?!notionTitle.enabled||resources.busy:bodyReadOnly}
+            value={notionTitle.active?notionTitle.title:note.title || ''}
             onChange={e => handleTitleChange(e.target.value)}
             placeholder="Untitled"
             style={{
@@ -489,24 +595,10 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
           display: 'flex', alignItems: 'center', gap: 6, marginTop: 4,
           fontSize: '0.75rem', color: 'var(--text-dim)', flexWrap: 'wrap',
         }}>
-          {/* Clickable source badge */}
-          <button
-            onClick={() => setSourcePickerOpen(true)}
-            style={{
-              display: 'inline-flex', alignItems: 'center',
-              background: 'transparent', border: '1px solid transparent',
-              borderRadius: 'var(--radius-sm)', padding: '1px 4px',
-              cursor: 'pointer', transition: 'border-color var(--transition-fast)',
-            }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border)'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'}
-            title="Change source"
-          >
-            <SourceBadge source={note.source} size="sm" />
-          </button>
+          <EntitySource entity={note} domain="notes" detail />
 
           {/* Tags unificados */}
-          <TagInput tags={note.tags} onChange={handleTagsChange} />
+          {metadataReadOnly ? <span>{(note.tags ?? []).join(' · ')}</span> : <TagInput tags={note.tags ?? []} onChange={handleTagsChange} />}
 
           {/* Compartir la nota (usuarios de Micelclaw + apps del móvil) */}
           <SharedWithIndicator
@@ -531,6 +623,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
 
           {/* Selector de formato del contenido (markdown/html/plain) */}
           <select
+            disabled={bodyReadOnly}
             value={format}
             onChange={e => handleFormatChange(e.target.value as NoteFormat)}
             title="Content format"
@@ -576,7 +669,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
             </button>
           )}
 
-          {saving && (
+          {(saving || oneNoteEditor.saving || nextcloudEditor.saving || notionTitle.saving) && (
             <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: '0.6875rem' }}>
               Saving...
             </span>
@@ -586,23 +679,25 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         {/* Toolbar de formato SIEMPRE visible, dentro del header fijo (no del
             scroll) → se accede a negrita/imagen/tabla/… sin subir del todo
             (bug 6). Solo en modo renderizado (no plain/código). */}
-        {format !== 'plain' && !sourceMode && (
+        {format !== 'plain' && !sourceMode && (!bodyReadOnly || oneNoteEditor.enabled || nextcloudEditor.enabled) && (
           <>
             <NoteEditorToolbar
               editor={editor}
               format={format}
+              inlineOnly={nativeView}
               tocOpen={tocOpen}
               onToggleToc={() => setTocOpen((v) => !v)}
-              onPickImage={() => imageInputRef.current?.click()}
+              onPickImage={resources.enabled?()=>{resourceTarget.current=null;resourceInputRef.current?.click();}:nativeView || nextcloudEditor.active ? undefined : () => imageInputRef.current?.click()}
             />
             <input
               ref={imageInputRef}
               type="file"
               accept="image/*"
+              disabled={nativeView || bodyReadOnly}
               style={{ display: 'none' }}
               onChange={(e) => {
                 const files = e.target.files;
-                if (files && files.length && editor) void insertImages(editor, Array.from(files));
+                if (!nativeView && !bodyReadOnly && files && files.length && editor) void insertImages(editor, Array.from(files));
                 e.target.value = '';
               }}
             />
@@ -610,22 +705,34 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
         )}
       </div>
 
-      {/* Source picker modal */}
-      <SourcePickerModal
-        open={sourcePickerOpen}
-        currentSource={note.source}
-        onSelect={handleSourceChange}
-        onClose={() => setSourcePickerOpen(false)}
-      />
-
       {/* Editor area — TipTap renderizado para markdown/html, textarea para
           plain y para el modo código fuente (md/html crudo, monospace).
           El bloque rico se OCULTA con CSS en vez de desmontarse: el DragHandle
           (extensión react) crashea con setState al desmontar el subtree del
           editor mientras la instancia sigue viva. */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column' }}>
+        <input ref={resourceInputRef} type="file" aria-label={note.sync?.provider==='nextcloud-notes'?'Archivo para Nextcloud':'Archivo para Notion'} accept="image/png,image/jpeg,image/gif,image/webp,application/pdf" hidden disabled={!resources.enabled}
+          onChange={event=>{const file=event.target.files?.[0],target=resourceTarget.current;event.target.value='';if(file){if(target&&target.image!==file.type.startsWith('image/')){toast.error('Sustituye por un archivo del mismo tipo: imagen por imagen, PDF por PDF.');return;}void resources.upload(file,target?.id??null);}}}/>
+        <NoteAttachments key={noteId} noteId={noteId} compact={nativeView} onItems={receiveAttachments} refreshKey={note.sync?.local_revision??(wsEvent?.data.id === noteId ? wsEvent : undefined)}
+          onAdd={resources.enabled?()=>{resourceTarget.current=null;resourceInputRef.current?.click();}:undefined}
+          onReplace={resources.enabled?item=>{resourceTarget.current={id:item.resource_ref!.split('/')[0]!,image:Boolean(item.mime_type?.startsWith('image/'))};resourceInputRef.current?.click();}:undefined}/>
+        {resources.error&&<div role="alert" className="text-sm text-[var(--amber)]">{resources.error}{resources.pending&&<button type="button" disabled={resources.sending} onClick={()=>void resources.retry()}>Comprobar el mismo adjunto</button>}</div>}
+        {resources.status&&<p role="status" className="text-xs text-[var(--text-dim)]">{resources.status}</p>}
+        {note.native_export_available && !note._shared_permission && (
+          <NoteNativeExport key={`native-${noteId}`} noteId={noteId} />
+        )}
+        {oneNoteEditor.error && <p role="alert" className="text-sm text-[var(--amber)]">{oneNoteEditor.error}</p>}
+        {nextcloudEditor.error && <p role="alert" className="text-sm text-[var(--amber)]">{nextcloudEditor.error}</p>}
+        {notionTitle.error&&<div role="alert" className="text-sm text-[var(--amber)]">{notionTitle.error} <button type="button" onClick={notionTitle.discard}>Descartar cambio de título</button></div>}
+        {notionTitle.status&&<p role="status" className="text-xs text-[var(--text-dim)]">{notionTitle.status}</p>}
+        {oneNoteEditor.status && <p role="status" className="text-xs text-[var(--text-dim)]">{oneNoteEditor.status}</p>}
+        {nextcloudEditor.status && <p role="status" className="text-xs text-[var(--text-dim)]">{nextcloudEditor.status}</p>}
+        {nativeView && !oneNoteEditor.active && !sourceMode && <NoteNativeView key={noteId} noteId={noteId} content={note.content}
+          provider={note.sync?.provider === 'notion-notes' ? 'Notion' : 'OneNote'}
+          attachments={attachmentState.noteId === noteId ? attachmentState.items : []} />}
         {(format === 'plain' || sourceMode) && (
           <textarea
+            readOnly={bodyReadOnly && !nextcloudEditor.enabled}
             value={note.content || ''}
             onChange={e => handleContentChange(e.target.value)}
             placeholder="Start writing..."
@@ -651,7 +758,7 @@ export function NoteEditor({ noteId, onBack, onSaved }: NoteEditorProps) {
           />
         )}
         <div style={{
-          display: (format === 'plain' || sourceMode) ? 'none' : 'flex',
+          display: (format === 'plain' || sourceMode || nativeView && !oneNoteEditor.active) ? 'none' : 'flex',
           flexDirection: 'column',
           flex: 1,
         }}>

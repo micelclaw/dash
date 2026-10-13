@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-// Lente Personal — contenedor de sub-pestañas (P1-P6) + acción "Nuevo movimiento".
+// Lente Personal — contenedor de sub-pestañas (P1-P6) + acción "New movement".
 // Deep-link: ?tx=<id> abre el MovimientoDetalle de ese movimiento (chips del chat).
 
 import { useCallback, useEffect, useState } from 'react';
@@ -32,11 +32,11 @@ import { MovimientoDetalle } from './MovimientoDetalle';
 import { PeriodControl } from '../period';
 
 const SECTIONS = [
-  { id: 'resumen', label: 'Resumen', icon: LayoutDashboard },
-  { id: 'movimientos', label: 'Movimientos', icon: ArrowLeftRight },
-  { id: 'cuentas', label: 'Cuentas', icon: Wallet },
-  { id: 'categorias', label: 'Categorías', icon: Tag },
-  { id: 'presupuestos', label: 'Presupuestos', icon: PiggyBank },
+  { id: 'resumen', label: 'Overview', icon: LayoutDashboard },
+  { id: 'movements', label: 'Movements', icon: ArrowLeftRight },
+  { id: 'cuentas', label: 'Accounts', icon: Wallet },
+  { id: 'categorias', label: 'Categories', icon: Tag },
+  { id: 'presupuestos', label: 'Quotes', icon: PiggyBank },
 ];
 
 export function PersonalLens() {
@@ -58,7 +58,7 @@ export function PersonalLens() {
     let cancelled = false;
     void api.get<{ data: FinanceTransaction }>(`/finance/transactions/${txParam}`)
       .then((r) => { if (!cancelled) setDetailTx(r.data); })
-      .catch(() => { if (!cancelled) toast.error('Movimiento no encontrado'); });
+      .catch(() => { if (!cancelled) toast.error('Movement not found'); });
     return () => { cancelled = true; };
   }, [txParam]);
 
@@ -86,7 +86,7 @@ export function PersonalLens() {
           {/* Selector de periodo (solo en Resumen): conduce TODO el resumen. */}
           {section === 'resumen' && <PeriodControl />}
           <button onClick={() => setDialogOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
-            <Plus size={15} /> Nuevo movimiento
+            <Plus size={15} /> New movement
           </button>
         </div>
       </div>
@@ -96,7 +96,7 @@ export function PersonalLens() {
           <div style={{ position: 'absolute', top: 10, right: 16, color: 'var(--text-muted)' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /></div>
         )}
         {section === 'resumen' && <ResumenTab />}
-        {section === 'movimientos' && <MovimientosTab />}
+        {section === 'movements' && <MovimientosTab />}
         {section === 'cuentas' && <CuentasTab />}
         {section === 'categorias' && <CategoriasTab />}
         {section === 'presupuestos' && <PresupuestosTab />}

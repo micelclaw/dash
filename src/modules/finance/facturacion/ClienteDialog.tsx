@@ -33,8 +33,8 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
   // ¿Es un alta de proveedor? Determina los textos contextuales del diálogo.
   const isSupplier = roleProp === 'supplier';
-  const entityLabel = isSupplier ? 'proveedor' : 'cliente';
-  const entityLabelCap = isSupplier ? 'Proveedor' : 'Cliente';
+  const entityLabel = isSupplier ? 'supplier' : 'customer';
+  const entityLabelCap = isSupplier ? 'Supplier' : 'Customer';
 
   // Roles del contacto (multi-selección): cliente y/o proveedor.
   const [isCustomer, setIsCustomer] = useState(false);
@@ -88,10 +88,10 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
       // Marca el contacto del CRM existente con el rol activo (o el de la prop).
       const role: FinanceRole = isSupplierRole && !isCustomer ? 'supplier' : isCustomer && !isSupplierRole ? 'customer' : roleProp;
       await tagContact(c.id, role);
-      toast.success(`${role === 'supplier' ? 'Proveedor' : 'Cliente'} vinculado: ${c.company || c.display_name}`);
+      toast.success(`${role === 'supplier' ? 'Supplier' : 'Customer'} vinculado: ${c.company || c.display_name}`);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo vincular el contacto');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t link the contact');
     } finally {
       setSaving(false);
     }
@@ -149,13 +149,13 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
   const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) { toast.error('Indica el nombre'); return; }
+    if (!trimmed) { toast.error('Enter the name'); return; }
     const roles: FinanceRole[] = [];
     if (isCustomer) roles.push('customer');
     if (isSupplierRole) roles.push('supplier');
-    if (roles.length === 0) { toast.error('Marca al menos un rol (Cliente o Proveedor)'); return; }
+    if (roles.length === 0) { toast.error('Tick at least one role (Customer or Supplier)'); return; }
     const pt = paymentTerms.trim();
-    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Vencimiento: indica un número de días válido'); return; }
+    if (pt && (Number.isNaN(Number(pt)) || Number(pt) < 0)) { toast.error('Due date: enter a valid number of days'); return; }
     setSaving(true);
     try {
       // Dirección de facturación (objeto único). Vacíos → null.
@@ -187,7 +187,7 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
       toast.success(editing ? `${entityLabelCap} actualizado` : `${entityLabelCap} creado`);
       onClose();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar');
+      toast.error(e instanceof Error ? e.message : 'Couldn\'t save');
     } finally {
       setSaving(false);
     }
@@ -228,7 +228,7 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
               <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 10, background: 'var(--card)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 600 }}>Marcar contacto del CRM como {entityLabel}</span>
-                  <button onClick={() => setCrmOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>Escribir a mano</button>
+                  <button onClick={() => setCrmOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}>Type it in</button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                   <Search size={14} style={{ color: 'var(--text-muted)' }} />
@@ -238,7 +238,7 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
                   {crmLoading ? (
                     <div style={{ padding: '12px 0', textAlign: 'center', color: 'var(--text-muted)' }}><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /></div>
                   ) : crmResults.length === 0 ? (
-                    <div style={{ padding: '12px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>Sin contactos.</div>
+                    <div style={{ padding: '12px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)' }}>No contacts.</div>
                   ) : crmResults.map((c) => (
                     <button key={c.id} onClick={() => pickContact(c)} disabled={saving} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '7px 10px', background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm, 4px)', cursor: saving ? 'wait' : 'pointer', textAlign: 'left', width: '100%' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
@@ -255,11 +255,11 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Nombre</label>
+            <label style={labelStyle}>Name</label>
             <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="p.ej. Acme S.L." style={fieldStyle} />
           </div>
           <div>
-            <label style={labelStyle}>Razón social <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+            <label style={labelStyle}>Legal name <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
             <input value={legalName} onChange={(e) => setLegalName(e.target.value)} placeholder="Nombre legal completo" style={fieldStyle} />
           </div>
 
@@ -269,31 +269,31 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
               Dirección de facturación <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>(opcional)</span>
             </span>
             <div>
-              <label style={labelStyle}>Calle</label>
-              <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Calle y número" style={fieldStyle} />
+              <label style={labelStyle}>Street</label>
+              <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Street and number" style={fieldStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Línea 2 <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+              <label style={labelStyle}>Line 2 <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
               <input value={line2} onChange={(e) => setLine2(e.target.value)} placeholder="Piso, puerta, etc." style={fieldStyle} />
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ width: 130 }}>
-                <label style={labelStyle}>Código postal</label>
+                <label style={labelStyle}>Postcode</label>
                 <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} placeholder="28001" style={fieldStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>Ciudad</label>
+                <label style={labelStyle}>City</label>
                 <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Madrid" style={fieldStyle} />
               </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>Provincia / Región</label>
+                <label style={labelStyle}>Province / Region</label>
                 <input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="Madrid" style={fieldStyle} />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={labelStyle}>País</label>
-                <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="España" style={fieldStyle} />
+                <label style={labelStyle}>Country</label>
+                <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Spain" style={fieldStyle} />
               </div>
             </div>
           </div>
@@ -305,7 +305,7 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
 
           {!editing && (
             <div>
-              <label style={labelStyle}>Email de contacto <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
+              <label style={labelStyle}>Contact email <span style={{ color: 'var(--text-muted)' }}>(opcional)</span></label>
               <input
                 type="email"
                 value={email}
@@ -320,11 +320,11 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
           )}
           <div style={{ display: 'flex', gap: 12 }}>
             <div style={{ flex: 1 }}>
-              <label style={labelStyle}>CIF / NIF</label>
+              <label style={labelStyle}>Tax ID</label>
               <input value={taxId} onChange={(e) => setTaxId(e.target.value)} placeholder="B12345678" style={{ ...fieldStyle, fontFamily: 'var(--font-mono, monospace)' }} />
             </div>
             <div style={{ width: 120 }}>
-              <label style={labelStyle}>Moneda</label>
+              <label style={labelStyle}>Currency</label>
               <select value={currency} onChange={(e) => setCurrency(e.target.value)} style={fieldStyle}>
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -334,8 +334,8 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Rol <span style={{ color: 'var(--text-muted)' }}>(uno o ambos)</span></label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <RoleCheck checked={isCustomer} onToggle={() => setIsCustomer((v) => !v)} label="Cliente" />
-                <RoleCheck checked={isSupplierRole} onToggle={() => setIsSupplierRole((v) => !v)} label="Proveedor" />
+                <RoleCheck checked={isCustomer} onToggle={() => setIsCustomer((v) => !v)} label="Customer" />
+                <RoleCheck checked={isSupplierRole} onToggle={() => setIsSupplierRole((v) => !v)} label="Supplier" />
               </div>
             </div>
             <div style={{ width: 130 }}>
@@ -354,9 +354,9 @@ export function ClienteDialog({ open, onClose, contactId, role: roleProp = 'cust
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancelar</button>
+          <button onClick={onClose} style={{ padding: '8px 14px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
           <button onClick={submit} disabled={saving} style={{ padding: '8px 16px', background: 'var(--amber)', border: 'none', borderRadius: 'var(--radius-md, 6px)', color: '#0a0a0a', cursor: saving ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-            {saving ? 'Guardando…' : editing ? 'Guardar cambios' : `Crear ${entityLabel}`}
+            {saving ? 'Guardando…' : editing ? 'Save changes' : `Crear ${entityLabel}`}
           </button>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

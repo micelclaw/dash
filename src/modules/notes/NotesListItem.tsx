@@ -99,7 +99,7 @@ export function NotesListItem({ note, selected, onClick, onPin, onArchive, onDel
             ))}
             {extraTags > 0 && <span>+{extraTags}</span>}
             <span style={{ marginLeft: 'auto' }}>
-              <SourceBadge source={note.source} size="sm" />
+              <SourceBadge origins={note.origins} source={note.source} domain="notes" size="sm" />
             </span>
           </div>
         </div>

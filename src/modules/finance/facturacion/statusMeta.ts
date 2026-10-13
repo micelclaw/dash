@@ -35,25 +35,25 @@ export interface StatusMeta {
 }
 
 export const STATUS_META: Record<DocStatus, StatusMeta> = {
-  paid: { label: 'Pagada', color: 'var(--mod-finance)' },
-  sent: { label: 'Enviada', color: 'var(--info)' },
-  accepted: { label: 'Aceptada', color: 'var(--info)' },
-  declined: { label: 'Rechazada', color: 'var(--error)' },
-  partial: { label: 'Parcial', color: 'var(--warning)' },
-  overdue: { label: 'Vencida', color: 'var(--error)' },
-  draft: { label: 'Borrador', color: 'var(--text-muted)' },
-  converted: { label: 'Convertida', color: 'var(--text-muted)' },
-  cancelled: { label: 'Anulada', color: 'var(--text-muted)' },
+  paid: { label: 'Paid', color: 'var(--mod-finance)' },
+  sent: { label: 'Sent', color: 'var(--info)' },
+  accepted: { label: 'Accepted', color: 'var(--info)' },
+  declined: { label: 'Rejected', color: 'var(--error)' },
+  partial: { label: 'Partial', color: 'var(--warning)' },
+  overdue: { label: 'Overdue', color: 'var(--error)' },
+  draft: { label: 'Draft', color: 'var(--text-muted)' },
+  converted: { label: 'Converted', color: 'var(--text-muted)' },
+  cancelled: { label: 'Voided', color: 'var(--text-muted)' },
 };
 
 // Etiqueta contextual por tipo de documento. STATUS_META queda agnóstico de color;
 // solo la etiqueta visible cambia para una factura RECIBIDA (bill): 'sent' no es
-// "Enviada" (no la envías, la registras) y 'paid' es "Pagada" (no "Cobrada").
+// "Sent" (no la envías, la registras) y 'paid' es "Paid" (no "Paid").
 export function statusLabel(status: DocStatus, docType?: DocType): string {
   if (docType === 'bill') {
-    if (status === 'sent') return 'Registrada';
-    if (status === 'partial') return 'Pago parcial';
-    if (status === 'overdue') return 'Vencida'; // pago al proveedor fuera de plazo
+    if (status === 'sent') return 'Recorded';
+    if (status === 'partial') return 'Partial payment';
+    if (status === 'overdue') return 'Overdue'; // pago al proveedor fuera de plazo
   }
   return STATUS_META[status].label;
 }

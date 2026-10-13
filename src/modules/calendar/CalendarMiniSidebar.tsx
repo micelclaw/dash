@@ -10,12 +10,16 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
+import type { OriginEntity } from '@/types/origins';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Pencil, Trash2, LayoutGrid } from 'lucide-react';
 import { ContextMenu } from '@/components/shared/ContextMenu';
+import { TileMoreButton } from '@/components/shared/TileMoreButton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { renameCalendar } from '@/services/calendars.service';
 import {
   getMonthGridDays,
   getWeekDayNames,
@@ -27,8 +31,9 @@ import {
 } from '@/lib/date-helpers';
 import { getCalendarColor } from './types';
 import type { CalendarEvent } from './types';
+import { ConnectButton } from '@/components/shared/ConnectButton';
 
-export interface CalendarInfo {
+export interface CalendarInfo extends OriginEntity {
   id: string;
   name: string;
   display_name?: string;
@@ -44,9 +49,9 @@ interface CalendarMiniSidebarProps {
   onToggleCalendar: (name: string) => void;
   events: CalendarEvent[];
   onAddCalendar?: () => void;
-  onRefresh?: () => void;
+  onRefresh?: () => void | Promise<void>;
   calendars?: CalendarInfo[];
-  onCalendarsChange?: () => void;
+  onCalendarsChange?: () => void | Promise<void>;
 }
 
 const DAY_NAMES = getWeekDayNames(1);
@@ -70,16 +75,37 @@ export function CalendarMiniSidebar({
   const [renameTo, setRenameTo] = useState('');
   const [confirmDeleteCal, setConfirmDeleteCal] = useState<CalendarInfo | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
+  const renameInFlightRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (renaming && renameRef.current) renameRef.current.focus();
   }, [renaming]);
 
-  const handleRename = async (oldName: string) => {
+  const handleRename = async (calendar: CalendarInfo) => {
+    const oldName = calendar.name;
     const newName = renameTo.trim();
     if (!newName || newName === oldName) { setRenaming(null); return; }
+    // Keep only an in-flight guard: a failed rename must allow retrying the same value.
+    if (renameInFlightRef.current.has(calendar.id)) return;
+    renameInFlightRef.current.add(calendar.id);
+
     try {
-      // Batch update all events with this calendar_name
+      // Only records fetched from GET /calendars can be renamed by their persisted ID.
+      // The event-derived extras and defaults below have names, not calendar record IDs.
+      const persistedCalendar = apiCalendars?.find(
+        candidate => candidate.id === calendar.id
+          && candidate.name === oldName
+          && candidate.source !== 'kanban',
+      );
+      if (persistedCalendar) {
+        await renameCalendar(persistedCalendar.id, newName);
+        toast.success(`Renamed "${oldName}" to "${newName}"`);
+        setRenaming(null);
+        await Promise.all([onCalendarsChange?.(), onRefresh?.()]);
+        return;
+      }
+
+      // Preserve event-only behavior for calendars synthesized from event names.
       const matching = events.filter(e => e.calendar_name === oldName);
       await Promise.all(matching.map(e =>
         api.patch(`/events/${e.id}`, { calendar_name: newName }),
@@ -89,6 +115,8 @@ export function CalendarMiniSidebar({
       onRefresh?.();
     } catch {
       toast.error('Failed to rename calendar');
+    } finally {
+      renameInFlightRef.current.delete(calendar.id);
     }
   };
 
@@ -311,10 +339,10 @@ export function CalendarMiniSidebar({
                   value={renameTo}
                   onChange={(e) => setRenameTo(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRename(name);
+                    if (e.key === 'Enter') void handleRename(cal);
                     if (e.key === 'Escape') setRenaming(null);
                   }}
-                  onBlur={() => handleRename(name)}
+                  onBlur={() => { void handleRename(cal); }}
                   style={{
                     flex: 1,
                     padding: '2px 6px',
@@ -335,43 +363,63 @@ export function CalendarMiniSidebar({
             <ContextMenu
               key={name}
               trigger={
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '4px 0',
-                    cursor: 'pointer',
-                    fontSize: '0.8125rem',
-                    fontFamily: 'var(--font-sans)',
-                    color: hidden ? 'var(--text-muted)' : 'var(--text)',
-                  }}
+                <div
+                  role="group"
+                  aria-label={`${cal.display_name ?? name} calendar actions`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}
                 >
-                  <input
-                    type="checkbox"
-                    checked={!hidden}
-                    onChange={() => onToggleCalendar(name)}
+                  <label
                     style={{
-                      accentColor: color,
-                      width: 14,
-                      height: 14,
+                      display: 'flex',
+                      flex: 1,
+                      minWidth: 0,
+                      alignItems: 'center',
+                      gap: 8,
                       cursor: 'pointer',
+                      fontSize: '0.8125rem',
+                      fontFamily: 'var(--font-sans)',
+                      color: hidden ? 'var(--text-muted)' : 'var(--text)',
                     }}
-                  />
-                  <span
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!hidden}
+                      onChange={() => onToggleCalendar(name)}
+                      style={{
+                        accentColor: color,
+                        width: 14,
+                        height: 14,
+                        cursor: 'pointer',
+                      }}
+                    />
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: color,
+                        flexShrink: 0,
+                        opacity: hidden ? 0.3 : 1,
+                      }}
+                    />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {cal.display_name ?? name}
+                    </span>
+                    <EntitySource entity={cal} domain="calendar" />
+                  </label>
+                  <TileMoreButton
                     style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: color,
-                      flexShrink: 0,
-                      opacity: hidden ? 0.3 : 1,
+                      position: 'static',
+                      width: 28,
+                      height: 28,
+                      flex: '0 0 auto',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
                     }}
                   />
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {cal.display_name ?? name}
-                  </span>
-                </label>
+                </div>
               }
               items={[
                 { label: 'Rename', icon: Pencil, onClick: () => { setRenameTo(name); setRenaming(name); } },
@@ -466,6 +514,7 @@ export function CalendarMiniSidebar({
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {cal.display_name ?? cal.name}
                   </span>
+                  <EntitySource entity={cal} domain="tasks" />
                 </label>
               );
             })}
@@ -489,6 +538,7 @@ export function CalendarMiniSidebar({
         cancelLabel="Cancel"
         variant="danger"
       />
+      <ConnectButton dataType="calendar" />
     </div>
   );
 }

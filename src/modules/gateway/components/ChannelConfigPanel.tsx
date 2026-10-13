@@ -343,12 +343,14 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
 
         {/* Messaging */}
         <Section title="Messaging" expanded={sections.messaging!} onToggle={() => toggleSection('messaging')}>
-          <SelectRow
-            label="Streaming"
-            value={(config.streaming ?? 'off') as string}
-            options={STREAMING_MODES}
-            onChange={v => updateField('streaming', v)}
-          />
+          {['telegram', 'discord', 'slack'].includes(channelType) && (
+            <SelectRow
+              label="Streaming"
+              value={(config.streaming ?? 'off') as string}
+              options={STREAMING_MODES}
+              onChange={v => updateField('streaming', v)}
+            />
+          )}
           <SelectRow
             label="Reply threading"
             value={(config.reply_to_mode ?? 'off') as string}
@@ -367,11 +369,13 @@ export function ChannelConfigPanel({ channelType, onClose }: ChannelConfigPanelP
             min={500} max={10000}
             onChange={v => updateField('textChunkLimit', v)}
           />
-          <ToggleRow
-            label="Link preview"
-            value={(config.link_preview ?? true) as boolean}
-            onChange={v => updateField('linkPreview', v)}
-          />
+          {channelType === 'telegram' && (
+            <ToggleRow
+              label="Link preview"
+              value={(config.link_preview ?? true) as boolean}
+              onChange={v => updateField('linkPreview', v)}
+            />
+          )}
           {(channelType === 'whatsapp' || channelType === 'signal') && (
             <ToggleRow
               label="Send read receipts"

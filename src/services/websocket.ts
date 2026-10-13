@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-import type { WsEvent, WsStatus } from '@/types/websocket';
+import type { WsEvent, WsStatus, WsSendResult } from '@/types/websocket';
 
 interface ClawWebSocketOptions {
   onStatusChange: (status: WsStatus) => void;
@@ -28,14 +28,18 @@ export class ClawWebSocket {
   private listeners = new Map<string, Set<EventCallback>>();
   private options: ClawWebSocketOptions;
   private token: string | null = null;
-  private everConnected = false;
+  private generation = 0;
 
   constructor(options: ClawWebSocketOptions) {
     this.options = options;
   }
 
   connect(token: string): void {
+    this.clearReconnect();
+    this.clearHeartbeat();
+    this.retireSocket();
     this.token = token;
+    const generation = ++this.generation;
 
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
@@ -45,59 +49,73 @@ export class ClawWebSocket {
     }
 
     const wsUrl = import.meta.env.VITE_WS_URL || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
-    this.ws = new WebSocket(`${wsUrl}?token=${token}`);
+    const socket = new WebSocket(`${wsUrl}?token=${token}`);
+    this.ws = socket;
+    const current = () => this.ws === socket && this.generation === generation && this.token !== null;
 
-    this.ws.onopen = () => {
+    socket.onopen = () => {
+      if (!current()) return;
       this.reconnectAttempts = 0;
-      this.everConnected = true;
       this.options.onStatusChange('connected');
     };
-
-    this.ws.onmessage = (raw: MessageEvent) => {
-      this.handleMessage(raw);
+    socket.onmessage = (raw: MessageEvent) => {
+      if (current()) this.handleMessage(raw);
     };
-
-    this.ws.onclose = (ev: CloseEvent) => {
+    socket.onclose = (ev: CloseEvent) => {
+      if (!current()) return;
       this.clearHeartbeat();
-      if (this.token) {
-        if (!this.everConnected) {
-          this.options.onStatusChange(ev.code === 4401 ? 'auth_failed' : 'offline');
-          return;
-        }
-        this.options.onStatusChange('reconnecting');
-        this.reconnect();
+      this.retireSocket();
+      if (ev.code === 4401) {
+        this.clearReconnect();
+        this.token = null;
+        this.options.onStatusChange('auth_failed');
+        return;
       }
+      this.options.onStatusChange('reconnecting');
+      this.reconnect();
     };
-
-    this.ws.onerror = () => {
-      this.ws?.close();
+    socket.onerror = () => {
+      if (current()) socket.close();
     };
   }
 
   disconnect(): void {
+    ++this.generation;
     this.token = null;
     this.clearHeartbeat();
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.ws) {
-      this.ws.onclose = null;
-      this.ws.close();
-      this.ws = null;
-    }
+    this.clearReconnect();
+    this.retireSocket();
+    for (const timer of this.mockNotificationTimers) clearTimeout(timer);
+    this.mockNotificationTimers = [];
     this.options.onStatusChange('offline');
   }
 
-  send(action: string, data?: Record<string, unknown>): void {
+  private retireSocket(): void {
+    const socket = this.ws;
+    this.ws = null;
+    if (!socket) return;
+    socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
+    if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close();
+  }
+
+  private clearReconnect(): void {
+    if (this.reconnectTimer !== null) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  send(action: string, data?: Record<string, unknown>): WsSendResult {
+    if (!this.token) return { accepted: false, reason: 'not_connected' };
     const useMock = import.meta.env.VITE_MOCK_API === 'true';
     if (useMock) {
-      this.handleMockSend(action, data);
-      return;
+      try { this.handleMockSend(action, data); return { accepted: true }; }
+      catch { return { accepted: false, reason: 'send_failed' }; }
     }
-
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState !== WebSocket.OPEN) return { accepted: false, reason: 'not_connected' };
+    try {
       this.ws.send(JSON.stringify({ action, data }));
+      return { accepted: true };
+    } catch {
+      return { accepted: false, reason: 'send_failed' };
     }
   }
 
@@ -149,12 +167,15 @@ export class ClawWebSocket {
   }
 
   private handleHeartbeat(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ action: 'pong' }));
+    const socket = this.ws;
+    const generation = this.generation;
+    if (socket?.readyState === WebSocket.OPEN) {
+      try { socket.send(JSON.stringify({ action: 'pong' })); }
+      catch { socket.close(); return; }
     }
     this.clearHeartbeat();
     this.heartbeatTimer = setTimeout(() => {
-      this.ws?.close();
+      if (this.ws === socket && this.generation === generation) socket?.close();
     }, 90_000);
   }
 
@@ -171,16 +192,24 @@ export class ClawWebSocket {
       return;
     }
 
+    this.clearReconnect();
+    const generation = this.generation;
     const base = Math.min(Math.pow(2, this.reconnectAttempts) * 1000, 30_000);
     const jitter = base * (0.8 + Math.random() * 0.4);
     this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {
-      if (this.token) this.connect(this.token);
+      this.reconnectTimer = null;
+      if (this.token && this.generation === generation) this.connect(this.token);
     }, jitter);
   }
 
   private handleMockSend(action: string, data?: Record<string, unknown>): void {
+    if (action.startsWith('voice.')) {
+      this.handleMockVoice(action, data);
+      return;
+    }
+
     if (action === 'chat.send') {
       const convId = (data?.conversation_id as string) ?? crypto.randomUUID();
       const message = (data?.message as string) ?? '';
@@ -219,6 +248,52 @@ export class ClawWebSocket {
           }
         }, 30);
       }, 500);
+    }
+  }
+
+  /** Lo que el "STT" del mock devuelve por cada segmento de audio recibido. */
+  private static readonly MOCK_STT_TEXT = 'Hola, esto es una prueba de voz.';
+  private mockVoiceText = '';
+
+  /**
+   * Sesión de voz full-duplex en modo mock. Sigue el guion del puente real
+   * (`core/src/ws/voice-bridge.ts`): `start` → `session.started`, cada segmento de audio
+   * → `stt.result`, y `end` → `transcript.final` (solo si hubo texto) + `session.ended`.
+   *
+   * Sin esto el dash mock no puede COMPLETAR un turno de voz: quien cierra la sesión y
+   * devuelve el transcript es el servidor, así que la caja de texto nunca se rellenaba y
+   * todo lo que cuelga de "el último input fue voz" (auto-play de TTS) quedaba sin probar.
+   */
+  private handleMockVoice(action: string, data?: Record<string, unknown>): void {
+    const sessionId = (data?.session_id as string) ?? 'mock-voice-session';
+    const emit = (event: string, payload: Record<string, unknown>) => {
+      setTimeout(() => {
+        this.dispatch({
+          event,
+          data: { session_id: sessionId, ...payload },
+          timestamp: new Date().toISOString(),
+        });
+      }, 30);
+    };
+
+    switch (action) {
+      case 'voice.session.start':
+        this.mockVoiceText = '';
+        emit('voice.session.started', { conversation_id: data?.conversation_id ?? null });
+        break;
+      case 'voice.audio': {
+        const text = ClawWebSocket.MOCK_STT_TEXT;
+        this.mockVoiceText = this.mockVoiceText ? `${this.mockVoiceText} ${text}` : text;
+        emit('voice.stt.result', { text, seq: data?.seq ?? 0 });
+        break;
+      }
+      case 'voice.session.end':
+        if (this.mockVoiceText) emit('voice.transcript.final', { text: this.mockVoiceText });
+        emit('voice.session.ended', {});
+        this.mockVoiceText = '';
+        break;
+      case 'voice.tts.stop':
+        break;
     }
   }
 

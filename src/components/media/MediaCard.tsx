@@ -23,6 +23,7 @@ interface MediaCardProps {
   image?: string | null;
   fallbackIcon?: LucideIcon;
   title: string;
+  badge?: ReactNode;
   subtitle?: string;
   /** Playback/read progress 0..1, rendered as a thin bar at the cover bottom. */
   progress?: number;
@@ -45,6 +46,7 @@ export function MediaCard({
   image,
   fallbackIcon: FallbackIcon,
   title,
+  badge,
   subtitle,
   progress,
   onClick,
@@ -220,6 +222,7 @@ export function MediaCard({
             textOverflow: 'ellipsis',
           }}
         >
+          {badge && <span style={{ float: 'right', marginLeft: 4 }}>{badge}</span>}
           {title}
         </div>
         {subtitle && (

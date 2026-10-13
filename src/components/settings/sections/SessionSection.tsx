@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import * as gwService from '@/services/gateway.service';
+import { OPENCLAW_AGENT_EXCHANGES } from '@/services/openclaw-94-config';
 import { describeError } from '@/lib/api-errors';
 import { SettingsBlock } from '../shared/SettingsBlock';
 import { SectionShell } from '../shared/SectionShell';
@@ -54,7 +55,6 @@ export function SessionSection() {
   const [maintenanceMode, setMaintenanceMode] = useState('enforce');
   const [pruneAfter, setPruneAfter] = useState('30d');
   const [maxDiskBytes, setMaxDiskBytes] = useState('');
-  const [maxPingPong, setMaxPingPong] = useState(3);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
@@ -73,8 +73,6 @@ export function SessionSection() {
       setMaintenanceMode((maint.mode ?? 'enforce') as string);
       setPruneAfter((maint.prune_after ?? '30d') as string);
       setMaxDiskBytes((maint.max_disk_bytes ?? '') as string);
-      const a2a = (data.agent_to_agent ?? {}) as Record<string, unknown>;
-      setMaxPingPong((a2a.max_ping_pong_turns ?? 3) as number);
       setDirty(false);
     } catch (err) {
       toast.error(describeError(err, 'Failed to load session config'));
@@ -101,10 +99,10 @@ export function SessionSection() {
     try {
       await gwService.updateSessionConfig({
         dmScope,
-        // 'disabled' → drop the whole reset block. 'daily'/'idle' → send
-        // only the relevant sub-fields so the backend doesn't mix modes.
+        // OpenClaw 9.4 has an explicit "none" mode. Sending it is important:
+        // omitting reset would leave any previous daily/idle policy active.
         ...(resetMode === 'disabled'
-          ? {}
+          ? { reset: { mode: 'none' } }
           : {
               reset: {
                 mode: resetMode,
@@ -118,7 +116,6 @@ export function SessionSection() {
           pruneAfter,
           ...(maxDiskBytes ? { maxDiskBytes } : {}),
         },
-        agentToAgent: { maxPingPongTurns: maxPingPong },
       });
       toast.success('Sessions saved');
       setDirty(false);
@@ -252,8 +249,25 @@ export function SessionSection() {
           With <em>per-channel-peer</em> they're separate. <em>Per-account-channel-peer</em> goes one step further if you run
           multiple Telegram accounts.
         </p>
-        <Row label="Agent-to-agent ping-pong limit" desc="Max back-and-forth turns between agents in the same conversation. 3 is enough for most coordination, higher risks loops.">
-          <Num value={maxPingPong} min={0} max={5} onChange={d(setMaxPingPong)} />
+        <Row
+          label="Agent-to-agent exchanges"
+          desc="OpenClaw 2026.9.4 fixes this safety limit. Collaboration enablement and the allowed-agent list remain independent and are not changed here."
+        >
+          <span
+            role="status"
+            style={{
+              padding: '4px 9px',
+              borderRadius: 999,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--text-dim)',
+              fontSize: '0.6875rem',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {OPENCLAW_AGENT_EXCHANGES} · fixed
+          </span>
         </Row>
       </SettingsBlock>
 

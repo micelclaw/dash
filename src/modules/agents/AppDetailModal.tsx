@@ -12,10 +12,10 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import MarkdownRenderer from '@/components/markdown/MarkdownRenderer';
 import { api } from '@/services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AppIcon } from '@/components/shared/AppIcon';
 import type { AgentSkill } from './types';
 
 /** Quita el bloque frontmatter YAML inicial (`---\n...\n---`) para mostrar solo el cuerpo legible. */
@@ -107,7 +107,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
       <DialogContent className="max-w-6xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <span style={{ fontSize: '1.25rem' }}>{skill.icon}</span>
+            <AppIcon icon={skill.icon} icon_kind={skill.icon_kind} color={skill.color} size={20} />
             {skill.name}
           </DialogTitle>
         </DialogHeader>
@@ -159,7 +159,7 @@ export function AppDetailModal({ skill, agentId, allSkillIds, skillModes, open, 
                 <div style={{ marginTop: 8 }}>
                   <h4 style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Guía</h4>
                   <div className="prose prose-invert prose-sm max-w-none" style={{ fontSize: '0.75rem' }}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripFrontmatter(guide)}</ReactMarkdown>
+                    <MarkdownRenderer content={stripFrontmatter(guide)} highlight={false} />
                   </div>
                 </div>
               ) : null;

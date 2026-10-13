@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { MicVocal } from 'lucide-react';
 import { MediaGrid, MediaHero } from '@/components/media';
 import { useMusicStore } from '@/stores/music.store';
@@ -27,6 +28,7 @@ export function ArtistDetailView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 16 }}>
       <BackButton onClick={closeDetail} />
+      <EntitySource entity={artist} domain="music" native detail />
       <MediaHero
         image={artist.cover_art ? coverUrl(artist.cover_art, 600) : null}
         fallbackIcon={MicVocal}

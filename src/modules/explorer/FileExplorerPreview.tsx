@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { ExternalLink, Star, Users, User, FileText } from 'lucide-react';
 import { FileDetailsContent } from '@/components/shared/FileDetailsContent';
 import { formatRelative } from '@/lib/date-helpers';
@@ -28,6 +29,7 @@ export function FileExplorerPreview({ file, isWritable, onClose, onDelete }: Fil
 
   return (
     <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)' }}>
+      <div style={{ padding: "10px 16px 0" }}><EntitySource entity={file} domain="files" detail /></div>
       {/* Same content as Drive's Details tab, horizontal (no Activity/Versions). */}
       <FileDetailsContent
         file={file}

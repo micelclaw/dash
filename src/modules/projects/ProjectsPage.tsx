@@ -10,9 +10,11 @@
  * https://micelclaw.com
  */
 
-import { useEffect, useState } from 'react';
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { EntitySource } from '@/components/shared/SourceBadge';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
-import { Plus, Archive, ArrowLeft } from 'lucide-react';
+import { Plus, Archive, ArrowLeft, FolderOpen, Trash2, Unplug } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
 import { useProjectsStore } from '@/stores/projects.store';
@@ -21,13 +23,39 @@ import { NewBoardModal } from './components/NewBoardModal';
 import { InboxZone } from './components/InboxZone';
 import { CardDetailPanel } from './components/CardDetailPanel';
 import type { Board } from './types';
+import { DataProviderIcon } from '@/config/data-provider-icons';
+import { ContextMenu, type ContextMenuItem } from '@/components/shared/ContextMenu';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+
+const PROVIDER_LABELS: Record<string, string> = {
+  micelclaw: 'Micelclaw',
+  todoist: 'Todoist',
+  notion: 'Notion',
+  google: 'Google Tasks',
+  microsoft: 'Microsoft To Do',
+  trello: 'Trello',
+  ticktick: 'TickTick',
+  asana: 'Asana',
+  clickup: 'ClickUp',
+  monday: 'Monday.com',
+  jira: 'Jira',
+  generic: 'Servidor propio',
+  caldav: 'CalDAV',
+};
+
+function providerOf(board: Board) {
+  const origin = board.origins?.[0];
+  const slug = origin ? origin.provider_slug ?? 'generic' : board._provider_slug || (board.source === 'local' ? 'micelclaw' : 'generic');
+  return { slug, label: origin?.label ?? PROVIDER_LABELS[slug] ?? slug };
+}
 
 function BoardCard({
-  board, onClick, onDropTask,
+  board, onClick, onDropTask, menuItems,
 }: {
   board: Board;
   onClick: () => void;
   onDropTask?: (cardId: string) => void;
+  menuItems: ContextMenuItem[];
 }) {
   const [over, setOver] = useState(false);
   const total = board._card_count;
@@ -35,7 +63,8 @@ function BoardCard({
   const vencidas = board._overdue_count ?? 0;
   const pct = total && total > 0 ? Math.round(((hechas ?? 0) / total) * 100) : null;
 
-  return (
+  const provider = providerOf(board);
+  const tile = (
     <button
       onClick={onClick}
       onDragOver={(e) => {
@@ -67,8 +96,10 @@ function BoardCard({
       onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--border)')}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <EntitySource entity={board} domain="tasks" />
         {board.icon && <span style={{ fontSize: 20 }}>{board.icon}</span>}
-        <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: 14 }}>{board.title}</span>
+        <span style={{ color: 'var(--text)', fontWeight: 600, fontSize: 14, flex: 1 }}>{board.title}</span>
+        <span style={{ color: 'var(--text-dim)', fontSize: 10 }}>{provider.label}</span>
       </div>
       {board.description && (
         <span style={{ color: 'var(--text-dim)', fontSize: 12, lineHeight: 1.4 }}>
@@ -97,6 +128,7 @@ function BoardCard({
       )}
     </button>
   );
+  return <ContextMenu trigger={tile} items={menuItems} />;
 }
 
 function SkeletonCard() {
@@ -134,6 +166,9 @@ export function Component() {
   const fetchInbox = useProjectsStore((s) => s.fetchInbox);
   const sendTaskToBoard = useProjectsStore((s) => s.sendTaskToBoard);
   const fetchFullBoard = useProjectsStore((s) => s.fetchFullBoard);
+  const deleteBoard = useProjectsStore((s) => s.deleteBoard);
+  const detachBoardSync = useProjectsStore((s) => s.detachBoardSync);
+  const [boardPendingRemoval, setBoardPendingRemoval] = useState<Board | null>(null);
 
   // La tarea abierta vive en la URL (`?task=`): sin eso, F5 y el botón atrás
   // devuelven a la rejilla y la ficha es un callejón sin salida.
@@ -141,6 +176,10 @@ export function Component() {
   const [taskBoardId, setTaskBoardId] = useState<string | null>(null);
 
   useEffect(() => { void fetchInbox(); }, [fetchInbox]);
+  useOriginRefresh('tasks', () => Promise.all([
+    fetchBoards(), fetchInbox(),
+    ...(taskId && taskBoardId ? [fetchFullBoard(taskBoardId)] : []),
+  ]));
 
   // Para pintar la ficha hace falta el tablero cargado (columnas + campos
   // propios): así se reutiliza EL MISMO CardDetailPanel del tablero, con sus 13
@@ -208,6 +247,33 @@ export function Component() {
   // Las tareas sueltas viven en el tablero por defecto, que se FILTRA de la
   // rejilla: si saliera como baldosa, las mismas tareas se verían dos veces.
   const tablerosVisibles = boards.filter((b) => !b.is_default);
+  const grupos = useMemo(() => {
+    const grouped = new Map<string, { slug: string; label: string; boards: Board[] }>();
+    for (const board of tablerosVisibles) {
+      const provider = providerOf(board);
+      const group = grouped.get(provider.slug) ?? { ...provider, boards: [] };
+      group.boards.push(board);
+      grouped.set(provider.slug, group);
+    }
+    return [...grouped.values()].sort((a, b) => {
+      if (a.slug === 'micelclaw') return -1;
+      if (b.slug === 'micelclaw') return 1;
+      return a.label.localeCompare(b.label, 'es');
+    });
+  }, [tablerosVisibles]);
+
+  function menuFor(board: Board): ContextMenuItem[] {
+    const imported = Boolean(board.connector_id && board.source !== 'local');
+    return [
+      { label: 'Abrir', icon: FolderOpen, onClick: () => navigate(`/projects/${board.id}`) },
+      {
+        label: imported ? 'Desincronizar de Micelclaw…' : 'Eliminar tablero…',
+        icon: imported ? Unplug : Trash2,
+        variant: 'danger',
+        onClick: () => setBoardPendingRemoval(board),
+      },
+    ];
+  }
 
   return (
     <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -299,20 +365,52 @@ export function Component() {
           <span style={{ fontSize: 14 }}>No boards yet. Create your first board to get started.</span>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-          {tablerosVisibles.map((board) => (
-            <BoardCard
-              key={board.id}
-              board={board}
-              onClick={() => navigate(`/projects/${board.id}`)}
-              onDropTask={(cardId) => void moverABaldosa(cardId, board)}
-            />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+          {grupos.map((group) => (
+            <section key={group.slug} aria-label={`Tableros de ${group.label}`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+                <DataProviderIcon slug={group.slug} size={20} />
+                <h2 style={{ margin: 0, color: 'var(--text)', fontSize: 14, fontWeight: 650 }}>{group.label}</h2>
+                <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{group.boards.length}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+                {group.boards.map((board) => (
+                  <BoardCard
+                    key={board.id}
+                    board={board}
+                    onClick={() => navigate(`/projects/${board.id}`)}
+                    onDropTask={(cardId) => void moverABaldosa(cardId, board)}
+                    menuItems={menuFor(board)}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}
       </div>
       )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(boardPendingRemoval)}
+        onClose={() => setBoardPendingRemoval(null)}
+        onConfirm={() => {
+          if (!boardPendingRemoval) return;
+          if (boardPendingRemoval.connector_id && boardPendingRemoval.source !== 'local') {
+            void detachBoardSync(boardPendingRemoval.id);
+          } else {
+            void deleteBoard(boardPendingRemoval.id);
+          }
+        }}
+        title={boardPendingRemoval?.connector_id ? 'Desincronizar tablero' : 'Eliminar tablero'}
+        description={boardPendingRemoval?.connector_id
+          ? `“${boardPendingRemoval.title}” dejará de aparecer en Micelclaw. No se borrará ni modificará en ${providerOf(boardPendingRemoval).label}.`
+          : `“${boardPendingRemoval?.title ?? ''}” se eliminará de Micelclaw.`}
+        confirmLabel={boardPendingRemoval?.connector_id ? 'Desincronizar' : 'Eliminar'}
+        cancelLabel="Cancelar"
+        variant="danger"
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { api } from '@/services/api';
+import { AppIcon } from '@/components/shared/AppIcon';
 import type { ManagedAgent, AvailableSkill } from './types';
 
 interface CreateAgentWizardProps {
@@ -182,11 +183,11 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
 
   // Step 3: Skills (loaded dynamically from API)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  const [skillOptions, setSkillOptions] = useState<{ id: string; name: string; icon: string }[]>([]);
+  const [skillOptions, setSkillOptions] = useState<{ id: string; name: string; icon: string; icon_kind?: 'emoji' | 'lucide'; color?: string }[]>([]);
 
   useEffect(() => {
     api.get<{ data: AvailableSkill[] }>('/managed-agents/available-skills')
-      .then(res => setSkillOptions(res.data.map(s => ({ id: s.id, name: s.name, icon: s.icon }))))
+      .then(res => setSkillOptions(res.data.map(s => ({ id: s.id, name: s.name, icon: s.icon, icon_kind: s.icon_kind, color: s.color }))))
       .catch(() => setSkillOptions(SKILL_OPTIONS_FALLBACK));
   }, []);
 
@@ -414,7 +415,7 @@ export function CreateAgentWizard({ onClose, agents, onCreated }: CreateAgentWiz
                 onChange={() => toggleSkill(skill.id)}
                 style={{ accentColor: 'var(--amber)' }}
               />
-              <span style={{ fontSize: '1rem' }}>{skill.icon}</span>
+              <AppIcon icon={skill.icon} icon_kind={skill.icon_kind} color={skill.color} size={16} />
               <span>{skill.name}</span>
             </label>
           );

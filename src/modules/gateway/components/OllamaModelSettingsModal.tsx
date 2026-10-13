@@ -33,9 +33,19 @@ interface Props {
 const KEEP_ALIVE_OPTS = [
   { value: '5m', label: '5 min' },
   { value: '30m', label: '30 min' },
-  { value: '-1', label: 'Siempre' },
+  // Ollama "keep forever": debe ser una duración válida ('-1m') o el número -1 — NUNCA
+  // el string '-1' (Go duration parser lo rechaza: `time: missing unit in duration "-1"`
+  // → 400 en TODAS las peticiones al modelo). Usamos '-1m' (string, negativo = indefinido).
+  { value: '-1m', label: 'Siempre' },
   { value: '0', label: 'Descargar al terminar' },
 ];
+
+/** Normaliza el keep_alive persistido (número -1, string '-1' o '-1m') a la opción 'Siempre'. */
+function normalizeKeepAlive(v: string | number | null | undefined): string {
+  if (v == null) return '5m';
+  if (v === -1 || v === '-1' || v === '-1m') return '-1m';
+  return String(v);
+}
 
 export function OllamaModelSettingsModal({ modelId, modelName, initialParams, onClose, onSuccess }: Props) {
   const [info, setInfo] = useState<OllamaModelInfo | null>(null);
@@ -46,9 +56,7 @@ export function OllamaModelSettingsModal({ modelId, modelName, initialParams, on
   const [numCtx, setNumCtx] = useState<number>(initialParams?.num_ctx ?? 32768);
   const [autoGpu, setAutoGpu] = useState<boolean>(initialParams?.num_gpu == null);
   const [numGpu, setNumGpu] = useState<number>(typeof initialParams?.num_gpu === 'number' ? initialParams.num_gpu : 0);
-  const [keepAlive, setKeepAlive] = useState<string>(
-    initialParams?.keep_alive != null ? String(initialParams.keep_alive) : '5m',
-  );
+  const [keepAlive, setKeepAlive] = useState<string>(normalizeKeepAlive(initialParams?.keep_alive));
   const [advOpen, setAdvOpen] = useState(false);
   const [numBatch, setNumBatch] = useState<number | ''>(typeof initialParams?.num_batch === 'number' ? initialParams.num_batch : '');
   const [numThread, setNumThread] = useState<number | ''>(typeof initialParams?.num_thread === 'number' ? initialParams.num_thread : '');

@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { ArrowLeft, Shuffle, Repeat, Repeat1 } from 'lucide-react';
 import { usePlayerStore } from '@/stores/player.store';
 import { PlaybackControls } from './PlaybackControls';
@@ -95,6 +96,7 @@ export function MobileNowPlaying({ onClose }: MobileNowPlayingProps) {
       {/* Track info */}
       <div style={{ textAlign: 'center', margin: '20px 0' }}>
         <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{currentItem.title}</div>
+              <EntitySource entity={{ origins: currentItem.origins }} domain="music" native={currentItem.source === 'navidrome'} detail />
         {currentItem.artist && (
           <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: 4 }}>{currentItem.artist}</div>
         )}

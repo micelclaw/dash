@@ -10,10 +10,11 @@
  * https://micelclaw.com
  */
 
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useState, useCallback } from 'react';
 import Selecto from 'react-selecto';
 import {
-  ChevronLeft, Share2, Trash2, Pencil, Image, Mail,
+  ChevronLeft, Share2, Trash2, Pencil, Image,
   FolderMinus, Info, Download, ImageIcon, X, Star, Cpu,
 } from 'lucide-react';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -188,14 +189,7 @@ function AlbumPhotoThumbnail({
             }} />
           )}
 
-          {photo.source !== 'local' && (
-            <div style={{
-              position: 'absolute', bottom: 4, left: 4, background: 'rgba(0,0,0,0.6)',
-              borderRadius: 'var(--radius-sm)', padding: '2px 4px', display: 'flex', alignItems: 'center',
-            }}>
-              <Mail size={10} style={{ color: 'var(--text-dim)' }} />
-            </div>
-          )}
+          <PhotoSource entity={photo} />
         </div>
       }
     />

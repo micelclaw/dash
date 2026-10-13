@@ -28,8 +28,8 @@ import { useFacturacionNav } from './navigation';
 import { tintedPillStyle } from './statusMeta';
 
 const ROLE_LABEL: Record<FinanceRole, string> = {
-  customer: 'Cliente',
-  supplier: 'Proveedor',
+  customer: 'Customer',
+  supplier: 'Supplier',
 };
 
 // Color de acento por rol: cliente = azul (--info), proveedor = ámbar (--amber).
@@ -41,9 +41,9 @@ const ROLE_COLOR: Record<FinanceRole, string> = {
 type RoleFilter = 'all' | 'customer' | 'supplier';
 
 const ROLE_FILTERS: { value: RoleFilter; label: string }[] = [
-  { value: 'all', label: 'Todos' },
-  { value: 'customer', label: 'Clientes' },
-  { value: 'supplier', label: 'Proveedores' },
+  { value: 'all', label: 'All' },
+  { value: 'customer', label: 'Customers' },
+  { value: 'supplier', label: 'Suppliers' },
 ];
 
 export function FacturacionClientesTab() {
@@ -81,7 +81,7 @@ export function FacturacionClientesTab() {
         </div>
         {listed.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 4px' }}>
-            {roleFilter === 'supplier' ? 'Aún no hay proveedores.' : roleFilter === 'customer' ? 'Aún no hay clientes.' : 'Aún no hay clientes ni proveedores.'}
+            {roleFilter === 'supplier' ? 'No suppliers yet.' : roleFilter === 'customer' ? 'No customers yet.' : 'No customers or suppliers yet.'}
           </div>
         )}
         {listed.map((c) => {
@@ -105,13 +105,13 @@ export function FacturacionClientesTab() {
           );
         })}
         <button onClick={() => setDialogOpen(true)} style={{ width: '100%', padding: '8px 12px', marginTop: 4, cursor: 'pointer', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 'var(--radius-md, 6px)', color: 'var(--text-dim)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-          <Plus size={14} /> Contacto
+          <Plus size={14} /> Contact
         </button>
       </div>
 
       {/* Ficha rica del contacto — editable in situ */}
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 16 }}>Crea un cliente o proveedor para empezar.</div>}
+        {!selected && <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 16 }}>Create a customer or supplier to get started.</div>}
         {selected && (
           <ClienteDetalle key={selected.id} contactId={selected.id} onOpenInvoice={openInvoice} />
         )}

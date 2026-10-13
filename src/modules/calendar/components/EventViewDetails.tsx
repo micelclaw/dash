@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useState } from 'react';
 import { MapPin, Calendar, Users, Tag, Share2, UserCircle2 } from 'lucide-react';
 import { TagChip } from '@/components/shared/TagChip';
@@ -95,6 +96,8 @@ export function EventViewDetails({
           </span>
         </div>
       )}
+
+      <EntitySource entity={event} domain="calendar" detail />
 
       {/* Date / time */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8125rem' }}>

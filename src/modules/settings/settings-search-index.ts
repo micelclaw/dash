@@ -32,6 +32,8 @@
 export interface SettingsSearchEntry {
   sectionId: string;
   groupId: string;
+  /** Optional canonical Settings URL for a subsection hosted by another route. */
+  path?: string;
   label: string;
   tags: string[];
   /**
@@ -64,20 +66,17 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { sectionId: 'agent-tokens', groupId: 'dev', label: 'Agent Tokens',
     tags: ['tokens', 'agentes', 'session', 'api', 'keys', 'developer'],
     settings: ['session token', 'static token', 'revoke', 'rotate'] },
-  { sectionId: 'permissions', groupId: 'account', label: 'Permissions',
-    tags: ['permisos', 'roles', 'access'],
-    settings: ['allowed domains', 'tag filter', 'include only', 'exclude'] },
   { sectionId: 'license', groupId: 'account', label: 'License',
     tags: ['licencia', 'plan', 'subscription', 'tier'],
     settings: ['plan', 'tier', 'upgrade', 'billing'] },
-  { sectionId: 'approvals-history', groupId: 'account', label: 'Approvals History',
-    tags: ['historial', 'aprobaciones', 'audit'],
-    settings: ['approval history', 'audit log'] },
+  { sectionId: 'security', groupId: 'security', path: '/settings/security?security_tab=audit-log', label: 'Security · Audit log',
+    tags: ['historial', 'aprobaciones', 'audit', 'security'],
+    settings: ['approval history', 'policy changes', 'audit log'] },
 
   // ── Apariencia ──
   { sectionId: 'dash', groupId: 'appearance', label: 'Dash',
     tags: ['tema', 'theme', 'colors', 'colores', 'accent', 'modules', 'branding', 'asistente', 'assistant'],
-    settings: ['accent color', 'seam color', 'module colors', 'assistant name', 'assistant avatar', 'openclaw branding'] },
+    settings: ['accent color', 'seam color', 'module colors', 'assistant identity migration', 'openclaw branding'] },
   { sectionId: 'general', groupId: 'appearance', label: 'General',
     tags: ['idioma', 'language', 'timezone', 'fecha', 'date', 'time', 'hora'],
     settings: ['language', 'timezone', 'date format', 'time format', 'first day of week'] },
@@ -98,9 +97,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { sectionId: 'voice', groupId: 'ai-agents', label: 'Voice',
     tags: ['voz', 'stt', 'tts', 'speech', 'whisper'],
     settings: ['stt engine', 'tts provider', 'voice', 'whisper', 'wake word', 'wave5'] },
-  { sectionId: 'tool-access-defaults', groupId: 'ai-agents', label: 'Tool Access',
-    tags: ['tools', 'herramientas', 'permisos', 'preset', 'minimal', 'coding'],
-    settings: ['preset', 'minimal', 'coding', 'messaging', 'full', 'inherit', 'allow', 'deny'] },
+  { sectionId: 'security', groupId: 'security', path: '/settings/security?security_tab=tool-policy', label: 'Security · Tools & approvals',
+    tags: ['tools', 'herramientas', 'permisos', 'preset', 'minimal', 'coding', 'approval', 'aprobación'],
+    settings: ['preset', 'minimal', 'coding', 'messaging', 'full', 'allow', 'deny', 'chat tools display'] },
   { sectionId: 'memory-search', groupId: 'ai-agents', label: 'Memory',
     tags: ['memory', 'memoria', 'search', 'busqueda', 'embeddings', 'hybrid', 'mmr'],
     settings: ['embedding provider', 'max results', 'mmr', 'hybrid search', 'citations'] },
@@ -182,17 +181,11 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // ── Seguridad ──
   { sectionId: 'security', groupId: 'security', label: 'Security',
-    tags: ['security', 'seguridad', 'pin', 'shell', 'approvals', 'aprobaciones', 'forwarding', 'reenvio'],
-    settings: ['security pin', 'unrestricted shell', 'approval levels', 'reminder timeout', 'escalation timeout', 'expiry timeout', 'approvals forwarding'] },
-  { sectionId: 'sandbox', groupId: 'security', label: 'Sandbox',
-    tags: ['sandbox', 'isolation', 'aislamiento'],
-    settings: ['sandbox mode', 'container scope', 'workspace access', 'idle prune', 'max age'] },
-  { sectionId: 'browser-config', groupId: 'security', label: 'Browser',
-    tags: ['browser', 'navegador', 'web', 'allowlist', 'denylist', 'evaluate'],
-    settings: ['browser enabled', 'headless', 'javascript evaluation', 'private network', 'default profile', 'ssrf'] },
-  { sectionId: 'commands', groupId: 'security', label: 'Commands',
-    tags: ['commands', 'comandos', 'shell', 'safe', 'developer'],
-    settings: ['native slash commands', 'shell access', 'bash mode', '/config', '/debug', '/restart'] },
+    tags: ['security', 'seguridad', 'pin', 'approvals', 'aprobaciones', 'forwarding', 'reenvio', 'sandbox', 'isolation', 'aislamiento', 'browser', 'navegador', 'command profiles', 'perfiles de comandos', 'audit', 'reconciliation'],
+    settings: ['overview', 'agent execution', 'command profiles', 'protected actions', 'action approvals', 'isolation', 'approval delivery', 'audit log', 'browser safety', 'security pin', 'sandbox mode', 'workspace access', 'blocked domains'] },
+  { sectionId: 'commands', groupId: 'security', label: 'Channel commands',
+    tags: ['channel commands', 'comandos de canal', 'slash commands', 'bash shortcut', 'telegram', 'discord'],
+    settings: ['native slash commands', 'native skill commands', 'shell shortcut', '/config', '/debug', '/restart'] },
 
   // ── Administración (admin only) ──
   { sectionId: 'users-groups', groupId: 'admin', label: 'Usuarios y grupos',
@@ -211,9 +204,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // ── Secciones registradas que faltaban en el índice (drift fix) ──
   // Alias y sub-secciones presentes en SECTION_REGISTRY pero sin entrada de
   // búsqueda: sin esto, escribir su nombre en el buscador no las encontraba.
-  { sectionId: 'chat-tools', groupId: 'ai-agents', label: 'Chat Tools Display',
-    tags: ['chat', 'tools', 'herramientas', 'visibility', 'visibilidad', 'render', 'toggle'],
-    settings: ['tool visibility', 'collapse by default', 'show tool calls', 'expanded'] },
   { sectionId: 'users', groupId: 'admin', label: 'Users',
     tags: ['users', 'usuarios', 'accounts', 'cuentas', 'admin', 'roles'],
     settings: ['create user', 'edit user', 'change role', 'reset password', 'disable user', 'quota'] },
@@ -226,15 +216,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { sectionId: 'file-services', groupId: 'admin', label: 'File Services',
     tags: ['file services', 'servicios de archivos', 'smb', 'nfs', 'ftp', 'afp', 'samba'],
     settings: ['enable smb', 'enable nfs', 'enable ftp', 'workgroup', 'protocol'] },
-  { sectionId: 'observers', groupId: 'ai-agents', label: 'Channel Observers',
-    tags: ['observers', 'observadores', 'channels', 'canales', 'watch', 'triggers'],
-    settings: ['observer', 'channel watch', 'trigger', 'match pattern'] },
+  { sectionId: 'observers', groupId: 'connectivity', label: 'Channel Observers',
+    tags: ['observers', 'observadores', 'channels', 'canales', 'messaging', 'mensajeria', 'whatsapp', 'telegram', 'signal', 'discord', 'slack', 'matrix', 'wechat', 'pairing', 'vincular', 'connect'],
+    settings: ['observer', 'channel', 'connect channel', 'pair', 'messaging platform'] },
   { sectionId: 'devices', groupId: 'connectivity', label: 'Devices',
     tags: ['devices', 'dispositivos', 'pairing', 'emparejar', 'gateway', 'pair'],
     settings: ['pair device', 'paired devices', 'pending devices', 'revoke device'] },
-  { sectionId: 'approvals-forwarding', groupId: 'ai-agents', label: 'Approvals Forwarding',
-    tags: ['approvals', 'aprobaciones', 'forwarding', 'reenvio', 'channel', 'canal'],
-    settings: ['forward approvals', 'approval channel', 'forward to'] },
   { sectionId: 'active-memory', groupId: 'ai-agents', label: 'Memoria Activa',
     tags: ['active memory', 'memoria activa', 'memory', 'recall', 'inject', 'contexto'],
     settings: ['active memory', 'recall', 'inject memory', 'salience'] },
@@ -347,13 +334,11 @@ export function validateSearchIndex(knownIds: readonly string[]): void {
   }
 
   if (missing.length > 0) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[settings-search-index] ${missing.length} registered section(s) missing from search index — search won't surface them: ${missing.join(', ')}`,
     );
   }
   if (ghost.length > 0) {
-    // eslint-disable-next-line no-console
     console.warn(
       `[settings-search-index] ${ghost.length} index entr${ghost.length === 1 ? 'y points' : 'ies point'} at unknown section ID(s): ${ghost.join(', ')}`,
     );

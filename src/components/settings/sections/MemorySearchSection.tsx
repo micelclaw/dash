@@ -62,11 +62,6 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   bedrock:          'AWS credentials + region required. Model family selected by the configured model id (titan-v1/v2 · cohere · nova · twelvelabs). Cohere variants also support asymmetric inputType (set below).',
 };
 
-const BACKENDS = [
-  { value: 'builtin', label: 'Built-in SQLite (default, in-process)' },
-  { value: 'qmd', label: 'QMD sidecar (separate process, advanced)' },
-];
-
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 0' }}>
@@ -83,6 +78,26 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
   return <ToggleSwitch checked={value} onChange={onChange} />;
 }
 
+function ManagedBadge({ children = 'Managed by OpenClaw 2026.9.4' }: { children?: React.ReactNode }) {
+  return (
+    <span
+      role="status"
+      style={{
+        padding: '4px 9px',
+        borderRadius: 999,
+        border: '1px solid var(--border)',
+        background: 'var(--surface)',
+        color: 'var(--text-dim)',
+        fontSize: '0.6875rem',
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function MemorySearchSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -91,22 +106,8 @@ export function MemorySearchSection() {
 
   const [provider, setProvider] = useState('ollama');
   const [enabled, setEnabled] = useState(true);
-  const [hybridEnabled, setHybridEnabled] = useState(true);
-  const [vectorWeight, setVectorWeight] = useState(0.7);
-  const [textWeight, setTextWeight] = useState(0.3);
-  const [temporalDecay, setTemporalDecay] = useState(false);
-  const [halfLifeDays, setHalfLifeDays] = useState(30);
-  const [mmrEnabled, setMmrEnabled] = useState(false);
-  const [mmrLambda, setMmrLambda] = useState(0.7);
   const [maxResults, setMaxResults] = useState(8);
   const [minScore, setMinScore] = useState(0.1);
-  const [chunkTokens, setChunkTokens] = useState(400);
-  const [chunkOverlap, setChunkOverlap] = useState(80);
-  const [syncOnStart, setSyncOnStart] = useState(true);
-  const [syncWatch, setSyncWatch] = useState(true);
-  const [syncOnSearch, setSyncOnSearch] = useState(false);
-  const [syncInterval, setSyncInterval] = useState(60);
-  const [backend, setBackend] = useState('builtin');
   const [citations, setCitations] = useState('auto');
   const [cacheEnabled, setCacheEnabled] = useState(true);
   // Asymmetric inputType — only meaningful for voyage and bedrock (cohere
@@ -143,27 +144,8 @@ export function MemorySearchSection() {
       const q = (ms.query ?? {}) as Record<string, unknown>;
       setMaxResults((q.max_results ?? 8) as number);
       setMinScore((q.min_score ?? 0.1) as number);
-      const h = (q.hybrid ?? {}) as Record<string, unknown>;
-      setHybridEnabled((h.enabled ?? true) as boolean);
-      setVectorWeight((h.vector_weight ?? 0.7) as number);
-      setTextWeight((h.text_weight ?? 0.3) as number);
-      const td = (h.temporal_decay ?? {}) as Record<string, unknown>;
-      setTemporalDecay((td.enabled ?? false) as boolean);
-      setHalfLifeDays((td.half_life_days ?? 30) as number);
-      const mmr = (h.mmr ?? {}) as Record<string, unknown>;
-      setMmrEnabled((mmr.enabled ?? false) as boolean);
-      setMmrLambda((mmr.lambda ?? 0.7) as number);
-      const ch = (ms.chunking ?? {}) as Record<string, unknown>;
-      setChunkTokens((ch.tokens ?? 400) as number);
-      setChunkOverlap((ch.overlap ?? 80) as number);
-      const sy = (ms.sync ?? {}) as Record<string, unknown>;
-      setSyncOnStart((sy.on_session_start ?? true) as boolean);
-      setSyncWatch((sy.watch ?? true) as boolean);
-      setSyncOnSearch((sy.on_search ?? false) as boolean);
-      setSyncInterval((sy.interval_minutes ?? 60) as number);
       const ca = (ms.cache ?? {}) as Record<string, unknown>;
       setCacheEnabled((ca.enabled ?? true) as boolean);
-      setBackend((mem.backend ?? 'builtin') as string);
       setCitations((mem.citations ?? 'auto') as string);
       // Asymmetric inputType (snake_case from API per case-transform plugin).
       setQueryInputType((ms.query_input_type ?? '') as string);
@@ -191,8 +173,10 @@ export function MemorySearchSection() {
       else if (ep && !ep.includes('amazonaws.com')) setStoragePreset('minio');
       else if (uriMatch) setStoragePreset('aws-s3');
       // Hydrate credentials: detect ${REF} pattern → reference mode
-      const ak = (storage.access_key_id ?? '') as string;
-      const sk = (storage.secret_access_key ?? '') as string;
+      // 9.4 canonical names, with safe read compatibility for pre-upgrade
+      // aliases. Writes below always use access_key / secret_key.
+      const ak = (storage.access_key ?? storage.access_key_id ?? '') as string;
+      const sk = (storage.secret_key ?? storage.secret_access_key ?? '') as string;
       const refRe = /^\$\{([A-Za-z0-9_-]+)\}$/;
       const akRef = ak.match(refRe)?.[1];
       const skRef = sk.match(refRe)?.[1];
@@ -251,8 +235,8 @@ export function MemorySearchSection() {
     if (s3Region) opts.region = s3Region;
     const ak = serializeSecret(accessKey);
     const sk = serializeSecret(secretKey);
-    if (ak) opts.access_key_id = ak;
-    if (sk) opts.secret_access_key = sk;
+    if (ak) opts.access_key = ak;
+    if (sk) opts.secret_key = sk;
     return opts;
   };
   const isCloudConfigured = !!s3Bucket && !!serializeSecret(accessKey) && !!serializeSecret(secretKey);
@@ -308,16 +292,7 @@ export function MemorySearchSection() {
       await gwService.updateMemoryConfig({
         memorySearch: {
           enabled, provider,
-          chunking: { tokens: chunkTokens, overlap: chunkOverlap },
-          sync: { onSessionStart: syncOnStart, onSearch: syncOnSearch, watch: syncWatch, intervalMinutes: syncInterval },
-          query: {
-            maxResults, minScore,
-            hybrid: {
-              enabled: hybridEnabled, vectorWeight, textWeight,
-              mmr: { enabled: mmrEnabled, lambda: mmrLambda },
-              temporalDecay: { enabled: temporalDecay, halfLifeDays },
-            },
-          },
+          query: { maxResults, minScore },
           cache: { enabled: cacheEnabled },
           // Asymmetric inputType — only sent when non-empty so we don't
           // pollute the config with empty strings (the runtime uses the
@@ -325,7 +300,7 @@ export function MemorySearchSection() {
           ...(queryInputType ? { queryInputType } : {}),
           ...(documentInputType ? { documentInputType } : {}),
         },
-        memory: { backend, citations },
+        memory: { citations },
         // G7: only emit memoryLancedb when the user has configured a bucket.
         // Empty object would clobber existing config; null would delete it.
         ...(s3Bucket
@@ -414,29 +389,31 @@ export function MemorySearchSection() {
       <SettingsBlock title="Search Quality" expanded={sections.search!} onToggle={() => setSections(p => ({ ...p, search: !p.search }))}>
         <Row label="Max results" desc="How many memory snippets the agent gets back per search. More = richer context but slower."><Num value={maxResults} min={1} max={30} onChange={d(setMaxResults)} /></Row>
         <Row label="Min relevance" desc="Drop snippets below this score (0–1). Lower lets through more, including weaker matches. Try 0.1 for broad recall, 0.3 for stricter."><Num value={minScore} min={0} max={1} onChange={d(setMinScore)} /></Row>
-        <Row label="Hybrid search" desc="Combines semantic similarity (meaning) with keyword matching. Catches both 'laptop battery' and exact tag matches. Recommended."><Toggle value={hybridEnabled} onChange={d(setHybridEnabled)} /></Row>
-        {hybridEnabled && <>
-          <Row label="Semantic weight" desc="Importance of meaning-based matches. 0.7 = mostly semantic, 0.3 = mostly keyword. Should sum with text weight to 1.0."><Num value={vectorWeight} min={0} max={1} onChange={d(setVectorWeight)} /></Row>
-          <Row label="Keyword weight" desc="Importance of exact-word matches. Higher helps when the user uses specific terms or jargon."><Num value={textWeight} min={0} max={1} onChange={d(setTextWeight)} /></Row>
-        </>}
-        <Row label="Prefer recent" desc="Recent notes rank higher than old ones. Useful for journaling / daily notes where freshness matters."><Toggle value={temporalDecay} onChange={d(setTemporalDecay)} /></Row>
-        {temporalDecay && <Row label="Half-life (days)" desc="A note this many days old is worth half what it was when fresh. 30 = strong decay, 365 = barely any."><Num value={halfLifeDays} min={1} max={365} onChange={d(setHalfLifeDays)} /></Row>}
-        <Row label="Avoid duplicates" desc="Skip near-identical results so the agent doesn't see the same idea five times. Useful for big memory archives."><Toggle value={mmrEnabled} onChange={d(setMmrEnabled)} /></Row>
-        {mmrEnabled && <Row label="Diversity vs relevance" desc="0 = maximum diversity (variety wins). 1 = ignore diversity (relevance wins). 0.7 is a balanced default."><Num value={mmrLambda} min={0} max={1} onChange={d(setMmrLambda)} /></Row>}
-        <Row label="Chunk size (tokens)" desc="How large each piece of memory is when indexed. Smaller (200) = more precise matches, larger (800) = more context per match."><Num value={chunkTokens} min={100} max={2000} onChange={d(setChunkTokens)} /></Row>
-        <Row label="Chunk overlap (tokens)" desc="How much consecutive chunks share. Prevents losing info that falls on chunk boundaries. Usually 10–20% of chunk size."><Num value={chunkOverlap} min={0} max={500} onChange={d(setChunkOverlap)} /></Row>
+        <Row
+          label="Ranking and chunking"
+          desc="Hybrid ranking, duplicate diversity, recency weighting and chunk sizing now use the runtime's production defaults."
+        >
+          <ManagedBadge />
+        </Row>
       </SettingsBlock>
 
       <SettingsBlock title="Indexing & Sync" expanded={sections.sync!} onToggle={() => setSections(p => ({ ...p, sync: !p.sync }))}>
-        <Row label="Sync on session start" desc="Re-index when a new chat session begins"><Toggle value={syncOnStart} onChange={d(setSyncOnStart)} /></Row>
-        <Row label="File watcher" desc="Auto-index when memory files change"><Toggle value={syncWatch} onChange={d(setSyncWatch)} /></Row>
-        <Row label="Sync before every search" desc="Guarantee fresh results (slower)"><Toggle value={syncOnSearch} onChange={d(setSyncOnSearch)} /></Row>
-        <Row label="Background sync interval (min)" desc="Periodic re-index interval. 0 = disabled"><Num value={syncInterval} min={0} max={1440} onChange={d(setSyncInterval)} /></Row>
+        <Row
+          label="Index synchronization"
+          desc="Startup, file watching, search-time refresh and background scheduling are managed by the 9.4 runtime."
+        >
+          <ManagedBadge />
+        </Row>
         <Row label="Embedding cache" desc="Cache embeddings to avoid re-computing unchanged chunks"><Toggle value={cacheEnabled} onChange={d(setCacheEnabled)} /></Row>
       </SettingsBlock>
 
       <SettingsBlock title="Backend" expanded={sections.backend!} onToggle={() => setSections(p => ({ ...p, backend: !p.backend }))}>
-        <Row label="Memory backend" desc="Search engine backend"><Sel value={backend} options={BACKENDS} onChange={d(setBackend)} /></Row>
+        <Row
+          label="Memory engine"
+          desc="The retired built-in/QMD switch is no longer written; engine selection is managed through OpenClaw's memory plugin slot."
+        >
+          <ManagedBadge />
+        </Row>
         <Row label="Citations" desc="Show source file + line in search results">
           <Sel value={citations} options={[
             { value: 'auto', label: 'Auto' }, { value: 'on', label: 'Always' }, { value: 'off', label: 'Never' },

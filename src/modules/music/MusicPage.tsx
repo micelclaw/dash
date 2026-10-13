@@ -10,6 +10,8 @@
  * https://micelclaw.com
  */
 
+import { musicService } from '@/services/music.service';
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { MediaShell, MediaToolbar } from '@/components/media';
@@ -67,6 +69,29 @@ export function MusicPage() {
     else if (playlist) void s.openPlaylist(playlist);
     setSearchParams({}, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  useOriginRefresh('music', async () => {
+    const store = useMusicStore.getState();
+    await Promise.all([store.loadHome(), store.loadAlbums({ reset: true }), store.loadArtists(), store.loadPlaylists()]);
+    if (store.selectedAlbum) {
+      const id = store.selectedAlbum.album.id;
+      const { tracks, ...album } = await musicService.getAlbum(id);
+      useMusicStore.setState(current => current.selectedAlbum?.album.id === id
+        ? { selectedAlbum: { album, tracks } } : {});
+    }
+    if (store.selectedArtist) {
+      const id = store.selectedArtist.artist.id;
+      const detail = await musicService.getArtist(id);
+      useMusicStore.setState(current => current.selectedArtist?.artist.id === id
+        ? { selectedArtist: detail } : {});
+    }
+    if (store.selectedPlaylist) {
+      const id = store.selectedPlaylist.playlist.id;
+      const detail = await musicService.getPlaylist(id);
+      useMusicStore.setState(current => current.selectedPlaylist?.playlist.id === id
+        ? { selectedPlaylist: detail } : {});
+    }
+  });
 
   let content: React.ReactNode;
   if (unavailable) {

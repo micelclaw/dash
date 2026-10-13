@@ -10,6 +10,9 @@
  * https://micelclaw.com
  */
 
+import { useOriginRefresh } from '@/hooks/use-origin-refresh';
+import { type OriginEntity } from '@/types/origins';
+import { PhotoSource } from '@/components/shared/SourceBadge';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useLocation, useNavigate } from 'react-router';
 import { Image, Lock, FolderPlus, FolderMinus, Download, Cpu, Star, Info, Trash2, Share2, Link2 } from 'lucide-react';
@@ -68,7 +71,7 @@ function SearchResultsGrid({
   search,
   onPhotoClick,
 }: {
-  results: { id: string; filename: string; similarity: number; metadata: Record<string, unknown> | null; created_at: string }[];
+  results: (OriginEntity & { id: string; filename: string; similarity: number; metadata: Record<string, unknown> | null; created_at: string })[];
   loading: boolean;
   searchType: 'semantic' | 'fulltext';
   isPro: boolean;
@@ -135,7 +138,7 @@ function SearchResultThumbnail({
   showSimilarity,
   onClick,
 }: {
-  result: { id: string; filename: string; similarity: number };
+  result: OriginEntity & { id: string; filename: string; similarity: number };
   showSimilarity: boolean;
   onClick: () => void;
 }) {
@@ -178,6 +181,7 @@ function SearchResultThumbnail({
         </div>
       )}
 
+      <PhotoSource entity={result} />
       {/* Similarity badge */}
       {showSimilarity && result.similarity > 0 && (
         <div style={{
@@ -257,6 +261,10 @@ export function Component() {
 
   // Modal/panel state
   const [exifPhoto, setExifPhoto] = useState<Photo | null>(null);
+  // Foto traída a pelo por `?id=` cuando NO está en la lista cargada (chip del grafo,
+  // deep-link a una foto vieja). Sin esto el panel de detalles enseñaba la foto correcta
+  // pero el visor grande pintaba `lightboxPhotos[0]` — otra foto distinta (deuda KG6).
+  const [deepLinkPhoto, setDeepLinkPhoto] = useState<Photo | null>(null);
   const [deletePhotoId, setDeletePhotoId] = useState<string | null>(null);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchAlbumPicker, setBatchAlbumPicker] = useState<{ x: number; y: number } | null>(null);
@@ -306,6 +314,58 @@ export function Component() {
   const selectedPhotos = useMemo(
     () => activePhotos.filter(p => activeSelection.selectedIds.has(p.id)),
     [activePhotos, activeSelection.selectedIds],
+  );
+
+  // ── Listas del visor (KG6) ─────────────────────────────
+  // `lightboxIndex` SIEMPRE es un índice sobre `lightboxPhotos`. Se calcula aquí arriba —
+  // y no junto al render — para que los handlers de abrir/navegar resuelvan la foto contra
+  // la MISMA lista: indexar `photos` mientras el visor pintaba clusterPhotos/albumPhotos/
+  // resultados de búsqueda era el bug KG6 (imagen grande y panel de detalles descuadrados).
+  // Con búsqueda activa los resultados son objetos PARCIALES (sin filepath/size/thumbnail).
+  const searchPhotosForLightbox: Photo[] = useMemo(() => searchResults?.map((r) => ({
+    id: r.id,
+    filename: r.filename,
+    filepath: '',
+    mime_type: 'image/jpeg',
+    size_bytes: 0,
+    checksum_sha256: null,
+    source: '',
+    origins: r.origins,
+    source_id: null,
+    parent_folder: '',
+    is_directory: false,
+    metadata: r.metadata as Photo['metadata'],
+    tags: [],
+    custom_fields: null,
+    created_at: r.created_at,
+    updated_at: r.created_at,
+    synced_at: null,
+    deleted_at: null,
+    taken_at: null,
+    thumbnail_url: '',
+  })) ?? [], [searchResults]);
+
+  const isClusterView = view === 'people' && !!selectedClusterId;
+  // La rejilla de búsqueda solo sustituye al contenido en el timeline (misma condición
+  // que el render); con una búsqueda viva y el usuario dentro de un álbum, lo que se ve
+  // siguen siendo las fotos del álbum.
+  const isSearchGrid = view === 'timeline' && searchResults !== null;
+  /** Lista que el usuario VE en la rejilla — de ahí salen los índices de los clicks. */
+  const gridLightboxPhotos = useMemo(() => (
+    isSearchGrid
+      ? searchPhotosForLightbox
+      : isClusterView && clusterPhotos
+        ? clusterPhotos
+        : isAlbumView
+          ? albumPhotos
+          : photos
+  ), [isSearchGrid, searchPhotosForLightbox, isClusterView, clusterPhotos, isAlbumView, albumPhotos, photos]);
+
+  // `deepLinkPhoto` gana: es una foto que NO está en ninguna de las listas cargadas
+  // (llegó por `?id=`), así que el visor la muestra sola (KG6).
+  const lightboxPhotos = useMemo(
+    () => (deepLinkPhoto ? [deepLinkPhoto] : gridLightboxPhotos),
+    [deepLinkPhoto, gridLightboxPhotos],
   );
 
   // Initial load
@@ -362,10 +422,16 @@ export function Component() {
     const targetId = searchParams.get('id');
     if (!targetId || deepLinkHandled.current || photosLoading) return;
 
-    const idx = photos.findIndex(p => p.id === targetId);
+    // `lightboxIndex` es un índice sobre `lightboxPhotos` (la lista EFECTIVA del visor:
+    // resultados de búsqueda, cluster o álbum si alguno está activo), no sobre el timeline.
+    // Buscar en `photos` daba un índice del timeline aplicado a otra lista → el visor grande
+    // pintaba otra foto (KG6). `photos` sigue siendo la mejor fuente para el panel de detalles:
+    // los objetos de búsqueda son parciales (sin filepath/size/thumbnail).
+    const fullPhoto = photos.find(p => p.id === targetId) ?? null;
+    const idx = lightboxPhotos.findIndex(p => p.id === targetId);
     if (idx >= 0) {
       setLightboxIndex(idx);
-      setExifPhoto(photos[idx] ?? null);
+      setExifPhoto(fullPhoto ?? lightboxPhotos[idx] ?? null);
       setDetailsOpen(true);
       deepLinkHandled.current = true;
       setSearchParams({}, { replace: true });
@@ -376,7 +442,9 @@ export function Component() {
           if (res.data) {
             setExifPhoto(res.data);
             setDetailsOpen(true);
-            // Open lightbox with index -1 (standalone), will show via exifPhoto
+            // Visor en modo "foto suelta": la lista del visor ES esta foto (índice 0),
+            // no la lista cargada — si no, el grande enseñaría otra imagen.
+            setDeepLinkPhoto(res.data);
             setLightboxIndex(0);
           }
         })
@@ -428,6 +496,20 @@ export function Component() {
   }, []);
 
   // Fetch face clusters when switching to people view
+  useOriginRefresh('files', async () => {
+    const ai = usePhotoAiStore.getState();
+    await Promise.all([fetchPhotos(true), selectedAlbumId ? fetchAlbumPhotos(true) : undefined,
+      fetchFaceClusters(), ai.selectedClusterId ? ai.fetchClusterPhotos(ai.selectedClusterId) : undefined,
+      search && ai.searchResults ? ai.searchPhotos(search, aiSearch) : undefined,
+      ai.similarFileId ? ai.fetchSimilar(ai.similarFileId, ai.similarMode) : undefined]);
+    const ids = [...new Set([exifPhoto?.id, deepLinkPhoto?.id].filter((id): id is string => !!id))];
+    await Promise.all(ids.map(async id => {
+      const { data } = await api.get<{ data: Photo }>(`/files/${id}`);
+      setExifPhoto(prev => prev?.id === id ? { ...prev, origins: data.origins } : prev);
+      setDeepLinkPhoto(prev => prev?.id === id ? { ...prev, origins: data.origins } : prev);
+    }));
+  });
+
   useEffect(() => {
     if (view === 'people') fetchFaceClusters();
   }, [view, fetchFaceClusters]);
@@ -559,21 +641,32 @@ export function Component() {
 
   // ── Photo actions ──────────────────────────────────────
 
+  /**
+   * El panel de detalles siempre habla de la MISMA foto que el visor. Se prefiere el objeto
+   * completo del timeline cuando existe: los items de búsqueda llegan parciales (KG6).
+   */
+  const showExifFor = useCallback((photo: Photo | undefined) => {
+    if (!photo) return;
+    setExifPhoto(photos.find(p => p.id === photo.id) ?? photo);
+  }, [photos]);
+
   const handlePhotoClick = useCallback((index: number) => {
+    setDeepLinkPhoto(null); // salir del modo "foto suelta" del deep-link
     setLightboxIndex(index);
-    const photo = activePhotos[index];
-    if (photo) setExifPhoto(photo);
-  }, [activePhotos]);
+    // El índice viene de la rejilla visible (timeline, álbum, cluster o búsqueda), que es
+    // exactamente `gridLightboxPhotos` — no de `activePhotos` (KG6).
+    showExifFor(gridLightboxPhotos[index]);
+  }, [gridLightboxPhotos, showExifFor]);
 
   const handleLightboxClose = useCallback(() => {
     setLightboxIndex(null);
+    setDeepLinkPhoto(null);
   }, []);
 
   const handleLightboxNavigate = useCallback((index: number) => {
     setLightboxIndex(index);
-    const photo = activePhotos[index];
-    if (photo) setExifPhoto(photo);
-  }, [activePhotos]);
+    showExifFor(lightboxPhotos[index]);
+  }, [lightboxPhotos, showExifFor]);
 
   // "View details" (menú contextual): abre el panel de detalles directamente
   // (la barra-rail de las vistas grid desapareció — el panel se invoca aquí
@@ -824,38 +917,8 @@ export function Component() {
 
   const selectedAlbum = selectedAlbumId ? albums.find(a => a.id === selectedAlbumId) : null;
 
-  // Determine which photos to show in lightbox
-  // When search is active, build Photo-like objects from search results
-  const searchPhotosForLightbox: Photo[] = searchResults?.map((r) => ({
-    id: r.id,
-    filename: r.filename,
-    filepath: '',
-    mime_type: 'image/jpeg',
-    size_bytes: 0,
-    checksum_sha256: null,
-    source: 'local',
-    source_id: null,
-    parent_folder: '',
-    is_directory: false,
-    metadata: r.metadata as Photo['metadata'],
-    tags: [],
-    custom_fields: null,
-    created_at: r.created_at,
-    updated_at: r.created_at,
-    synced_at: null,
-    deleted_at: null,
-    taken_at: null,
-    thumbnail_url: '',
-  })) ?? [];
-
-  const isClusterView = view === 'people' && !!selectedClusterId;
-  const lightboxPhotos = searchResults !== null
-    ? searchPhotosForLightbox
-    : isClusterView && clusterPhotos
-      ? clusterPhotos
-      : isAlbumView
-        ? albumPhotos
-        : photos;
+  // (las listas del visor — searchPhotosForLightbox / gridLightboxPhotos / lightboxPhotos —
+  //  se calculan arriba, junto al resto del estado derivado: ver §"Listas del visor (KG6)")
 
   return (
     <>
@@ -884,7 +947,7 @@ export function Component() {
               selectedStars={selectedStars}
               onStarsToggle={(n) => setSelectedStars(prev => {
                 const s = new Set(prev);
-                s.has(n) ? s.delete(n) : s.add(n);
+                if (s.has(n)) s.delete(n); else s.add(n);
                 return s;
               })}
               onStarsClear={() => setSelectedStars(new Set())}
@@ -934,8 +997,10 @@ export function Component() {
                 isPro={!!isPro}
                 search={search}
                 onPhotoClick={(id) => {
+                  // Mismo camino que las demás rejillas: limpia el modo "foto suelta" y
+                  // sincroniza el panel de detalles (antes solo movía el índice → KG6).
                   const idx = searchResults.findIndex((r) => r.id === id);
-                  if (idx >= 0) setLightboxIndex(idx);
+                  if (idx >= 0) handlePhotoClick(idx);
                 }}
               />
             ) : view === 'timeline' ? (

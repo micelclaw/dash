@@ -121,8 +121,8 @@ export interface ConfigHealthReport {
   orphan_fallbacks: string[];
   /**
    * Agents whose assigned model points to a declared provider, BUT the
-   * agent's per-agent `auth-profiles.json` lacks a valid token for that
-   * provider. Spawn-time failure: "No API key found for provider X".
+   * concrete OpenClaw agent lacks usable provider auth (API key, OAuth,
+   * device-code, CLI or token). Spawn-time failure: missing provider auth.
    * Undefined when the endpoint was called without `?check_agent_auth=1`.
    */
   agents_missing_auth?: Array<{
@@ -178,6 +178,13 @@ export interface AutoFixResult {
   remaining_issues: ConfigHealthReport;
 }
 
+/** Capacidades del catálogo CURADO (core/data/model-catalog). */
+export interface CuratedCaps {
+  reasoning: boolean;
+  vision: boolean;
+  tools: boolean;
+}
+
 export interface CatalogModel {
   key: string;
   name: string;
@@ -189,6 +196,159 @@ export interface CatalogModel {
   is_default: boolean;
   local: boolean;
   size_bytes?: number | null; // Ollama: tamaño en disco (badge "espacio en disco")
+  // ── Metadata del catálogo CURADO — presentes SOLO con match ──
+  /** Contexto máximo DEL MODELO (el chip muestra el asignado si existe; este va al tooltip). */
+  max_context?: number | null;
+  max_output?: number | null;
+  caps?: CuratedCaps | null;
+  /** Knowledge cutoff ("2025-04") → tooltip del chip de contexto. */
+  knowledge?: string | null;
+  /** Slug VERIFICADO de artificialanalysis.ai/models/<slug>; null/ausente = sin botón. */
+  aa_slug?: string | null;
+}
+
+// ─── Model health test (POST /gateway/models/test) ─────────────────
+// "Available" en una fila de modelo = respondió a un TEST real (completion
+// de 1 token), no "hay credencial". Los resultados viven en Core hasta su
+// reinicio y se rehidratan con GET /gateway/models/tests.
+
+export interface ModelTestResult {
+  ok: boolean;
+  tag: 'available' | 'present' | 'auth' | 'rate_limit' | 'not_found' | 'not_serving' | 'unreachable' | 'error';
+  phase: string;
+  upstream_status?: number;
+  message?: string;
+  latency_ms?: number;
+  /** Solo en not_found: tamaño y muestra del catálogo real del provider. */
+  available_count?: number;
+  available_sample?: string[];
+  /** Cap de tokens/min declarado por el provider en sus headers de rate-limit.
+   *  Por debajo de un turno real de agente (~40-70k) → pill ámbar "Limited". */
+  limit_tokens_per_minute?: number;
+  tested_at: string;
+}
+
+// ─── Providers overview (SSOT de auth por proveedor) ───────────────
+// `GET /gateway/models/providers-overview` — la vista reconciliada de la que
+// derivan TODAS las superficies del módulo Models (tarjetas del Catalog,
+// vista de modelos, Configured, Provider Status). `has_credential` es LA
+// señal de auth (punto verde, gates de +Add, entrar a modelos). El flag
+// `catalog.available` NO es auth: significa "modelo destacado".
+
+export interface ProviderOverview {
+  id: string;
+  /** Existe `models.providers[id]` en openclaw.json. */
+  entry_in_config: boolean;
+  /** Credencial USABLE en runtime — la señal de auth para todo el módulo. */
+  has_credential: boolean;
+  credential_source: 'api_key' | 'local_marker' | 'auth_store' | null;
+  /** Mirror declarado en config SIN secreto detrás → ofrecer "Clean up". */
+  declared_only: boolean;
+  /** Key huérfana rescatable (pre-migración 2026.6.11) → ofrecer "Rescue key". */
+  orphan_credentials: boolean;
+  /** Modelos destacados en el catálogo. null si el catálogo está frío. */
+  featured_count: number | null;
+  configured_count: number;
+  is_user_managed: boolean;
+  base_url: string | null;
+}
+
+export interface ProvidersOverviewResponse {
+  providers: ProviderOverview[];
+  catalog_warm: boolean;
+}
+
+// ─── Unified OpenClaw provider/model catalog ──────────────────────
+
+export interface ProviderAuthMethod {
+  id: string;
+  label: string;
+  hint: string | null;
+  kind: 'api_key' | 'oauth' | 'device_code' | 'token' | string;
+}
+
+export interface CatalogProvider {
+  id: string;
+  label: string;
+  description: string;
+  installed: true;
+  enabled: boolean;
+  source: 'openclaw_plugin' | 'openclaw_catalog' | 'micelclaw_config' | string;
+  plugin_id: string | null;
+  version: string | null;
+  docs_path: string | null;
+  auth_methods: ProviderAuthMethod[];
+  api_transport: string | null;
+  model_count: number;
+  configured_count: number;
+  has_credential: boolean;
+  credential_source: ProviderOverview['credential_source'];
+  entry_in_config: boolean;
+  is_user_managed: boolean;
+  is_cli_backend: boolean;
+  legacy_configured: boolean;
+  migration_target: string | null;
+  status: 'configured' | 'not_configured';
+}
+
+export interface InstallableCatalogProvider {
+  id: string;
+  label: string;
+  description: string;
+  installed: false;
+  enabled: false;
+  source: 'openclaw_official';
+  plugin_id: string;
+  docs_path: string | null;
+  categories: string[];
+  auth_methods: ProviderAuthMethod[];
+  install_ref: string;
+  model_count: 0;
+  configured_count: 0;
+  has_credential: false;
+  status: 'available_to_install';
+}
+
+export interface UnifiedModelCatalog {
+  count: number;
+  models: CatalogModel[];
+  providers: CatalogProvider[];
+  available_providers: InstallableCatalogProvider[];
+  source: 'openclaw';
+  openclaw_version: string | null;
+  degraded: boolean;
+  generated_at: string;
+}
+
+export type ProviderAuthFlowStatus = 'running' | 'waiting_input' | 'completed' | 'failed' | 'cancelled';
+
+export interface ProviderAuthFlowMessage {
+  id: string;
+  type: 'intro' | 'outro' | 'note' | 'plain' | 'progress' | 'progress_done' | 'open_url';
+  message: string;
+  title: string | null;
+}
+
+export interface ProviderAuthFlowPrompt {
+  id: string;
+  type: 'text' | 'select' | 'multiselect' | 'confirm';
+  message: string;
+  sensitive: boolean;
+  options: Array<{ value: unknown; label: string; hint: string | null }>;
+  initial_value?: unknown;
+}
+
+export interface ProviderAuthFlow {
+  id: string;
+  provider: string;
+  method: string;
+  status: ProviderAuthFlowStatus;
+  messages: ProviderAuthFlowMessage[];
+  prompt: ProviderAuthFlowPrompt | null;
+  result: { provider_id?: string; method_id?: string; default_model?: string } | null;
+  error: string | null;
+  created_at: number;
+  updated_at: number;
 }
 
 // ─── Models: status (CLI: openclaw models status --json) ────────────
@@ -210,6 +370,10 @@ export interface ModelsStatus {
     providers: Array<{
       provider: string;
       effective: { kind: string; detail: string };
+      /** Fila sintética de mirror `auth.profiles` sin material secreto
+       *  (`effective.kind === 'declared'`) → "Declared in config — no
+       *  credential" con acción "Clean up" en la UI. */
+      declared_only?: boolean;
       profiles: {
         count: number;
         oauth: number;

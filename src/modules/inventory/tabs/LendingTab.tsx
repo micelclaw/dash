@@ -251,7 +251,10 @@ export function LendingTab() {
                     </button>
                     <button
                       disabled
-                      title="Agent reminder — coming with flows"
+                      // El tooltip prometía «flows» (MicelFlow), retirado el 2026-06-30 y
+                      // sustituido por n8n: apuntaba a un destino que ya no existe. Queda
+                      // honesto hasta que se decida por dónde sale el aviso (INV3).
+                      title="Agent reminder — not wired up yet"
                       style={{
                         background: 'transparent',
                         border: 'none',

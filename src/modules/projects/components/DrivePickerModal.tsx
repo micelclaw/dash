@@ -87,7 +87,8 @@ export function DrivePickerModal({
     if (soloImagenes) { onPick([f]); return; }   // una imagen: elegir y cerrar
     setElegidos((s) => {
       const n = new Set(s);
-      n.has(f.id) ? n.delete(f.id) : n.add(f.id);
+      if (n.has(f.id)) n.delete(f.id);
+      else n.add(f.id);
       return n;
     });
   }
@@ -157,7 +158,7 @@ export function DrivePickerModal({
                   <div style={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {f.is_directory
                       ? <Folder size={16} style={{ color: 'var(--text-dim)' }} />
-                      : <FileThumbnail file={f} width={64} fit="cover" iconSize={16} />}
+                      : <FileThumbnail file={f} width={64} fit="cover" iconSize="sm" />}
                   </div>
                   <span style={{ flex: 1, minWidth: 0, color: 'var(--text)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {f.filename}

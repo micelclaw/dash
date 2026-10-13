@@ -12,20 +12,34 @@
 
 import { create } from 'zustand';
 import { api } from '@/services/api';
+import {
+  listApprovalHistory,
+  listApprovals,
+  resolveApproval as resolveApprovalRequest,
+  type ApprovalDecision,
+} from '@/services/approvals.service';
 import type { SecurityConfig, ApprovalRequest } from '@/types/settings';
 
 interface SecurityState {
   config: SecurityConfig | null;
+  configError: string | null;
   approvals: ApprovalRequest[];
+  approvalHistory: ApprovalRequest[];
   pendingCount: number;
   loading: boolean;
+  approvalsLoading: boolean;
+  approvalsError: string | null;
+  approvalTotal: number;
+  historyTotal: number;
 
   fetchConfig: () => Promise<void>;
   updateConfig: (data: Partial<SecurityConfig>) => Promise<void>;
-  fetchApprovals: (status?: string) => Promise<void>;
+  fetchApprovals: (status?: string, limit?: number, offset?: number) => Promise<void>;
+  fetchApprovalHistory: (limit?: number, offset?: number) => Promise<void>;
   fetchPendingCount: () => Promise<void>;
-  approveApproval: (id: string, credential?: string) => Promise<void>;
-  rejectApproval: (id: string, reason?: string) => Promise<void>;
+  resolveApproval: (id: string, decision: ApprovalDecision, credential?: string, reason?: string) => Promise<ApprovalRequest>;
+  approveApproval: (id: string, credential?: string, decision?: Exclude<ApprovalDecision, 'deny'>) => Promise<ApprovalRequest>;
+  rejectApproval: (id: string, reason?: string) => Promise<ApprovalRequest>;
   setupPin: (pin: string, currentPassword: string) => Promise<void>;
   removePin: (currentPassword: string) => Promise<void>;
   verifyPin: (pin: string) => Promise<{ verified: boolean }>;
@@ -38,37 +52,71 @@ interface SecurityState {
 
 export const useSecurityStore = create<SecurityState>()((set, get) => ({
   config: null,
+  configError: null,
   approvals: [],
+  approvalHistory: [],
   pendingCount: 0,
   loading: false,
+  approvalsLoading: false,
+  approvalsError: null,
+  approvalTotal: 0,
+  historyTotal: 0,
 
   fetchConfig: async () => {
-    set({ loading: true });
+    set({ loading: true, configError: null });
     try {
       const res = await api.get<{ data: SecurityConfig }>('/settings/security');
-      set({ config: res.data, loading: false });
-    } catch {
-      set({ loading: false });
+      set({ config: res.data, configError: null, loading: false });
+    } catch (err) {
+      set({
+        configError: err instanceof Error ? err.message : 'Failed to load security settings',
+        loading: false,
+      });
     }
   },
 
   updateConfig: async (data: Partial<SecurityConfig>) => {
     try {
       const res = await api.patch<{ data: SecurityConfig }>('/settings/security', data);
-      set({ config: res.data });
-    } catch {
-      throw new Error('Failed to update security config');
+      set({ config: res.data, configError: null });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update security config';
+      set({ configError: message });
+      throw err instanceof Error ? err : new Error(message);
     }
   },
 
-  fetchApprovals: async (status?: string) => {
+  fetchApprovals: async (status = 'pending', limit = 50, offset = 0) => {
+    set({ approvalsLoading: true, approvalsError: null });
     try {
-      const params: Record<string, string> = {};
-      if (status) params.status = status;
-      const res = await api.get<{ data: ApprovalRequest[] }>('/approvals', params);
-      set({ approvals: res.data });
-    } catch {
-      set({ approvals: [] });
+      const res = await listApprovals({ status, limit, offset });
+      set({
+        approvals: res.data ?? [],
+        approvalTotal: res.meta?.total ?? res.data?.length ?? 0,
+        approvalsLoading: false,
+      });
+    } catch (err) {
+      set({
+        approvalsError: err instanceof Error ? err.message : 'Failed to load approvals',
+        approvalsLoading: false,
+      });
+    }
+  },
+
+  fetchApprovalHistory: async (limit = 50, offset = 0) => {
+    set({ approvalsLoading: true, approvalsError: null });
+    try {
+      const res = await listApprovalHistory({ limit, offset });
+      set({
+        approvalHistory: res.data ?? [],
+        historyTotal: res.meta?.total ?? res.data?.length ?? 0,
+        approvalsLoading: false,
+      });
+    } catch (err) {
+      set({
+        approvalsError: err instanceof Error ? err.message : 'Failed to load approval history',
+        approvalsLoading: false,
+      });
     }
   },
 
@@ -81,24 +129,25 @@ export const useSecurityStore = create<SecurityState>()((set, get) => ({
     }
   },
 
-  approveApproval: async (id: string, credential?: string) => {
-    const body: Record<string, unknown> = {};
-    if (credential) body.credential = credential;
-    await api.post(`/approvals/${id}/approve`, body);
+  resolveApproval: async (id, decision, credential, reason) => {
+    const resolved = await resolveApprovalRequest(id, {
+      decision,
+      ...(credential ? { credential } : {}),
+      ...(reason ? { reason } : {}),
+    });
     set({
       approvals: get().approvals.filter((a) => a.id !== id),
       pendingCount: Math.max(0, get().pendingCount - 1),
     });
+    return resolved;
+  },
+
+  approveApproval: async (id, credential, decision = 'allow_once') => {
+    return get().resolveApproval(id, decision, credential);
   },
 
   rejectApproval: async (id: string, reason?: string) => {
-    const body: Record<string, unknown> = {};
-    if (reason) body.reason = reason;
-    await api.post(`/approvals/${id}/reject`, body);
-    set({
-      approvals: get().approvals.filter((a) => a.id !== id),
-      pendingCount: Math.max(0, get().pendingCount - 1),
-    });
+    return get().resolveApproval(id, 'deny', undefined, reason);
   },
 
   setupPin: async (pin: string, currentPassword: string) => {

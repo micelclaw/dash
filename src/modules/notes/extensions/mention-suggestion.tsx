@@ -15,6 +15,7 @@
 // disponible en Free) y pinta MentionDropdown anclado al caret. Sin tippy:
 // posicionamiento manual con el clientRect que provee el suggestion plugin.
 
+import { type OriginEntity } from '@/types/origins';
 import { ReactRenderer } from '@tiptap/react';
 import type { SuggestionOptions, SuggestionProps, SuggestionKeyDownProps } from '@tiptap/suggestion';
 import { api } from '@/services/api';
@@ -25,7 +26,7 @@ interface SearchResult {
   domain: string;
   record_id: string;
   snippet: string;
-  record: Record<string, unknown> | null;
+  record: (Record<string, unknown> & OriginEntity) | null;
 }
 
 /** Título legible por dominio (cada tabla nombra distinto su campo principal). */
@@ -78,6 +79,7 @@ async function searchMentions(query: string): Promise<MentionItem[]> {
         id: mentionId(r),
         label: resultLabel(r.domain, r.record, r.snippet ?? ''),
         snippet: r.snippet,
+        origins: r.record?.origins,
       }))
       .filter((i) => i.label);
     // Agrupar por dominio preservando el orden de score dentro de cada grupo.

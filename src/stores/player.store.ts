@@ -10,12 +10,13 @@
  * https://micelclaw.com
  */
 
+import type { OriginEntity } from '@/types/origins';
 import { create } from 'zustand';
 import { api } from '@/services/api';
 
 // ─── Types ───────────────────────────────────────────────
 
-export interface PlayableItem {
+export interface PlayableItem extends OriginEntity {
   fileId: string;
   /** Source-native id (e.g. the Navidrome song id) for scrobbling and other source-specific calls. */
   sourceId?: string;

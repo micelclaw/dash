@@ -10,6 +10,7 @@
  * https://micelclaw.com
  */
 
+import { EntitySource } from '@/components/shared/SourceBadge';
 import { useMemo } from 'react';
 import { getMonthGridDays, isSameMonth, isToday, startOfDay } from '@/lib/date-helpers';
 import { getCalendarColor } from '../types';
@@ -246,6 +247,7 @@ function MonthEventPill({ event, onEventClick, calendarColorMap }: MonthEventPil
       >
         {event.title}
       </span>
+      <span style={{ marginLeft: "auto", display: "inline-flex" }}><EntitySource entity={event} domain="calendar" size="xs" /></span>
     </div>
   );
 }

@@ -70,6 +70,9 @@ export function DepreciationReport() {
     api.get<{ data: DepSummary }>('/inventory/reports/depreciation')
       .then((res) => { if (alive) { setData(res.data); setLoaded(true); } })
       .catch(() => { if (alive) setLoaded(true); });
+    // Sin cleanup el guard `alive` nunca bajaba: el .then seguía llamando a
+    // setState tras desmontar el informe.
+    return () => { alive = false; };
   }, []);
 
   if (!loaded || !data || data.count === 0) return null;

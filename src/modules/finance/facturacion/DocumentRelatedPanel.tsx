@@ -10,7 +10,7 @@
  * https://micelclaw.com
  */
 
-// O9 — Panel "Relacionado con esta factura": completa la narrativa del documento con
+// O9 — Panel "Related to this invoice": completa la narrativa del documento con
 // el CONTACTO, la CORRESPONDENCIA (emails enviados/recibidos con esa gente sobre el
 // tema), los PRODUCTOS de inventario (relación derivada, tier secundario) y los PAGOS.
 // Consume GET /finance/documents/:id/related (getDocumentRelated). Reutiliza
@@ -40,12 +40,12 @@ export function DocumentRelatedPanel({ documentId, onOpenContact }: { documentId
 
   return (
     <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md, 6px)', padding: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Relacionado con esta factura</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Related to this invoice</div>
 
       {/* Contacto (cliente/proveedor) — relación principal. */}
       {data.contact && (
         <div>
-          <div style={sectionTitle}>Contacto</div>
+          <div style={sectionTitle}>Contact</div>
           <div {...clickable(() => onOpenContact(data.contact!.id))} {...hoverBg}
             style={{ ...rowBase, margin: '0 -8px' }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', background: 'color-mix(in srgb, var(--mod-contacts, #6366f1) 16%, transparent)', flexShrink: 0 }}>
@@ -104,7 +104,7 @@ export function DocumentRelatedPanel({ documentId, onOpenContact }: { documentId
             {data.payments.map((p) => (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
                 <Banknote size={13} style={{ color: 'var(--mod-finance)', flexShrink: 0 }} />
-                <span style={{ color: 'var(--text-dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.account_name ?? 'Cuenta'} · {fmtDate(p.date, { year: false })}</span>
+                <span style={{ color: 'var(--text-dim)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.account_name ?? 'Account'} · {fmtDate(p.date, { year: false })}</span>
                 <span style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)', flexShrink: 0 }}>{fmtMoney(p.amount)}</span>
               </div>
             ))}

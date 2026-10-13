@@ -21,7 +21,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { SharedFolderCreateDialog } from './SharedFolderCreateDialog';
 import { SharedFolderEditDialog } from './SharedFolderEditDialog';
 import {
-  listSharedFolders, deleteSharedFolder, reindexSharedFolder,
+  listSharedFolders, deleteSharedFolder, reindexSharedFolder, updateSharedFolder,
   getSshKeys, setSshKeys, type SharedFolder,
 } from '@/services/shared-folders.service';
 
@@ -80,6 +80,18 @@ export function SharedFoldersSection() {
   };
   useEffect(load, []);
 
+  const toggleDrive = async (folder: SharedFolder) => {
+    setBusyId(folder.id);
+    try {
+      const enabled = !folder.index_in_drive;
+      await updateSharedFolder(folder.id, { index_in_drive: enabled });
+      toast.success(enabled ? `«${folder.name}» ya aparece en Drive` : `«${folder.name}» se ha retirado de Drive`);
+      load();
+    } catch (error) {
+      toast.error((error as Error).message || 'No se pudo cambiar la visibilidad en Drive');
+    } finally { setBusyId(null); }
+  };
+
   // Mantener el diálogo de edición sincronizado con la fila recargada.
   useEffect(() => {
     if (!editFolder) return;
@@ -122,9 +134,26 @@ export function SharedFoldersSection() {
         : <span className="inline-flex items-center gap-1 text-xs text-[var(--text-dim)]"><HardDrive className="h-3 w-3" /> gestionada</span>,
     },
     {
+      key: 'index_in_drive', header: 'Drive', align: 'center',
+      render: (f) => (
+        <div className="flex flex-col items-center gap-1">
+          <span className={`text-xs ${f.index_in_drive ? 'text-[var(--success)]' : 'text-[var(--text-dim)]'}`}>
+            {f.index_in_drive ? 'Habilitada' : 'No habilitada'}
+          </span>
+          <Button
+            variant="outline" size="sm" className="h-7 px-2 text-xs"
+            disabled={busyId === f.id}
+            onClick={(event) => { event.stopPropagation(); void toggleDrive(f); }}
+          >
+            {f.index_in_drive ? 'Deshabilitar' : 'Habilitar'}
+          </Button>
+        </div>
+      ),
+    },
+    {
       key: 'status', header: 'Estado', align: 'center',
       render: (f) => {
-        const m = STATUS_META[f.status] ?? STATUS_META.active;
+        const m = STATUS_META[f.status] ?? STATUS_META['active'] ?? { label: f.status, cls: 'text-[var(--text-dim)]' };
         return <span title={f.last_error ?? undefined} className={`text-xs ${m.cls}`}>{m.label}</span>;
       },
     },
@@ -148,7 +177,7 @@ export function SharedFoldersSection() {
       render: (f) => (
         <div className="flex justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
           <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar" onClick={() => openEdit(f, 'general')}><Pencil className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" title="Reindexar en el Drive" disabled={busyId === f.id} onClick={() => void reindex(f)}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Reindexar en Drive" disabled={!f.index_in_drive || busyId === f.id} onClick={() => void reindex(f)}>
             <RefreshCw className={`h-4 w-4 ${busyId === f.id ? 'animate-spin' : ''}`} />
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7 text-[var(--error)]" title="Eliminar" onClick={() => setConfirmDel(f)}><Trash2 className="h-4 w-4" /></Button>

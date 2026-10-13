@@ -57,7 +57,7 @@ export async function playFromDrive(file: FileRecord): Promise<void> {
     coverBase64 = info.data.coverBase64 || undefined;
   } catch { /* use filename */ }
   const item = {
-    fileId: file.id, title, artist, coverBase64,
+    fileId: file.id, title, artist, coverBase64, origins: file.origins,
     streamUrl: `/files/${file.id}/stream`,
     mediaType: (isVideo ? 'video' : 'audio') as 'audio' | 'video',
   };
@@ -125,7 +125,7 @@ function buildOpenWithItems(file: FileRecord, ctx: DriveMenuContext): ContextMen
       { label: 'Play', icon: Play, onClick: () => { void playFromDrive(file); } },
       { label: 'Add to queue', icon: ListPlus, onClick: () => {
         usePlayerStore.getState().addToQueue({
-          fileId: file.id, title: file.filename,
+          fileId: file.id, title: file.filename, origins: file.origins,
           streamUrl: `/files/${file.id}/stream`, mediaType: 'audio' as const,
         });
       } },

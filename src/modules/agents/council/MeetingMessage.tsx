@@ -10,13 +10,18 @@
  * https://micelclaw.com
  */
 
+import { memo } from 'react';
 import type { MeetingMessage as MeetingMessageType } from '../types';
 
 interface MeetingMessageProps {
   message: MeetingMessageType;
 }
 
-export function MeetingMessage({ message }: MeetingMessageProps) {
+// memo: durante el stream, cada delta crea un objeto `meeting`/`messages` nuevo pero deja intactas
+// las referencias de los mensajes NO afectados (el handler solo hace {...x, content} en el que
+// streamea). Con memo (comparación por referencia de `message`, el único prop) solo re-renderiza la
+// burbuja que cambia, no las N del transcript → stream fluido en councils largos.
+export const MeetingMessage = memo(function MeetingMessage({ message }: MeetingMessageProps) {
   const time = new Date(message.created_at).toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -110,4 +115,4 @@ export function MeetingMessage({ message }: MeetingMessageProps) {
       `}</style>
     </div>
   );
-}
+});

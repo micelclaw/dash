@@ -610,14 +610,14 @@ export function ConfigHealthBanner() {
             />
           )}
 
-          {/* 🟡 Agentes con missing auth (por agente) */}
+          {/* 🟡 Agentes con missing auth (API key/OAuth/device/CLI por agente) */}
           {filtered.agents_missing_auth.map((a) => {
             const managed = resolveManagedAgent(a.agent_id);
             return (
               <IssueRow
                 key={`ma-${a.agent_id}`}
                 severity="amber"
-                title={`${a.agent_id} sin token de ${a.provider}`}
+                title={`${a.agent_id} sin autenticación de ${a.provider}`}
                 detail={`Modelo asignado: ${a.model}`}
                 actions={(
                   <>

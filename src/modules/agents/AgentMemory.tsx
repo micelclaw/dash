@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/services/api';
+import { useAuthStore } from '@/stores/auth.store';
 
 // ── Shapes devueltas por los endpoints (todas enveloped: api.get NO desempaqueta) ──
 interface MemoryEmbedding { ok?: boolean; checked?: boolean; error?: string; model?: string; dims?: number; }
@@ -60,6 +61,8 @@ const MAINTENANCE: { action: string; label: string; desc: string; destructive?: 
 interface Props { agentId: string; agentName: string; agentBareName: string; }
 
 export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
+  const role = useAuthStore(s => s.user?.role);
+  const canManageGlobalMemory = role === 'owner' || role === 'admin';
   const [status, setStatus] = useState<MemoryStatus | null>(null);
   const [diary, setDiary] = useState<DreamDiary | null>(null);
   const [rem, setRem] = useState<RemHarness | null>(null);
@@ -84,8 +87,8 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
         api.get<Env<MemoryStatus>>(`${base}/status`),
         api.get<Env<DreamDiary>>(`${base}/dream-diary`).catch(() => null),
         api.get<Env<RemHarness>>(`${base}/rem-harness`).catch(() => null),
-        api.get<Env<DreamingConfig>>('/gateway/dreaming-config').catch(() => null),
-        api.get<Env<ActiveMemoryConfig>>('/gateway/active-memory-config').catch(() => null),
+        api.get<Env<DreamingConfig>>('/managed-agents/memory-settings/dreaming').catch(() => null),
+        api.get<Env<ActiveMemoryConfig>>('/managed-agents/memory-settings/active-memory').catch(() => null),
       ]);
       setStatus(st.data);
       setDiary(dd?.data ?? null);
@@ -115,6 +118,7 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
   };
 
   const toggleDreaming = async (next: boolean) => {
+    if (!canManageGlobalMemory) return;
     setTogglingDream(true);
     try {
       await api.patch('/gateway/dreaming-config', { enabled: next });
@@ -129,6 +133,7 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
 
   const amOn = !!amCfg?.config?.enabled && !!amCfg?.plugin_enabled && (amCfg?.config?.agents ?? []).includes(agentBareName);
   const toggleActiveMemory = async (next: boolean) => {
+    if (!canManageGlobalMemory) return;
     setTogglingAm(true);
     try {
       if (next && !amCfg?.plugin_enabled) {
@@ -140,7 +145,7 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
         : current.filter(a => a !== agentBareName);
       await api.patch('/gateway/active-memory-config', { config: { enabled: true, agents } });
       toast.success(`Recall proactivo ${next ? 'activado' : 'desactivado'} para ${agentName}`);
-      const am = await api.get<Env<ActiveMemoryConfig>>('/gateway/active-memory-config').catch(() => null);
+      const am = await api.get<Env<ActiveMemoryConfig>>('/managed-agents/memory-settings/active-memory').catch(() => null);
       setAmCfg(am?.data ?? null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Fallo al cambiar Active Memory');
@@ -220,19 +225,29 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
           <Moon size={16} color="var(--amber)" /> Dreaming · consolidación nocturna
           <span style={{ ...statusPill('var(--text-dim)'), gap: 3, marginLeft: 6 }}><Globe size={11} /> global</span>
           <div style={{ marginLeft: 'auto' }}>
-            <Toggle on={dreamingEnabled} busy={togglingDream} onChange={toggleDreaming} />
+            <Toggle on={dreamingEnabled} busy={togglingDream} disabled={!canManageGlobalMemory} onChange={toggleDreaming} />
           </div>
         </div>
         <div style={dim}>
           Consolida de noche ({dreamCfg?.frequency ?? '0 3 * * *'}) las señales fuertes a <code>MEMORY.md</code>.
           <b> Es un ajuste global de OpenClaw memory-core</b> — afecta a todos tus agentes, no solo a {agentName}.
+          {!canManageGlobalMemory && <> · <b>Solo lectura:</b> solo owner/admin puede modificarlo.</>}
           {' · '}señales en cola: <b>{shortTerm.length}</b> · modo: <b>{dr.storage_mode ?? '—'}</b>
           {dreamCfg && !dreamCfg.memory_core_enabled && <span style={{ color: 'var(--warning)' }}> · ⚠ el plugin memory-core está desactivado.</span>}
         </div>
 
-        <button onClick={() => setShowDiary(s => !s)} style={btn()}>
-          <BookOpen size={13} /> {showDiary ? 'Ocultar' : 'Ver'} Dream Diary
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button onClick={() => setShowDiary(s => !s)} style={btn()}>
+            <BookOpen size={13} /> {showDiary ? 'Ocultar' : 'Ver'} Dream Diary
+          </button>
+          {/* Vista unificada per-agente: Resumen, Recuerdos, Sueños y ajustes. */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('claw:agents-tab', { detail: 'memory' }))}
+            style={btn('var(--amber)')}
+          >
+            <Moon size={13} /> Abrir Memory →
+          </button>
+        </div>
         {showDiary && (
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: 12, fontSize: '0.72rem', whiteSpace: 'pre-wrap', color: 'var(--text-dim)', fontFamily: 'var(--font-mono, monospace)' }}>
             {diary?.found && diary.content ? diary.content : 'Sin entradas en el diario todavía.'}
@@ -245,11 +260,12 @@ export function AgentMemory({ agentId, agentName, agentBareName }: Props) {
         <div style={cardTitle}>
           <Zap size={16} color="var(--amber)" /> Recall proactivo (Active Memory)
           <div style={{ marginLeft: 'auto' }}>
-            <Toggle on={amOn} busy={togglingAm} onChange={toggleActiveMemory} />
+            <Toggle on={amOn} busy={togglingAm} disabled={!canManageGlobalMemory} onChange={toggleActiveMemory} />
           </div>
         </div>
         <div style={dim}>
           Aflora memoria relevante ANTES de cada respuesta de <b>{agentName}</b> (sub-agente de recall). Per-agente.
+          {!canManageGlobalMemory && <> <b>Solo lectura:</b> solo owner/admin puede modificar este ajuste compartido.</>}
           {amCfg && !amCfg.plugin_enabled && <span> Activarlo cargará el plugin.</span>}
         </div>
       </div>
