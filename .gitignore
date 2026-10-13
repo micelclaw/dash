@@ -34,6 +34,11 @@ playwright-report/
 test-results/
 contract-results*.txt
 
+# Local scratch, bundle reports and patch backups
+/_*.mjs
+/bundle-analysis.html
+*.orig
+
 # Playwright MCP
 tests/mcp/.auth/
 tests/mcp/.runs/

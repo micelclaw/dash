@@ -33,10 +33,19 @@ export default tseslint.config(
       'src/vendor/**',
       '*.config.js',
       '*.config.ts',
+      // Repros de scratch en la raíz (Playwright, sin trackear): no son código
+      // del dash. Lo permanente vive en scripts/ o en ../tests/dash.
+      '_*.mjs',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    // Scripts de mantenimiento: corren en Node, no en el navegador (sin esto,
+    // no-undef marcaba process/console/fetch/Buffer como indefinidos).
+    files: ['scripts/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
+  },
   {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
@@ -61,8 +70,12 @@ export default tseslint.config(
       'react-hooks/use-memo': 'warn',
       'react-hooks/rules-of-hooks': 'warn',
       '@typescript-eslint/no-explicit-any': 'warn',
+      // Familia LIMPIA (medido 2026-08-06: 0 violaciones en `eslint .`), así
+      // que vuelve a la severidad del preset typescript-eslint según la
+      // política de la cabecera: se sube a "error" cuando el backlog queda a
+      // cero. Los `_`-prefijados siguen exentos (descartes intencionales).
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
       'no-restricted-imports': [
@@ -76,10 +89,12 @@ export default tseslint.config(
           ],
         },
       ],
-      // Dirección (warn): migrar los consumidores directos de react-markdown al
-      // MarkdownRenderer compartido (src/components/markdown/) — carga lazy.
+      // Familia LIMPIA (medido: 0 violaciones en todo src/), así que sube a
+      // "error" según la política de la cabecera: los consumidores directos de
+      // react-markdown ya usan el MarkdownRenderer compartido
+      // (src/components/markdown/, carga lazy) y la regla ahora impide recaer.
       'no-restricted-syntax': [
-        'warn',
+        'error',
         {
           selector: "ImportDeclaration[source.value='react-markdown'][importKind!='type']",
           message: 'Usa el MarkdownRenderer compartido (src/components/markdown/).',

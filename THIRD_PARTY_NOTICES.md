@@ -42,3 +42,27 @@ tree. Unmodified npm dependencies are covered by their own licenses under
   concepts in Streamyfin's `getStreamUrl.ts`. The file is kept isolated so
   the adapted logic stays contained; per MPL-2.0, the adapted portions
   remain available under MPL-2.0.
+
+## Brand logos (third-party trademarks) — no license granted
+
+- Vendored into: `src/assets/brand-icons/` — **24 image files**
+  (`ls src/assets/brand-icons/ | grep -vi '\.md$' | wc -l`), downloaded once by
+  `scripts/fetch-brand-icons.mjs` and committed. Nothing is fetched from a CDN
+  at runtime (CSP / offline-first).
+- Sources: <https://github.com/homarr-labs/dashboard-icons> (20 files),
+  <https://github.com/selfhst/icons> (1 file) and the providers' own public
+  app-icon/favicon assets (3 files: AOL, Posteo, WEB.DE).
+- License: **none**. Neither upstream catalogue relicenses the logos — each one
+  remains the registered trademark of its owner (14 brands: Google, Microsoft,
+  Proton, iCloud, Synology, Nextcloud, Fastmail, Yahoo, Yandex, Zoho,
+  mailbox.org, AOL, Posteo, WEB.DE). They are used for **nominative
+  identification** of the provider a user connects on the integrations screen,
+  not promotionally: Micelclaw is not affiliated with, sponsored by, or
+  endorsed by any of them.
+- Why they are listed here even though they are neither code nor npm
+  dependencies: a license audit that starts from this file would otherwise miss
+  them entirely.
+- Per-file provenance, source URL and use justification:
+  `src/assets/brand-icons/ATTRIBUTION.md` (it also documents the four logos that
+  are *not* vendored and are painted from the CC0 `simple-icons` package
+  instead). Regenerate: `node scripts/fetch-brand-icons.mjs`.
